@@ -42,6 +42,23 @@ uvicorn app.main:app --reload
 Herhangi bir ortam değişkeni tanımlamazsanız API otomatik olarak kök dizinde `butce_takip.db` isimli SQLite veritabanı
 oluşturur. PostgreSQL kullanmak isterseniz `DATABASE_URL` ortam değişkeni ile bağlantı dizesi sağlayabilirsiniz.
 
+### Varsayılan yönetici hesabı oluşturma
+
+İlk kullanıcıyı elle oluşturmak istemiyorsanız `.env` dosyasına aşağıdaki değişkenleri ekleyerek uygulama her başlatıldığında
+hesabın otomatik olarak var olduğundan emin olabilirsiniz:
+
+```env
+DEFAULT_ADMIN_EMAIL=admin@example.com
+DEFAULT_ADMIN_PASSWORD=GucluBirSifre123!
+# İsteğe bağlı
+DEFAULT_ADMIN_FULL_NAME=Admin Kullanıcı
+DEFAULT_ADMIN_ROLE=admin
+```
+
+E-posta ve parola değerleri sağlandığında veritabanında kayıt bulunmuyorsa kullanıcı otomatik oluşturulur. Parola yalnızca ilk
+oluşturma sırasında kullanılır; ileride değiştirmek isterseniz API üzerindeki kullanıcı uç noktalarını veya veritabanını
+kullanabilirsiniz.
+
 ### Frontend (React)
 
 ```bash
