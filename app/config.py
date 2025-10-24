@@ -5,7 +5,7 @@ from pydantic import BaseSettings, Field
 class Settings(BaseSettings):
     app_name: str = "ButceTakip"
     database_url: str = Field(
-        default="postgresql+psycopg2://postgres:postgres@db:5432/butce_takip",
+        default="sqlite:///./butce_takip.db",
         env="DATABASE_URL",
     )
     secret_key: str = Field(default="change-me", env="SECRET_KEY")

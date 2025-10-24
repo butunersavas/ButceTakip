@@ -7,7 +7,14 @@ from .config import get_settings
 
 
 settings = get_settings()
-engine = create_engine(settings.database_url, echo=False, pool_pre_ping=True)
+is_sqlite = settings.database_url.startswith("sqlite")
+connect_args = {"check_same_thread": False} if is_sqlite else {}
+engine = create_engine(
+    settings.database_url,
+    echo=False,
+    pool_pre_ping=not is_sqlite,
+    connect_args=connect_args,
+)
 
 
 def init_db() -> None:

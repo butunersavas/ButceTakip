@@ -14,7 +14,8 @@ Kurumsal bütçe planlama ve gerçekleşen harcamaları takip etmeye yönelik AP
 ## Gerekli Teknolojiler
 - Python 3.11
 - FastAPI
-- PostgreSQL
+- PostgreSQL (Docker dağıtımı için)
+- SQLite (yerel geliştirme için varsayılan)
 
 ## Çalıştırma (Docker Compose)
 1. `.env.example` dosyasını `.env` olarak kopyalayın ve gerekli değerleri güncelleyin:
@@ -37,6 +38,9 @@ source .venv/bin/activate
 pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
+
+Herhangi bir ortam değişkeni tanımlamazsanız API otomatik olarak kök dizinde `butce_takip.db` isimli SQLite veritabanı
+oluşturur. PostgreSQL kullanmak isterseniz `DATABASE_URL` ortam değişkeni ile bağlantı dizesi sağlayabilirsiniz.
 
 ### Frontend (React)
 
