@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from hashlib import sha256
 from typing import Optional
 
 from fastapi import HTTPException, status
@@ -7,6 +8,25 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 
 from app.config import get_settings
+
+# NOTE:
+# ``passlib`` expects the third-party ``bcrypt`` package to expose an ``__about__``
+# module containing the version information. Newer releases of ``bcrypt`` removed
+# this attribute which causes an ``AttributeError`` during the lazy backend loading
+# phase. Importing and patching the module here keeps ``passlib`` functional across
+# the supported ``bcrypt`` versions without requiring a hard pin in every execution
+# environment.
+try:  # pragma: no cover - import-time patching
+    import bcrypt as _bcrypt
+except ImportError:  # pragma: no cover - bcrypt is an optional dependency
+    _bcrypt = None
+else:  # pragma: no branch - executed only when bcrypt is available
+    if getattr(_bcrypt, "__about__", None) is None:
+        from types import SimpleNamespace
+
+        _bcrypt.__about__ = SimpleNamespace(
+            __version__=getattr(_bcrypt, "__version__", "unknown"),
+        )
 
 
 pwd_context = CryptContext(
@@ -24,12 +44,27 @@ class TokenData:
         self.exp = exp
 
 
+def _normalize_password(password: str) -> str:
+    """Convert long passwords into a digest usable by bcrypt backends.
+
+    The bcrypt algorithm rejects secrets longer than 72 bytes. We hash longer
+    passwords with SHA-256 before delegating to passlib so that administrators can
+    safely configure credentials of arbitrary length. Shorter passwords are left
+    untouched to remain backward compatible with existing hashes.
+    """
+
+    password_bytes = password.encode("utf-8")
+    if len(password_bytes) <= 72:
+        return password
+    return sha256(password_bytes).hexdigest()
+
+
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    return pwd_context.verify(_normalize_password(plain_password), hashed_password)
 
 
 def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
+    return pwd_context.hash(_normalize_password(password))
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
