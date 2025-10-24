@@ -5,7 +5,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlmodel import Session, select
 
 from app.config import get_settings
-from app.dependencies import get_db_session
+from app.dependencies import get_current_user, get_db_session
 from app.models import User
 from app.schemas import Token, UserCreate, UserRead
 from app.utils.security import create_access_token, get_password_hash, verify_password
@@ -44,3 +44,9 @@ def login_for_access_token(
         expires_delta=timedelta(minutes=settings.access_token_expire_minutes),
     )
     return Token(access_token=access_token)
+
+
+@router.get("/me", response_model=UserRead)
+def read_current_user(current_user: User = Depends(get_current_user)) -> User:
+    """Return the authenticated user's profile information."""
+    return current_user

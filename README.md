@@ -1,6 +1,6 @@
 # Bütçe Takip Uygulaması
 
-Kurumsal bütçe planlama ve gerçekleşen harcamaları takip etmeye yönelik API uygulaması.
+Kurumsal bütçe planlama ve gerçekleşen harcamaları takip etmeye yönelik API ve modern web arayüzü.
 
 ## Özellikler
 - Senaryolara göre yıl/ay bazlı plan verileri oluşturma ve güncelleme
@@ -9,6 +9,7 @@ Kurumsal bütçe planlama ve gerçekleşen harcamaları takip etmeye yönelik AP
 - JSON ve CSV formatında içe aktarma, CSV/XLSX dışa aktarma
 - Plan ve harcama verilerini temizleme/sıfırlama uç noktaları
 - Kullanıcı kaydı ve JWT tabanlı kimlik doğrulama
+- React + Material UI tabanlı dashboard, plan/harcama yönetimi ekranları ve raporlama araçları
 
 ## Gerekli Teknolojiler
 - Python 3.11
@@ -25,6 +26,7 @@ Kurumsal bütçe planlama ve gerçekleşen harcamaları takip etmeye yönelik AP
    docker compose up --build
    ```
 3. API `http://localhost:8000` adresinden ulaşılabilir. Etkileşimli dokümantasyon için `http://localhost:8000/docs` adresini ziyaret edin.
+4. Web arayüzüne `http://localhost:5173` adresinden erişebilirsiniz.
 4. PgAdmin arayüzüne `http://localhost:8080` adresinden erişebilirsiniz.
 
 ## Geliştirme Ortamı
@@ -35,6 +37,17 @@ source .venv/bin/activate
 pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
+
+### Frontend (React)
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Varsayılan olarak arayüz `http://localhost:5173` portundan yayına alınır. API adresi `.env` dosyasında `VITE_API_URL` değişkeni ile değiştirilebilir (varsayılan: `http://localhost:8000`).
+Örnek değerler için `frontend/.env.example` dosyasını `.env` olarak kopyalayabilirsiniz.
 
 ## Örnek CSV Şablonu
 ```
