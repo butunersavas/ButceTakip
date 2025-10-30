@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Alert,
   Box,
@@ -14,7 +14,7 @@ import {
 } from "@mui/material";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
 import DownloadIcon from "@mui/icons-material/Download";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 
@@ -41,6 +41,7 @@ const sampleCsv = `type,budget_code,budget_name,scenario,year,month,amount,date,
 
 export default function ImportExportView() {
   const client = useAuthorizedClient();
+  const queryClient = useQueryClient();
   const [importSummary, setImportSummary] = useState<ImportSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [year, setYear] = useState<number | "">(new Date().getFullYear());
@@ -65,6 +66,21 @@ export default function ImportExportView() {
     }
   });
 
+  useEffect(() => {
+    if (!scenarios?.length) return;
+    const numericYear = typeof year === "string" ? Number(year) : year;
+    const matchingScenario = scenarios.find((scenario) => scenario.year === numericYear);
+    setScenarioId((previous) => {
+      if (
+        previous &&
+        scenarios.some((scenario) => scenario.id === previous && scenario.year === numericYear)
+      ) {
+        return previous;
+      }
+      return matchingScenario ? matchingScenario.id : null;
+    });
+  }, [scenarios, year]);
+
   const handleImport = async (file: File, type: "json" | "csv") => {
     const formData = new FormData();
     formData.append("file", file);
@@ -74,6 +90,8 @@ export default function ImportExportView() {
       });
       setImportSummary(data);
       setError(null);
+      queryClient.invalidateQueries({ queryKey: ["budget-items"] });
+      queryClient.invalidateQueries({ queryKey: ["scenarios"] });
     } catch (err) {
       console.error(err);
       setError("Dosya içe aktarılırken bir hata oluştu. Lütfen formatı kontrol edin.");
@@ -119,6 +137,36 @@ export default function ImportExportView() {
     }
   };
 
+  const handleQuarterlyExport = async (format: "csv" | "xlsx") => {
+    setExporting(true);
+    setExportError(null);
+    try {
+      const params: Record<string, string | number> = {};
+      if (year) params.year = Number(year);
+      if (scenarioId) params.scenario_id = scenarioId;
+      if (budgetItemId) params.budget_item_id = budgetItemId;
+      const response = await client.get(`/io/export/quarterly/${format}`, {
+        params,
+        responseType: "blob"
+      });
+      const blob = new Blob([response.data]);
+      const link = document.createElement("a");
+      const url = URL.createObjectURL(blob);
+      link.href = url;
+      const fileName = `butce-ucaylik-rapor-${Date.now()}.${format}`;
+      link.setAttribute("download", fileName);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error(err);
+      setExportError("Üç aylık rapor indirilirken bir hata oluştu. Lütfen filtreleri kontrol edin.");
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const downloadSample = () => {
     const blob = new Blob([sampleCsv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
@@ -135,10 +183,10 @@ export default function ImportExportView() {
     <Stack spacing={4}>
       <Box>
         <Typography variant="h4" fontWeight={700} gutterBottom>
-          Veri İçe/Dışa Aktarım
+          Raporlama
         </Typography>
         <Typography variant="body1" color="text.secondary">
-          JSON ve CSV formatında toplu veri aktarın, raporları CSV/XLSX olarak dışa aktarın.
+          Verileri içe aktarın, filtrelenmiş raporları indirin ve üç aylık özetleri CSV/XLSX olarak dışa aktarın.
         </Typography>
       </Box>
 
@@ -194,7 +242,7 @@ export default function ImportExportView() {
                   Dışa Aktarım
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Filtrelere göre plan ve harcama raporlarını CSV veya XLSX olarak dışa aktarın.
+                  Filtrelere göre plan ve harcama raporlarını ve üç aylık özetleri CSV veya XLSX olarak dışa aktarın.
                 </Typography>
                 {exportError && <Alert severity="error">{exportError}</Alert>}
                 <Divider sx={{ my: 1 }} />
@@ -261,6 +309,26 @@ export default function ImportExportView() {
                     disabled={exporting}
                   >
                     XLSX Olarak Dışa Aktar
+                  </Button>
+                </Stack>
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+                  <Button
+                    variant="contained"
+                    color="secondary"
+                    startIcon={<DownloadIcon />}
+                    onClick={() => void handleQuarterlyExport("csv")}
+                    disabled={exporting}
+                  >
+                    3 Aylık CSV İndir
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    color="secondary"
+                    startIcon={<DownloadIcon />}
+                    onClick={() => void handleQuarterlyExport("xlsx")}
+                    disabled={exporting}
+                  >
+                    3 Aylık XLSX İndir
                   </Button>
                 </Stack>
               </Stack>

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Box,
   Card,
@@ -13,14 +13,17 @@ import {
 } from "@mui/material";
 import { useQuery } from "@tanstack/react-query";
 import {
-  Area,
-  AreaChart,
+  Bar,
+  BarChart,
   CartesianGrid,
   Legend,
+  Pie,
+  PieChart,
   ResponsiveContainer,
   Tooltip as RechartsTooltip,
   XAxis,
-  YAxis
+  YAxis,
+  Cell
 } from "recharts";
 
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
@@ -102,6 +105,20 @@ export default function DashboardView() {
     }
   });
 
+  useEffect(() => {
+    if (!scenarios?.length) return;
+    const matchingScenario = scenarios.find((scenario) => scenario.year === year);
+    setScenarioId((previous) => {
+      if (
+        previous &&
+        scenarios.some((scenario) => scenario.id === previous && scenario.year === year)
+      ) {
+        return previous;
+      }
+      return matchingScenario ? matchingScenario.id : null;
+    });
+  }, [scenarios, year]);
+
   const { data: dashboard, isLoading } = useQuery<DashboardResponse>({
     queryKey: ["dashboard", year, scenarioId, budgetItemId],
     queryFn: async () => {
@@ -120,6 +137,33 @@ export default function DashboardView() {
       monthLabel: monthLabels[entry.month - 1]
     }));
   }, [dashboard]);
+
+  const quarterlyData = useMemo(() => {
+    if (!dashboard?.monthly?.length) return [];
+    const quarters = [
+      { label: "Q1", months: [1, 2, 3] },
+      { label: "Q2", months: [4, 5, 6] },
+      { label: "Q3", months: [7, 8, 9] },
+      { label: "Q4", months: [10, 11, 12] }
+    ];
+    return quarters.map(({ label, months }) => {
+      const entries = dashboard.monthly.filter((item) => months.includes(item.month));
+      const planned = entries.reduce((sum, item) => sum + item.planned, 0);
+      const actual = entries.reduce((sum, item) => sum + item.actual, 0);
+      const saving = Math.max(planned - actual, 0);
+      return { label, planned, actual, saving };
+    });
+  }, [dashboard]);
+
+  const pieColors = useMemo(
+    () => ({
+      planned: "#0d47a1",
+      actual: "#26a69a",
+      saving: "#1abc9c"
+    }),
+    []
+  );
+  const pieKeys = useMemo(() => ["planned", "actual", "saving"] as const, []);
 
   return (
     <Stack spacing={4}>
@@ -266,7 +310,7 @@ export default function DashboardView() {
               <Skeleton variant="rectangular" height="100%" />
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={monthlyData}>
+                <BarChart data={monthlyData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="monthLabel" />
                   <YAxis tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`} />
@@ -275,13 +319,81 @@ export default function DashboardView() {
                     labelFormatter={(label) => label}
                   />
                   <Legend />
-                  <Area type="monotone" dataKey="planned" name="Plan" stroke="#0d47a1" fill="#0d47a1" fillOpacity={0.25} />
-                  <Area type="monotone" dataKey="actual" name="Gerçekleşen" stroke="#26a69a" fill="#26a69a" fillOpacity={0.3} />
-                  <Area type="monotone" dataKey="saving" name="Tasarruf" stroke="#ef6c00" fill="#ef6c00" fillOpacity={0.2} />
-                </AreaChart>
+                  <Bar dataKey="planned" name="Planlanan" fill={pieColors.planned} radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="actual" name="Gerçekleşen" fill={pieColors.actual} radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="saving" name="Tasarruf" fill={pieColors.saving} radius={[4, 4, 0, 0]} />
+                </BarChart>
               </ResponsiveContainer>
             )}
           </Box>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent>
+          <Stack spacing={3}>
+            <Box>
+              <Typography variant="h6" fontWeight={600} gutterBottom>
+                3 Aylık Harcama Dağılımı
+              </Typography>
+              <Stack direction="row" spacing={2} flexWrap="wrap" alignItems="center">
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <Box sx={{ width: 12, height: 12, borderRadius: "50%", backgroundColor: pieColors.planned }} />
+                  <Typography variant="body2">Planlanan</Typography>
+                </Stack>
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <Box sx={{ width: 12, height: 12, borderRadius: "50%", backgroundColor: pieColors.actual }} />
+                  <Typography variant="body2">Gerçekleşen</Typography>
+                </Stack>
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <Box sx={{ width: 12, height: 12, borderRadius: "50%", backgroundColor: pieColors.saving }} />
+                  <Typography variant="body2">Tasarruf</Typography>
+                </Stack>
+              </Stack>
+            </Box>
+            <Grid container spacing={3}>
+              {quarterlyData.map((quarter) => (
+                <Grid item xs={12} md={6} lg={3} key={quarter.label}>
+                  <Stack spacing={1} alignItems="center">
+                    <Typography variant="subtitle1" fontWeight={600}>
+                      {quarter.label}
+                    </Typography>
+                    <Box sx={{ width: "100%", height: 220 }}>
+                      {isLoading ? (
+                        <Skeleton
+                          variant="circular"
+                          width={220}
+                          height={220}
+                          sx={{ mx: "auto" }}
+                        />
+                      ) : (
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie
+                              data={[
+                                { name: "Planlanan", value: quarter.planned, key: "planned" },
+                                { name: "Gerçekleşen", value: quarter.actual, key: "actual" },
+                                { name: "Tasarruf", value: quarter.saving, key: "saving" }
+                              ]}
+                              dataKey="value"
+                              nameKey="name"
+                              innerRadius={50}
+                              outerRadius={80}
+                              paddingAngle={2}
+                            >
+                              {pieKeys.map((key) => (
+                                <Cell key={key} fill={pieColors[key]} />
+                              ))}
+                            </Pie>
+                          </PieChart>
+                        </ResponsiveContainer>
+                      )}
+                    </Box>
+                  </Stack>
+                </Grid>
+              ))}
+            </Grid>
+          </Stack>
         </CardContent>
       </Card>
     </Stack>

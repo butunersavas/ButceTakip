@@ -49,6 +49,28 @@ def export_xlsx(
     return exporter.export_xlsx(session, year, scenario_id, budget_item_id)
 
 
+@router.get("/export/quarterly/csv")
+def export_quarterly_csv(
+    year: int = Query(...),
+    scenario_id: int | None = Query(default=None),
+    budget_item_id: int | None = Query(default=None),
+    session: Session = Depends(get_db_session),
+    _= Depends(get_current_user),
+):
+    return exporter.export_quarterly_csv(session, year, scenario_id, budget_item_id)
+
+
+@router.get("/export/quarterly/xlsx")
+def export_quarterly_xlsx(
+    year: int = Query(...),
+    scenario_id: int | None = Query(default=None),
+    budget_item_id: int | None = Query(default=None),
+    session: Session = Depends(get_db_session),
+    _= Depends(get_current_user),
+):
+    return exporter.export_quarterly_xlsx(session, year, scenario_id, budget_item_id)
+
+
 @router.post("/cleanup")
 def cleanup(
     request: CleanupRequest,
