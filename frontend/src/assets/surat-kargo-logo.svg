@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 120" role="img" aria-labelledby="title">
+  <title>Sürat Kargo</title>
+  <defs>
+    <linearGradient id="redGradient" x1="0%" y1="0%" x2="100%" y2="60%">
+      <stop offset="0%" stop-color="#ef3b3a" />
+      <stop offset="100%" stop-color="#c52026" />
+    </linearGradient>
+    <linearGradient id="blueGradient" x1="0%" y1="40%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1f4a93" />
+      <stop offset="100%" stop-color="#0d2f6f" />
+    </linearGradient>
+  </defs>
+  <g transform="translate(12 10)">
+    <path
+      d="M6 66c18.5-27.5 50-45.5 95-49l12.5 19.5C76 40 47 56 26 87z"
+      fill="url(#redGradient)"
+    />
+    <path
+      d="M10 102c20-31 51.5-50.5 99-53l15 22.5C77 78 50 96 26 122z"
+      fill="url(#blueGradient)"
+    />
+  </g>
+</svg>

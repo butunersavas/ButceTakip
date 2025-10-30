@@ -293,44 +293,54 @@ export default function ImportExportView() {
                     </TextField>
                   </Grid>
                 </Grid>
-                <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-                  <Button
-                    variant="contained"
-                    startIcon={<DownloadIcon />}
-                    onClick={() => void handleExport("csv")}
-                    disabled={exporting}
-                  >
-                    CSV Olarak Dışa Aktar
-                  </Button>
-                  <Button
-                    variant="outlined"
-                    startIcon={<DownloadIcon />}
-                    onClick={() => void handleExport("xlsx")}
-                    disabled={exporting}
-                  >
-                    XLSX Olarak Dışa Aktar
-                  </Button>
-                </Stack>
-                <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-                  <Button
-                    variant="contained"
-                    color="secondary"
-                    startIcon={<DownloadIcon />}
-                    onClick={() => void handleQuarterlyExport("csv")}
-                    disabled={exporting}
-                  >
-                    3 Aylık CSV İndir
-                  </Button>
-                  <Button
-                    variant="outlined"
-                    color="secondary"
-                    startIcon={<DownloadIcon />}
-                    onClick={() => void handleQuarterlyExport("xlsx")}
-                    disabled={exporting}
-                  >
-                    3 Aylık XLSX İndir
-                  </Button>
-                </Stack>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={6}>
+                    <Button
+                      variant="contained"
+                      startIcon={<DownloadIcon />}
+                      onClick={() => void handleExport("csv")}
+                      disabled={exporting}
+                      fullWidth
+                    >
+                      CSV Olarak Dışa Aktar
+                    </Button>
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <Button
+                      variant="outlined"
+                      startIcon={<DownloadIcon />}
+                      onClick={() => void handleExport("xlsx")}
+                      disabled={exporting}
+                      fullWidth
+                    >
+                      XLSX Olarak Dışa Aktar
+                    </Button>
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <Button
+                      variant="contained"
+                      color="secondary"
+                      startIcon={<DownloadIcon />}
+                      onClick={() => void handleQuarterlyExport("csv")}
+                      disabled={exporting}
+                      fullWidth
+                    >
+                      3 Aylık CSV İndir
+                    </Button>
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <Button
+                      variant="outlined"
+                      color="secondary"
+                      startIcon={<DownloadIcon />}
+                      onClick={() => void handleQuarterlyExport("xlsx")}
+                      disabled={exporting}
+                      fullWidth
+                    >
+                      3 Aylık XLSX İndir
+                    </Button>
+                  </Grid>
+                </Grid>
               </Stack>
             </CardContent>
           </Card>

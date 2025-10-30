@@ -34,18 +34,24 @@ def _ensure_default_admin() -> None:
     if not settings.default_admin_email or not settings.default_admin_password:
         return
 
+    admin_email = settings.default_admin_email.strip()
+    admin_password = settings.default_admin_password.strip()
+    admin_full_name = settings.default_admin_full_name.strip() or "Admin Kullanıcı"
+    admin_role = settings.default_admin_role.strip() or "admin"
+
+    if not admin_email or not admin_password:
+        return
+
     with Session(engine) as session:
-        existing_user = session.exec(
-            select(User).where(User.email == settings.default_admin_email)
-        ).first()
+        existing_user = session.exec(select(User).where(User.email == admin_email)).first()
         if existing_user:
             return
 
         user = User(
-            email=settings.default_admin_email,
-            full_name=settings.default_admin_full_name,
-            hashed_password=get_password_hash(settings.default_admin_password),
-            role=settings.default_admin_role,
+            email=admin_email,
+            full_name=admin_full_name,
+            hashed_password=get_password_hash(admin_password),
+            role=admin_role,
             is_active=True,
         )
         session.add(user)
