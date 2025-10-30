@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, File, Query, UploadFile
+from fastapi import APIRouter, Depends, File, UploadFile, Query
 from sqlmodel import Session
 
 from app.dependencies import get_admin_user, get_current_user, get_db_session
