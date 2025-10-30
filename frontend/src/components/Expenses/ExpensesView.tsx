@@ -228,7 +228,7 @@ export default function ExpensesView() {
       unit_price: Number(formData.get("unit_price")) || 0,
       vendor: formData.get("vendor")?.toString() ?? undefined,
       description: formData.get("description")?.toString() ?? undefined,
-      status: (formData.get("status") as Expense["status"]) ?? "recorded",
+      status: formData.get("is_cancelled") === "on" ? "cancelled" : "recorded",
       is_out_of_budget: formData.get("is_out_of_budget") === "on"
     };
 
@@ -655,16 +655,16 @@ export default function ExpensesView() {
                   />
                 </Grid>
                 <Grid item xs={12} md={4}>
-                  <TextField
-                    select
-                    label="Durum"
-                    name="status"
-                    defaultValue={editingExpense?.status ?? "recorded"}
-                    fullWidth
-                  >
-                    <MenuItem value="recorded">Kaydedildi</MenuItem>
-                    <MenuItem value="cancelled">İptal Edildi</MenuItem>
-                  </TextField>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        name="is_cancelled"
+                        defaultChecked={editingExpense?.status === "cancelled"}
+                      />
+                    }
+                    label="İptal Edildi"
+                    sx={{ ml: 0 }}
+                  />
                 </Grid>
                 <Grid item xs={12} md={4}>
                   <FormControlLabel
@@ -675,6 +675,7 @@ export default function ExpensesView() {
                       />
                     }
                     label="Bütçe Dışı"
+                    sx={{ ml: 0 }}
                   />
                 </Grid>
               </Grid>

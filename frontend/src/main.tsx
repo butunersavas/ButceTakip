@@ -26,13 +26,13 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
           styles={{
             html: {
               height: "100%",
-              overflowY: "auto",
+              overflowY: "scroll",
               scrollbarGutter: "stable"
             },
             body: {
               minHeight: "100vh",
               overflowX: "hidden",
-              overflowY: "auto",
+              overflowY: "scroll",
               scrollbarGutter: "stable both-edges",
               width: "100%"
             },

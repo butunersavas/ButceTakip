@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 60" role="img" aria-labelledby="title">
+  <title>Sürat Kargo</title>
+  <rect width="240" height="60" fill="none" />
+  <g transform="translate(10,10)">
+    <polygon points="0,20 30,0 60,0 30,20 60,40 30,40" fill="#e31c24" />
+    <polygon points="48,0 80,0 52,20 80,40 48,40 20,20" fill="#1a2f5a" opacity="0.9" />
+  </g>
+  <text x="110" y="36" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif" font-size="28" font-weight="700" fill="#1a2f5a">
+    SÜRAT <tspan fill="#e31c24">KARGO</tspan>
+  </text>
+</svg>
