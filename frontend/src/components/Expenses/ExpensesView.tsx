@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Box,
@@ -82,7 +82,7 @@ function formatCurrency(value: number) {
 
 const statusLabels: Record<Expense["status"], string> = {
   recorded: "Kaydedildi",
-  cancelled: "İptal"
+  cancelled: "İptal Edildi"
 };
 
 export default function ExpensesView() {
@@ -119,6 +119,20 @@ export default function ExpensesView() {
       return data;
     }
   });
+
+  useEffect(() => {
+    if (!scenarios?.length) return;
+    const matchingScenario = scenarios.find((scenario) => scenario.year === year);
+    setScenarioId((previous) => {
+      if (
+        previous &&
+        scenarios.some((scenario) => scenario.id === previous && scenario.year === year)
+      ) {
+        return previous;
+      }
+      return matchingScenario ? matchingScenario.id : null;
+    });
+  }, [scenarios, year]);
 
   const { data: expenses, isFetching } = useQuery<Expense[]>({
     queryKey: [
@@ -229,6 +243,15 @@ export default function ExpensesView() {
     return (
       expenses?.reduce(
         (sum, expense) => (expense.is_out_of_budget ? sum + expense.amount : sum),
+        0
+      ) ?? 0
+    );
+  }, [expenses]);
+
+  const cancelledTotal = useMemo(() => {
+    return (
+      expenses?.reduce(
+        (sum, expense) => (expense.status === "cancelled" ? sum + expense.amount : sum),
         0
       ) ?? 0
     );
@@ -397,7 +420,7 @@ export default function ExpensesView() {
               >
                 <MenuItem value="">Tümü</MenuItem>
                 <MenuItem value="recorded">Kaydedildi</MenuItem>
-                <MenuItem value="cancelled">İptal</MenuItem>
+                <MenuItem value="cancelled">İptal Edildi</MenuItem>
               </TextField>
             </Grid>
             <Grid item xs={12} md={3}>
@@ -496,13 +519,13 @@ export default function ExpensesView() {
           <Card>
             <CardContent>
               <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-                Kayıt Sayısı
+                İptal Edildi
               </Typography>
-              <Typography variant="h4" fontWeight={700}>
-                {expenses?.length ?? 0}
+              <Typography variant="h5" fontWeight={700} color="text.secondary">
+                {formatCurrency(cancelledTotal)}
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                Filtrelere göre listelenen toplam kayıt.
+                İptal edilen kayıtların toplam tutarı.
               </Typography>
             </CardContent>
           </Card>
@@ -640,7 +663,7 @@ export default function ExpensesView() {
                     fullWidth
                   >
                     <MenuItem value="recorded">Kaydedildi</MenuItem>
-                    <MenuItem value="cancelled">İptal</MenuItem>
+                    <MenuItem value="cancelled">İptal Edildi</MenuItem>
                   </TextField>
                 </Grid>
                 <Grid item xs={12} md={4}>

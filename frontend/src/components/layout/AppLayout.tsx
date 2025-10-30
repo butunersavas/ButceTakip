@@ -44,7 +44,7 @@ const navItems = [
     path: "/expenses"
   },
   {
-    label: "İçe/Dışa Aktarım",
+    label: "Raporlama",
     icon: <CloudUploadIcon />,
     path: "/import-export"
   },
