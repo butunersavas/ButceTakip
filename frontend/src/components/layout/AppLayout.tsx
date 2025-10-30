@@ -138,7 +138,15 @@ export default function AppLayout({ children }: AppLayoutProps) {
   );
 
   return (
-    <Box sx={{ display: "flex", minHeight: "100vh", backgroundColor: "background.default" }}>
+    <Box
+      sx={{
+        display: "flex",
+        minHeight: "100vh",
+        width: "100%",
+        backgroundColor: "background.default",
+        overflowX: "hidden"
+      }}
+    >
       <AppBar
         position="fixed"
         sx={{
@@ -205,6 +213,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
           flexGrow: 1,
           minWidth: 0,
           width: "100%",
+          maxWidth: "100vw",
           p: { xs: 3, md: 5 },
           mt: { xs: 8, md: 10 }
         }}
