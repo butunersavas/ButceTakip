@@ -70,6 +70,28 @@ npm run dev
 Varsayılan olarak arayüz `http://localhost:5173` portundan yayına alınır. API adresi `.env` dosyasında `VITE_API_URL` değişkeni ile değiştirilebilir (varsayılan: `http://localhost:8000`).
 Örnek değerler için `frontend/.env.example` dosyasını `.env` olarak kopyalayabilirsiniz.
 
+> **PowerShell Kullanıcılarına Not**
+>
+> - `npm run dev` komutunu çalıştırdıktan sonra başka bir komut (ör. `curl`) yazacaksanız yeni bir terminal sekmesi açın veya
+>   aynı pencerede komutu tamamen bitirdikten sonra yazın. Yan yana yazıldığında PowerShell bunu tek bir komut sanarak
+>   `npm run devcurl` gibi hatalara yol açar.
+> - Linux/macOS için verilen çok satırlı `curl` örneklerindeki `\` karakteri PowerShell’de satır devamı olarak çalışmaz.
+>   Komutu tek satırda yazabilir ya da aşağıdaki `Invoke-RestMethod` örneğinde olduğu gibi PowerShell sözdizimini
+>   kullanabilirsiniz:
+>
+>   ```powershell
+>   Invoke-RestMethod -Method Post `
+>       -Uri "http://localhost:8000/auth/register" `
+>       -ContentType "application/json" `
+>       -Body '{"email":"yeni.admin@example.com","full_name":"Yeni Admin","password":"DahaGucluSifre456!"}'
+>   ```
+>
+>   Alternatif olarak Windows’ta yer alan klasik `curl.exe` uygulamasını tek satırda çalıştırabilirsiniz:
+>
+>   ```powershell
+>   curl.exe -X POST "http://localhost:8000/auth/register" -H "Content-Type: application/json" -d '{"email":"yeni.admin@example.com","full_name":"Yeni Admin","password":"DahaGucluSifre456!"}'
+>   ```
+
 ## Örnek CSV Şablonu
 ```
 type,budget_code,budget_name,scenario,year,month,amount,date,quantity,unit_price,vendor,description,out_of_budget
