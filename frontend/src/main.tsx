@@ -24,8 +24,20 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
         <CssBaseline />
         <GlobalStyles
           styles={{
+            html: {
+              height: "100%",
+              overflowY: "auto",
+              scrollbarGutter: "stable"
+            },
             body: {
-              overflowX: "hidden"
+              minHeight: "100vh",
+              overflowX: "hidden",
+              overflowY: "auto",
+              scrollbarGutter: "stable both-edges",
+              width: "100%"
+            },
+            "#root": {
+              minHeight: "100%"
             }
           }}
         />
