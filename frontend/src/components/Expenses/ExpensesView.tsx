@@ -352,7 +352,7 @@ export default function ExpensesView() {
   }, [budgetItems, handleDelete, handleEdit, scenarios]);
 
   return (
-    <Stack spacing={4}>
+    <Stack spacing={4} sx={{ width: "100%", minWidth: 0 }}>
       <Box>
         <Typography variant="h4" fontWeight={700} gutterBottom>
           Harcama Yönetimi
@@ -531,8 +531,21 @@ export default function ExpensesView() {
           </Card>
         </Grid>
         <Grid item xs={12}>
-          <Card sx={{ height: 600 }}>
-            <CardContent sx={{ height: "100%" }}>
+          <Card
+            sx={{
+              height: { xs: 520, lg: 640 },
+              display: "flex",
+              flexDirection: "column"
+            }}
+          >
+            <CardContent
+              sx={{
+                flexGrow: 1,
+                display: "flex",
+                flexDirection: "column",
+                minWidth: 0
+              }}
+            >
               <Typography variant="subtitle1" fontWeight={600} gutterBottom>
                 Harcamalar
               </Typography>
@@ -546,7 +559,11 @@ export default function ExpensesView() {
                   pagination: { paginationModel: { pageSize: 15, page: 0 } }
                 }}
                 pageSizeOptions={[15, 30, 50]}
-                sx={{ border: "none" }}
+                sx={{
+                  border: "none",
+                  flexGrow: 1,
+                  minWidth: 0
+                }}
               />
             </CardContent>
           </Card>

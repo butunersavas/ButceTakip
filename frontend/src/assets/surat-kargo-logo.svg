@@ -1,11 +1,23 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 60" role="img" aria-labelledby="title">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 120" role="img" aria-labelledby="title">
   <title>Sürat Kargo</title>
-  <rect width="240" height="60" fill="none" />
-  <g transform="translate(10,10)">
-    <polygon points="0,20 30,0 60,0 30,20 60,40 30,40" fill="#e31c24" />
-    <polygon points="48,0 80,0 52,20 80,40 48,40 20,20" fill="#1a2f5a" opacity="0.9" />
+  <defs>
+    <linearGradient id="redGradient" x1="0%" y1="0%" x2="100%" y2="60%">
+      <stop offset="0%" stop-color="#ef3b3a" />
+      <stop offset="100%" stop-color="#c52026" />
+    </linearGradient>
+    <linearGradient id="blueGradient" x1="0%" y1="40%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1f4a93" />
+      <stop offset="100%" stop-color="#0d2f6f" />
+    </linearGradient>
+  </defs>
+  <g transform="translate(12 10)">
+    <path
+      d="M6 66c18.5-27.5 50-45.5 95-49l12.5 19.5C76 40 47 56 26 87z"
+      fill="url(#redGradient)"
+    />
+    <path
+      d="M10 102c20-31 51.5-50.5 99-53l15 22.5C77 78 50 96 26 122z"
+      fill="url(#blueGradient)"
+    />
   </g>
-  <text x="110" y="36" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif" font-size="28" font-weight="700" fill="#1a2f5a">
-    SÜRAT <tspan fill="#e31c24">KARGO</tspan>
-  </text>
 </svg>

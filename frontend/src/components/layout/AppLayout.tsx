@@ -144,6 +144,8 @@ export default function AppLayout({ children }: AppLayoutProps) {
         sx={{
           width: { md: `calc(100% - ${drawerWidth}px)` },
           ml: { md: `${drawerWidth}px` },
+          left: { md: `${drawerWidth}px` },
+          right: 0,
           boxShadow: "none",
           backgroundColor: "transparent"
         }}
@@ -197,7 +199,16 @@ export default function AppLayout({ children }: AppLayoutProps) {
           {drawer}
         </Drawer>
       </Box>
-      <Box component="main" sx={{ flexGrow: 1, p: { xs: 3, md: 5 }, mt: { xs: 8, md: 10 } }}>
+      <Box
+        component="main"
+        sx={{
+          flexGrow: 1,
+          minWidth: 0,
+          width: "100%",
+          p: { xs: 3, md: 5 },
+          mt: { xs: 8, md: 10 }
+        }}
+      >
         {children}
       </Box>
     </Box>
