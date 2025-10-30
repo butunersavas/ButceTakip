@@ -421,7 +421,18 @@ export default function ExpensesView() {
               />
             </Grid>
             <Grid item xs={12} md={6}>
-              <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+              <Stack
+                direction={{ xs: "column", sm: "row" }}
+                spacing={2}
+                flexWrap={{ sm: "wrap" }}
+                sx={{
+                  rowGap: { sm: 1.5 },
+                  columnGap: { sm: 2 },
+                  "& .MuiFormControlLabel-root": {
+                    flex: { sm: "1 1 220px" }
+                  }
+                }}
+              >
                 <FormControlLabel
                   control={
                     <Switch
