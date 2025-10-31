@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import {
   Alert,
-  Box,
   Button,
   Card,
   CardContent,
@@ -107,28 +106,35 @@ export default function ImportExportView() {
     }
   };
 
-  const handleExport = async (format: "csv" | "xlsx") => {
+  const buildExportParams = () => {
+    const params: Record<string, string | number> = {};
+    if (year) params.year = Number(year);
+    if (scenarioId) params.scenario_id = scenarioId;
+    if (budgetItemId) params.budget_item_id = budgetItemId;
+    return params;
+  };
+
+  const downloadBlob = (data: BlobPart, fileName: string) => {
+    const blob = new Blob([data]);
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.href = url;
+    link.setAttribute("download", fileName);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportXlsx = async () => {
     setExporting(true);
     setExportError(null);
     try {
-      const params: Record<string, string | number> = {};
-      if (year) params.year = Number(year);
-      if (scenarioId) params.scenario_id = scenarioId;
-      if (budgetItemId) params.budget_item_id = budgetItemId;
-      const response = await client.get(`/io/export/${format}`, {
-        params,
+      const response = await client.get("/io/export/xlsx", {
+        params: buildExportParams(),
         responseType: "blob"
       });
-      const blob = new Blob([response.data]);
-      const link = document.createElement("a");
-      const url = URL.createObjectURL(blob);
-      link.href = url;
-      const fileName = `butce-raporu-${format}-${Date.now()}.${format}`;
-      link.setAttribute("download", fileName);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
+      downloadBlob(response.data, `butce-raporu-${Date.now()}.xlsx`);
     } catch (err) {
       console.error(err);
       setExportError("Dışa aktarma sırasında bir hata oluştu. Lütfen filtreleri kontrol edin.");
@@ -137,31 +143,39 @@ export default function ImportExportView() {
     }
   };
 
-  const handleQuarterlyExport = async (format: "csv" | "xlsx") => {
+  const handleQuarterlyExportXlsx = async () => {
     setExporting(true);
     setExportError(null);
     try {
-      const params: Record<string, string | number> = {};
-      if (year) params.year = Number(year);
-      if (scenarioId) params.scenario_id = scenarioId;
-      if (budgetItemId) params.budget_item_id = budgetItemId;
-      const response = await client.get(`/io/export/quarterly/${format}`, {
-        params,
+      const response = await client.get("/io/export/quarterly/xlsx", {
+        params: buildExportParams(),
         responseType: "blob"
       });
-      const blob = new Blob([response.data]);
-      const link = document.createElement("a");
-      const url = URL.createObjectURL(blob);
-      link.href = url;
-      const fileName = `butce-ucaylik-rapor-${Date.now()}.${format}`;
-      link.setAttribute("download", fileName);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
+      downloadBlob(response.data, `butce-ucaylik-rapor-${Date.now()}.xlsx`);
     } catch (err) {
       console.error(err);
       setExportError("Üç aylık rapor indirilirken bir hata oluştu. Lütfen filtreleri kontrol edin.");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleFilteredExpenseExport = async (type: "out-of-budget" | "cancelled") => {
+    setExporting(true);
+    setExportError(null);
+    try {
+      const response = await client.get(`/io/export/expenses/${type}`, {
+        params: buildExportParams(),
+        responseType: "blob"
+      });
+      const fileName =
+        type === "out-of-budget"
+          ? `butce-disi-harcamalar-${Date.now()}.xlsx`
+          : `iptal-edilen-harcamalar-${Date.now()}.xlsx`;
+      downloadBlob(response.data, fileName);
+    } catch (err) {
+      console.error(err);
+      setExportError("Seçili rapor indirilirken bir hata oluştu. Lütfen filtreleri kontrol edin.");
     } finally {
       setExporting(false);
     }
@@ -181,15 +195,6 @@ export default function ImportExportView() {
 
   return (
     <Stack spacing={4}>
-      <Box>
-        <Typography variant="h4" fontWeight={700} gutterBottom>
-          Raporlama
-        </Typography>
-        <Typography variant="body1" color="text.secondary">
-          Verileri içe aktarın, filtrelenmiş raporları indirin ve üç aylık özetleri CSV/XLSX olarak dışa aktarın.
-        </Typography>
-      </Box>
-
       <Grid container spacing={3}>
         <Grid item xs={12} md={6}>
           <Card sx={{ height: "100%" }}>
@@ -242,7 +247,8 @@ export default function ImportExportView() {
                   Dışa Aktarım
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Filtrelere göre plan ve harcama raporlarını ve üç aylık özetleri CSV veya XLSX olarak dışa aktarın.
+                  Filtrelere göre plan ve harcama raporlarını, üç aylık özetleri ve özel harcama listelerini XLSX
+                  formatında dışa aktarın.
                 </Typography>
                 {exportError && <Alert severity="error">{exportError}</Alert>}
                 <Divider sx={{ my: 1 }} />
@@ -298,18 +304,7 @@ export default function ImportExportView() {
                     <Button
                       variant="contained"
                       startIcon={<DownloadIcon />}
-                      onClick={() => void handleExport("csv")}
-                      disabled={exporting}
-                      fullWidth
-                    >
-                      CSV Olarak Dışa Aktar
-                    </Button>
-                  </Grid>
-                  <Grid item xs={12} sm={6}>
-                    <Button
-                      variant="outlined"
-                      startIcon={<DownloadIcon />}
-                      onClick={() => void handleExport("xlsx")}
+                      onClick={() => void handleExportXlsx()}
                       disabled={exporting}
                       fullWidth
                     >
@@ -318,26 +313,37 @@ export default function ImportExportView() {
                   </Grid>
                   <Grid item xs={12} sm={6}>
                     <Button
-                      variant="contained"
-                      color="secondary"
+                      variant="outlined"
                       startIcon={<DownloadIcon />}
-                      onClick={() => void handleQuarterlyExport("csv")}
+                      onClick={() => void handleQuarterlyExportXlsx()}
                       disabled={exporting}
                       fullWidth
                     >
-                      3 Aylık CSV İndir
+                      3 Aylık XLSX İndir
+                    </Button>
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <Button
+                      variant="contained"
+                      color="warning"
+                      startIcon={<DownloadIcon />}
+                      onClick={() => void handleFilteredExpenseExport("out-of-budget")}
+                      disabled={exporting}
+                      fullWidth
+                    >
+                      Bütçe Dışı Harcamalar XLSX
                     </Button>
                   </Grid>
                   <Grid item xs={12} sm={6}>
                     <Button
                       variant="outlined"
-                      color="secondary"
+                      color="error"
                       startIcon={<DownloadIcon />}
-                      onClick={() => void handleQuarterlyExport("xlsx")}
+                      onClick={() => void handleFilteredExpenseExport("cancelled")}
                       disabled={exporting}
                       fullWidth
                     >
-                      3 Aylık XLSX İndir
+                      İptal Edilen Harcamalar XLSX
                     </Button>
                   </Grid>
                 </Grid>
