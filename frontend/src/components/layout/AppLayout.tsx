@@ -24,6 +24,7 @@ import { useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 
 import { useAuth } from "../../context/AuthContext";
+import suratLogo from "../../assets/surat-kargo-logo.svg";
 
 const drawerWidth = 260;
 
@@ -75,13 +76,21 @@ export default function AppLayout({ children }: AppLayoutProps) {
 
   const drawer = (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      <Box sx={{ p: 3 }}>
-        <Typography variant="h6" fontWeight={700} color="primary">
-          Bütçe Yönetimi
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          Kurumsal bütçe planlama ve raporlama
-        </Typography>
+      <Box sx={{ p: 3, display: "flex", alignItems: "center", gap: 2 }}>
+        <Box
+          component="img"
+          src={suratLogo}
+          alt="Sürat Kargo"
+          sx={{ width: 48, height: 48, flexShrink: 0 }}
+        />
+        <Box>
+          <Typography variant="h6" fontWeight={700} color="primary">
+            Sürat Kargo
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Bütçe Yönetimi
+          </Typography>
+        </Box>
       </Box>
       <Divider />
       <List sx={{ flexGrow: 1, py: 2 }}>
@@ -160,9 +169,17 @@ export default function AppLayout({ children }: AppLayoutProps) {
           >
             <MenuIcon />
           </IconButton>
-          <Typography variant="h6" color="text.primary" sx={{ fontWeight: 600 }}>
-            {navItems.find((item) => item.path === location.pathname)?.label ?? "Bütçe Yönetimi"}
-          </Typography>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+            <Box
+              component="img"
+              src={suratLogo}
+              alt="Sürat Kargo"
+              sx={{ height: 32, width: "auto", display: { xs: "none", sm: "block" } }}
+            />
+            <Typography variant="h6" color="text.primary" sx={{ fontWeight: 600 }}>
+              {navItems.find((item) => item.path === location.pathname)?.label ?? "Bütçe Yönetimi"}
+            </Typography>
+          </Box>
           <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
             <Box sx={{ textAlign: "right" }}>
               <Typography variant="subtitle2" fontWeight={600}>
