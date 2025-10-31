@@ -352,7 +352,7 @@ export default function ExpensesView() {
   }, [budgetItems, handleDelete, handleEdit, scenarios]);
 
   return (
-    <Stack spacing={4} sx={{ width: "100%", minWidth: 0 }}>
+    <Stack spacing={4} sx={{ width: "100%", minWidth: 0, maxWidth: "100%", overflowX: "hidden" }}>
       <Box>
         <Typography variant="h4" fontWeight={700} gutterBottom>
           Harcama Yönetimi
@@ -364,7 +364,7 @@ export default function ExpensesView() {
 
       <Card>
         <CardContent>
-          <Grid container spacing={3}>
+          <Grid container spacing={3} disableEqualOverflow>
             <Grid item xs={12} md={3}>
               <TextField
                 label="Yıl"
@@ -484,7 +484,7 @@ export default function ExpensesView() {
         </CardContent>
       </Card>
 
-      <Grid container spacing={3}>
+      <Grid container spacing={3} disableEqualOverflow>
         <Grid item xs={12} md={4}>
           <Card>
             <CardContent>
@@ -535,7 +535,8 @@ export default function ExpensesView() {
             sx={{
               height: { xs: 520, lg: 640 },
               display: "flex",
-              flexDirection: "column"
+              flexDirection: "column",
+              overflow: "hidden"
             }}
           >
             <CardContent
@@ -543,28 +544,43 @@ export default function ExpensesView() {
                 flexGrow: 1,
                 display: "flex",
                 flexDirection: "column",
-                minWidth: 0
+                minWidth: 0,
+                overflow: "hidden"
               }}
             >
               <Typography variant="subtitle1" fontWeight={600} gutterBottom>
                 Harcamalar
               </Typography>
-              <DataGrid
-                rows={expenses ?? []}
-                columns={columns}
-                loading={isFetching}
-                getRowId={(row) => row.id}
-                disableRowSelectionOnClick
-                initialState={{
-                  pagination: { paginationModel: { pageSize: 15, page: 0 } }
-                }}
-                pageSizeOptions={[15, 30, 50]}
-                sx={{
-                  border: "none",
-                  flexGrow: 1,
-                  minWidth: 0
-                }}
-              />
+              <Box sx={{ flexGrow: 1, minWidth: 0, width: "100%", overflow: "hidden" }}>
+                <DataGrid
+                  rows={expenses ?? []}
+                  columns={columns}
+                  loading={isFetching}
+                  getRowId={(row) => row.id}
+                  disableRowSelectionOnClick
+                  initialState={{
+                    pagination: { paginationModel: { pageSize: 15, page: 0 } }
+                  }}
+                  pageSizeOptions={[15, 30, 50]}
+                  sx={{
+                    border: "none",
+                    flexGrow: 1,
+                    minWidth: 0,
+                    width: "100%",
+                    "& .MuiDataGrid-main": {
+                      overflowX: "auto",
+                      scrollbarGutter: "stable"
+                    },
+                    "& .MuiDataGrid-virtualScroller": {
+                      overflowX: "hidden",
+                      overscrollBehaviorX: "contain"
+                    },
+                    "& .MuiDataGrid-virtualScrollerContent": {
+                      minWidth: "100%"
+                    }
+                  }}
+                />
+              </Box>
             </CardContent>
           </Card>
         </Grid>
