@@ -1,5 +1,7 @@
 from datetime import date, datetime
 
+from decimal import Decimal, ROUND_HALF_UP
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session, select
 
@@ -8,6 +10,15 @@ from app.models import BudgetItem, Expense, ExpenseStatus, Scenario, User
 from app.schemas import ExpenseCreate, ExpenseRead, ExpenseUpdate
 
 router = APIRouter(prefix="/expenses", tags=["Expenses"])
+
+
+def _calculate_amount(quantity: float, unit_price: float) -> float:
+    quantity_decimal = Decimal(str(quantity or 0))
+    unit_price_decimal = Decimal(str(unit_price or 0))
+    amount = (quantity_decimal * unit_price_decimal).quantize(
+        Decimal("0.01"), rounding=ROUND_HALF_UP
+    )
+    return float(amount)
 
 
 @router.get("/", response_model=list[ExpenseRead])
@@ -68,7 +79,10 @@ def create_expense(
         raise HTTPException(status_code=400, detail="Budget item not found")
     if expense_in.scenario_id and not session.get(Scenario, expense_in.scenario_id):
         raise HTTPException(status_code=400, detail="Scenario not found")
-    expense = Expense(**expense_in.dict(), created_by_id=current_user.id)
+    calculated_amount = _calculate_amount(expense_in.quantity, expense_in.unit_price)
+    expense_data = expense_in.dict()
+    expense_data["amount"] = calculated_amount
+    expense = Expense(**expense_data, created_by_id=current_user.id)
     session.add(expense)
     session.commit()
     session.refresh(expense)
@@ -87,7 +101,12 @@ def update_expense(
         raise HTTPException(status_code=404, detail="Expense not found")
     if expense.created_by_id not in (None, current_user.id) and current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Not allowed")
-    for field, value in expense_in.dict(exclude_unset=True).items():
+    update_data = expense_in.dict(exclude_unset=True)
+    if update_data:
+        quantity = update_data.get("quantity", expense.quantity)
+        unit_price = update_data.get("unit_price", expense.unit_price)
+        update_data["amount"] = _calculate_amount(quantity, unit_price)
+    for field, value in update_data.items():
         setattr(expense, field, value)
     expense.updated_at = datetime.utcnow()
     session.add(expense)

@@ -1,21 +1,11 @@
-<svg width="160" height="120" viewBox="0 0 160 120" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title">
+<svg width="120" height="96" viewBox="0 0 120 96" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title">
   <title id="title">Sürat Kargo</title>
-  <defs>
-    <linearGradient id="redGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#d62828" />
-      <stop offset="100%" stop-color="#ef3d3d" />
-    </linearGradient>
-    <linearGradient id="blueGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#0052a5" />
-      <stop offset="100%" stop-color="#1f6ed4" />
-    </linearGradient>
-  </defs>
   <path
-    d="M150 16c-46 3.5-84.5 13.2-116 29.2C21 52.6 12 61 6 69.5c27.6-10.7 64.4-18 110.4-22.1 15.7-1.5 29.5-5 41.6-10.5 4.5-6.5 5-13.2 2-20z"
-    fill="url(#redGradient)"
+    d="M10 56c29.6-21.5 63.5-34.4 101.7-38.8 2.9-.3 5.8-.6 8.7-.8-1.5 9.2-5.2 18.1-10.6 26-28.8 4.8-55.7 13-80.6 24.6Z"
+    fill="#d82027"
   />
   <path
-    d="M12 98.4c42.6-19.3 82.4-30.8 119.4-34.4 11.5-1.1 21.8-3.5 31-7.2-5-7.6-13.4-13.8-25.2-18.7C96.7 45 59.2 60.3 30.4 83 21.1 90.4 15.4 95.4 12 98.4z"
-    fill="url(#blueGradient)"
+    d="M18 90c28.3-25.8 61-42 98-48.8 2.6-.5 5.2-.9 7.8-1.2-6-8.9-15-16.1-26.6-20.9C66.3 28.3 38.7 41.7 16 61.5Z"
+    fill="#004192"
   />
 </svg>

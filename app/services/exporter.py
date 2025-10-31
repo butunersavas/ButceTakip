@@ -1,4 +1,3 @@
-import csv
 import io
 from datetime import date
 
@@ -15,83 +14,6 @@ CURRENCY_SYMBOL = "$"
 
 def _format_currency(value: float) -> str:
     return f"{CURRENCY_SYMBOL}{value:,.2f}"
-
-
-def export_csv(
-    session: Session,
-    year: int,
-    scenario_id: int | None = None,
-    budget_item_id: int | None = None,
-) -> Response:
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow(
-        [
-            "type",
-            "budget_item_id",
-            "scenario_id",
-            "year",
-            "month",
-            "amount",
-            "currency",
-            "status",
-            "is_out_of_budget",
-            "expense_date",
-            "vendor",
-            "description",
-        ]
-    )
-
-    plan_query = select(PlanEntry).where(PlanEntry.year == year)
-    if scenario_id is not None:
-        plan_query = plan_query.where(PlanEntry.scenario_id == scenario_id)
-    if budget_item_id is not None:
-        plan_query = plan_query.where(PlanEntry.budget_item_id == budget_item_id)
-    for plan in session.exec(plan_query).all():
-        writer.writerow(
-            [
-                "plan",
-                plan.budget_item_id,
-                plan.scenario_id,
-                plan.year,
-                plan.month,
-                _format_currency(plan.amount),
-                "USD",
-                "",
-                "",
-                "",
-                "",
-                "",
-            ]
-        )
-
-    expense_query = select(Expense).where(
-        Expense.expense_date >= date(year, 1, 1), Expense.expense_date <= date(year, 12, 31)
-    )
-    if scenario_id is not None:
-        expense_query = expense_query.where(Expense.scenario_id == scenario_id)
-    if budget_item_id is not None:
-        expense_query = expense_query.where(Expense.budget_item_id == budget_item_id)
-    for expense in session.exec(expense_query).all():
-        writer.writerow(
-            [
-                "expense",
-                expense.budget_item_id,
-                expense.scenario_id,
-                expense.expense_date.year,
-                expense.expense_date.month,
-                _format_currency(expense.amount),
-                "USD",
-                expense.status.value,
-                str(expense.is_out_of_budget).lower(),
-                expense.expense_date.isoformat(),
-                expense.vendor or "",
-                expense.description or "",
-            ]
-        )
-    response = Response(content=output.getvalue(), media_type="text/csv")
-    response.headers["Content-Disposition"] = "attachment; filename=budget_export.csv"
-    return response
 
 
 def export_xlsx(
@@ -223,43 +145,6 @@ def export_filtered_expenses_xlsx(
     )
     response.headers["Content-Disposition"] = f"attachment; filename={file_name}"
     return response
-
-
-def export_quarterly_csv(
-    session: Session,
-    year: int,
-    scenario_id: int | None = None,
-    budget_item_id: int | None = None,
-) -> Response:
-    summary = compute_quarterly_summary(session, year, scenario_id, budget_item_id)
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow(
-        [
-            "quarter",
-            "planned",
-            "actual",
-            "saving",
-            "out_of_budget",
-            "cancelled",
-        ]
-    )
-    for entry in summary:
-        writer.writerow(
-            [
-                f"Q{entry.quarter}",
-                _format_currency(entry.planned),
-                _format_currency(entry.actual),
-                _format_currency(entry.saving),
-                _format_currency(entry.out_of_budget),
-                _format_currency(entry.cancelled),
-            ]
-        )
-    response = Response(content=output.getvalue(), media_type="text/csv")
-    response.headers["Content-Disposition"] = "attachment; filename=quarterly_summary.csv"
-    return response
-
-
 def export_quarterly_xlsx(
     session: Session,
     year: int,
