@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, File, UploadFile, Query
 from sqlmodel import Session
 
 from app.dependencies import get_admin_user, get_current_user, get_db_session
+from app.models import ExpenseStatus
 from app.schemas import CleanupRequest, ImportSummary
 from app.services import cleanup as cleanup_service
 from app.services import exporter, importer
@@ -69,6 +70,44 @@ def export_quarterly_xlsx(
     _= Depends(get_current_user),
 ):
     return exporter.export_quarterly_xlsx(session, year, scenario_id, budget_item_id)
+
+
+@router.get("/export/expenses/out-of-budget/xlsx")
+def export_out_of_budget_expenses(
+    year: int = Query(...),
+    scenario_id: int | None = Query(default=None),
+    budget_item_id: int | None = Query(default=None),
+    session: Session = Depends(get_db_session),
+    _= Depends(get_current_user),
+):
+    return exporter.export_filtered_expenses_xlsx(
+        session,
+        year,
+        scenario_id,
+        budget_item_id,
+        out_of_budget=True,
+        sheet_title="Out of Budget Expenses",
+        file_name="out_of_budget_expenses.xlsx",
+    )
+
+
+@router.get("/export/expenses/cancelled/xlsx")
+def export_cancelled_expenses(
+    year: int = Query(...),
+    scenario_id: int | None = Query(default=None),
+    budget_item_id: int | None = Query(default=None),
+    session: Session = Depends(get_db_session),
+    _= Depends(get_current_user),
+):
+    return exporter.export_filtered_expenses_xlsx(
+        session,
+        year,
+        scenario_id,
+        budget_item_id,
+        status=ExpenseStatus.cancelled,
+        sheet_title="Cancelled Expenses",
+        file_name="cancelled_expenses.xlsx",
+    )
 
 
 @router.post("/cleanup")

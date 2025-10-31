@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import {
   Alert,
-  Box,
   Button,
   Card,
   CardContent,
@@ -107,15 +106,24 @@ export default function ImportExportView() {
     }
   };
 
-  const handleExport = async (format: "csv" | "xlsx") => {
+  const buildBaseParams = () => {
+    const params: Record<string, string | number> = {};
+    if (year) params.year = Number(year);
+    if (scenarioId) params.scenario_id = scenarioId;
+    if (budgetItemId) params.budget_item_id = budgetItemId;
+    return params;
+  };
+
+  const exportReport = async (
+    endpoint: string,
+    filePrefix: string,
+    extraParams?: Record<string, string | number | boolean>
+  ) => {
     setExporting(true);
     setExportError(null);
     try {
-      const params: Record<string, string | number> = {};
-      if (year) params.year = Number(year);
-      if (scenarioId) params.scenario_id = scenarioId;
-      if (budgetItemId) params.budget_item_id = budgetItemId;
-      const response = await client.get(`/io/export/${format}`, {
+      const params = { ...buildBaseParams(), ...(extraParams ?? {}) };
+      const response = await client.get(endpoint, {
         params,
         responseType: "blob"
       });
@@ -123,8 +131,7 @@ export default function ImportExportView() {
       const link = document.createElement("a");
       const url = URL.createObjectURL(blob);
       link.href = url;
-      const fileName = `butce-raporu-${format}-${Date.now()}.${format}`;
-      link.setAttribute("download", fileName);
+      link.setAttribute("download", `${filePrefix}-${Date.now()}.xlsx`);
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -137,35 +144,17 @@ export default function ImportExportView() {
     }
   };
 
-  const handleQuarterlyExport = async (format: "csv" | "xlsx") => {
-    setExporting(true);
-    setExportError(null);
-    try {
-      const params: Record<string, string | number> = {};
-      if (year) params.year = Number(year);
-      if (scenarioId) params.scenario_id = scenarioId;
-      if (budgetItemId) params.budget_item_id = budgetItemId;
-      const response = await client.get(`/io/export/quarterly/${format}`, {
-        params,
-        responseType: "blob"
-      });
-      const blob = new Blob([response.data]);
-      const link = document.createElement("a");
-      const url = URL.createObjectURL(blob);
-      link.href = url;
-      const fileName = `butce-ucaylik-rapor-${Date.now()}.${format}`;
-      link.setAttribute("download", fileName);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      console.error(err);
-      setExportError("Üç aylık rapor indirilirken bir hata oluştu. Lütfen filtreleri kontrol edin.");
-    } finally {
-      setExporting(false);
-    }
-  };
+  const handleStandardExport = () =>
+    void exportReport("/io/export/xlsx", "butce-raporu");
+
+  const handleQuarterlyExport = () =>
+    void exportReport("/io/export/quarterly/xlsx", "butce-ucaylik-raporu");
+
+  const handleOutOfBudgetExport = () =>
+    void exportReport("/io/export/expenses/out-of-budget/xlsx", "butce-disi-harcamalar");
+
+  const handleCancelledExport = () =>
+    void exportReport("/io/export/expenses/cancelled/xlsx", "iptal-edilen-harcamalar");
 
   const downloadSample = () => {
     const blob = new Blob([sampleCsv], { type: "text/csv;charset=utf-8;" });
@@ -181,15 +170,6 @@ export default function ImportExportView() {
 
   return (
     <Stack spacing={4}>
-      <Box>
-        <Typography variant="h4" fontWeight={700} gutterBottom>
-          Raporlama
-        </Typography>
-        <Typography variant="body1" color="text.secondary">
-          Verileri içe aktarın, filtrelenmiş raporları indirin ve üç aylık özetleri CSV/XLSX olarak dışa aktarın.
-        </Typography>
-      </Box>
-
       <Grid container spacing={3}>
         <Grid item xs={12} md={6}>
           <Card sx={{ height: "100%" }}>
@@ -242,7 +222,7 @@ export default function ImportExportView() {
                   Dışa Aktarım
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Filtrelere göre plan ve harcama raporlarını ve üç aylık özetleri CSV veya XLSX olarak dışa aktarın.
+                  Filtrelere göre plan ve harcama raporlarını XLSX formatında dışa aktarın, ayrıca bütçe dışı ve iptal edilen harcamalar için ayrı raporlar indirin.
                 </Typography>
                 {exportError && <Alert severity="error">{exportError}</Alert>}
                 <Divider sx={{ my: 1 }} />
@@ -298,18 +278,7 @@ export default function ImportExportView() {
                     <Button
                       variant="contained"
                       startIcon={<DownloadIcon />}
-                      onClick={() => void handleExport("csv")}
-                      disabled={exporting}
-                      fullWidth
-                    >
-                      CSV Olarak Dışa Aktar
-                    </Button>
-                  </Grid>
-                  <Grid item xs={12} sm={6}>
-                    <Button
-                      variant="outlined"
-                      startIcon={<DownloadIcon />}
-                      onClick={() => void handleExport("xlsx")}
+                      onClick={handleStandardExport}
                       disabled={exporting}
                       fullWidth
                     >
@@ -318,26 +287,37 @@ export default function ImportExportView() {
                   </Grid>
                   <Grid item xs={12} sm={6}>
                     <Button
-                      variant="contained"
-                      color="secondary"
+                      variant="outlined"
                       startIcon={<DownloadIcon />}
-                      onClick={() => void handleQuarterlyExport("csv")}
+                      onClick={handleQuarterlyExport}
                       disabled={exporting}
                       fullWidth
                     >
-                      3 Aylık CSV İndir
+                      3 Aylık XLSX İndir
+                    </Button>
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <Button
+                      variant="contained"
+                      color="warning"
+                      startIcon={<DownloadIcon />}
+                      onClick={handleOutOfBudgetExport}
+                      disabled={exporting}
+                      fullWidth
+                    >
+                      Bütçe Dışı Harcamalar XLSX
                     </Button>
                   </Grid>
                   <Grid item xs={12} sm={6}>
                     <Button
                       variant="outlined"
-                      color="secondary"
+                      color="error"
                       startIcon={<DownloadIcon />}
-                      onClick={() => void handleQuarterlyExport("xlsx")}
+                      onClick={handleCancelledExport}
                       disabled={exporting}
                       fullWidth
                     >
-                      3 Aylık XLSX İndir
+                      İptal Edilen Harcamalar XLSX
                     </Button>
                   </Grid>
                 </Grid>

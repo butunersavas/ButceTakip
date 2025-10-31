@@ -24,7 +24,7 @@ import { useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 
 import { useAuth } from "../../context/AuthContext";
-import suratKargoLogo from "../../assets/surat-kargo-logo.svg";
+import SuratKargoLogo from "../../assets/surat-kargo-logo.svg";
 
 const drawerWidth = 260;
 
@@ -76,19 +76,13 @@ export default function AppLayout({ children }: AppLayoutProps) {
 
   const drawer = (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      <Box sx={{ p: 3 }}>
+      <Box sx={{ p: 3, display: "flex", alignItems: "center", justifyContent: "center" }}>
         <Box
           component="img"
-          src={suratKargoLogo}
+          src={SuratKargoLogo}
           alt="Sürat Kargo"
-          sx={{ height: 48, mb: 2 }}
+          sx={{ maxWidth: "100%", height: 56, objectFit: "contain" }}
         />
-        <Typography variant="h6" fontWeight={700} color="primary">
-          Bütçe Yönetimi
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          Kurumsal bütçe planlama ve raporlama
-        </Typography>
       </Box>
       <Divider />
       <List sx={{ flexGrow: 1, py: 2 }}>

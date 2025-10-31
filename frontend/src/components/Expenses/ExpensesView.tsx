@@ -42,6 +42,12 @@ interface BudgetItem {
   name: string;
 }
 
+interface PlanAggregate {
+  budget_item_id: number;
+  month: number;
+  total_amount: number;
+}
+
 export interface Expense {
   id: number;
   budget_item_id: number;
@@ -100,6 +106,8 @@ export default function ExpensesView() {
   const [includeOutOfBudget, setIncludeOutOfBudget] = useState(true);
   const [mineOnly, setMineOnly] = useState(false);
   const [todayOnly, setTodayOnly] = useState(false);
+  const [formQuantity, setFormQuantity] = useState<number>(1);
+  const [formUnitPrice, setFormUnitPrice] = useState<number>(0);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -118,6 +126,22 @@ export default function ExpensesView() {
       const { data } = await client.get<BudgetItem[]>("/budget-items");
       return data;
     }
+  });
+
+  const planYear = typeof year === "number" ? year : null;
+
+  const { data: planAggregates } = useQuery<PlanAggregate[]>({
+    queryKey: ["plan-aggregate", planYear, scenarioId],
+    queryFn: async () => {
+      if (planYear === null) {
+        return [];
+      }
+      const params: Record<string, number> = { year: planYear };
+      if (scenarioId) params.scenario_id = scenarioId;
+      const { data } = await client.get<PlanAggregate[]>("/plans/aggregate", { params });
+      return data;
+    },
+    enabled: planYear !== null
   });
 
   useEffect(() => {
@@ -163,6 +187,12 @@ export default function ExpensesView() {
     }
   });
 
+  useEffect(() => {
+    if (!dialogOpen) return;
+    setFormQuantity(editingExpense?.quantity ?? 1);
+    setFormUnitPrice(editingExpense?.unit_price ?? 0);
+  }, [dialogOpen, editingExpense]);
+
   const mutation = useMutation({
     mutationFn: async (payload: ExpensePayload) => {
       if (payload.id) {
@@ -177,6 +207,9 @@ export default function ExpensesView() {
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
       setDialogOpen(false);
       setErrorMessage(null);
+      setEditingExpense(null);
+      setFormQuantity(1);
+      setFormUnitPrice(0);
     },
     onError: (error: unknown) => {
       setErrorMessage("Harcama kaydı kaydedilirken bir hata oluştu");
@@ -193,13 +226,25 @@ export default function ExpensesView() {
     }
   });
 
+  const computedAmount = useMemo(() => {
+    const safeQuantity = Math.max(formQuantity, 0);
+    const safeUnitPrice = Math.max(formUnitPrice, 0);
+    return Number((safeQuantity * safeUnitPrice).toFixed(2));
+  }, [formQuantity, formUnitPrice]);
+
   const handleCreate = useCallback(() => {
     setEditingExpense(null);
+    setFormQuantity(1);
+    setFormUnitPrice(0);
+    setErrorMessage(null);
     setDialogOpen(true);
   }, []);
 
   const handleEdit = useCallback((expense: Expense) => {
     setEditingExpense(expense);
+    setFormQuantity(expense.quantity ?? 1);
+    setFormUnitPrice(expense.unit_price ?? 0);
+    setErrorMessage(null);
     setDialogOpen(true);
   }, []);
 
@@ -213,9 +258,20 @@ export default function ExpensesView() {
     [deleteMutation]
   );
 
+  const handleDialogClose = useCallback(() => {
+    setDialogOpen(false);
+    setEditingExpense(null);
+    setErrorMessage(null);
+    setFormQuantity(1);
+    setFormUnitPrice(0);
+  }, []);
+
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
+    const quantity = Math.max(formQuantity, 0);
+    const unitPrice = Math.max(formUnitPrice, 0);
+    const amount = computedAmount;
     const payload: ExpensePayload = {
       id: editingExpense?.id,
       budget_item_id: Number(formData.get("budget_item_id")),
@@ -223,9 +279,9 @@ export default function ExpensesView() {
         ? Number(formData.get("scenario_id"))
         : null,
       expense_date: String(formData.get("expense_date")),
-      amount: Number(formData.get("amount")),
-      quantity: Number(formData.get("quantity")) || 1,
-      unit_price: Number(formData.get("unit_price")) || 0,
+      amount,
+      quantity,
+      unit_price: unitPrice,
       vendor: formData.get("vendor")?.toString() ?? undefined,
       description: formData.get("description")?.toString() ?? undefined,
       status: formData.get("is_cancelled") === "on" ? "cancelled" : "recorded",
@@ -235,14 +291,22 @@ export default function ExpensesView() {
     mutation.mutate(payload);
   };
 
-  const totalActual = useMemo(() => {
-    return expenses?.reduce((sum, expense) => sum + expense.amount, 0) ?? 0;
+  const recordedTotal = useMemo(() => {
+    return (
+      expenses?.reduce(
+        (sum, expense) => (expense.status === "recorded" ? sum + expense.amount : sum),
+        0
+      ) ?? 0
+    );
   }, [expenses]);
 
   const outOfBudgetTotal = useMemo(() => {
     return (
       expenses?.reduce(
-        (sum, expense) => (expense.is_out_of_budget ? sum + expense.amount : sum),
+        (sum, expense) =>
+          expense.status === "recorded" && expense.is_out_of_budget
+            ? sum + expense.amount
+            : sum,
         0
       ) ?? 0
     );
@@ -256,6 +320,24 @@ export default function ExpensesView() {
       ) ?? 0
     );
   }, [expenses]);
+
+  const plannedTotal = useMemo(() => {
+    if (!planAggregates?.length) return 0;
+    const relevantAggregates = budgetItemId
+      ? planAggregates.filter((aggregate) => aggregate.budget_item_id === budgetItemId)
+      : planAggregates;
+    return relevantAggregates.reduce((sum, aggregate) => sum + aggregate.total_amount, 0);
+  }, [budgetItemId, planAggregates]);
+
+  const savingTotal = useMemo(() => Math.max(plannedTotal - recordedTotal, 0), [
+    plannedTotal,
+    recordedTotal
+  ]);
+
+  const overrunTotal = useMemo(() => Math.max(recordedTotal - plannedTotal, 0), [
+    plannedTotal,
+    recordedTotal
+  ]);
 
   const columns = useMemo<GridColDef[]>(() => {
     return [
@@ -352,19 +434,10 @@ export default function ExpensesView() {
   }, [budgetItems, handleDelete, handleEdit, scenarios]);
 
   return (
-    <Stack spacing={4} sx={{ width: "100%", minWidth: 0 }}>
-      <Box>
-        <Typography variant="h4" fontWeight={700} gutterBottom>
-          Harcama Yönetimi
-        </Typography>
-        <Typography variant="body1" color="text.secondary">
-          Güncel harcamaları kaydedin, bütçe dışı/iptal durumlarını takip edin ve filtreleyin.
-        </Typography>
-      </Box>
-
+    <Stack spacing={4} sx={{ width: "100%", minWidth: 0, maxWidth: "100%", overflowX: "hidden" }}>
       <Card>
         <CardContent>
-          <Grid container spacing={3}>
+          <Grid container spacing={3} disableEqualOverflow>
             <Grid item xs={12} md={3}>
               <TextField
                 label="Yıl"
@@ -484,7 +557,7 @@ export default function ExpensesView() {
         </CardContent>
       </Card>
 
-      <Grid container spacing={3}>
+      <Grid container spacing={3} disableEqualOverflow>
         <Grid item xs={12} md={4}>
           <Card>
             <CardContent>
@@ -492,10 +565,10 @@ export default function ExpensesView() {
                 Toplam Gerçekleşen
               </Typography>
               <Typography variant="h4" fontWeight={700} color="primary">
-                {formatCurrency(totalActual)}
+                {formatCurrency(recordedTotal)}
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                Bu listeye dahil edilen kayıtların toplam tutarı.
+                Kaydedilen (iptal edilmeyen) harcamaların toplam tutarı.
               </Typography>
             </CardContent>
           </Card>
@@ -510,7 +583,7 @@ export default function ExpensesView() {
                 {formatCurrency(outOfBudgetTotal)}
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                Plan dışı olarak işaretlenen harcamaların toplamı.
+                Plan dışı olarak işaretlenen kaydedilmiş harcamaların toplamı.
               </Typography>
             </CardContent>
           </Card>
@@ -530,12 +603,43 @@ export default function ExpensesView() {
             </CardContent>
           </Card>
         </Grid>
+        <Grid item xs={12} md={4}>
+          <Card>
+            <CardContent>
+              <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+                Tasarruf
+              </Typography>
+              <Typography variant="h5" fontWeight={700} color="success.main">
+                {formatCurrency(savingTotal)}
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                Planlanan tutar ile gerçekleşen arasında oluşan olumlu fark.
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} md={4}>
+          <Card>
+            <CardContent>
+              <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+                Aşım
+              </Typography>
+              <Typography variant="h5" fontWeight={700} color="error.main">
+                {formatCurrency(overrunTotal)}
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                Gerçekleşen harcamaların planlanan tutarı aştığı miktar.
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
         <Grid item xs={12}>
           <Card
             sx={{
               height: { xs: 520, lg: 640 },
               display: "flex",
-              flexDirection: "column"
+              flexDirection: "column",
+              overflow: "hidden"
             }}
           >
             <CardContent
@@ -543,34 +647,49 @@ export default function ExpensesView() {
                 flexGrow: 1,
                 display: "flex",
                 flexDirection: "column",
-                minWidth: 0
+                minWidth: 0,
+                overflow: "hidden"
               }}
             >
               <Typography variant="subtitle1" fontWeight={600} gutterBottom>
                 Harcamalar
               </Typography>
-              <DataGrid
-                rows={expenses ?? []}
-                columns={columns}
-                loading={isFetching}
-                getRowId={(row) => row.id}
-                disableRowSelectionOnClick
-                initialState={{
-                  pagination: { paginationModel: { pageSize: 15, page: 0 } }
-                }}
-                pageSizeOptions={[15, 30, 50]}
-                sx={{
-                  border: "none",
-                  flexGrow: 1,
-                  minWidth: 0
-                }}
-              />
+              <Box sx={{ flexGrow: 1, minWidth: 0, width: "100%", overflow: "hidden" }}>
+                <DataGrid
+                  rows={expenses ?? []}
+                  columns={columns}
+                  loading={isFetching}
+                  getRowId={(row) => row.id}
+                  disableRowSelectionOnClick
+                  initialState={{
+                    pagination: { paginationModel: { pageSize: 15, page: 0 } }
+                  }}
+                  pageSizeOptions={[15, 30, 50]}
+                  sx={{
+                    border: "none",
+                    flexGrow: 1,
+                    minWidth: 0,
+                    width: "100%",
+                    "& .MuiDataGrid-main": {
+                      overflowX: "auto",
+                      scrollbarGutter: "stable"
+                    },
+                    "& .MuiDataGrid-virtualScroller": {
+                      overflowX: "hidden",
+                      overscrollBehaviorX: "contain"
+                    },
+                    "& .MuiDataGrid-virtualScrollerContent": {
+                      minWidth: "100%"
+                    }
+                  }}
+                />
+              </Box>
             </CardContent>
           </Card>
         </Grid>
       </Grid>
 
-      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} fullWidth maxWidth="md">
+      <Dialog open={dialogOpen} onClose={handleDialogClose} fullWidth maxWidth="md">
         <DialogTitle>{editingExpense ? "Harcamayı Güncelle" : "Yeni Harcama"}</DialogTitle>
         <form onSubmit={handleSubmit}>
           <DialogContent>
@@ -611,6 +730,48 @@ export default function ExpensesView() {
                 </Grid>
                 <Grid item xs={12} md={4}>
                   <TextField
+                    label="Adet"
+                    name="quantity"
+                    type="number"
+                    value={formQuantity}
+                    onChange={(event) => {
+                      const value = Number(event.target.value);
+                      setFormQuantity(Number.isNaN(value) ? 0 : Math.max(value, 0));
+                    }}
+                    inputProps={{ min: 0, step: 1 }}
+                    required
+                    fullWidth
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    label="Birim Fiyat"
+                    name="unit_price"
+                    type="number"
+                    value={formUnitPrice}
+                    onChange={(event) => {
+                      const value = Number(event.target.value);
+                      setFormUnitPrice(Number.isNaN(value) ? 0 : Math.max(value, 0));
+                    }}
+                    inputProps={{ min: 0, step: 0.01 }}
+                    required
+                    fullWidth
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    label="Toplam Tutar"
+                    name="amount"
+                    type="number"
+                    value={computedAmount}
+                    InputProps={{ readOnly: true }}
+                    inputProps={{ min: 0, step: 0.01 }}
+                    helperText="Adet × Birim Fiyat"
+                    fullWidth
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
                     label="Tarih"
                     name="expense_date"
                     type="date"
@@ -621,37 +782,6 @@ export default function ExpensesView() {
                     }
                     InputLabelProps={{ shrink: true }}
                     required
-                    fullWidth
-                  />
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <TextField
-                    label="Toplam Tutar"
-                    name="amount"
-                    type="number"
-                    inputProps={{ min: 0, step: 10 }}
-                    defaultValue={editingExpense?.amount ?? 0}
-                    required
-                    fullWidth
-                  />
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <TextField
-                    label="Adet"
-                    name="quantity"
-                    type="number"
-                    inputProps={{ min: 1, step: 1 }}
-                    defaultValue={editingExpense?.quantity ?? 1}
-                    fullWidth
-                  />
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <TextField
-                    label="Birim Fiyat"
-                    name="unit_price"
-                    type="number"
-                    inputProps={{ min: 0, step: 10 }}
-                    defaultValue={editingExpense?.unit_price ?? 0}
                     fullWidth
                   />
                 </Grid>
@@ -699,7 +829,7 @@ export default function ExpensesView() {
             </Stack>
           </DialogContent>
           <DialogActions>
-            <Button onClick={() => setDialogOpen(false)}>Vazgeç</Button>
+            <Button onClick={handleDialogClose}>Vazgeç</Button>
             <Button type="submit" variant="contained" disabled={mutation.isPending}>
               Kaydet
             </Button>

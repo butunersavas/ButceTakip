@@ -91,15 +91,6 @@ export default function CleanupView() {
 
   return (
     <Stack spacing={4}>
-      <Box>
-        <Typography variant="h4" fontWeight={700} gutterBottom>
-          Veri Temizleme Araçları
-        </Typography>
-        <Typography variant="body1" color="text.secondary">
-          İçe aktarılan verileri temizleyin veya seçili plan/harcamaları sıfırlayın. İşlemler geri alınamaz!
-        </Typography>
-      </Box>
-
       <Card>
         <CardContent>
           <Stack spacing={3}>

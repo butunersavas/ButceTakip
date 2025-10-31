@@ -167,15 +167,6 @@ export default function DashboardView() {
 
   return (
     <Stack spacing={4}>
-      <Box>
-        <Typography variant="h4" fontWeight={700} gutterBottom>
-          Plan vs Gerçekleşen Özeti
-        </Typography>
-        <Typography variant="body1" color="text.secondary">
-          Yıl, senaryo ve bütçe kalemi filtreleri ile aylık performansı ve toplam KPI değerlerini takip edin.
-        </Typography>
-      </Box>
-
       <Card>
         <CardContent>
           <Grid container spacing={3}>
