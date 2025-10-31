@@ -1,7 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import {
   Alert,
-  Box,
   Button,
   Card,
   CardContent,
@@ -17,7 +16,6 @@ import {
   Tooltip,
   Typography
 } from "@mui/material";
-import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/DeleteOutline";
 import { DataGrid, GridColDef } from "@mui/x-data-grid";
@@ -162,12 +160,6 @@ export default function PlansView() {
     }
   });
 
-  const handleCreate = useCallback(() => {
-    setEditingPlan(null);
-    setDialogOpen(true);
-    setFormError(null);
-  }, []);
-
   const handleEdit = useCallback((plan: PlanEntry) => {
     setEditingPlan(plan);
     setDialogOpen(true);
@@ -280,19 +272,10 @@ export default function PlansView() {
 
   return (
     <Stack spacing={4}>
-      <Box>
-        <Typography variant="h4" fontWeight={700} gutterBottom>
-          Plan Yönetimi
-        </Typography>
-        <Typography variant="body1" color="text.secondary">
-          Yıllık plan tutarlarını yönetin, güncelleyin ve aylık toplamları takip edin.
-        </Typography>
-      </Box>
-
       <Card>
         <CardContent>
           <Grid container spacing={3} alignItems="center">
-            <Grid item xs={12} md={3}>
+            <Grid item xs={12} md={4}>
               <TextField
                 label="Yıl"
                 type="number"
@@ -301,7 +284,7 @@ export default function PlansView() {
                 fullWidth
               />
             </Grid>
-            <Grid item xs={12} md={3}>
+            <Grid item xs={12} md={4}>
               <TextField
                 select
                 label="Senaryo"
@@ -319,7 +302,7 @@ export default function PlansView() {
                 ))}
               </TextField>
             </Grid>
-            <Grid item xs={12} md={3}>
+            <Grid item xs={12} md={4}>
               <TextField
                 select
                 label="Bütçe Kalemi"
@@ -336,16 +319,6 @@ export default function PlansView() {
                   </MenuItem>
                 ))}
               </TextField>
-            </Grid>
-            <Grid item xs={12} md={3} textAlign="right">
-              <Button
-                variant="contained"
-                startIcon={<AddIcon />}
-                onClick={handleCreate}
-                disabled={user?.role !== "admin"}
-              >
-                Yeni Plan Kaydı
-              </Button>
             </Grid>
           </Grid>
         </CardContent>

@@ -103,6 +103,8 @@ export default function ExpensesView() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [formQuantity, setFormQuantity] = useState<string>("1");
+  const [formUnitPrice, setFormUnitPrice] = useState<string>("0");
 
   const { data: scenarios } = useQuery<Scenario[]>({
     queryKey: ["scenarios"],
@@ -175,6 +177,7 @@ export default function ExpensesView() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       setDialogOpen(false);
       setErrorMessage(null);
     },
@@ -190,18 +193,26 @@ export default function ExpensesView() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     }
   });
 
   const handleCreate = useCallback(() => {
     setEditingExpense(null);
+    setFormQuantity("1");
+    setFormUnitPrice("0");
     setDialogOpen(true);
-  }, []);
+  }, [setDialogOpen, setEditingExpense, setFormQuantity, setFormUnitPrice]);
 
-  const handleEdit = useCallback((expense: Expense) => {
-    setEditingExpense(expense);
-    setDialogOpen(true);
-  }, []);
+  const handleEdit = useCallback(
+    (expense: Expense) => {
+      setEditingExpense(expense);
+      setFormQuantity(String(expense.quantity ?? 1));
+      setFormUnitPrice(String(expense.unit_price ?? 0));
+      setDialogOpen(true);
+    },
+    [setDialogOpen, setEditingExpense, setFormQuantity, setFormUnitPrice]
+  );
 
   const handleDelete = useCallback(
     (expenseId: number) => {
@@ -216,6 +227,12 @@ export default function ExpensesView() {
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
+    const quantity = Number(formData.get("quantity")) || 1;
+    const unitPrice = Number(formData.get("unit_price")) || 0;
+    const amount = Number.isFinite(quantity * unitPrice)
+      ? Math.round(quantity * unitPrice * 100) / 100
+      : 0;
+
     const payload: ExpensePayload = {
       id: editingExpense?.id,
       budget_item_id: Number(formData.get("budget_item_id")),
@@ -223,9 +240,9 @@ export default function ExpensesView() {
         ? Number(formData.get("scenario_id"))
         : null,
       expense_date: String(formData.get("expense_date")),
-      amount: Number(formData.get("amount")),
-      quantity: Number(formData.get("quantity")) || 1,
-      unit_price: Number(formData.get("unit_price")) || 0,
+      amount,
+      quantity,
+      unit_price: unitPrice,
       vendor: formData.get("vendor")?.toString() ?? undefined,
       description: formData.get("description")?.toString() ?? undefined,
       status: formData.get("is_cancelled") === "on" ? "cancelled" : "recorded",
@@ -256,6 +273,15 @@ export default function ExpensesView() {
       ) ?? 0
     );
   }, [expenses]);
+
+  const totalAmount = useMemo(() => {
+    const quantityNumber = Number(formQuantity);
+    const unitPriceNumber = Number(formUnitPrice);
+    if (Number.isNaN(quantityNumber) || Number.isNaN(unitPriceNumber)) {
+      return 0;
+    }
+    return Math.round(quantityNumber * unitPriceNumber * 100) / 100;
+  }, [formQuantity, formUnitPrice]);
 
   const columns = useMemo<GridColDef[]>(() => {
     return [
@@ -353,15 +379,6 @@ export default function ExpensesView() {
 
   return (
     <Stack spacing={4} sx={{ width: "100%", minWidth: 0, maxWidth: "100%", overflowX: "hidden" }}>
-      <Box>
-        <Typography variant="h4" fontWeight={700} gutterBottom>
-          Harcama Yönetimi
-        </Typography>
-        <Typography variant="body1" color="text.secondary">
-          Güncel harcamaları kaydedin, bütçe dışı/iptal durumlarını takip edin ve filtreleyin.
-        </Typography>
-      </Box>
-
       <Card>
         <CardContent>
           <Grid container spacing={3} disableEqualOverflow>
@@ -642,22 +659,12 @@ export default function ExpensesView() {
                 </Grid>
                 <Grid item xs={12} md={4}>
                   <TextField
-                    label="Toplam Tutar"
-                    name="amount"
-                    type="number"
-                    inputProps={{ min: 0, step: 10 }}
-                    defaultValue={editingExpense?.amount ?? 0}
-                    required
-                    fullWidth
-                  />
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <TextField
                     label="Adet"
                     name="quantity"
                     type="number"
                     inputProps={{ min: 1, step: 1 }}
-                    defaultValue={editingExpense?.quantity ?? 1}
+                    value={formQuantity}
+                    onChange={(event) => setFormQuantity(event.target.value)}
                     fullWidth
                   />
                 </Grid>
@@ -667,7 +674,17 @@ export default function ExpensesView() {
                     name="unit_price"
                     type="number"
                     inputProps={{ min: 0, step: 10 }}
-                    defaultValue={editingExpense?.unit_price ?? 0}
+                    value={formUnitPrice}
+                    onChange={(event) => setFormUnitPrice(event.target.value)}
+                    fullWidth
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    label="Toplam Tutar"
+                    value={totalAmount.toFixed(2)}
+                    type="number"
+                    InputProps={{ readOnly: true }}
                     fullWidth
                   />
                 </Grid>

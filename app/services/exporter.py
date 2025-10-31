@@ -1,12 +1,13 @@
 import csv
 import io
 from datetime import date
+from typing import Literal
 
 from fastapi import Response
 from openpyxl import Workbook
 from sqlmodel import Session, select
 
-from app.models import Expense, PlanEntry
+from app.models import Expense, ExpenseStatus, PlanEntry
 from app.services.analytics import compute_quarterly_summary
 
 
@@ -15,6 +16,24 @@ CURRENCY_SYMBOL = "$"
 
 def _format_currency(value: float) -> str:
     return f"{CURRENCY_SYMBOL}{value:,.2f}"
+
+
+def _get_expenses(
+    session: Session,
+    year: int,
+    scenario_id: int | None = None,
+    budget_item_id: int | None = None,
+) -> list[Expense]:
+    query = select(Expense).where(
+        Expense.expense_date >= date(year, 1, 1),
+        Expense.expense_date <= date(year, 12, 31),
+    )
+    if scenario_id is not None:
+        query = query.where(Expense.scenario_id == scenario_id)
+    if budget_item_id is not None:
+        query = query.where(Expense.budget_item_id == budget_item_id)
+    query = query.order_by(Expense.expense_date)
+    return session.exec(query).all()
 
 
 def export_csv(
@@ -65,14 +84,8 @@ def export_csv(
             ]
         )
 
-    expense_query = select(Expense).where(
-        Expense.expense_date >= date(year, 1, 1), Expense.expense_date <= date(year, 12, 31)
-    )
-    if scenario_id is not None:
-        expense_query = expense_query.where(Expense.scenario_id == scenario_id)
-    if budget_item_id is not None:
-        expense_query = expense_query.where(Expense.budget_item_id == budget_item_id)
-    for expense in session.exec(expense_query).all():
+    expenses = _get_expenses(session, year, scenario_id, budget_item_id)
+    for expense in expenses:
         writer.writerow(
             [
                 "expense",
@@ -129,14 +142,8 @@ def export_xlsx(
             "Out of Budget",
         ]
     )
-    expense_query = select(Expense).where(
-        Expense.expense_date >= date(year, 1, 1), Expense.expense_date <= date(year, 12, 31)
-    )
-    if scenario_id is not None:
-        expense_query = expense_query.where(Expense.scenario_id == scenario_id)
-    if budget_item_id is not None:
-        expense_query = expense_query.where(Expense.budget_item_id == budget_item_id)
-    for expense in session.exec(expense_query).all():
+    expenses = _get_expenses(session, year, scenario_id, budget_item_id)
+    for expense in expenses:
         expense_sheet.append(
             [
                 expense.budget_item_id,
@@ -158,6 +165,67 @@ def export_xlsx(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
     response.headers["Content-Disposition"] = "attachment; filename=budget_export.xlsx"
+    return response
+
+
+def export_filtered_expenses_xlsx(
+    session: Session,
+    year: int,
+    scenario_id: int | None = None,
+    budget_item_id: int | None = None,
+    *,
+    filter_type: Literal["out_of_budget", "cancelled"],
+) -> Response:
+    expenses = _get_expenses(session, year, scenario_id, budget_item_id)
+    if filter_type == "out_of_budget":
+        filtered = [expense for expense in expenses if expense.is_out_of_budget]
+        sheet_title = "OutOfBudgetExpenses"
+        filename = f"out_of_budget_expenses_{year}.xlsx"
+    else:
+        filtered = [expense for expense in expenses if expense.status == ExpenseStatus.CANCELLED]
+        sheet_title = "CancelledExpenses"
+        filename = f"cancelled_expenses_{year}.xlsx"
+
+    wb = Workbook()
+    sheet = wb.active
+    sheet.title = sheet_title
+    sheet.append(
+        [
+            "Budget Item ID",
+            "Scenario ID",
+            "Date",
+            "Amount (USD)",
+            "Quantity",
+            "Unit Price",
+            "Vendor",
+            "Description",
+            "Status",
+            "Out of Budget",
+        ]
+    )
+    for expense in filtered:
+        sheet.append(
+            [
+                expense.budget_item_id,
+                expense.scenario_id,
+                expense.expense_date.isoformat(),
+                _format_currency(expense.amount),
+                expense.quantity,
+                expense.unit_price,
+                expense.vendor or "",
+                expense.description or "",
+                expense.status.value,
+                expense.is_out_of_budget,
+            ]
+        )
+
+    output = io.BytesIO()
+    wb.save(output)
+    response = Response(
+        content=output.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response.headers["Content-Disposition"] = f"attachment; filename={filename}"
     return response
 
 
