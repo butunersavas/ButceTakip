@@ -5,6 +5,8 @@ from typing import Literal
 
 from fastapi import Response
 from openpyxl import Workbook
+from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.datavalidation import DataValidation
 from sqlmodel import Session, select
 
 from app.models import Expense, ExpenseStatus, PlanEntry
@@ -16,6 +18,51 @@ CURRENCY_SYMBOL = "$"
 
 def _format_currency(value: float) -> str:
     return f"{CURRENCY_SYMBOL}{value:,.2f}"
+
+
+def _ensure_option_sheet(workbook: Workbook) -> str:
+    sheet_name = "_Options"
+    if sheet_name in workbook.sheetnames:
+        sheet = workbook[sheet_name]
+    else:
+        sheet = workbook.create_sheet(sheet_name)
+        sheet.sheet_state = "hidden"
+        sheet["A1"] = "Harcama Türü"
+        sheet["A2"] = "OPEX"
+        sheet["A3"] = "CAPEX"
+        sheet["B1"] = "Kategori"
+        sheet["B2"] = "Yazılım"
+        sheet["B3"] = "Donanım"
+        sheet["B4"] = "Hizmet"
+        sheet["B5"] = "Bakım"
+    return sheet_name
+
+
+def _add_category_validations(workbook: Workbook, sheet, type_col: int, category_col: int) -> None:
+    last_row = sheet.max_row
+    if last_row <= 1:
+        return
+    options_sheet = _ensure_option_sheet(workbook)
+    type_letter = get_column_letter(type_col)
+    category_letter = get_column_letter(category_col)
+    type_range = f"{type_letter}2:{type_letter}{last_row}"
+    category_range = f"{category_letter}2:{category_letter}{last_row}"
+
+    type_validation = DataValidation(
+        type="list",
+        formula1=f"={options_sheet}!$A$2:$A$3",
+        allow_blank=True
+    )
+    category_validation = DataValidation(
+        type="list",
+        formula1=f"={options_sheet}!$B$2:$B$5",
+        allow_blank=True
+    )
+
+    sheet.add_data_validation(type_validation)
+    sheet.add_data_validation(category_validation)
+    type_validation.add(type_range)
+    category_validation.add(category_range)
 
 
 def _get_expenses(
@@ -140,6 +187,8 @@ def export_xlsx(
             "Description",
             "Status",
             "Out of Budget",
+            "Harcama Türü",
+            "Kategori",
         ]
     )
     expenses = _get_expenses(session, year, scenario_id, budget_item_id)
@@ -156,8 +205,16 @@ def export_xlsx(
                 expense.description or "",
                 expense.status.value,
                 expense.is_out_of_budget,
+                "",
+                "",
             ]
         )
+    _add_category_validations(
+        wb,
+        expense_sheet,
+        expense_sheet.max_column - 1,
+        expense_sheet.max_column,
+    )
     output = io.BytesIO()
     wb.save(output)
     response = Response(
@@ -201,6 +258,8 @@ def export_filtered_expenses_xlsx(
             "Description",
             "Status",
             "Out of Budget",
+            "Harcama Türü",
+            "Kategori",
         ]
     )
     for expense in filtered:
@@ -216,8 +275,17 @@ def export_filtered_expenses_xlsx(
                 expense.description or "",
                 expense.status.value,
                 expense.is_out_of_budget,
+                "",
+                "",
             ]
         )
+
+    _add_category_validations(
+        wb,
+        sheet,
+        sheet.max_column - 1,
+        sheet.max_column,
+    )
 
     output = io.BytesIO()
     wb.save(output)

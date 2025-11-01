@@ -7,6 +7,7 @@ import { ThemeProvider, CssBaseline, GlobalStyles } from "@mui/material";
 import App from "./App";
 import theme from "./theme";
 import { AuthProvider } from "./context/AuthContext";
+import { FilterProvider } from "./context/FilterContext";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -43,7 +44,9 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
         />
         <BrowserRouter>
           <AuthProvider>
-            <App />
+            <FilterProvider>
+              <App />
+            </FilterProvider>
           </AuthProvider>
         </BrowserRouter>
       </ThemeProvider>

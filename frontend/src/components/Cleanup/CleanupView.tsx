@@ -18,6 +18,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import { useAuth } from "../../context/AuthContext";
+import { useFilters } from "../../context/FilterContext";
 
 interface Scenario {
   id: number;
@@ -40,8 +41,7 @@ interface CleanupResponse {
 export default function CleanupView() {
   const client = useAuthorizedClient();
   const { user } = useAuth();
-
-  const [scenarioId, setScenarioId] = useState<number | null>(null);
+  const { scenarioId, setScenarioId } = useFilters();
   const [budgetItemId, setBudgetItemId] = useState<number | null>(null);
   const [clearImportedOnly, setClearImportedOnly] = useState(false);
   const [resetPlans, setResetPlans] = useState(false);

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Button,
@@ -22,6 +22,7 @@ import { DataGrid, GridColDef } from "@mui/x-data-grid";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
+import { useFilters } from "../../context/FilterContext";
 import { useAuth } from "../../context/AuthContext";
 
 interface Scenario {
@@ -88,8 +89,8 @@ export default function PlansView() {
   const { user } = useAuth();
 
   const currentYear = new Date().getFullYear();
-  const [year, setYear] = useState(currentYear);
-  const [scenarioId, setScenarioId] = useState<number | null>(null);
+  const { year, setYear, scenarioId, setScenarioId } = useFilters();
+  const effectiveYear = year ?? currentYear;
   const [budgetItemId, setBudgetItemId] = useState<number | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState<PlanEntry | null>(null);
@@ -112,9 +113,9 @@ export default function PlansView() {
   });
 
   const { data: plans, isFetching } = useQuery<PlanEntry[]>({
-    queryKey: ["plans", year, scenarioId, budgetItemId],
+    queryKey: ["plans", effectiveYear, scenarioId, budgetItemId],
     queryFn: async () => {
-      const params: Record<string, number> = { year };
+      const params: Record<string, number> = { year: effectiveYear };
       if (scenarioId) params.scenario_id = scenarioId;
       if (budgetItemId) params.budget_item_id = budgetItemId;
       const { data } = await client.get<PlanEntry[]>("/plans", { params });
@@ -123,14 +124,28 @@ export default function PlansView() {
   });
 
   const { data: aggregates } = useQuery<PlanAggregate[]>({
-    queryKey: ["plan-aggregate", year, scenarioId],
+    queryKey: ["plan-aggregate", effectiveYear, scenarioId],
     queryFn: async () => {
-      const params: Record<string, number> = { year };
+      const params: Record<string, number> = { year: effectiveYear };
       if (scenarioId) params.scenario_id = scenarioId;
       const { data } = await client.get<PlanAggregate[]>("/plans/aggregate", { params });
       return data;
     }
   });
+
+  useEffect(() => {
+    if (!scenarios?.length) return;
+    const matchingScenario = scenarios.find((scenario) => scenario.year === effectiveYear);
+    setScenarioId((previous) => {
+      if (
+        previous &&
+        scenarios.some((scenario) => scenario.id === previous && scenario.year === effectiveYear)
+      ) {
+        return previous;
+      }
+      return matchingScenario ? matchingScenario.id : null;
+    });
+  }, [effectiveYear, scenarios, setScenarioId]);
 
   const mutation = useMutation({
     mutationFn: async (payload: PlanMutationPayload) => {
@@ -171,7 +186,7 @@ export default function PlansView() {
     const formData = new FormData(event.currentTarget);
     const payload: PlanMutationPayload = {
       id: editingPlan?.id ?? undefined,
-      year: Number(formData.get("year")) || year,
+      year: Number(formData.get("year")) || effectiveYear,
       month: Number(formData.get("month")),
       amount: Number(formData.get("amount")),
       scenario_id: Number(formData.get("scenario_id")),
@@ -279,7 +294,7 @@ export default function PlansView() {
               <TextField
                 label="Yıl"
                 type="number"
-                value={year}
+                value={effectiveYear}
                 onChange={(event) => setYear(Number(event.target.value))}
                 fullWidth
               />
@@ -388,7 +403,7 @@ export default function PlansView() {
                 label="Yıl"
                 name="year"
                 type="number"
-                defaultValue={editingPlan?.year ?? year}
+                    defaultValue={editingPlan?.year ?? effectiveYear}
                 required
               />
               <TextField
