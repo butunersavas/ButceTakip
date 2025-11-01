@@ -16,6 +16,7 @@ import DownloadIcon from "@mui/icons-material/Download";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
+import { useFilters } from "../../context/FilterContext";
 
 interface Scenario {
   id: number;
@@ -43,8 +44,12 @@ export default function ImportExportView() {
   const queryClient = useQueryClient();
   const [importSummary, setImportSummary] = useState<ImportSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [year, setYear] = useState<number | "">(new Date().getFullYear());
-  const [scenarioId, setScenarioId] = useState<number | null>(null);
+  const {
+    year: selectedYear,
+    setYear: setSelectedYear,
+    scenarioId,
+    setScenarioId
+  } = useFilters();
   const [budgetItemId, setBudgetItemId] = useState<number | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
@@ -67,18 +72,18 @@ export default function ImportExportView() {
 
   useEffect(() => {
     if (!scenarios?.length) return;
-    const numericYear = typeof year === "string" ? Number(year) : year;
-    const matchingScenario = scenarios.find((scenario) => scenario.year === numericYear);
+    if (selectedYear === null) return;
+    const matchingScenario = scenarios.find((scenario) => scenario.year === selectedYear);
     setScenarioId((previous) => {
       if (
         previous &&
-        scenarios.some((scenario) => scenario.id === previous && scenario.year === numericYear)
+        scenarios.some((scenario) => scenario.id === previous && scenario.year === selectedYear)
       ) {
         return previous;
       }
       return matchingScenario ? matchingScenario.id : null;
     });
-  }, [scenarios, year]);
+  }, [scenarios, selectedYear, setScenarioId]);
 
   const handleImport = async (file: File, type: "json" | "csv") => {
     const formData = new FormData();
@@ -108,7 +113,7 @@ export default function ImportExportView() {
 
   const buildExportParams = () => {
     const params: Record<string, string | number> = {};
-    if (year) params.year = Number(year);
+    if (selectedYear !== null) params.year = selectedYear;
     if (scenarioId) params.scenario_id = scenarioId;
     if (budgetItemId) params.budget_item_id = budgetItemId;
     return params;
@@ -257,8 +262,10 @@ export default function ImportExportView() {
                     <TextField
                       label="Yıl"
                       type="number"
-                      value={year}
-                      onChange={(event) => setYear(event.target.value ? Number(event.target.value) : "")}
+                value={selectedYear ?? ""}
+                onChange={(event) =>
+                  setSelectedYear(event.target.value ? Number(event.target.value) : null)
+                }
                       fullWidth
                     />
                   </Grid>

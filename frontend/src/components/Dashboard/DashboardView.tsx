@@ -27,6 +27,7 @@ import {
 } from "recharts";
 
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
+import { useFilters } from "../../context/FilterContext";
 
 interface DashboardSummary {
   month: number;
@@ -85,8 +86,8 @@ function formatCurrency(value: number) {
 export default function DashboardView() {
   const client = useAuthorizedClient();
   const currentYear = new Date().getFullYear();
-  const [year, setYear] = useState(currentYear);
-  const [scenarioId, setScenarioId] = useState<number | null>(null);
+  const { year, setYear, scenarioId, setScenarioId } = useFilters();
+  const effectiveYear = year ?? currentYear;
   const [budgetItemId, setBudgetItemId] = useState<number | null>(null);
 
   const { data: scenarios } = useQuery<Scenario[]>({
@@ -107,22 +108,22 @@ export default function DashboardView() {
 
   useEffect(() => {
     if (!scenarios?.length) return;
-    const matchingScenario = scenarios.find((scenario) => scenario.year === year);
+    const matchingScenario = scenarios.find((scenario) => scenario.year === effectiveYear);
     setScenarioId((previous) => {
       if (
         previous &&
-        scenarios.some((scenario) => scenario.id === previous && scenario.year === year)
+        scenarios.some((scenario) => scenario.id === previous && scenario.year === effectiveYear)
       ) {
         return previous;
       }
       return matchingScenario ? matchingScenario.id : null;
     });
-  }, [scenarios, year]);
+  }, [scenarios, effectiveYear, setScenarioId]);
 
   const { data: dashboard, isLoading } = useQuery<DashboardResponse>({
-    queryKey: ["dashboard", year, scenarioId, budgetItemId],
+    queryKey: ["dashboard", effectiveYear, scenarioId, budgetItemId],
     queryFn: async () => {
-      const params: Record<string, number> = { year };
+      const params: Record<string, number> = { year: effectiveYear };
       if (scenarioId) params.scenario_id = scenarioId;
       if (budgetItemId) params.budget_item_id = budgetItemId;
       const { data } = await client.get<DashboardResponse>("/dashboard", { params });
@@ -174,7 +175,7 @@ export default function DashboardView() {
               <TextField
                 label="Yıl"
                 type="number"
-                value={year}
+                value={effectiveYear}
                 onChange={(event) => setYear(Number(event.target.value))}
                 fullWidth
               />

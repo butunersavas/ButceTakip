@@ -24,7 +24,7 @@ import { useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 
 import { useAuth } from "../../context/AuthContext";
-import suratLogo from "../../assets/surat-kargo-logo.svg";
+import suratLogo from "../../assets/surat-kargo-logo.png";
 
 const drawerWidth = 260;
 
@@ -76,7 +76,18 @@ export default function AppLayout({ children }: AppLayoutProps) {
 
   const drawer = (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      <Box sx={{ p: 3, display: "flex", alignItems: "center", gap: 2 }}>
+      <Box
+        component={Link}
+        to="/"
+        sx={{
+          p: 3,
+          display: "flex",
+          alignItems: "center",
+          gap: 2,
+          textDecoration: "none",
+          color: "inherit"
+        }}
+      >
         <Box
           component="img"
           src={suratLogo}
@@ -171,12 +182,46 @@ export default function AppLayout({ children }: AppLayoutProps) {
           </IconButton>
           <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
             <Box
-              component="img"
-              src={suratLogo}
-              alt="Sürat Kargo"
-              sx={{ height: 32, width: "auto", display: { xs: "none", sm: "block" } }}
-            />
-            <Typography variant="h6" color="text.primary" sx={{ fontWeight: 600 }}>
+              component={Link}
+              to="/"
+              sx={{
+                display: { xs: "none", sm: "flex" },
+                alignItems: "center",
+                gap: 1.5,
+                textDecoration: "none"
+              }}
+            >
+              <Box
+                component="img"
+                src={suratLogo}
+                alt="Sürat Kargo"
+                sx={{ height: 32, width: "auto" }}
+              />
+              <Typography variant="h6" color="text.primary" sx={{ fontWeight: 600 }}>
+                Sürat Kargo Bütçe Yönetimi
+              </Typography>
+            </Box>
+            <Typography
+              component={Link}
+              to="/"
+              variant="h6"
+              color="text.primary"
+              sx={{
+                fontWeight: 600,
+                textDecoration: "none",
+                display: { xs: "block", sm: "none" }
+              }}
+            >
+              Sürat Kargo Bütçe Yönetimi
+            </Typography>
+            <Typography
+              variant="h6"
+              color="text.secondary"
+              sx={{
+                fontWeight: 500,
+                display: { xs: "none", sm: "block" }
+              }}
+            >
               {navItems.find((item) => item.path === location.pathname)?.label ?? "Bütçe Yönetimi"}
             </Typography>
           </Box>

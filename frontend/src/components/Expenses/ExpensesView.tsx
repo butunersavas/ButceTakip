@@ -16,6 +16,11 @@ import {
   MenuItem,
   Stack,
   Switch,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
   TextField,
   Tooltip,
   Typography
@@ -23,12 +28,14 @@ import {
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/DeleteOutline";
+import AssessmentIcon from "@mui/icons-material/AssessmentOutlined";
 import { DataGrid, GridColDef } from "@mui/x-data-grid";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import dayjs from "dayjs";
 
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import { useAuth } from "../../context/AuthContext";
+import { useFilters } from "../../context/FilterContext";
 
 interface Scenario {
   id: number;
@@ -55,6 +62,8 @@ export interface Expense {
   status: "recorded" | "cancelled";
   is_out_of_budget: boolean;
   created_by_id: number | null;
+  created_by_name?: string | null;
+  updated_by_name?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -91,8 +100,13 @@ export default function ExpensesView() {
   const { user } = useAuth();
 
   const currentYear = new Date().getFullYear();
-  const [year, setYear] = useState<number | "">(currentYear);
-  const [scenarioId, setScenarioId] = useState<number | null>(null);
+  const {
+    year: selectedYear,
+    setYear: setSelectedYear,
+    scenarioId,
+    setScenarioId
+  } = useFilters();
+  const effectiveYear = selectedYear ?? currentYear;
   const [budgetItemId, setBudgetItemId] = useState<number | null>(null);
   const [statusFilter, setStatusFilter] = useState<"" | Expense["status"]>("");
   const [startDate, setStartDate] = useState<string>("");
@@ -101,6 +115,7 @@ export default function ExpensesView() {
   const [mineOnly, setMineOnly] = useState(false);
   const [todayOnly, setTodayOnly] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [vendorDialogOpen, setVendorDialogOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [formQuantity, setFormQuantity] = useState<string>("1");
@@ -124,22 +139,23 @@ export default function ExpensesView() {
 
   useEffect(() => {
     if (!scenarios?.length) return;
-    const matchingScenario = scenarios.find((scenario) => scenario.year === year);
+    if (selectedYear === null) return;
+    const matchingScenario = scenarios.find((scenario) => scenario.year === selectedYear);
     setScenarioId((previous) => {
       if (
         previous &&
-        scenarios.some((scenario) => scenario.id === previous && scenario.year === year)
+        scenarios.some((scenario) => scenario.id === previous && scenario.year === selectedYear)
       ) {
         return previous;
       }
       return matchingScenario ? matchingScenario.id : null;
     });
-  }, [scenarios, year]);
+  }, [scenarios, selectedYear, setScenarioId]);
 
   const { data: expenses, isFetching } = useQuery<Expense[]>({
     queryKey: [
       "expenses",
-      year,
+      selectedYear ?? "all",
       scenarioId,
       budgetItemId,
       statusFilter,
@@ -151,7 +167,7 @@ export default function ExpensesView() {
     ],
     queryFn: async () => {
       const params: Record<string, string | number | boolean> = {};
-      if (year) params.year = Number(year);
+      if (selectedYear !== null) params.year = selectedYear;
       if (scenarioId) params.scenario_id = scenarioId;
       if (budgetItemId) params.budget_item_id = budgetItemId;
       if (statusFilter) params.status_filter = statusFilter;
@@ -196,6 +212,22 @@ export default function ExpensesView() {
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     }
   });
+
+  const vendorSummary = useMemo(() => {
+    if (!expenses?.length) return [] as Array<{ vendor: string; total: number; count: number }>;
+    const summaryMap = new Map<string, { total: number; count: number }>();
+    for (const expense of expenses) {
+      const vendorName = expense.vendor?.trim();
+      if (!vendorName) continue;
+      const existing = summaryMap.get(vendorName) ?? { total: 0, count: 0 };
+      existing.total += expense.amount;
+      existing.count += 1;
+      summaryMap.set(vendorName, existing);
+    }
+    return Array.from(summaryMap.entries())
+      .map(([vendor, data]) => ({ vendor, ...data }))
+      .sort((a, b) => b.total - a.total);
+  }, [expenses]);
 
   const handleCreate = useCallback(() => {
     setEditingExpense(null);
@@ -282,6 +314,21 @@ export default function ExpensesView() {
     }
     return Math.round(quantityNumber * unitPriceNumber * 100) / 100;
   }, [formQuantity, formUnitPrice]);
+
+  const currentUserName = user?.full_name ?? "-";
+  const createdByDisplay = editingExpense?.created_by_name
+    ?? (editingExpense?.created_by_id
+      ? editingExpense.created_by_id === user?.id
+        ? currentUserName
+        : `Kullanıcı #${editingExpense.created_by_id}`
+      : currentUserName);
+  const createdAtDisplay = editingExpense
+    ? dayjs(editingExpense.created_at).format("DD MMM YYYY HH:mm")
+    : "Kaydedildiğinde sizin adınıza kaydedilecek";
+  const updatedByDisplay = editingExpense?.updated_by_name ?? currentUserName;
+  const updatedAtDisplay = editingExpense
+    ? dayjs(editingExpense.updated_at).format("DD MMM YYYY HH:mm")
+    : "Henüz güncellenmedi";
 
   const columns = useMemo<GridColDef[]>(() => {
     return [
@@ -386,8 +433,10 @@ export default function ExpensesView() {
               <TextField
                 label="Yıl"
                 type="number"
-                value={year}
-                onChange={(event) => setYear(event.target.value ? Number(event.target.value) : "")}
+                value={selectedYear ?? ""}
+                onChange={(event) =>
+                  setSelectedYear(event.target.value ? Number(event.target.value) : null)
+                }
                 fullWidth
               />
             </Grid>
@@ -492,10 +541,25 @@ export default function ExpensesView() {
                 />
               </Stack>
             </Grid>
-            <Grid item xs={12} md={6} textAlign="right">
-              <Button variant="contained" startIcon={<AddIcon />} onClick={handleCreate}>
-                Harcama Ekle
-              </Button>
+            <Grid item xs={12} md={6}>
+              <Stack
+                direction={{ xs: "column", sm: "row" }}
+                spacing={1.5}
+                justifyContent={{ xs: "flex-start", md: "flex-end" }}
+                alignItems={{ xs: "stretch", sm: "center" }}
+              >
+                <Button
+                  variant="outlined"
+                  startIcon={<AssessmentIcon />}
+                  onClick={() => setVendorDialogOpen(true)}
+                  sx={{ whiteSpace: "nowrap" }}
+                >
+                  Aynı tedarikçi raporu
+                </Button>
+                <Button variant="contained" startIcon={<AddIcon />} onClick={handleCreate}>
+                  Harcama Ekle
+                </Button>
+              </Stack>
             </Grid>
           </Grid>
         </CardContent>
@@ -603,12 +667,90 @@ export default function ExpensesView() {
         </Grid>
       </Grid>
 
+      <Dialog
+        open={vendorDialogOpen}
+        onClose={() => setVendorDialogOpen(false)}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>Aynı tedarikçiden bu yıl ne kadar alınmış?</DialogTitle>
+        <DialogContent dividers>
+          {vendorSummary.length ? (
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Tedarikçi</TableCell>
+                  <TableCell align="right">Kayıt Sayısı</TableCell>
+                  <TableCell align="right">Toplam Tutar</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {vendorSummary.map((entry) => (
+                  <TableRow key={entry.vendor}>
+                    <TableCell>{entry.vendor}</TableCell>
+                    <TableCell align="right">{entry.count}</TableCell>
+                    <TableCell align="right">{formatCurrency(entry.total)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              Seçili filtrelere uygun tedarikçi verisi bulunamadı.
+            </Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setVendorDialogOpen(false)}>Kapat</Button>
+        </DialogActions>
+      </Dialog>
+
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} fullWidth maxWidth="md">
         <DialogTitle>{editingExpense ? "Harcamayı Güncelle" : "Yeni Harcama"}</DialogTitle>
         <form onSubmit={handleSubmit}>
           <DialogContent>
             <Stack spacing={2.5}>
               {errorMessage && <Alert severity="error">{errorMessage}</Alert>}
+              <Stack
+                direction={{ xs: "column", sm: "row" }}
+                spacing={3}
+                sx={{
+                  p: 2,
+                  borderRadius: 2,
+                  backgroundColor: "background.default"
+                }}
+              >
+                <Box>
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ textTransform: "uppercase", letterSpacing: 0.4 }}
+                  >
+                    Kim ekledi
+                  </Typography>
+                  <Typography variant="body2" fontWeight={600} sx={{ mt: 0.5 }}>
+                    {createdByDisplay}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {createdAtDisplay}
+                  </Typography>
+                </Box>
+                <Box>
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ textTransform: "uppercase", letterSpacing: 0.4 }}
+                  >
+                    Kim güncelledi
+                  </Typography>
+                  <Typography variant="body2" fontWeight={600} sx={{ mt: 0.5 }}>
+                    {updatedByDisplay}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {updatedAtDisplay}
+                  </Typography>
+                </Box>
+              </Stack>
               <Grid container spacing={2}>
                 <Grid item xs={12} md={4}>
                   <TextField
