@@ -4,9 +4,14 @@ import { BrowserRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider, CssBaseline, GlobalStyles } from "@mui/material";
 
+import dayjs from "dayjs";
+import "dayjs/locale/tr";
+
 import App from "./App";
 import theme from "./theme";
 import { AuthProvider } from "./context/AuthContext";
+
+dayjs.locale("tr");
 
 const queryClient = new QueryClient({
   defaultOptions: {

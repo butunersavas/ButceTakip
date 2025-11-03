@@ -22,6 +22,7 @@ import { DataGrid, GridColDef } from "@mui/x-data-grid";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
+import usePersistentState from "../../hooks/usePersistentState";
 import { useAuth } from "../../context/AuthContext";
 
 interface Scenario {
@@ -34,6 +35,7 @@ interface BudgetItem {
   id: number;
   code: string;
   name: string;
+  map_attribute?: string | null;
 }
 
 interface PlanEntry {
@@ -88,9 +90,9 @@ export default function PlansView() {
   const { user } = useAuth();
 
   const currentYear = new Date().getFullYear();
-  const [year, setYear] = useState(currentYear);
-  const [scenarioId, setScenarioId] = useState<number | null>(null);
-  const [budgetItemId, setBudgetItemId] = useState<number | null>(null);
+  const [year, setYear] = usePersistentState<number>("plans:year", currentYear);
+  const [scenarioId, setScenarioId] = usePersistentState<number | null>("plans:scenarioId", null);
+  const [budgetItemId, setBudgetItemId] = usePersistentState<number | null>("plans:budgetItemId", null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState<PlanEntry | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -213,6 +215,15 @@ export default function PlansView() {
           return item ? `${item.code} — ${item.name}` : "-";
         }
       },
+      {
+        field: "map_attribute",
+        headerName: "Map Nitelik",
+        flex: 1,
+        valueGetter: (params) => {
+          const item = budgetItems?.find((budget) => budget.id === params.row.budget_item_id);
+          return item?.map_attribute ?? "-";
+        }
+      },
       { field: "year", headerName: "Yıl", width: 110 },
       {
         field: "month",
@@ -280,7 +291,10 @@ export default function PlansView() {
                 label="Yıl"
                 type="number"
                 value={year}
-                onChange={(event) => setYear(Number(event.target.value))}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setYear(value ? Number(value) : currentYear);
+                }}
                 fullWidth
               />
             </Grid>
@@ -316,6 +330,7 @@ export default function PlansView() {
                 {budgetItems?.map((item) => (
                   <MenuItem key={item.id} value={item.id}>
                     {item.code} — {item.name}
+                    {item.map_attribute ? ` (${item.map_attribute})` : ""}
                   </MenuItem>
                 ))}
               </TextField>
@@ -435,6 +450,7 @@ export default function PlansView() {
                 {budgetItems?.map((item) => (
                   <MenuItem key={item.id} value={item.id}>
                     {item.code} — {item.name}
+                    {item.map_attribute ? ` (${item.map_attribute})` : ""}
                   </MenuItem>
                 ))}
               </TextField>

@@ -27,6 +27,15 @@ def import_csv(
     return importer.import_csv(file, session)
 
 
+@router.post("/import/xlsx", response_model=ImportSummary)
+def import_xlsx(
+    file: UploadFile = File(...),
+    session: Session = Depends(get_db_session),
+    _= Depends(get_current_user),
+) -> ImportSummary:
+    return importer.import_xlsx(file, session)
+
+
 @router.get("/export/csv")
 def export_csv(
     year: int = Query(...),

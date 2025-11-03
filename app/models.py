@@ -47,6 +47,7 @@ class BudgetItem(TimestampMixin, SQLModel, table=True):
     code: str = Field(nullable=False, unique=True, index=True)
     name: str = Field(nullable=False)
     description: Optional[str] = Field(default=None)
+    map_attribute: Optional[str] = Field(default=None, nullable=True)
 
     plans: list["PlanEntry"] = Relationship(back_populates="budget_item")
     expenses: list["Expense"] = Relationship(back_populates="budget_item")
