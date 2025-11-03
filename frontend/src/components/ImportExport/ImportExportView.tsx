@@ -16,6 +16,7 @@ import DownloadIcon from "@mui/icons-material/Download";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
+import usePersistentState from "../../hooks/usePersistentState";
 
 interface Scenario {
   id: number;
@@ -27,6 +28,7 @@ interface BudgetItem {
   id: number;
   code: string;
   name: string;
+  map_attribute?: string | null;
 }
 
 interface ImportSummary {
@@ -36,16 +38,16 @@ interface ImportSummary {
   message?: string;
 }
 
-const sampleCsv = `type,budget_code,budget_name,scenario,year,month,amount,date,quantity,unit_price,vendor,description,out_of_budget\nplan,MARKETING,Marketing Temel,Temel,2024,1,15000,,,,,,false\nexpense,MARKETING,Marketing Temel,Temel,2024,,12000,2024-01-15,1,12000,ACME Ltd,Reklam harcaması,false\n`;
+const sampleCsv = `type,budget_code,budget_name,map_attribute,scenario,year,month,amount,date,quantity,unit_price,vendor,description,out_of_budget\nplan,MARKETING,Marketing Temel,Hizmet,Temel,2024,1,15000,,,,,,false\nexpense,MARKETING,Marketing Temel,Hizmet,Temel,2024,,12000,2024-01-15,1,12000,ACME Ltd,Reklam harcaması,false\n`;
 
 export default function ImportExportView() {
   const client = useAuthorizedClient();
   const queryClient = useQueryClient();
   const [importSummary, setImportSummary] = useState<ImportSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [year, setYear] = useState<number | "">(new Date().getFullYear());
-  const [scenarioId, setScenarioId] = useState<number | null>(null);
-  const [budgetItemId, setBudgetItemId] = useState<number | null>(null);
+  const [year, setYear] = usePersistentState<number | "">("io:year", new Date().getFullYear());
+  const [scenarioId, setScenarioId] = usePersistentState<number | null>("io:scenarioId", null);
+  const [budgetItemId, setBudgetItemId] = usePersistentState<number | null>("io:budgetItemId", null);
   const [exportError, setExportError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
 
@@ -80,7 +82,7 @@ export default function ImportExportView() {
     });
   }, [scenarios, year]);
 
-  const handleImport = async (file: File, type: "json" | "csv") => {
+  const handleImport = async (file: File, type: "json" | "csv" | "xlsx") => {
     const formData = new FormData();
     formData.append("file", file);
     try {
@@ -98,10 +100,20 @@ export default function ImportExportView() {
     }
   };
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>, type: "json" | "csv") => {
+  const handleFileChange = (
+    event: React.ChangeEvent<HTMLInputElement>,
+    type: "json" | "csv"
+  ) => {
     const file = event.target.files?.[0];
     if (file) {
-      void handleImport(file, type);
+      const extension = file.name.split(".").pop()?.toLowerCase();
+      if (type === "json") {
+        void handleImport(file, "json");
+      } else if (extension === "xlsx" || extension === "xls") {
+        void handleImport(file, "xlsx");
+      } else {
+        void handleImport(file, "csv");
+      }
       event.target.value = "";
     }
   };
@@ -204,7 +216,8 @@ export default function ImportExportView() {
                   İçe Aktarım
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Plan ve harcama verilerini JSON veya CSV formatında sisteme aktarabilirsiniz.
+                  Plan ve harcama verilerini JSON, CSV veya Excel (XLSX) formatında sisteme aktarabilirsiniz. Lütfen dosyalarınıza
+                  Map Nitelik sütununu da ekleyin.
                 </Typography>
                 {error && <Alert severity="error">{error}</Alert>}
                 {importSummary && (
@@ -294,6 +307,7 @@ export default function ImportExportView() {
                       {budgetItems?.map((item) => (
                         <MenuItem key={item.id} value={item.id}>
                           {item.code} — {item.name}
+                          {item.map_attribute ? ` (${item.map_attribute})` : ""}
                         </MenuItem>
                       ))}
                     </TextField>

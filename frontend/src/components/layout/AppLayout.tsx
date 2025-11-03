@@ -24,7 +24,7 @@ import { useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 
 import { useAuth } from "../../context/AuthContext";
-import suratLogo from "../../assets/surat-kargo-logo.svg";
+import brandLogo from "../../assets/brand-logo.svg";
 
 const drawerWidth = 260;
 
@@ -79,16 +79,16 @@ export default function AppLayout({ children }: AppLayoutProps) {
       <Box sx={{ p: 3, display: "flex", alignItems: "center", gap: 2 }}>
         <Box
           component="img"
-          src={suratLogo}
-          alt="Sürat Kargo"
+          src={brandLogo}
+          alt="Bütçe Takip"
           sx={{ width: 48, height: 48, flexShrink: 0 }}
         />
         <Box>
           <Typography variant="h6" fontWeight={700} color="primary">
-            Sürat Kargo
+            Bütçe Takip
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Bütçe Yönetimi
+            Yönetim Platformu
           </Typography>
         </Box>
       </Box>
@@ -160,27 +160,50 @@ export default function AppLayout({ children }: AppLayoutProps) {
           backgroundColor: "transparent"
         }}
       >
-        <Toolbar sx={{ justifyContent: "space-between", backgroundColor: "background.paper", borderBottom: "1px solid", borderColor: "divider" }}>
-          <IconButton
-            color="inherit"
-            edge="start"
-            onClick={() => setMobileOpen(true)}
-            sx={{ mr: 2, display: { md: "none" } }}
-          >
-            <MenuIcon />
-          </IconButton>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+        <Toolbar
+          sx={{
+            backgroundColor: "background.paper",
+            borderBottom: "1px solid",
+            borderColor: "divider",
+            columnGap: 2
+          }}
+        >
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, minWidth: 0 }}>
+            <IconButton
+              color="inherit"
+              edge="start"
+              onClick={() => setMobileOpen(true)}
+              sx={{ mr: 1, display: { md: "none" } }}
+            >
+              <MenuIcon />
+            </IconButton>
             <Box
               component="img"
-              src={suratLogo}
-              alt="Sürat Kargo"
-              sx={{ height: 32, width: "auto", display: { xs: "none", sm: "block" } }}
+              src={brandLogo}
+              alt="Bütçe Takip"
+              sx={{ height: 32, width: 32, display: { xs: "none", sm: "block" } }}
             />
-            <Typography variant="h6" color="text.primary" sx={{ fontWeight: 600 }}>
-              {navItems.find((item) => item.path === location.pathname)?.label ?? "Bütçe Yönetimi"}
+            <Typography
+              variant="subtitle1"
+              color="text.secondary"
+              sx={{ fontWeight: 600, display: { xs: "none", md: "block" } }}
+            >
+              Bütçe Takip Platformu
             </Typography>
           </Box>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+          <Typography
+            component="h1"
+            sx={{
+              flexGrow: 1,
+              textAlign: "center",
+              fontWeight: 700,
+              fontSize: { xs: "1.35rem", md: "1.8rem" },
+              color: "text.primary"
+            }}
+          >
+            {navItems.find((item) => item.path === location.pathname)?.label ?? "Bütçe Yönetimi"}
+          </Typography>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 2, minWidth: 0 }}>
             <Box sx={{ textAlign: "right" }}>
               <Typography variant="subtitle2" fontWeight={600}>
                 {user?.full_name}

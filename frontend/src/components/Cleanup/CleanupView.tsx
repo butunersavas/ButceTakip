@@ -17,6 +17,7 @@ import CleaningServicesIcon from "@mui/icons-material/CleaningServices";
 import { useQuery } from "@tanstack/react-query";
 
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
+import usePersistentState from "../../hooks/usePersistentState";
 import { useAuth } from "../../context/AuthContext";
 
 interface Scenario {
@@ -29,6 +30,7 @@ interface BudgetItem {
   id: number;
   code: string;
   name: string;
+  map_attribute?: string | null;
 }
 
 interface CleanupResponse {
@@ -41,10 +43,10 @@ export default function CleanupView() {
   const client = useAuthorizedClient();
   const { user } = useAuth();
 
-  const [scenarioId, setScenarioId] = useState<number | null>(null);
-  const [budgetItemId, setBudgetItemId] = useState<number | null>(null);
-  const [clearImportedOnly, setClearImportedOnly] = useState(false);
-  const [resetPlans, setResetPlans] = useState(false);
+  const [scenarioId, setScenarioId] = usePersistentState<number | null>("cleanup:scenarioId", null);
+  const [budgetItemId, setBudgetItemId] = usePersistentState<number | null>("cleanup:budgetItemId", null);
+  const [clearImportedOnly, setClearImportedOnly] = usePersistentState<boolean>("cleanup:clearImported", false);
+  const [resetPlans, setResetPlans] = usePersistentState<boolean>("cleanup:resetPlans", false);
   const [result, setResult] = useState<CleanupResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -138,6 +140,7 @@ export default function CleanupView() {
                   {budgetItems?.map((item) => (
                     <MenuItem key={item.id} value={item.id}>
                       {item.code} — {item.name}
+                      {item.map_attribute ? ` (${item.map_attribute})` : ""}
                     </MenuItem>
                   ))}
                 </TextField>
