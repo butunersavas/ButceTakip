@@ -16,32 +16,59 @@ from app.schemas import ImportSummary
 
 MONTH_ALIASES = {
     "jan": 1,
+    "january": 1,
     "feb": 2,
+    "february": 2,
     "mart": 3,
+    "mar": 3,
+    "march": 3,
     "apr": 4,
+    "april": 4,
     "may": 5,
     "jun": 6,
+    "june": 6,
     "jul": 7,
+    "july": 7,
     "aug": 8,
+    "august": 8,
     "sep": 9,
     "sept": 9,
+    "september": 9,
     "oct": 10,
+    "october": 10,
     "nov": 11,
+    "november": 11,
     "dec": 12,
+    "december": 12,
     "oca": 1,
+    "ocak": 1,
     "şub": 2,
+    "şubat": 2,
     "sub": 2,
+    "subat": 2,
     "nis": 4,
+    "nisan": 4,
     "mayıs": 5,
     "mayis": 5,
     "haz": 6,
+    "haziran": 6,
     "tem": 7,
+    "temmuz": 7,
     "ağu": 8,
+    "ağustos": 8,
     "agu": 8,
+    "agustos": 8,
     "eyl": 9,
+    "eylül": 9,
+    "eylul": 9,
     "eki": 10,
+    "ekim": 10,
     "kas": 11,
+    "kasım": 11,
+    "kasim": 11,
     "ara": 12,
+    "aralık": 12,
+    "aralik": 12,
 }
 
 EXPENSE_COLUMN_KEYWORDS = {"actual", "expense", "spend", "spent", "harcama", "gerçekleşen"}
@@ -77,7 +104,15 @@ def _ensure_budget_item(
 
 
 def _extract_map_attribute(data: dict[str, Any]) -> str | None:
-    for key in ("map_attribute", "map nitelik", "map-nitelik", "mapnitelik", "map_nitelik"):
+    for key in (
+        "map_attribute",
+        "map nitelik",
+        "map-nitelik",
+        "mapnitelik",
+        "map_nitelik",
+        "map-capex or opex",
+        "map capex or opex",
+    ):
         value = data.get(key)
         if value is None:
             continue
