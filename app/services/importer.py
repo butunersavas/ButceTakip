@@ -1,7 +1,10 @@
 import csv
 import io
 import json
-from datetime import date
+from datetime import date, datetime
+from typing import Any
+
+from openpyxl import load_workbook
 
 from fastapi import HTTPException, UploadFile, status
 from sqlmodel import Session, select
@@ -10,17 +13,101 @@ from app.models import BudgetItem, Expense, PlanEntry, Scenario
 from app.schemas import ImportSummary
 
 
-def _ensure_budget_item(session: Session, code: str, name: str | None = None) -> BudgetItem:
+def _ensure_budget_item(
+    session: Session,
+    code: str,
+    name: str | None = None,
+    map_attribute: str | None = None,
+) -> BudgetItem:
     item = session.exec(select(BudgetItem).where(BudgetItem.code == code)).first()
     if item:
+        updated = False
+        if name and item.name != name:
+            item.name = name
+            updated = True
+        if map_attribute and item.map_attribute != map_attribute:
+            item.map_attribute = map_attribute
+            updated = True
+        if updated:
+            session.add(item)
+            session.commit()
+            session.refresh(item)
         return item
     if not name:
         raise HTTPException(status_code=400, detail=f"Missing name for budget item {code}")
-    item = BudgetItem(code=code, name=name)
+    item = BudgetItem(code=code, name=name, map_attribute=map_attribute)
     session.add(item)
     session.commit()
     session.refresh(item)
     return item
+
+
+def _extract_map_attribute(data: dict[str, Any]) -> str | None:
+    for key in ("map_attribute", "map nitelik", "map-nitelik", "mapnitelik", "map_nitelik"):
+        value = data.get(key)
+        if value is None:
+            continue
+        if isinstance(value, str):
+            stripped = value.strip()
+        else:
+            stripped = str(value).strip()
+        if stripped:
+            return stripped
+    return None
+
+
+def _coerce_str(value: Any, field: str) -> str:
+    if value is None:
+        raise ValueError(f"Missing value for {field}")
+    if isinstance(value, str):
+        text = value.strip()
+    else:
+        text = str(value).strip()
+    if not text:
+        raise ValueError(f"Missing value for {field}")
+    return text
+
+
+def _coerce_int(value: Any, field: str) -> int:
+    if value is None:
+        raise ValueError(f"Missing value for {field}")
+    if isinstance(value, (int, float)):
+        return int(value)
+    text = str(value).strip()
+    if not text:
+        raise ValueError(f"Missing value for {field}")
+    return int(text)
+
+
+def _coerce_float(value: Any, field: str) -> float:
+    if value is None:
+        raise ValueError(f"Missing value for {field}")
+    if isinstance(value, (int, float)):
+        return float(value)
+    text = str(value).strip()
+    if not text:
+        raise ValueError(f"Missing value for {field}")
+    return float(text)
+
+
+def _coerce_date(value: Any, field: str) -> date:
+    if value is None:
+        raise ValueError(f"Missing value for {field}")
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    text = str(value).strip()
+    if not text:
+        raise ValueError(f"Missing value for {field}")
+    return date.fromisoformat(text)
+
+
+def _get_value(data: dict[str, Any], *keys: str) -> Any:
+    for key in keys:
+        if key in data and data[key] not in (None, ""):
+            return data[key]
+    return None
 
 
 def import_json(file: UploadFile, session: Session) -> ImportSummary:
@@ -46,7 +133,10 @@ def _import_plan_list(data: list[dict], session: Session) -> int:
     imported = 0
     for entry in data:
         try:
-            item = _ensure_budget_item(session, entry["budget_code"], entry.get("budget_name"))
+            map_attribute = _extract_map_attribute(entry)
+            item = _ensure_budget_item(
+                session, entry["budget_code"], entry.get("budget_name"), map_attribute
+            )
             scenario = _get_or_create_scenario(
                 session, entry.get("scenario"), int(entry.get("year"))
             )
@@ -70,7 +160,9 @@ def _import_year_month_structure(data: dict, session: Session) -> int:
     year = int(data["year"])
     scenario = _get_or_create_scenario(session, data.get("scenario"), year)
     for item_code, months in data.get("items", {}).items():
-        item = _ensure_budget_item(session, item_code, months.get("name"))
+        item = _ensure_budget_item(
+            session, item_code, months.get("name"), _extract_map_attribute(months)
+        )
         for month_str, amount in months.get("plan", {}).items():
             plan = PlanEntry(
                 year=year,
@@ -117,8 +209,11 @@ def import_csv(file: UploadFile, session: Session) -> ImportSummary:
     for row in reader:
         try:
             entry_type = row.get("type", "plan").lower()
+            map_attribute = _extract_map_attribute(row)
             if entry_type == "plan":
-                item = _ensure_budget_item(session, row["budget_code"], row.get("budget_name"))
+                item = _ensure_budget_item(
+                    session, row["budget_code"], row.get("budget_name"), map_attribute
+                )
                 scenario = _get_or_create_scenario(session, row.get("scenario"), int(row["year"]))
                 plan = PlanEntry(
                     year=int(row["year"]),
@@ -131,7 +226,9 @@ def import_csv(file: UploadFile, session: Session) -> ImportSummary:
                 session.commit()
                 summary.imported_plans += 1
             elif entry_type == "expense":
-                item = _ensure_budget_item(session, row["budget_code"], row.get("budget_name"))
+                item = _ensure_budget_item(
+                    session, row["budget_code"], row.get("budget_name"), map_attribute
+                )
                 scenario = _get_or_create_scenario(session, row.get("scenario"), int(row["year"]))
                 expense = Expense(
                     budget_item_id=item.id,
@@ -153,4 +250,95 @@ def import_csv(file: UploadFile, session: Session) -> ImportSummary:
             session.rollback()
             summary.skipped_rows += 1
     summary.message = "CSV import completed"
+    return summary
+
+
+def import_xlsx(file: UploadFile, session: Session) -> ImportSummary:
+    try:
+        file.file.seek(0)
+        workbook = load_workbook(file.file, data_only=True)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail="Invalid XLSX file") from exc
+
+    sheet = workbook.active
+    if sheet is None:
+        raise HTTPException(status_code=400, detail="XLSX file does not contain any sheets")
+
+    rows = list(sheet.iter_rows(values_only=True))
+    if not rows:
+        raise HTTPException(status_code=400, detail="XLSX file is empty")
+
+    headers: list[str] = []
+    for cell in rows[0]:
+        if cell is None:
+            headers.append("")
+        elif isinstance(cell, str):
+            headers.append(cell.strip().lower())
+        else:
+            headers.append(str(cell).strip().lower())
+
+    summary = ImportSummary()
+    for values in rows[1:]:
+        row: dict[str, Any] = {}
+        for index, header in enumerate(headers):
+            if not header:
+                continue
+            row[header] = values[index] if index < len(values) else None
+        if not row:
+            continue
+        entry_type = str(row.get("type") or "plan").lower()
+        map_attribute = _extract_map_attribute(row)
+        try:
+            budget_code = _coerce_str(
+                _get_value(row, "budget_code", "budget code", "kod"),
+                "budget_code",
+            )
+            budget_name = _get_value(row, "budget_name", "budget name", "ad")
+            scenario_name = _get_value(row, "scenario", "senaryo")
+            year_value = _coerce_int(_get_value(row, "year", "yıl"), "year")
+
+            if entry_type == "plan":
+                month_value = _coerce_int(_get_value(row, "month", "ay"), "month")
+                amount_value = _coerce_float(_get_value(row, "amount", "tutar"), "amount")
+                item = _ensure_budget_item(session, budget_code, budget_name, map_attribute)
+                scenario = _get_or_create_scenario(session, scenario_name, year_value)
+                plan = PlanEntry(
+                    year=year_value,
+                    month=month_value,
+                    amount=amount_value,
+                    scenario_id=scenario.id,
+                    budget_item_id=item.id,
+                )
+                session.add(plan)
+                session.commit()
+                summary.imported_plans += 1
+            elif entry_type == "expense":
+                item = _ensure_budget_item(session, budget_code, budget_name, map_attribute)
+                scenario = _get_or_create_scenario(session, scenario_name, year_value)
+                amount_value = _coerce_float(_get_value(row, "amount", "tutar"), "amount")
+                quantity_value = _get_value(row, "quantity", "adet")
+                unit_price_value = _get_value(row, "unit_price", "birim fiyat")
+                date_value = _get_value(row, "date", "tarih")
+                expense = Expense(
+                    budget_item_id=item.id,
+                    scenario_id=scenario.id,
+                    expense_date=_coerce_date(date_value, "date"),
+                    amount=amount_value,
+                    quantity=float(quantity_value) if quantity_value not in (None, "") else 1.0,
+                    unit_price=float(unit_price_value) if unit_price_value not in (None, "") else 0.0,
+                    vendor=_get_value(row, "vendor", "satıcı"),
+                    description=_get_value(row, "description", "açıklama"),
+                    is_out_of_budget=str(_get_value(row, "out_of_budget", "bütçe_dışı") or "false").lower()
+                    == "true",
+                )
+                session.add(expense)
+                session.commit()
+                summary.imported_expenses += 1
+            else:
+                summary.skipped_rows += 1
+        except Exception:
+            session.rollback()
+            summary.skipped_rows += 1
+
+    summary.message = "XLSX import completed"
     return summary

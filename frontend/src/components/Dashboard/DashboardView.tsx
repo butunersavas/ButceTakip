@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import {
   Box,
   Card,
@@ -27,6 +27,7 @@ import {
 } from "recharts";
 
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
+import usePersistentState from "../../hooks/usePersistentState";
 
 interface DashboardSummary {
   month: number;
@@ -58,6 +59,7 @@ interface BudgetItem {
   id: number;
   code: string;
   name: string;
+  map_attribute?: string | null;
 }
 
 const monthLabels = [
@@ -85,9 +87,9 @@ function formatCurrency(value: number) {
 export default function DashboardView() {
   const client = useAuthorizedClient();
   const currentYear = new Date().getFullYear();
-  const [year, setYear] = useState(currentYear);
-  const [scenarioId, setScenarioId] = useState<number | null>(null);
-  const [budgetItemId, setBudgetItemId] = useState<number | null>(null);
+  const [year, setYear] = usePersistentState<number>("dashboard:year", currentYear);
+  const [scenarioId, setScenarioId] = usePersistentState<number | null>("dashboard:scenarioId", null);
+  const [budgetItemId, setBudgetItemId] = usePersistentState<number | null>("dashboard:budgetItemId", null);
 
   const { data: scenarios } = useQuery<Scenario[]>({
     queryKey: ["scenarios"],
@@ -175,7 +177,10 @@ export default function DashboardView() {
                 label="Yıl"
                 type="number"
                 value={year}
-                onChange={(event) => setYear(Number(event.target.value))}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setYear(value ? Number(value) : currentYear);
+                }}
                 fullWidth
               />
             </Grid>
@@ -211,6 +216,7 @@ export default function DashboardView() {
                 {budgetItems?.map((item) => (
                   <MenuItem key={item.id} value={item.id}>
                     {item.code} — {item.name}
+                    {item.map_attribute ? ` (${item.map_attribute})` : ""}
                   </MenuItem>
                 ))}
               </TextField>

@@ -1,6 +1,7 @@
 from contextlib import contextmanager
 from typing import Iterator
 
+from sqlalchemy import inspect, text
 from sqlmodel import Session, SQLModel, create_engine, select
 
 from .config import get_settings
@@ -21,6 +22,7 @@ engine = create_engine(
 
 def init_db() -> None:
     SQLModel.metadata.create_all(engine)
+    _apply_schema_upgrades()
     _ensure_default_admin()
 
 
@@ -56,3 +58,11 @@ def _ensure_default_admin() -> None:
         )
         session.add(user)
         session.commit()
+
+
+def _apply_schema_upgrades() -> None:
+    inspector = inspect(engine)
+    existing_columns = {column["name"] for column in inspector.get_columns("budget_items")}
+    if "map_attribute" not in existing_columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE budget_items ADD COLUMN map_attribute TEXT"))

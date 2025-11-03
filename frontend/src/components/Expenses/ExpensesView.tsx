@@ -28,6 +28,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import dayjs from "dayjs";
 
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
+import usePersistentState from "../../hooks/usePersistentState";
 import { useAuth } from "../../context/AuthContext";
 
 interface Scenario {
@@ -40,6 +41,7 @@ interface BudgetItem {
   id: number;
   code: string;
   name: string;
+  map_attribute?: string | null;
 }
 
 export interface Expense {
@@ -91,15 +93,15 @@ export default function ExpensesView() {
   const { user } = useAuth();
 
   const currentYear = new Date().getFullYear();
-  const [year, setYear] = useState<number | "">(currentYear);
-  const [scenarioId, setScenarioId] = useState<number | null>(null);
-  const [budgetItemId, setBudgetItemId] = useState<number | null>(null);
-  const [statusFilter, setStatusFilter] = useState<"" | Expense["status"]>("");
-  const [startDate, setStartDate] = useState<string>("");
-  const [endDate, setEndDate] = useState<string>("");
-  const [includeOutOfBudget, setIncludeOutOfBudget] = useState(true);
-  const [mineOnly, setMineOnly] = useState(false);
-  const [todayOnly, setTodayOnly] = useState(false);
+  const [year, setYear] = usePersistentState<number | "">("expenses:year", currentYear);
+  const [scenarioId, setScenarioId] = usePersistentState<number | null>("expenses:scenarioId", null);
+  const [budgetItemId, setBudgetItemId] = usePersistentState<number | null>("expenses:budgetItemId", null);
+  const [statusFilter, setStatusFilter] = usePersistentState<"" | Expense["status"]>("expenses:status", "");
+  const [startDate, setStartDate] = usePersistentState<string>("expenses:startDate", "");
+  const [endDate, setEndDate] = usePersistentState<string>("expenses:endDate", "");
+  const [includeOutOfBudget, setIncludeOutOfBudget] = usePersistentState<boolean>("expenses:includeOutOfBudget", true);
+  const [mineOnly, setMineOnly] = usePersistentState<boolean>("expenses:mineOnly", false);
+  const [todayOnly, setTodayOnly] = usePersistentState<boolean>("expenses:todayOnly", false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -289,7 +291,7 @@ export default function ExpensesView() {
         field: "expense_date",
         headerName: "Tarih",
         width: 140,
-        valueFormatter: ({ value }) => dayjs(value as string).format("DD MMM YYYY")
+        valueFormatter: ({ value }) => dayjs(value as string).format("DD MMMM YYYY")
       },
       {
         field: "budget_item_id",
@@ -298,6 +300,15 @@ export default function ExpensesView() {
         valueGetter: (params) => {
           const item = budgetItems?.find((budget) => budget.id === params.row.budget_item_id);
           return item ? `${item.code} — ${item.name}` : "-";
+        }
+      },
+      {
+        field: "map_attribute",
+        headerName: "Map Nitelik",
+        flex: 1,
+        valueGetter: (params) => {
+          const item = budgetItems?.find((budget) => budget.id === params.row.budget_item_id);
+          return item?.map_attribute ?? "-";
         }
       },
       {
@@ -423,6 +434,7 @@ export default function ExpensesView() {
                 {budgetItems?.map((item) => (
                   <MenuItem key={item.id} value={item.id}>
                     {item.code} — {item.name}
+                    {item.map_attribute ? ` (${item.map_attribute})` : ""}
                   </MenuItem>
                 ))}
               </TextField>
@@ -619,12 +631,13 @@ export default function ExpensesView() {
                     required
                     fullWidth
                   >
-                    {budgetItems?.map((item) => (
-                      <MenuItem key={item.id} value={item.id}>
-                        {item.code} — {item.name}
-                      </MenuItem>
-                    ))}
-                  </TextField>
+                {budgetItems?.map((item) => (
+                  <MenuItem key={item.id} value={item.id}>
+                    {item.code} — {item.name}
+                    {item.map_attribute ? ` (${item.map_attribute})` : ""}
+                  </MenuItem>
+                ))}
+              </TextField>
                 </Grid>
                 <Grid item xs={12} md={4}>
                   <TextField
