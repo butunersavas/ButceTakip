@@ -217,7 +217,8 @@ export default function ImportExportView() {
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
                   Plan ve harcama verilerini JSON, CSV veya Excel (XLSX) formatında sisteme aktarabilirsiniz. Lütfen dosyalarınıza
-                  Map Nitelik sütununu da ekleyin.
+                  Map Nitelik sütununu da ekleyin. Qlik’ten alınan pivot tablo çıktıları gibi “Row Labels” ve ay bazlı sütunlar içeren
+                  Excel dosyaları da otomatik olarak parçalanıp plana dönüştürülür.
                 </Typography>
                 {error && <Alert severity="error">{error}</Alert>}
                 {importSummary && (

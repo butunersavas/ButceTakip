@@ -98,3 +98,11 @@ type,budget_code,budget_name,scenario,year,month,amount,date,quantity,unit_price
 plan,MARKETING,Marketing Temel,Temel,2024,1,15000,,,,,
 expense,MARKETING,Marketing Temel,Temel,2024,,12000,2024-01-15,1,12000,ACME Ltd,Reklam harcaması,false
 ```
+
+## Pivot tablo (Row Labels) XLSX dosyaları
+
+Qlik veya benzeri raporlama araçlarından çıkan ve satırlarda harcama kalemi isimleri, sütunlarda ise ay bazlı plan tutarları
+bulunan pivot tablolardaki XLSX dosyaları doğrudan içe aktarılabilir. Dosyada `Row Labels` başlığının ve ayları temsil eden
+(`Oct-23`, `Jan-24` vb.) sütunların bulunması yeterlidir. Plan satırlarının “Type” sütununda `Plan` yazıyorsa yalnızca plan
+verileri içe alınır; diğer satırlar atlanır. Map Attribute/Map Nitelik bilgisi varsa ilgili bütçe kalemine otomatik olarak
+bağlanır.
