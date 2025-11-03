@@ -9,7 +9,8 @@ import {
   MenuItem,
   Stack,
   TextField,
-  Typography
+  Typography,
+  Box
 } from "@mui/material";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
 import DownloadIcon from "@mui/icons-material/Download";
@@ -222,6 +223,17 @@ export default function ImportExportView() {
                   Map Nitelik sütununu da ekleyin. Qlik’ten alınan pivot tablo çıktıları gibi “Row Labels” ve ay bazlı sütunlar içeren
                   Excel dosyaları da otomatik olarak parçalanıp plana dönüştürülür.
                 </Typography>
+                <Box component="ul" sx={{ color: "text.secondary", pl: 3, m: 0 }}>
+                  <Typography component="li" variant="body2">
+                    <code>cost_type</code> sütunu OPEX/CAPEX sınıflandırmasını (<code>opex</code> veya <code>capex</code>) belirtir.
+                  </Typography>
+                  <Typography component="li" variant="body2">
+                    <code>asset_type</code> sütunu harcamanın Donanım/Yazılım durumunu (<code>hardware</code> veya <code>software</code>) seçmenizi sağlar.
+                  </Typography>
+                  <Typography component="li" variant="body2">
+                    Bu alanlar boş bırakılırsa mevcut kalem değerleri korunur; yalnızca geçerli değerler içe aktarılır.
+                  </Typography>
+                </Box>
                 {error && <Alert severity="error">{error}</Alert>}
                 {importSummary && (
                   <Alert severity="success">
