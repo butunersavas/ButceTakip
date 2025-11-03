@@ -60,6 +60,7 @@ class BudgetItemBase(BaseModel):
     code: str
     name: str
     description: Optional[str] = None
+    map_attribute: Optional[str] = None
 
 
 class BudgetItemCreate(BudgetItemBase):
@@ -70,6 +71,7 @@ class BudgetItemUpdate(BaseModel):
     code: Optional[str] = None
     name: Optional[str] = None
     description: Optional[str] = None
+    map_attribute: Optional[str] = None
 
 
 class BudgetItemRead(BudgetItemBase):
