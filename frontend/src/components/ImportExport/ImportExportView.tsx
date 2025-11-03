@@ -38,7 +38,7 @@ interface ImportSummary {
   message?: string;
 }
 
-const sampleCsv = `type,budget_code,budget_name,map_attribute,scenario,year,month,amount,date,quantity,unit_price,vendor,description,out_of_budget\nplan,MARKETING,Marketing Temel,Hizmet,Temel,2024,1,15000,,,,,,false\nexpense,MARKETING,Marketing Temel,Hizmet,Temel,2024,,12000,2024-01-15,1,12000,ACME Ltd,Reklam harcaması,false\n`;
+const sampleCsv = `type,budget_code,budget_name,scenario,year,month,amount,date,quantity,unit_price,vendor,description,out_of_budget,capex_opex,asset_type\nplan,MARKETING,Marketing Temel,Temel,2026,1,15000,,,,,,,CAPEX,Donanım\nexpense,MARKETING,Marketing Temel,Temel,2026,,12000,2026-01-15,1,12000,ACME Ltd,Reklam harcaması,false,OPEX,Yazılım\n`;
 
 export default function ImportExportView() {
   const client = useAuthorizedClient();
