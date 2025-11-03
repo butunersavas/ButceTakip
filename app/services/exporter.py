@@ -7,7 +7,7 @@ from fastapi import Response
 from openpyxl import Workbook
 from sqlmodel import Session, select
 
-from app.models import BudgetItem, Expense, ExpenseStatus, PlanEntry
+from app.models import BudgetItem, Expense, ExpenseStatus, PlanEntry, Scenario
 from app.services.analytics import compute_quarterly_summary
 
 
@@ -40,6 +40,10 @@ def _get_budget_item_map(session: Session) -> dict[int, BudgetItem]:
     return {item.id: item for item in session.exec(select(BudgetItem)).all()}
 
 
+def _get_scenario_map(session: Session) -> dict[int, Scenario]:
+    return {scenario.id: scenario for scenario in session.exec(select(Scenario)).all()}
+
+
 def export_csv(
     session: Session,
     year: int,
@@ -49,21 +53,25 @@ def export_csv(
     output = io.StringIO()
     writer = csv.writer(output)
     budget_items = _get_budget_item_map(session)
+    scenarios = _get_scenario_map(session)
     writer.writerow(
         [
             "type",
-            "budget_item_id",
+            "budget_code",
+            "budget_name",
             "map_attribute",
-            "scenario_id",
+            "cost_type",
+            "asset_type",
+            "scenario",
             "year",
             "month",
             "amount",
-            "currency",
-            "status",
-            "is_out_of_budget",
-            "expense_date",
+            "date",
+            "quantity",
+            "unit_price",
             "vendor",
             "description",
+            "out_of_budget",
         ]
     )
 
@@ -73,17 +81,21 @@ def export_csv(
     if budget_item_id is not None:
         plan_query = plan_query.where(PlanEntry.budget_item_id == budget_item_id)
     for plan in session.exec(plan_query).all():
-        map_attribute = budget_items.get(plan.budget_item_id).map_attribute if plan.budget_item_id in budget_items else ""
+        budget_item = budget_items.get(plan.budget_item_id)
+        scenario = scenarios.get(plan.scenario_id)
         writer.writerow(
             [
                 "plan",
-                plan.budget_item_id,
-                map_attribute or "",
-                plan.scenario_id,
+                budget_item.code if budget_item else plan.budget_item_id,
+                budget_item.name if budget_item else "",
+                (budget_item.map_attribute or "") if budget_item else "",
+                budget_item.cost_type.value if budget_item and budget_item.cost_type else "",
+                budget_item.asset_type.value if budget_item and budget_item.asset_type else "",
+                scenario.name if scenario else "",
                 plan.year,
                 plan.month,
-                _format_currency(plan.amount),
-                "USD",
+                plan.amount,
+                "",
                 "",
                 "",
                 "",
@@ -94,26 +106,26 @@ def export_csv(
 
     expenses = _get_expenses(session, year, scenario_id, budget_item_id)
     for expense in expenses:
-        map_attribute = (
-            budget_items.get(expense.budget_item_id).map_attribute
-            if expense.budget_item_id in budget_items
-            else ""
-        )
+        budget_item = budget_items.get(expense.budget_item_id)
+        scenario = scenarios.get(expense.scenario_id) if expense.scenario_id else None
         writer.writerow(
             [
                 "expense",
-                expense.budget_item_id,
-                map_attribute or "",
-                expense.scenario_id,
+                budget_item.code if budget_item else expense.budget_item_id,
+                budget_item.name if budget_item else "",
+                (budget_item.map_attribute or "") if budget_item else "",
+                budget_item.cost_type.value if budget_item and budget_item.cost_type else "",
+                budget_item.asset_type.value if budget_item and budget_item.asset_type else "",
+                scenario.name if scenario else "",
                 expense.expense_date.year,
                 expense.expense_date.month,
-                _format_currency(expense.amount),
-                "USD",
-                expense.status.value,
-                str(expense.is_out_of_budget).lower(),
+                expense.amount,
                 expense.expense_date.isoformat(),
+                expense.quantity,
+                expense.unit_price,
                 expense.vendor or "",
                 expense.description or "",
+                str(expense.is_out_of_budget).lower(),
             ]
         )
     response = Response(content=output.getvalue(), media_type="text/csv")
@@ -130,41 +142,54 @@ def export_xlsx(
     wb = Workbook()
     plan_sheet = wb.active
     plan_sheet.title = "Plans"
-    plan_sheet.append([
-        "Budget Item ID",
-        "Map Nitelik",
-        "Scenario ID",
-        "Year",
-        "Month",
-        "Amount (USD)",
-    ])
+    plan_sheet.append(
+        [
+            "Budget Code",
+            "Budget Name",
+            "Map Nitelik",
+            "Cost Type",
+            "Asset Type",
+            "Scenario",
+            "Year",
+            "Month",
+            "Amount",
+        ]
+    )
     budget_items = _get_budget_item_map(session)
+    scenarios = _get_scenario_map(session)
     plan_query = select(PlanEntry).where(PlanEntry.year == year)
     if scenario_id is not None:
         plan_query = plan_query.where(PlanEntry.scenario_id == scenario_id)
     if budget_item_id is not None:
         plan_query = plan_query.where(PlanEntry.budget_item_id == budget_item_id)
     for plan in session.exec(plan_query).all():
-        map_attribute = budget_items.get(plan.budget_item_id).map_attribute if plan.budget_item_id in budget_items else ""
+        budget_item = budget_items.get(plan.budget_item_id)
+        scenario = scenarios.get(plan.scenario_id)
         plan_sheet.append(
             [
-                plan.budget_item_id,
-                map_attribute or "",
-                plan.scenario_id,
+                budget_item.code if budget_item else plan.budget_item_id,
+                budget_item.name if budget_item else "",
+                (budget_item.map_attribute or "") if budget_item else "",
+                budget_item.cost_type.value if budget_item and budget_item.cost_type else "",
+                budget_item.asset_type.value if budget_item and budget_item.asset_type else "",
+                scenario.name if scenario else "",
                 plan.year,
                 plan.month,
-                _format_currency(plan.amount),
+                plan.amount,
             ]
         )
 
     expense_sheet = wb.create_sheet("Expenses")
     expense_sheet.append(
         [
-            "Budget Item ID",
+            "Budget Code",
+            "Budget Name",
             "Map Nitelik",
-            "Scenario ID",
+            "Cost Type",
+            "Asset Type",
+            "Scenario",
             "Date",
-            "Amount (USD)",
+            "Amount",
             "Quantity",
             "Unit Price",
             "Vendor",
@@ -175,18 +200,18 @@ def export_xlsx(
     )
     expenses = _get_expenses(session, year, scenario_id, budget_item_id)
     for expense in expenses:
-        map_attribute = (
-            budget_items.get(expense.budget_item_id).map_attribute
-            if expense.budget_item_id in budget_items
-            else ""
-        )
+        budget_item = budget_items.get(expense.budget_item_id)
+        scenario = scenarios.get(expense.scenario_id) if expense.scenario_id else None
         expense_sheet.append(
             [
-                expense.budget_item_id,
-                map_attribute or "",
-                expense.scenario_id,
+                budget_item.code if budget_item else expense.budget_item_id,
+                budget_item.name if budget_item else "",
+                (budget_item.map_attribute or "") if budget_item else "",
+                budget_item.cost_type.value if budget_item and budget_item.cost_type else "",
+                budget_item.asset_type.value if budget_item and budget_item.asset_type else "",
+                scenario.name if scenario else "",
                 expense.expense_date.isoformat(),
-                _format_currency(expense.amount),
+                expense.amount,
                 expense.quantity,
                 expense.unit_price,
                 expense.vendor or "",
