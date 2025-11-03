@@ -31,6 +31,8 @@ interface BudgetItem {
   code: string;
   name: string;
   map_attribute?: string | null;
+  cost_type?: "capex" | "opex" | null;
+  asset_type?: "hardware" | "software" | null;
 }
 
 interface CleanupResponse {
@@ -141,6 +143,10 @@ export default function CleanupView() {
                     <MenuItem key={item.id} value={item.id}>
                       {item.code} — {item.name}
                       {item.map_attribute ? ` (${item.map_attribute})` : ""}
+                      {item.cost_type ? ` • ${item.cost_type.toUpperCase()}` : ""}
+                      {item.asset_type
+                        ? ` • ${item.asset_type === "hardware" ? "Donanım" : "Yazılım"}`
+                        : ""}
                     </MenuItem>
                   ))}
                 </TextField>

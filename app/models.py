@@ -40,6 +40,16 @@ class Scenario(TimestampMixin, SQLModel, table=True):
     expenses: list["Expense"] = Relationship(back_populates="scenario")
 
 
+class CostType(str, enum.Enum):
+    CAPEX = "capex"
+    OPEX = "opex"
+
+
+class AssetType(str, enum.Enum):
+    HARDWARE = "hardware"
+    SOFTWARE = "software"
+
+
 class BudgetItem(TimestampMixin, SQLModel, table=True):
     __tablename__ = "budget_items"
 
@@ -48,6 +58,8 @@ class BudgetItem(TimestampMixin, SQLModel, table=True):
     name: str = Field(nullable=False)
     description: Optional[str] = Field(default=None)
     map_attribute: Optional[str] = Field(default=None, nullable=True)
+    cost_type: Optional[CostType] = Field(default=None, nullable=True)
+    asset_type: Optional[AssetType] = Field(default=None, nullable=True)
 
     plans: list["PlanEntry"] = Relationship(back_populates="budget_item")
     expenses: list["Expense"] = Relationship(back_populates="budget_item")

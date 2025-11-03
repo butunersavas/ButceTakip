@@ -3,7 +3,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Field, validator
 
-from app.models import ExpenseStatus
+from app.models import AssetType, CostType, ExpenseStatus
 
 
 class Token(BaseModel):
@@ -61,6 +61,8 @@ class BudgetItemBase(BaseModel):
     name: str
     description: Optional[str] = None
     map_attribute: Optional[str] = None
+    cost_type: Optional[CostType] = None
+    asset_type: Optional[AssetType] = None
 
 
 class BudgetItemCreate(BudgetItemBase):

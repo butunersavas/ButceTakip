@@ -29,6 +29,8 @@ interface BudgetItem {
   code: string;
   name: string;
   map_attribute?: string | null;
+  cost_type?: "capex" | "opex" | null;
+  asset_type?: "hardware" | "software" | null;
 }
 
 interface ImportSummary {
@@ -38,7 +40,7 @@ interface ImportSummary {
   message?: string;
 }
 
-const sampleCsv = `type,budget_code,budget_name,map_attribute,scenario,year,month,amount,date,quantity,unit_price,vendor,description,out_of_budget\nplan,MARKETING,Marketing Temel,Hizmet,Temel,2024,1,15000,,,,,,false\nexpense,MARKETING,Marketing Temel,Hizmet,Temel,2024,,12000,2024-01-15,1,12000,ACME Ltd,Reklam harcaması,false\n`;
+const sampleCsv = `type,budget_code,budget_name,map_attribute,cost_type,asset_type,scenario,year,month,amount,date,quantity,unit_price,vendor,description,out_of_budget\nplan,MARKETING,Marketing Temel,Hizmet,opex,software,Temel,2024,1,15000,,,,,,false\nexpense,MARKETING,Marketing Temel,Hizmet,opex,software,Temel,2024,,12000,2024-01-15,1,12000,ACME Ltd,Reklam harcaması,false\n`;
 
 export default function ImportExportView() {
   const client = useAuthorizedClient();
@@ -217,7 +219,8 @@ export default function ImportExportView() {
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
                   Plan ve harcama verilerini JSON, CSV veya Excel (XLSX) formatında sisteme aktarabilirsiniz. Lütfen dosyalarınıza
-                  Map Nitelik sütununu da ekleyin.
+                  Map Nitelik sütununu da ekleyin. Qlik’ten alınan pivot tablo çıktıları gibi “Row Labels” ve ay bazlı sütunlar içeren
+                  Excel dosyaları da otomatik olarak parçalanıp plana dönüştürülür.
                 </Typography>
                 {error && <Alert severity="error">{error}</Alert>}
                 {importSummary && (
@@ -308,6 +311,10 @@ export default function ImportExportView() {
                         <MenuItem key={item.id} value={item.id}>
                           {item.code} — {item.name}
                           {item.map_attribute ? ` (${item.map_attribute})` : ""}
+                          {item.cost_type ? ` • ${item.cost_type.toUpperCase()}` : ""}
+                          {item.asset_type
+                            ? ` • ${item.asset_type === "hardware" ? "Donanım" : "Yazılım"}`
+                            : ""}
                         </MenuItem>
                       ))}
                     </TextField>

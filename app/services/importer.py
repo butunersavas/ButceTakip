@@ -1,6 +1,8 @@
 import csv
 import io
 import json
+import re
+import unicodedata
 from datetime import date, datetime
 from typing import Any
 
@@ -9,8 +11,40 @@ from openpyxl import load_workbook
 from fastapi import HTTPException, UploadFile, status
 from sqlmodel import Session, select
 
-from app.models import BudgetItem, Expense, PlanEntry, Scenario
+from app.models import AssetType, BudgetItem, CostType, Expense, PlanEntry, Scenario
 from app.schemas import ImportSummary
+
+MONTH_ALIASES = {
+    "jan": 1,
+    "feb": 2,
+    "mart": 3,
+    "apr": 4,
+    "may": 5,
+    "jun": 6,
+    "jul": 7,
+    "aug": 8,
+    "sep": 9,
+    "sept": 9,
+    "oct": 10,
+    "nov": 11,
+    "dec": 12,
+    "oca": 1,
+    "şub": 2,
+    "sub": 2,
+    "nis": 4,
+    "mayıs": 5,
+    "mayis": 5,
+    "haz": 6,
+    "tem": 7,
+    "ağu": 8,
+    "agu": 8,
+    "eyl": 9,
+    "eki": 10,
+    "kas": 11,
+    "ara": 12,
+}
+
+EXPENSE_COLUMN_KEYWORDS = {"actual", "expense", "spend", "spent", "harcama", "gerçekleşen"}
 
 
 def _ensure_budget_item(
@@ -18,6 +52,8 @@ def _ensure_budget_item(
     code: str,
     name: str | None = None,
     map_attribute: str | None = None,
+    cost_type: CostType | None = None,
+    asset_type: AssetType | None = None,
 ) -> BudgetItem:
     item = session.exec(select(BudgetItem).where(BudgetItem.code == code)).first()
     if item:
@@ -28,6 +64,12 @@ def _ensure_budget_item(
         if map_attribute and item.map_attribute != map_attribute:
             item.map_attribute = map_attribute
             updated = True
+        if cost_type and item.cost_type != cost_type:
+            item.cost_type = cost_type
+            updated = True
+        if asset_type and item.asset_type != asset_type:
+            item.asset_type = asset_type
+            updated = True
         if updated:
             session.add(item)
             session.commit()
@@ -35,11 +77,69 @@ def _ensure_budget_item(
         return item
     if not name:
         raise HTTPException(status_code=400, detail=f"Missing name for budget item {code}")
-    item = BudgetItem(code=code, name=name, map_attribute=map_attribute)
+    item = BudgetItem(
+        code=code,
+        name=name,
+        map_attribute=map_attribute,
+        cost_type=cost_type,
+        asset_type=asset_type,
+    )
     session.add(item)
     session.commit()
     session.refresh(item)
     return item
+
+
+def _normalize_cost_type(value: Any) -> CostType | None:
+    if value in (None, ""):
+        return None
+    if isinstance(value, CostType):
+        return value
+    text = str(value).strip().lower()
+    if not text:
+        return None
+    mapping = {
+        "capex": CostType.CAPEX,
+        "capital": CostType.CAPEX,
+        "cap": CostType.CAPEX,
+        "yatırım": CostType.CAPEX,
+        "yatirim": CostType.CAPEX,
+        "yatirim harcaması": CostType.CAPEX,
+        "yatirim harcamasi": CostType.CAPEX,
+        "opex": CostType.OPEX,
+        "operasyon": CostType.OPEX,
+        "operasyonel": CostType.OPEX,
+        "operation": CostType.OPEX,
+        "operations": CostType.OPEX,
+        "operational": CostType.OPEX,
+        "op": CostType.OPEX,
+    }
+    return mapping.get(text)
+
+
+def _normalize_asset_type(value: Any) -> AssetType | None:
+    if value in (None, ""):
+        return None
+    if isinstance(value, AssetType):
+        return value
+    text = str(value).strip().lower()
+    if not text:
+        return None
+    mapping = {
+        "hardware": AssetType.HARDWARE,
+        "donanım": AssetType.HARDWARE,
+        "donanim": AssetType.HARDWARE,
+        "don": AssetType.HARDWARE,
+        "hw": AssetType.HARDWARE,
+        "cihaz": AssetType.HARDWARE,
+        "software": AssetType.SOFTWARE,
+        "yazılım": AssetType.SOFTWARE,
+        "yazilim": AssetType.SOFTWARE,
+        "yaz": AssetType.SOFTWARE,
+        "sw": AssetType.SOFTWARE,
+        "uygulama": AssetType.SOFTWARE,
+    }
+    return mapping.get(text)
 
 
 def _extract_map_attribute(data: dict[str, Any]) -> str | None:
@@ -53,6 +153,58 @@ def _extract_map_attribute(data: dict[str, Any]) -> str | None:
             stripped = str(value).strip()
         if stripped:
             return stripped
+    return None
+
+
+def _normalize_code(value: str) -> str:
+    normalized = unicodedata.normalize("NFKD", value)
+    ascii_text = normalized.encode("ascii", "ignore").decode("ascii")
+    ascii_text = ascii_text.strip().upper()
+    ascii_text = re.sub(r"[^A-Z0-9]+", "_", ascii_text)
+    ascii_text = ascii_text.strip("_")
+    if not ascii_text:
+        ascii_text = "ITEM"
+    return ascii_text[:64]
+
+
+def _parse_month_header(header: str) -> tuple[int, int] | None:
+    normalized = header.strip().lower()
+    if not normalized or "total" in normalized or "genel toplam" in normalized:
+        return None
+    # remove words that can precede month info such as plan/actual
+    normalized = normalized.replace("plan", " ")
+    normalized = normalized.replace("budget", " ")
+    normalized = normalized.replace("gerçekleşen", " ")
+    normalized = normalized.replace("actual", " ")
+    normalized = normalized.replace("expense", " ")
+    normalized = normalized.replace("harcama", " ")
+    normalized = re.sub(r"\s+", " ", normalized)
+
+    month_match = None
+    for month_key, month_value in MONTH_ALIASES.items():
+        if month_key in normalized:
+            month_match = (month_key, month_value)
+            break
+    if not month_match:
+        return None
+    year_match = re.search(r"(20\d{2}|19\d{2}|\d{2})", normalized)
+    if not year_match:
+        return None
+    raw_year = int(year_match.group(1))
+    if raw_year < 100:
+        raw_year += 2000 if raw_year < 70 else 1900
+    return (month_match[1], raw_year)
+
+
+def _find_header_index(headers: list[str], *candidates: str) -> int | None:
+    lowered = [header.lower() for header in headers]
+    for candidate in candidates:
+        candidate_lower = candidate.lower()
+        if candidate_lower in lowered:
+            return lowered.index(candidate_lower)
+    for index, header in enumerate(lowered):
+        if any(candidate_lower in header for candidate_lower in map(str.lower, candidates)):
+            return index
     return None
 
 
@@ -134,8 +286,15 @@ def _import_plan_list(data: list[dict], session: Session) -> int:
     for entry in data:
         try:
             map_attribute = _extract_map_attribute(entry)
+            cost_type = _normalize_cost_type(entry.get("cost_type"))
+            asset_type = _normalize_asset_type(entry.get("asset_type"))
             item = _ensure_budget_item(
-                session, entry["budget_code"], entry.get("budget_name"), map_attribute
+                session,
+                entry["budget_code"],
+                entry.get("budget_name"),
+                map_attribute,
+                cost_type,
+                asset_type,
             )
             scenario = _get_or_create_scenario(
                 session, entry.get("scenario"), int(entry.get("year"))
@@ -161,7 +320,12 @@ def _import_year_month_structure(data: dict, session: Session) -> int:
     scenario = _get_or_create_scenario(session, data.get("scenario"), year)
     for item_code, months in data.get("items", {}).items():
         item = _ensure_budget_item(
-            session, item_code, months.get("name"), _extract_map_attribute(months)
+            session,
+            item_code,
+            months.get("name"),
+            _extract_map_attribute(months),
+            _normalize_cost_type(months.get("cost_type")),
+            _normalize_asset_type(months.get("asset_type")),
         )
         for month_str, amount in months.get("plan", {}).items():
             plan = PlanEntry(
@@ -199,6 +363,143 @@ def _get_or_create_scenario(session: Session, scenario_name: str | None, year: i
     return scenario
 
 
+def _import_pivot_style_rows(
+    data_rows: list[tuple[Any, ...]],
+    headers_raw: list[str],
+    session: Session,
+    summary: ImportSummary,
+) -> bool:
+    normalized_headers = [header.lower() for header in headers_raw]
+    if not any("row labels" in header or "row label" in header for header in normalized_headers):
+        return False
+
+    month_columns: list[tuple[int, int, int]] = []
+    for index, header in enumerate(headers_raw):
+        parsed = _parse_month_header(header)
+        if not parsed:
+            continue
+        header_lower = header.lower()
+        if any(keyword in header_lower for keyword in EXPENSE_COLUMN_KEYWORDS):
+            continue
+        month_columns.append((index, parsed[0], parsed[1]))
+
+    if not month_columns:
+        return False
+
+    name_index = _find_header_index(headers_raw, "row labels", "row label", "kalem")
+    if name_index is None:
+        return False
+
+    code_index = _find_header_index(headers_raw, "budget_code", "budget code", "kod", "code")
+    map_index = _find_header_index(headers_raw, "map attribute", "map_attribute", "map nitelik", "map")
+    scenario_index = _find_header_index(headers_raw, "scenario", "senaryo", "bench")
+    type_index = _find_header_index(headers_raw, "type", "tip", "type export")
+    cost_index = _find_header_index(
+        headers_raw,
+        "cost_type",
+        "cost type",
+        "cost category",
+        "opex/capex",
+        "harcama tipi",
+        "harcama türü",
+    )
+    asset_index = _find_header_index(
+        headers_raw,
+        "asset_type",
+        "asset type",
+        "asset category",
+        "donanım",
+        "yazılım",
+        "varlık tipi",
+        "varlik tipi",
+    )
+
+    for row in data_rows:
+        if not row or name_index >= len(row):
+            continue
+        raw_name = row[name_index]
+        if raw_name is None:
+            continue
+        if isinstance(raw_name, str):
+            name = raw_name.strip()
+        else:
+            name = str(raw_name).strip()
+        if not name:
+            continue
+        if "total" in name.lower() or "genel toplam" in name.lower():
+            continue
+
+        map_attribute_value: str | None = None
+        if map_index is not None and map_index < len(row):
+            value = row[map_index]
+            if value not in (None, ""):
+                map_attribute_value = str(value).strip()
+
+        code_value: str | None = None
+        if code_index is not None and code_index < len(row):
+            code_cell = row[code_index]
+            if code_cell not in (None, ""):
+                code_value = str(code_cell).strip()
+        if not code_value:
+            code_value = map_attribute_value or name
+        budget_code = _normalize_code(code_value)
+
+        cost_type_value = None
+        if cost_index is not None and cost_index < len(row):
+            cost_type_value = _normalize_cost_type(row[cost_index])
+
+        asset_type_value = None
+        if asset_index is not None and asset_index < len(row):
+            asset_type_value = _normalize_asset_type(row[asset_index])
+
+        scenario_value: str | None = None
+        if scenario_index is not None and scenario_index < len(row):
+            scenario_cell = row[scenario_index]
+            if scenario_cell not in (None, ""):
+                scenario_value = str(scenario_cell).strip()
+        entry_type_value = "plan"
+        if type_index is not None and type_index < len(row):
+            type_cell = row[type_index]
+            if type_cell not in (None, ""):
+                entry_type_value = str(type_cell).strip().lower()
+        if entry_type_value not in {"plan", "planlama", "budget"}:
+            # Currently only plan rows are supported
+            continue
+
+        item = _ensure_budget_item(
+            session,
+            budget_code,
+            name,
+            map_attribute_value,
+            cost_type_value,
+            asset_type_value,
+        )
+
+        for index, month, year in month_columns:
+            if index >= len(row):
+                continue
+            amount = row[index]
+            if amount in (None, "", 0):
+                continue
+            try:
+                amount_value = float(amount)
+            except (TypeError, ValueError):
+                continue
+            scenario = _get_or_create_scenario(session, scenario_value, year)
+            plan = PlanEntry(
+                year=year,
+                month=month,
+                amount=amount_value,
+                scenario_id=scenario.id,
+                budget_item_id=item.id,
+            )
+            session.add(plan)
+            session.commit()
+            summary.imported_plans += 1
+
+    return True
+
+
 def import_csv(file: UploadFile, session: Session) -> ImportSummary:
     try:
         content = file.file.read().decode("utf-8")
@@ -210,9 +511,16 @@ def import_csv(file: UploadFile, session: Session) -> ImportSummary:
         try:
             entry_type = row.get("type", "plan").lower()
             map_attribute = _extract_map_attribute(row)
+            cost_type = _normalize_cost_type(row.get("cost_type"))
+            asset_type = _normalize_asset_type(row.get("asset_type"))
             if entry_type == "plan":
                 item = _ensure_budget_item(
-                    session, row["budget_code"], row.get("budget_name"), map_attribute
+                    session,
+                    row["budget_code"],
+                    row.get("budget_name"),
+                    map_attribute,
+                    cost_type,
+                    asset_type,
                 )
                 scenario = _get_or_create_scenario(session, row.get("scenario"), int(row["year"]))
                 plan = PlanEntry(
@@ -227,7 +535,12 @@ def import_csv(file: UploadFile, session: Session) -> ImportSummary:
                 summary.imported_plans += 1
             elif entry_type == "expense":
                 item = _ensure_budget_item(
-                    session, row["budget_code"], row.get("budget_name"), map_attribute
+                    session,
+                    row["budget_code"],
+                    row.get("budget_name"),
+                    map_attribute,
+                    cost_type,
+                    asset_type,
                 )
                 scenario = _get_or_create_scenario(session, row.get("scenario"), int(row["year"]))
                 expense = Expense(
@@ -268,16 +581,25 @@ def import_xlsx(file: UploadFile, session: Session) -> ImportSummary:
     if not rows:
         raise HTTPException(status_code=400, detail="XLSX file is empty")
 
+    headers_raw: list[str] = []
     headers: list[str] = []
     for cell in rows[0]:
         if cell is None:
+            headers_raw.append("")
             headers.append("")
         elif isinstance(cell, str):
-            headers.append(cell.strip().lower())
+            stripped = cell.strip()
+            headers_raw.append(stripped)
+            headers.append(stripped.lower())
         else:
-            headers.append(str(cell).strip().lower())
+            stripped = str(cell).strip()
+            headers_raw.append(stripped)
+            headers.append(stripped.lower())
 
     summary = ImportSummary()
+    if _import_pivot_style_rows(rows[1:], headers_raw, session, summary):
+        summary.message = "XLSX import completed"
+        return summary
     for values in rows[1:]:
         row: dict[str, Any] = {}
         for index, header in enumerate(headers):
@@ -288,6 +610,29 @@ def import_xlsx(file: UploadFile, session: Session) -> ImportSummary:
             continue
         entry_type = str(row.get("type") or "plan").lower()
         map_attribute = _extract_map_attribute(row)
+        cost_type = _normalize_cost_type(
+            _get_value(
+                row,
+                "cost_type",
+                "cost type",
+                "cost category",
+                "opex/capex",
+                "harcama tipi",
+                "harcama türü",
+            )
+        )
+        asset_type = _normalize_asset_type(
+            _get_value(
+                row,
+                "asset_type",
+                "asset type",
+                "asset category",
+                "donanım",
+                "yazılım",
+                "varlık tipi",
+                "varlik tipi",
+            )
+        )
         try:
             budget_code = _coerce_str(
                 _get_value(row, "budget_code", "budget code", "kod"),
@@ -300,7 +645,14 @@ def import_xlsx(file: UploadFile, session: Session) -> ImportSummary:
             if entry_type == "plan":
                 month_value = _coerce_int(_get_value(row, "month", "ay"), "month")
                 amount_value = _coerce_float(_get_value(row, "amount", "tutar"), "amount")
-                item = _ensure_budget_item(session, budget_code, budget_name, map_attribute)
+                item = _ensure_budget_item(
+                    session,
+                    budget_code,
+                    budget_name,
+                    map_attribute,
+                    cost_type,
+                    asset_type,
+                )
                 scenario = _get_or_create_scenario(session, scenario_name, year_value)
                 plan = PlanEntry(
                     year=year_value,
@@ -313,7 +665,14 @@ def import_xlsx(file: UploadFile, session: Session) -> ImportSummary:
                 session.commit()
                 summary.imported_plans += 1
             elif entry_type == "expense":
-                item = _ensure_budget_item(session, budget_code, budget_name, map_attribute)
+                item = _ensure_budget_item(
+                    session,
+                    budget_code,
+                    budget_name,
+                    map_attribute,
+                    cost_type,
+                    asset_type,
+                )
                 scenario = _get_or_create_scenario(session, scenario_name, year_value)
                 amount_value = _coerce_float(_get_value(row, "amount", "tutar"), "amount")
                 quantity_value = _get_value(row, "quantity", "adet")

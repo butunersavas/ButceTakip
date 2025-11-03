@@ -42,6 +42,8 @@ interface BudgetItem {
   code: string;
   name: string;
   map_attribute?: string | null;
+  cost_type?: "capex" | "opex" | null;
+  asset_type?: "hardware" | "software" | null;
 }
 
 export interface Expense {
@@ -312,6 +314,25 @@ export default function ExpensesView() {
         }
       },
       {
+        field: "cost_type",
+        headerName: "OPEX/CAPEX",
+        width: 140,
+        valueGetter: (params) => {
+          const item = budgetItems?.find((budget) => budget.id === params.row.budget_item_id);
+          return item?.cost_type ? item.cost_type.toUpperCase() : "-";
+        }
+      },
+      {
+        field: "asset_type",
+        headerName: "Donanım/Yazılım",
+        width: 150,
+        valueGetter: (params) => {
+          const item = budgetItems?.find((budget) => budget.id === params.row.budget_item_id);
+          if (!item?.asset_type) return "-";
+          return item.asset_type === "hardware" ? "Donanım" : "Yazılım";
+        }
+      },
+      {
         field: "scenario_id",
         headerName: "Senaryo",
         width: 150,
@@ -435,6 +456,10 @@ export default function ExpensesView() {
                   <MenuItem key={item.id} value={item.id}>
                     {item.code} — {item.name}
                     {item.map_attribute ? ` (${item.map_attribute})` : ""}
+                    {item.cost_type ? ` • ${item.cost_type.toUpperCase()}` : ""}
+                    {item.asset_type
+                      ? ` • ${item.asset_type === "hardware" ? "Donanım" : "Yazılım"}`
+                      : ""}
                   </MenuItem>
                 ))}
               </TextField>
@@ -631,13 +656,17 @@ export default function ExpensesView() {
                     required
                     fullWidth
                   >
-                {budgetItems?.map((item) => (
-                  <MenuItem key={item.id} value={item.id}>
-                    {item.code} — {item.name}
-                    {item.map_attribute ? ` (${item.map_attribute})` : ""}
-                  </MenuItem>
-                ))}
-              </TextField>
+                    {budgetItems?.map((item) => (
+                      <MenuItem key={item.id} value={item.id}>
+                        {item.code} — {item.name}
+                        {item.map_attribute ? ` (${item.map_attribute})` : ""}
+                        {item.cost_type ? ` • ${item.cost_type.toUpperCase()}` : ""}
+                        {item.asset_type
+                          ? ` • ${item.asset_type === "hardware" ? "Donanım" : "Yazılım"}`
+                          : ""}
+                      </MenuItem>
+                    ))}
+                  </TextField>
                 </Grid>
                 <Grid item xs={12} md={4}>
                   <TextField

@@ -36,6 +36,8 @@ interface BudgetItem {
   code: string;
   name: string;
   map_attribute?: string | null;
+  cost_type?: "capex" | "opex" | null;
+  asset_type?: "hardware" | "software" | null;
 }
 
 interface PlanEntry {
@@ -224,6 +226,26 @@ export default function PlansView() {
           return item?.map_attribute ?? "-";
         }
       },
+      {
+        field: "cost_type",
+        headerName: "OPEX/CAPEX",
+        flex: 1,
+        valueGetter: (params) => {
+          const item = budgetItems?.find((budget) => budget.id === params.row.budget_item_id);
+          if (!item?.cost_type) return "-";
+          return item.cost_type.toUpperCase();
+        }
+      },
+      {
+        field: "asset_type",
+        headerName: "Donanım/Yazılım",
+        flex: 1,
+        valueGetter: (params) => {
+          const item = budgetItems?.find((budget) => budget.id === params.row.budget_item_id);
+          if (!item?.asset_type) return "-";
+          return item.asset_type === "hardware" ? "Donanım" : "Yazılım";
+        }
+      },
       { field: "year", headerName: "Yıl", width: 110 },
       {
         field: "month",
@@ -331,6 +353,10 @@ export default function PlansView() {
                   <MenuItem key={item.id} value={item.id}>
                     {item.code} — {item.name}
                     {item.map_attribute ? ` (${item.map_attribute})` : ""}
+                    {item.cost_type ? ` • ${item.cost_type.toUpperCase()}` : ""}
+                    {item.asset_type
+                      ? ` • ${item.asset_type === "hardware" ? "Donanım" : "Yazılım"}`
+                      : ""}
                   </MenuItem>
                 ))}
               </TextField>
@@ -451,6 +477,10 @@ export default function PlansView() {
                   <MenuItem key={item.id} value={item.id}>
                     {item.code} — {item.name}
                     {item.map_attribute ? ` (${item.map_attribute})` : ""}
+                    {item.cost_type ? ` • ${item.cost_type.toUpperCase()}` : ""}
+                    {item.asset_type
+                      ? ` • ${item.asset_type === "hardware" ? "Donanım" : "Yazılım"}`
+                      : ""}
                   </MenuItem>
                 ))}
               </TextField>
