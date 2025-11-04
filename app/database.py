@@ -6,7 +6,7 @@ from sqlmodel import Session, SQLModel, create_engine, select
 
 from .config import get_settings
 from .models import User
-from .utils.security import get_password_hash
+from .utils.security import get_password_hash, verify_password
 
 
 settings = get_settings()
@@ -55,6 +55,10 @@ def _ensure_default_admin() -> None:
 
             if not existing_user.is_active:
                 existing_user.is_active = True
+                needs_commit = True
+
+            if not verify_password(admin_password, existing_user.hashed_password):
+                existing_user.hashed_password = get_password_hash(admin_password)
                 needs_commit = True
 
             if needs_commit:
