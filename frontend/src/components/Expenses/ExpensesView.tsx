@@ -57,6 +57,7 @@ export interface Expense {
   status: "recorded" | "cancelled";
   is_out_of_budget: boolean;
   created_by_id: number | null;
+  map_attribute?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -307,8 +308,13 @@ export default function ExpensesView() {
         headerName: "Map Nitelik",
         flex: 1,
         valueGetter: (params) => {
+          const directValue = params.row.map_attribute;
+          if (typeof directValue === "string" && directValue.trim()) {
+            return directValue;
+          }
           const item = budgetItems?.find((budget) => budget.id === params.row.budget_item_id);
-          return item?.map_attribute ?? "-";
+          const fallback = item?.map_attribute;
+          return typeof fallback === "string" && fallback.trim() ? fallback : "-";
         }
       },
       {

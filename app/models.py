@@ -86,3 +86,11 @@ class Expense(TimestampMixin, SQLModel, table=True):
     budget_item: BudgetItem = Relationship(back_populates="expenses")
     scenario: Optional[Scenario] = Relationship(back_populates="expenses")
     created_by: Optional[User] = Relationship(back_populates="expenses")
+
+    @property
+    def map_attribute(self) -> Optional[str]:
+        """Expose the related budget item's map attribute for API responses."""
+
+        if self.budget_item is None:
+            return None
+        return self.budget_item.map_attribute
