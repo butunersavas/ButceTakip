@@ -1,6 +1,9 @@
+from datetime import datetime
+
+from sqlalchemy import exists, select
 from sqlmodel import Session, delete
 
-from app.models import Expense, PlanEntry
+from app.models import BudgetItem, Expense, PlanEntry
 from app.schemas import CleanupRequest
 
 
@@ -22,6 +25,8 @@ def perform_cleanup(session: Session, request: CleanupRequest) -> dict[str, int]
     deleted_expenses = result.rowcount if result else 0
 
     deleted_plans = 0
+    deleted_budget_items = 0
+    resequenced_budget_items = 0
     if request.reset_plans:
         plan_query = delete(PlanEntry)
         if request.budget_item_id is not None:
@@ -31,5 +36,33 @@ def perform_cleanup(session: Session, request: CleanupRequest) -> dict[str, int]
         plan_result = session.exec(plan_query)
         deleted_plans = plan_result.rowcount if plan_result else 0
 
+        orphan_budget_query = delete(BudgetItem).where(
+            ~exists(select(PlanEntry.id).where(PlanEntry.budget_item_id == BudgetItem.id)),
+            ~exists(select(Expense.id).where(Expense.budget_item_id == BudgetItem.id)),
+        )
+        orphan_result = session.exec(orphan_budget_query)
+        deleted_budget_items = orphan_result.rowcount if orphan_result else 0
+
+        resequenced_budget_items = _resequence_budget_codes(session)
+
     session.commit()
-    return {"deleted_expenses": deleted_expenses, "deleted_plans": deleted_plans}
+    return {
+        "cleared_expenses": deleted_expenses,
+        "cleared_plans": deleted_plans,
+        "cleared_budget_items": deleted_budget_items,
+        "reindexed_budget_items": resequenced_budget_items,
+    }
+
+
+def _resequence_budget_codes(session: Session) -> int:
+    items = session.exec(select(BudgetItem).order_by(BudgetItem.created_at, BudgetItem.id)).all()
+    updated = 0
+    for index, item in enumerate(items, start=1):
+        expected_code = f"SK{index:02d}"
+        if item.code == expected_code:
+            continue
+        item.code = expected_code
+        item.updated_at = datetime.utcnow()
+        session.add(item)
+        updated += 1
+    return updated
