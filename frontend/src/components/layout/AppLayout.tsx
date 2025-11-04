@@ -21,12 +21,15 @@ import LogoutIcon from "@mui/icons-material/Logout";
 import MenuIcon from "@mui/icons-material/Menu";
 import DarkModeIcon from "@mui/icons-material/DarkModeOutlined";
 import LightModeIcon from "@mui/icons-material/LightModeOutlined";
+import PlayArrowIcon from "@mui/icons-material/PlayArrow";
+import PauseIcon from "@mui/icons-material/Pause";
 import { useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 
 import { useAuth } from "../../context/AuthContext";
 import brandLogo from "../../assets/brand-logo.svg";
 import { useThemeMode } from "../../context/ThemeModeContext";
+import { useDashboardPlayback } from "../../context/DashboardPlaybackContext";
 
 const drawerWidth = 260;
 
@@ -67,6 +70,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const { mode, toggleMode, setMode } = useThemeMode();
+  const { autoPlay, toggleAutoPlay } = useDashboardPlayback();
 
   const initials = useMemo(() => {
     if (!user) return "?";
@@ -138,6 +142,24 @@ export default function AppLayout({ children }: AppLayoutProps) {
             </Typography>
           </Box>
         </Box>
+        <Tooltip
+          title={autoPlay ? "Grafik oynatımını durdur" : "Grafik oynatımını başlat"}
+          placement="top"
+        >
+          <ListItemButton
+            onClick={toggleAutoPlay}
+            sx={{ borderRadius: 2, color: "text.secondary" }}
+          >
+            <ListItemIcon sx={{ color: "text.secondary" }}>
+              {autoPlay ? <PauseIcon /> : <PlayArrowIcon />}
+            </ListItemIcon>
+            <ListItemText
+              primary="Grafik Oynatımı"
+              secondary={autoPlay ? "Otomatik" : "Duraklatıldı"}
+              secondaryTypographyProps={{ color: "text.secondary" }}
+            />
+          </ListItemButton>
+        </Tooltip>
         <Tooltip title={mode === "dark" ? "Açık moda geç" : "Karanlık moda geç"} placement="top">
           <ListItemButton
             onClick={toggleMode}

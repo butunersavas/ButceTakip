@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { ChangeEvent, useEffect, useMemo } from "react";
 import {
   Box,
   Card,
@@ -28,6 +28,7 @@ import {
 
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import usePersistentState from "../../hooks/usePersistentState";
+import { useDashboardPlayback } from "../../context/DashboardPlaybackContext";
 
 interface DashboardSummary {
   month: number;
@@ -90,6 +91,7 @@ export default function DashboardView() {
   const [year, setYear] = usePersistentState<number>("dashboard:year", currentYear);
   const [scenarioId, setScenarioId] = usePersistentState<number | null>("dashboard:scenarioId", null);
   const [budgetItemId, setBudgetItemId] = usePersistentState<number | null>("dashboard:budgetItemId", null);
+  const { autoPlay, setAutoPlay } = useDashboardPlayback();
 
   const { data: scenarios } = useQuery<Scenario[]>({
     queryKey: ["scenarios"],
@@ -167,6 +169,39 @@ export default function DashboardView() {
   );
   const pieKeys = useMemo(() => ["planned", "actual", "saving"] as const, []);
 
+  const playbackSequence = useMemo(() => {
+    const itemIds = budgetItems?.map((item) => item.id) ?? [];
+    return [null, ...itemIds];
+  }, [budgetItems]);
+
+  useEffect(() => {
+    if (isLoading || !dashboard) return;
+    if (!autoPlay) return;
+    if (!playbackSequence.length) return;
+
+    let currentIndex = playbackSequence.findIndex(
+      (itemId) => itemId === (budgetItemId ?? null)
+    );
+
+    if (currentIndex === -1) {
+      currentIndex = 0;
+      setBudgetItemId(playbackSequence[0]);
+    }
+
+    const interval = window.setInterval(() => {
+      currentIndex = (currentIndex + 1) % playbackSequence.length;
+      setBudgetItemId(playbackSequence[currentIndex]);
+    }, 6000);
+
+    return () => window.clearInterval(interval);
+  }, [autoPlay, playbackSequence, budgetItemId, dashboard, isLoading, setBudgetItemId]);
+
+  const handleBudgetItemChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const value = event.target.value ? Number(event.target.value) : null;
+    setAutoPlay(false);
+    setBudgetItemId(value);
+  };
+
   return (
     <Stack spacing={4}>
       <Card>
@@ -207,9 +242,7 @@ export default function DashboardView() {
                 select
                 label="Bütçe Kalemi"
                 value={budgetItemId ?? ""}
-                onChange={(event) =>
-                  setBudgetItemId(event.target.value ? Number(event.target.value) : null)
-                }
+                onChange={handleBudgetItemChange}
                 fullWidth
               >
                 <MenuItem value="">Tümü</MenuItem>

@@ -10,6 +10,7 @@ import "dayjs/locale/tr";
 import App from "./App";
 import { AuthProvider } from "./context/AuthContext";
 import { ThemeModeProvider } from "./context/ThemeModeContext";
+import { DashboardPlaybackProvider } from "./context/DashboardPlaybackContext";
 
 dayjs.locale("tr");
 
@@ -47,7 +48,9 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
         />
         <BrowserRouter>
           <AuthProvider>
-            <App />
+            <DashboardPlaybackProvider>
+              <App />
+            </DashboardPlaybackProvider>
           </AuthProvider>
         </BrowserRouter>
       </ThemeModeProvider>
