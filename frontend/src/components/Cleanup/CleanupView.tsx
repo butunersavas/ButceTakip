@@ -37,6 +37,8 @@ interface CleanupResponse {
   status: string;
   cleared_expenses: number;
   cleared_plans: number;
+  cleared_budget_items: number;
+  reindexed_budget_items: number;
 }
 
 export default function CleanupView() {
@@ -103,8 +105,18 @@ export default function CleanupView() {
             )}
             {error && <Alert severity="error">{error}</Alert>}
             {result && (
-              <Alert severity="success">
-                {result.status === "ok" ? "Temizlik tamamlandı." : result.status} Silinen harcama: {result.cleared_expenses} — Silinen plan: {result.cleared_plans}
+              <Alert severity="success" sx={{ lineHeight: 1.7 }}>
+                <Typography fontWeight={600} component="span">
+                  {result.status === "ok" ? "Temizlik tamamlandı." : result.status}
+                </Typography>
+                <br />
+                <Typography variant="body2" component="span">
+                  Silinen harcama: <strong>{result.cleared_expenses}</strong> — Silinen plan: <strong>{result.cleared_plans}</strong>
+                </Typography>
+                <br />
+                <Typography variant="body2" component="span">
+                  Silinen bütçe kalemi: <strong>{result.cleared_budget_items}</strong> — Yeniden kodlanan bütçe kalemi: <strong>{result.reindexed_budget_items}</strong>
+                </Typography>
               </Alert>
             )}
             <Grid container spacing={3}>

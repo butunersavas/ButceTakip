@@ -9,6 +9,7 @@ import {
   ListItemButton,
   ListItemIcon,
   ListItemText,
+  Switch,
   Toolbar,
   Tooltip,
   Typography
@@ -20,11 +21,14 @@ import CloudUploadIcon from "@mui/icons-material/CloudUploadOutlined";
 import CleaningServicesIcon from "@mui/icons-material/CleaningServicesOutlined";
 import LogoutIcon from "@mui/icons-material/Logout";
 import MenuIcon from "@mui/icons-material/Menu";
+import DarkModeIcon from "@mui/icons-material/DarkModeOutlined";
+import LightModeIcon from "@mui/icons-material/LightModeOutlined";
 import { useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 
 import { useAuth } from "../../context/AuthContext";
 import brandLogo from "../../assets/brand-logo.svg";
+import { useThemeMode } from "../../context/ThemeModeContext";
 
 const drawerWidth = 260;
 
@@ -64,6 +68,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const { user, logout } = useAuth();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { mode, toggleMode, setMode } = useThemeMode();
 
   const initials = useMemo(() => {
     if (!user) return "?";
@@ -123,7 +128,32 @@ export default function AppLayout({ children }: AppLayoutProps) {
           );
         })}
       </List>
-      <Box sx={{ p: 2 }}>
+      <Box sx={{ p: 2, display: "flex", flexDirection: "column", gap: 1.5 }}>
+        <Tooltip title={mode === "dark" ? "Açık moda geç" : "Karanlık moda geç"} placement="top">
+          <ListItemButton
+            onClick={toggleMode}
+            sx={{ borderRadius: 2, color: "text.secondary" }}
+          >
+            <ListItemIcon sx={{ color: "text.secondary" }}>
+              {mode === "dark" ? <DarkModeIcon /> : <LightModeIcon />}
+            </ListItemIcon>
+            <ListItemText
+              primary="Karanlık Mod"
+              secondary={mode === "dark" ? "Aktif" : "Pasif"}
+              secondaryTypographyProps={{ color: "text.secondary" }}
+            />
+            <Switch
+              edge="end"
+              checked={mode === "dark"}
+              onChange={(event) => {
+                event.stopPropagation();
+                setMode(event.target.checked ? "dark" : "light");
+              }}
+              onClick={(event) => event.stopPropagation()}
+              inputProps={{ "aria-label": "Karanlık mod anahtarı" }}
+            />
+          </ListItemButton>
+        </Tooltip>
         <Tooltip title="Çıkış Yap">
           <ListItemButton
             onClick={logout}
@@ -165,54 +195,78 @@ export default function AppLayout({ children }: AppLayoutProps) {
             backgroundColor: "background.paper",
             borderBottom: "1px solid",
             borderColor: "divider",
-            columnGap: 2
+            columnGap: 2,
+            py: 1.5
           }}
         >
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, minWidth: 0 }}>
-            <IconButton
-              color="inherit"
-              edge="start"
-              onClick={() => setMobileOpen(true)}
-              sx={{ mr: 1, display: { md: "none" } }}
-            >
-              <MenuIcon />
-            </IconButton>
-            <Box
-              component="img"
-              src={brandLogo}
-              alt="Bütçe Takip"
-              sx={{ height: 32, width: 32, display: { xs: "none", sm: "block" } }}
-            />
-            <Typography
-              variant="subtitle1"
-              color="text.secondary"
-              sx={{ fontWeight: 600, display: { xs: "none", md: "block" } }}
-            >
-              Bütçe Takip Platformu
-            </Typography>
-          </Box>
-          <Typography
-            component="h1"
+          <Box
             sx={{
-              flexGrow: 1,
-              textAlign: "center",
-              fontWeight: 700,
-              fontSize: { xs: "1.35rem", md: "1.8rem" },
-              color: "text.primary"
+              width: "100%",
+              maxWidth: { xl: 1440, lg: 1280 },
+              mx: "auto",
+              display: "flex",
+              alignItems: "center",
+              flexWrap: "wrap",
+              gap: { xs: 1.5, md: 2 }
             }}
           >
-            {navItems.find((item) => item.path === location.pathname)?.label ?? "Bütçe Yönetimi"}
-          </Typography>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 2, minWidth: 0 }}>
-            <Box sx={{ textAlign: "right" }}>
-              <Typography variant="subtitle2" fontWeight={600}>
-                {user?.full_name}
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                {user?.role === "admin" ? "Yönetici" : "Kullanıcı"}
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, minWidth: 0 }}>
+              <IconButton
+                color="inherit"
+                edge="start"
+                onClick={() => setMobileOpen(true)}
+                sx={{ mr: 1, display: { md: "none" } }}
+              >
+                <MenuIcon />
+              </IconButton>
+              <Box
+                component="img"
+                src={brandLogo}
+                alt="Bütçe Takip"
+                sx={{ height: 32, width: 32, display: { xs: "none", sm: "block" } }}
+              />
+              <Typography
+                variant="subtitle1"
+                color="text.secondary"
+                sx={{ fontWeight: 600, display: { xs: "none", lg: "block" } }}
+              >
+                Bütçe Takip Platformu
               </Typography>
             </Box>
-            <Avatar sx={{ bgcolor: "primary.main" }}>{initials}</Avatar>
+            <Typography
+              component="h1"
+              sx={{
+                flexGrow: 1,
+                textAlign: { xs: "left", md: "center" },
+                fontWeight: 700,
+                fontSize: { xs: "1.3rem", md: "1.75rem" },
+                color: "text.primary",
+                order: { xs: 3, md: 2 },
+                width: { xs: "100%", md: "auto" }
+              }}
+            >
+              {navItems.find((item) => item.path === location.pathname)?.label ?? "Bütçe Yönetimi"}
+            </Typography>
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                gap: 2,
+                minWidth: 0,
+                marginLeft: { md: "auto" },
+                order: { xs: 2, md: 3 }
+              }}
+            >
+              <Box sx={{ textAlign: "right" }}>
+                <Typography variant="subtitle2" fontWeight={600}>
+                  {user?.full_name}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {user?.role === "admin" ? "Yönetici" : "Kullanıcı"}
+                </Typography>
+              </Box>
+              <Avatar sx={{ bgcolor: "primary.main" }}>{initials}</Avatar>
+            </Box>
           </Box>
         </Toolbar>
       </AppBar>
