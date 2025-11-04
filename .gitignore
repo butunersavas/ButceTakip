@@ -10,3 +10,4 @@ __pycache__/
 .pytest_cache/
 frontend/node_modules/
 frontend/dist/
+butce_takip.db
