@@ -30,6 +30,7 @@ import dayjs from "dayjs";
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import usePersistentState from "../../hooks/usePersistentState";
 import { useAuth } from "../../context/AuthContext";
+import { formatMapAttributeLabel } from "../../utils/mapAttribute";
 
 interface Scenario {
   id: number;
@@ -57,6 +58,7 @@ export interface Expense {
   status: "recorded" | "cancelled";
   is_out_of_budget: boolean;
   created_by_id: number | null;
+  map_attribute?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -307,8 +309,16 @@ export default function ExpensesView() {
         headerName: "Map Nitelik",
         flex: 1,
         valueGetter: (params) => {
+          const directValue = params.row.map_attribute as string | null | undefined;
+          if (directValue) {
+            const formatted = formatMapAttributeLabel(directValue);
+            if (formatted !== "-") {
+              return formatted;
+            }
+          }
+
           const item = budgetItems?.find((budget) => budget.id === params.row.budget_item_id);
-          return item?.map_attribute ?? "-";
+          return formatMapAttributeLabel(item?.map_attribute);
         }
       },
       {
@@ -431,12 +441,15 @@ export default function ExpensesView() {
                 fullWidth
               >
                 <MenuItem value="">Tümü</MenuItem>
-                {budgetItems?.map((item) => (
-                  <MenuItem key={item.id} value={item.id}>
-                    {item.code} — {item.name}
-                    {item.map_attribute ? ` (${item.map_attribute})` : ""}
-                  </MenuItem>
-                ))}
+                {budgetItems?.map((item) => {
+                  const mapLabel = formatMapAttributeLabel(item.map_attribute);
+                  return (
+                    <MenuItem key={item.id} value={item.id}>
+                      {item.code} — {item.name}
+                      {mapLabel !== "-" ? ` (${mapLabel})` : ""}
+                    </MenuItem>
+                  );
+                })}
               </TextField>
             </Grid>
             <Grid item xs={12} md={3}>
@@ -631,12 +644,15 @@ export default function ExpensesView() {
                     required
                     fullWidth
                   >
-                {budgetItems?.map((item) => (
-                  <MenuItem key={item.id} value={item.id}>
-                    {item.code} — {item.name}
-                    {item.map_attribute ? ` (${item.map_attribute})` : ""}
-                  </MenuItem>
-                ))}
+                {budgetItems?.map((item) => {
+                  const mapLabel = formatMapAttributeLabel(item.map_attribute);
+                  return (
+                    <MenuItem key={item.id} value={item.id}>
+                      {item.code} — {item.name}
+                      {mapLabel !== "-" ? ` (${mapLabel})` : ""}
+                    </MenuItem>
+                  );
+                })}
               </TextField>
                 </Grid>
                 <Grid item xs={12} md={4}>

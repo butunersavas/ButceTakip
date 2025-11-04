@@ -159,6 +159,7 @@ class ExpenseUpdate(BaseModel):
 class ExpenseRead(ExpenseBase):
     id: int
     created_by_id: Optional[int]
+    map_attribute: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

@@ -1,6 +1,7 @@
 from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import selectinload
 from sqlmodel import Session, select
 
 from app.dependencies import get_current_user, get_db_session
@@ -24,7 +25,7 @@ def list_expenses(
     session: Session = Depends(get_db_session),
     current_user: User = Depends(get_current_user),
 ) -> list[Expense]:
-    query = select(Expense)
+    query = select(Expense).options(selectinload(Expense.budget_item))
     if year is not None:
         query = query.where(Expense.expense_date >= date(year, 1, 1)).where(
             Expense.expense_date <= date(year, 12, 31)

@@ -24,6 +24,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import usePersistentState from "../../hooks/usePersistentState";
 import { useAuth } from "../../context/AuthContext";
+import { formatMapAttributeLabel } from "../../utils/mapAttribute";
 
 interface Scenario {
   id: number;
@@ -88,6 +89,7 @@ export default function PlansView() {
   const client = useAuthorizedClient();
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const isAdmin = user?.role?.toLowerCase() === "admin";
 
   const currentYear = new Date().getFullYear();
   const [year, setYear] = usePersistentState<number>("plans:year", currentYear);
@@ -188,14 +190,14 @@ export default function PlansView() {
   };
 
   const handleDelete = useCallback((planId: number) => {
-    if (user?.role !== "admin") return;
+    if (!isAdmin) return;
     const confirmed = window.confirm(
       "Plan kaydını silmek istediğinize emin misiniz? Bu işlem geri alınamaz."
     );
     if (confirmed) {
       deleteMutation.mutate(planId);
     }
-  }, [deleteMutation, user?.role]);
+  }, [deleteMutation, isAdmin]);
 
   const columns = useMemo<GridColDef[]>(() => {
     return [
@@ -221,7 +223,7 @@ export default function PlansView() {
         flex: 1,
         valueGetter: (params) => {
           const item = budgetItems?.find((budget) => budget.id === params.row.budget_item_id);
-          return item?.map_attribute ?? "-";
+          return formatMapAttributeLabel(item?.map_attribute);
         }
       },
       { field: "year", headerName: "Yıl", width: 110 },
@@ -246,11 +248,7 @@ export default function PlansView() {
           <Stack direction="row" spacing={1}>
             <Tooltip title="Güncelle">
               <span>
-                <IconButton
-                  size="small"
-                  onClick={() => handleEdit(row)}
-                  disabled={user?.role !== "admin"}
-                >
+                <IconButton size="small" onClick={() => handleEdit(row)} disabled={!isAdmin}>
                   <EditIcon fontSize="small" />
                 </IconButton>
               </span>
@@ -261,7 +259,7 @@ export default function PlansView() {
                   size="small"
                   color="error"
                   onClick={() => handleDelete(row.id)}
-                  disabled={user?.role !== "admin"}
+                  disabled={!isAdmin}
                 >
                   <DeleteIcon fontSize="small" />
                 </IconButton>
@@ -271,7 +269,7 @@ export default function PlansView() {
         )
       }
     ];
-  }, [budgetItems, handleDelete, handleEdit, scenarios, user?.role]);
+  }, [budgetItems, handleDelete, handleEdit, isAdmin, scenarios]);
 
   const monthlyTotals = useMemo(() => {
     const totals = Array(12).fill(0);
@@ -327,12 +325,15 @@ export default function PlansView() {
                 fullWidth
               >
                 <MenuItem value="">Tümü</MenuItem>
-                {budgetItems?.map((item) => (
-                  <MenuItem key={item.id} value={item.id}>
-                    {item.code} — {item.name}
-                    {item.map_attribute ? ` (${item.map_attribute})` : ""}
-                  </MenuItem>
-                ))}
+                {budgetItems?.map((item) => {
+                  const mapLabel = formatMapAttributeLabel(item.map_attribute);
+                  return (
+                    <MenuItem key={item.id} value={item.id}>
+                      {item.code} — {item.name}
+                      {mapLabel !== "-" ? ` (${mapLabel})` : ""}
+                    </MenuItem>
+                  );
+                })}
               </TextField>
             </Grid>
           </Grid>
@@ -447,12 +448,15 @@ export default function PlansView() {
                 defaultValue={editingPlan?.budget_item_id ?? budgetItemId ?? ""}
                 required
               >
-                {budgetItems?.map((item) => (
-                  <MenuItem key={item.id} value={item.id}>
-                    {item.code} — {item.name}
-                    {item.map_attribute ? ` (${item.map_attribute})` : ""}
-                  </MenuItem>
-                ))}
+                {budgetItems?.map((item) => {
+                  const mapLabel = formatMapAttributeLabel(item.map_attribute);
+                  return (
+                    <MenuItem key={item.id} value={item.id}>
+                      {item.code} — {item.name}
+                      {mapLabel !== "-" ? ` (${mapLabel})` : ""}
+                    </MenuItem>
+                  );
+                })}
               </TextField>
             </Stack>
           </DialogContent>

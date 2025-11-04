@@ -28,6 +28,7 @@ import {
 
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import usePersistentState from "../../hooks/usePersistentState";
+import { formatMapAttributeLabel } from "../../utils/mapAttribute";
 
 interface DashboardSummary {
   month: number;
@@ -213,12 +214,15 @@ export default function DashboardView() {
                 fullWidth
               >
                 <MenuItem value="">Tümü</MenuItem>
-                {budgetItems?.map((item) => (
-                  <MenuItem key={item.id} value={item.id}>
-                    {item.code} — {item.name}
-                    {item.map_attribute ? ` (${item.map_attribute})` : ""}
-                  </MenuItem>
-                ))}
+                {budgetItems?.map((item) => {
+                  const mapLabel = formatMapAttributeLabel(item.map_attribute);
+                  return (
+                    <MenuItem key={item.id} value={item.id}>
+                      {item.code} — {item.name}
+                      {mapLabel !== "-" ? ` (${mapLabel})` : ""}
+                    </MenuItem>
+                  );
+                })}
               </TextField>
             </Grid>
           </Grid>

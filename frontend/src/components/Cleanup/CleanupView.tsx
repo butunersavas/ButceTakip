@@ -19,6 +19,7 @@ import { useQuery } from "@tanstack/react-query";
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import usePersistentState from "../../hooks/usePersistentState";
 import { useAuth } from "../../context/AuthContext";
+import { formatMapAttributeLabel } from "../../utils/mapAttribute";
 
 interface Scenario {
   id: number;
@@ -91,7 +92,7 @@ export default function CleanupView() {
     }
   };
 
-  const isAdmin = user?.role === "admin";
+  const isAdmin = user?.role?.toLowerCase() === "admin";
 
   return (
     <Stack spacing={4}>
@@ -149,12 +150,15 @@ export default function CleanupView() {
                   fullWidth
                 >
                   <MenuItem value="">Tümü</MenuItem>
-                  {budgetItems?.map((item) => (
-                    <MenuItem key={item.id} value={item.id}>
-                      {item.code} — {item.name}
-                      {item.map_attribute ? ` (${item.map_attribute})` : ""}
-                    </MenuItem>
-                  ))}
+                  {budgetItems?.map((item) => {
+                    const mapLabel = formatMapAttributeLabel(item.map_attribute);
+                    return (
+                      <MenuItem key={item.id} value={item.id}>
+                        {item.code} — {item.name}
+                        {mapLabel !== "-" ? ` (${mapLabel})` : ""}
+                      </MenuItem>
+                    );
+                  })}
                 </TextField>
               </Grid>
               <Grid item xs={12} md={4}>
