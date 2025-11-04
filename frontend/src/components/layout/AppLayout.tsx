@@ -1,13 +1,13 @@
 import {
-  Avatar,
   Box,
+  Avatar,
   Divider,
   Drawer,
-  IconButton,
   List,
   ListItemButton,
   ListItemIcon,
   ListItemText,
+  Fab,
   Switch,
   Tooltip,
   Typography
@@ -219,39 +219,29 @@ export default function AppLayout({ children }: AppLayoutProps) {
           minWidth: 0,
           width: "100%",
           maxWidth: "100vw",
-          p: { xs: 3, md: 5 }
+          px: { xs: 3, md: 5 },
+          pt: { xs: 3, md: 5 },
+          pb: { xs: 10, md: 5 }
         }}
       >
-        <Box
-          sx={{
-            display: { xs: "flex", md: "none" },
-            alignItems: "center",
-            gap: 1.5,
-            mb: 3
-          }}
-        >
-          <IconButton
-            onClick={() => setMobileOpen(true)}
-            color="primary"
-            aria-label="Menüyü aç"
-            sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2 }}
-          >
-            <MenuIcon />
-          </IconButton>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-            <Box
-              component="img"
-              src={brandLogo}
-              alt="Bütçe Takip"
-              sx={{ height: 28, width: 28 }}
-            />
-            <Typography variant="subtitle1" fontWeight={600} color="text.secondary">
-              Bütçe Takip Platformu
-            </Typography>
-          </Box>
-        </Box>
         {children}
       </Box>
+      <Tooltip title="Menüyü aç" placement="left">
+        <Fab
+          color="primary"
+          aria-label="Menüyü aç"
+          onClick={() => setMobileOpen(true)}
+          sx={{
+            position: "fixed",
+            bottom: 24,
+            right: 24,
+            zIndex: (theme) => theme.zIndex.drawer + 1,
+            display: { xs: mobileOpen ? "none" : "flex", md: "none" }
+          }}
+        >
+          <MenuIcon />
+        </Fab>
+      </Tooltip>
     </Box>
   );
 }
