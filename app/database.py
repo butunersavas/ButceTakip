@@ -47,6 +47,20 @@ def _ensure_default_admin() -> None:
     with Session(engine) as session:
         existing_user = session.exec(select(User).where(User.email == admin_email)).first()
         if existing_user:
+            needs_commit = False
+
+            if existing_user.role != admin_role:
+                existing_user.role = admin_role
+                needs_commit = True
+
+            if not existing_user.is_active:
+                existing_user.is_active = True
+                needs_commit = True
+
+            if needs_commit:
+                session.add(existing_user)
+                session.commit()
+
             return
 
         user = User(
