@@ -56,3 +56,24 @@ def test_default_admin_can_log_in(test_client):
     payload = profile_response.json()
     assert payload["email"] == "integration.admin@example.com"
     assert payload["role"] == "admin"
+
+
+def test_login_is_case_insensitive_for_email(test_client):
+    response = test_client.post(
+        "/auth/token",
+        data={
+            "username": "Integration.Admin@Example.Com ",
+            "password": "Sifre123!@",
+            "grant_type": "password",
+        },
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    assert response.status_code == 200
+    token = response.json()["access_token"]
+
+    profile_response = test_client.get(
+        "/auth/me", headers={"Authorization": f"Bearer {token}"}
+    )
+    assert profile_response.status_code == 200
+    payload = profile_response.json()
+    assert payload["email"] == "integration.admin@example.com"

@@ -1,7 +1,7 @@
 from contextlib import contextmanager
 from typing import Iterator
 
-from sqlalchemy import inspect, text
+from sqlalchemy import func, inspect, text
 from sqlmodel import Session, SQLModel, create_engine, select
 
 from .config import get_settings
@@ -36,7 +36,7 @@ def _ensure_default_admin() -> None:
     if not settings.default_admin_email or not settings.default_admin_password:
         return
 
-    admin_email = settings.default_admin_email.strip()
+    admin_email = settings.default_admin_email.strip().lower()
     admin_password = settings.default_admin_password.strip()
     admin_full_name = settings.default_admin_full_name.strip() or "Admin Kullanıcı"
     admin_role = settings.default_admin_role.strip() or "admin"
@@ -45,7 +45,9 @@ def _ensure_default_admin() -> None:
         return
 
     with Session(engine) as session:
-        existing_user = session.exec(select(User).where(User.email == admin_email)).first()
+        existing_user = session.exec(
+            select(User).where(func.lower(User.email) == admin_email)
+        ).first()
         if existing_user:
             needs_commit = False
 
