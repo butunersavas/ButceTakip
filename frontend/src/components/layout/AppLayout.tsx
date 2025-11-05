@@ -1,16 +1,14 @@
 import {
-  AppBar,
-  Avatar,
   Box,
+  Avatar,
   Divider,
   Drawer,
-  IconButton,
   List,
   ListItemButton,
   ListItemIcon,
   ListItemText,
+  Fab,
   Switch,
-  Toolbar,
   Tooltip,
   Typography
 } from "@mui/material";
@@ -23,12 +21,15 @@ import LogoutIcon from "@mui/icons-material/Logout";
 import MenuIcon from "@mui/icons-material/Menu";
 import DarkModeIcon from "@mui/icons-material/DarkModeOutlined";
 import LightModeIcon from "@mui/icons-material/LightModeOutlined";
+import PlayArrowIcon from "@mui/icons-material/PlayArrow";
+import PauseIcon from "@mui/icons-material/Pause";
 import { useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 
 import { useAuth } from "../../context/AuthContext";
 import brandLogo from "../../assets/brand-logo.svg";
 import { useThemeMode } from "../../context/ThemeModeContext";
+import { useDashboardPlayback } from "../../context/DashboardPlaybackContext";
 
 const drawerWidth = 260;
 
@@ -69,6 +70,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const { mode, toggleMode, setMode } = useThemeMode();
+  const { autoPlay, toggleAutoPlay } = useDashboardPlayback();
 
   const initials = useMemo(() => {
     if (!user) return "?";
@@ -129,6 +131,35 @@ export default function AppLayout({ children }: AppLayoutProps) {
         })}
       </List>
       <Box sx={{ p: 2, display: "flex", flexDirection: "column", gap: 1.5 }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+          <Avatar sx={{ bgcolor: "primary.main" }}>{initials}</Avatar>
+          <Box>
+            <Typography variant="subtitle2" fontWeight={600} noWrap>
+              {user?.full_name}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {(user?.role ?? "user").toLowerCase() === "admin" ? "Yönetici" : "Kullanıcı"}
+            </Typography>
+          </Box>
+        </Box>
+        <Tooltip
+          title={autoPlay ? "Grafik oynatımını durdur" : "Grafik oynatımını başlat"}
+          placement="top"
+        >
+          <ListItemButton
+            onClick={toggleAutoPlay}
+            sx={{ borderRadius: 2, color: "text.secondary" }}
+          >
+            <ListItemIcon sx={{ color: "text.secondary" }}>
+              {autoPlay ? <PauseIcon /> : <PlayArrowIcon />}
+            </ListItemIcon>
+            <ListItemText
+              primary="Grafik Oynatımı"
+              secondary={autoPlay ? "Otomatik" : "Duraklatıldı"}
+              secondaryTypographyProps={{ color: "text.secondary" }}
+            />
+          </ListItemButton>
+        </Tooltip>
         <Tooltip title={mode === "dark" ? "Açık moda geç" : "Karanlık moda geç"} placement="top">
           <ListItemButton
             onClick={toggleMode}
@@ -179,97 +210,6 @@ export default function AppLayout({ children }: AppLayoutProps) {
         overflowX: "hidden"
       }}
     >
-      <AppBar
-        position="fixed"
-        sx={{
-          width: { md: `calc(100% - ${drawerWidth}px)` },
-          ml: { md: `${drawerWidth}px` },
-          left: { md: `${drawerWidth}px` },
-          right: 0,
-          boxShadow: "none",
-          backgroundColor: "transparent"
-        }}
-      >
-        <Toolbar
-          sx={{
-            backgroundColor: "background.paper",
-            borderBottom: "1px solid",
-            borderColor: "divider",
-            columnGap: 2,
-            py: 1.5
-          }}
-        >
-          <Box
-            sx={{
-              width: "100%",
-              maxWidth: { xl: 1440, lg: 1280 },
-              mx: "auto",
-              display: "flex",
-              alignItems: "center",
-              flexWrap: "wrap",
-              gap: { xs: 1.5, md: 2 }
-            }}
-          >
-            <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, minWidth: 0 }}>
-              <IconButton
-                color="inherit"
-                edge="start"
-                onClick={() => setMobileOpen(true)}
-                sx={{ mr: 1, display: { md: "none" } }}
-              >
-                <MenuIcon />
-              </IconButton>
-              <Box
-                component="img"
-                src={brandLogo}
-                alt="Bütçe Takip"
-                sx={{ height: 32, width: 32, display: { xs: "none", sm: "block" } }}
-              />
-              <Typography
-                variant="subtitle1"
-                color="text.secondary"
-                sx={{ fontWeight: 600, display: { xs: "none", lg: "block" } }}
-              >
-                Bütçe Takip Platformu
-              </Typography>
-            </Box>
-            <Typography
-              component="h1"
-              sx={{
-                flexGrow: 1,
-                textAlign: { xs: "left", md: "center" },
-                fontWeight: 700,
-                fontSize: { xs: "1.3rem", md: "1.75rem" },
-                color: "text.primary",
-                order: { xs: 3, md: 2 },
-                width: { xs: "100%", md: "auto" }
-              }}
-            >
-              {navItems.find((item) => item.path === location.pathname)?.label ?? "Bütçe Yönetimi"}
-            </Typography>
-            <Box
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                gap: 2,
-                minWidth: 0,
-                marginLeft: { md: "auto" },
-                order: { xs: 2, md: 3 }
-              }}
-            >
-              <Box sx={{ textAlign: "right" }}>
-                <Typography variant="subtitle2" fontWeight={600}>
-                  {user?.full_name}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {user?.role === "admin" ? "Yönetici" : "Kullanıcı"}
-                </Typography>
-              </Box>
-              <Avatar sx={{ bgcolor: "primary.main" }}>{initials}</Avatar>
-            </Box>
-          </Box>
-        </Toolbar>
-      </AppBar>
       <Box component="nav" sx={{ width: { md: drawerWidth }, flexShrink: { md: 0 } }}>
         <Drawer
           variant="temporary"
@@ -301,12 +241,29 @@ export default function AppLayout({ children }: AppLayoutProps) {
           minWidth: 0,
           width: "100%",
           maxWidth: "100vw",
-          p: { xs: 3, md: 5 },
-          mt: { xs: 8, md: 10 }
+          px: { xs: 3, md: 5 },
+          pt: { xs: 3, md: 5 },
+          pb: { xs: 10, md: 5 }
         }}
       >
         {children}
       </Box>
+      <Tooltip title="Menüyü aç" placement="left">
+        <Fab
+          color="primary"
+          aria-label="Menüyü aç"
+          onClick={() => setMobileOpen(true)}
+          sx={{
+            position: "fixed",
+            bottom: 24,
+            right: 24,
+            zIndex: (theme) => theme.zIndex.drawer + 1,
+            display: { xs: mobileOpen ? "none" : "flex", md: "none" }
+          }}
+        >
+          <MenuIcon />
+        </Fab>
+      </Tooltip>
     </Box>
   );
 }

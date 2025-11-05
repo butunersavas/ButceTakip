@@ -30,6 +30,7 @@ import dayjs from "dayjs";
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import usePersistentState from "../../hooks/usePersistentState";
 import { useAuth } from "../../context/AuthContext";
+import { formatMapAttribute } from "../../utils/formatters";
 
 interface Scenario {
   id: number;
@@ -57,6 +58,7 @@ export interface Expense {
   status: "recorded" | "cancelled";
   is_out_of_budget: boolean;
   created_by_id: number | null;
+  map_attribute?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -308,7 +310,8 @@ export default function ExpensesView() {
         flex: 1,
         valueGetter: (params) => {
           const item = budgetItems?.find((budget) => budget.id === params.row.budget_item_id);
-          return item?.map_attribute ?? "-";
+          const candidate = params.row.map_attribute ?? item?.map_attribute ?? null;
+          return formatMapAttribute(candidate);
         }
       },
       {
@@ -431,12 +434,15 @@ export default function ExpensesView() {
                 fullWidth
               >
                 <MenuItem value="">Tümü</MenuItem>
-                {budgetItems?.map((item) => (
-                  <MenuItem key={item.id} value={item.id}>
-                    {item.code} — {item.name}
-                    {item.map_attribute ? ` (${item.map_attribute})` : ""}
-                  </MenuItem>
-                ))}
+                  {budgetItems?.map((item) => {
+                    const attributeLabel = formatMapAttribute(item.map_attribute);
+                    return (
+                      <MenuItem key={item.id} value={item.id}>
+                        {item.code} — {item.name}
+                        {attributeLabel !== "-" ? ` (${attributeLabel})` : ""}
+                      </MenuItem>
+                    );
+                  })}
               </TextField>
             </Grid>
             <Grid item xs={12} md={3}>
@@ -631,12 +637,15 @@ export default function ExpensesView() {
                     required
                     fullWidth
                   >
-                {budgetItems?.map((item) => (
-                  <MenuItem key={item.id} value={item.id}>
-                    {item.code} — {item.name}
-                    {item.map_attribute ? ` (${item.map_attribute})` : ""}
-                  </MenuItem>
-                ))}
+                  {budgetItems?.map((item) => {
+                    const attributeLabel = formatMapAttribute(item.map_attribute);
+                    return (
+                      <MenuItem key={item.id} value={item.id}>
+                        {item.code} — {item.name}
+                        {attributeLabel !== "-" ? ` (${attributeLabel})` : ""}
+                      </MenuItem>
+                    );
+                  })}
               </TextField>
                 </Grid>
                 <Grid item xs={12} md={4}>
