@@ -65,11 +65,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [token, fetchCurrentUser]);
 
   const login = useCallback(async (email: string, password: string) => {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) {
+      setError("Geçerli bir e-posta adresi giriniz");
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
       const params = new URLSearchParams();
-      params.append("username", email);
+      params.append("username", normalizedEmail);
       params.append("password", password);
       params.append("grant_type", "password");
       const response = await axios.post<{ access_token: string }>(
