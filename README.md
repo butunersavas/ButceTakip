@@ -30,6 +30,26 @@ Kurumsal bütçe planlama ve gerçekleşen harcamaları takip etmeye yönelik AP
 4. Web arayüzüne `http://localhost:5173` adresinden erişebilirsiniz.
 4. PgAdmin arayüzüne `http://localhost:8080` adresinden erişebilirsiniz.
 
+### Docker build hatası: `unknown instruction: diff`
+
+Docker imajlarını oluştururken aşağıdaki gibi bir hata mesajı görürseniz:
+
+```
+target api: failed to solve: dockerfile parse error on line 1: unknown instruction: diff
+```
+
+Bu durum çoğunlukla `Dockerfile` içeriğinin bir Git yaması (örn. `diff --git ...` satırları) ile
+yanlışlıkla değiştirilmesinden kaynaklanır. Sorunu gidermek için ilgili `Dockerfile` dosyasını
+orijinal haline döndürün:
+
+```powershell
+git checkout -- Dockerfile
+git checkout -- frontend/Dockerfile
+```
+
+veya dosyaları yeniden indirip tekrar deneyin. İlk satırın `FROM python:3.11-slim` (API için)
+veya `FROM node:20-alpine` (frontend için) ile başladığından emin olun.
+
 ## Geliştirme Ortamı
 Yerel geliştirmede aşağıdaki adımları takip edebilirsiniz:
 ```bash
