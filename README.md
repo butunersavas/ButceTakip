@@ -30,6 +30,23 @@ Kurumsal bütçe planlama ve gerçekleşen harcamaları takip etmeye yönelik AP
 4. Web arayüzüne `http://localhost:5173` adresinden erişebilirsiniz.
 4. PgAdmin arayüzüne `http://localhost:8080` adresinden erişebilirsiniz.
 
+### Kurumsal TLS incelemesi olan ağlarda pip hatası
+
+Kurumsal ağınız PyPI trafiğini SSL incelemesinden geçiriyor ve `pip install` komutları
+"self-signed certificate in certificate chain" hatası ile sonlanıyorsa kurumsal
+kök sertifikanızı Docker imajına eklemeniz gerekir. Bunun için `docker/certs/`
+dizinine `.crt` uzantılı sertifika dosyanızı kopyalayın ve build komutunu tekrar
+çalıştırın:
+
+```bash
+cp kurumsal-kok-sertifika.crt docker/certs/
+docker compose build --no-cache api
+```
+
+İmaj oluşturulurken `docker/certs/` altındaki tüm `.crt` dosyaları sistemin güvenilen
+sertifikalar deposuna eklenir. Sertifika dosyanız değiştiğinde veya yeni bir sertifika
+eklediğinizde imajı yeniden oluşturmanız yeterlidir.
+
 ### Docker build hatası: `unknown instruction: diff`
 
 Docker imajlarını oluştururken aşağıdaki gibi bir hata mesajı görürseniz:

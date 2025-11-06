@@ -14,8 +14,13 @@ RUN apt-get update \
         curl \
         cargo \
         rustc \
-    && update-ca-certificates \
     && rm -rf /var/lib/apt/lists/*
+
+# Kurumsal ağlarda PyPI TLS incelemesi yapılıyorsa ek kök sertifikaları 
+# `docker/certs/` dizinine `.crt` uzantısıyla kopyalayarak build sırasında 
+# güvenilen sertifikalara ekleyebilirsiniz.
+COPY docker/certs/ /usr/local/share/ca-certificates/
+RUN update-ca-certificates
 
 COPY requirements.txt ./
 RUN pip install --no-cache-dir \
