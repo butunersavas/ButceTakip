@@ -8,6 +8,8 @@ import {
 } from "react";
 import axios, { AxiosError } from "axios";
 
+import { API_URL } from "../config";
+
 export interface AuthUser {
   id: number;
   email: string;
@@ -25,8 +27,6 @@ interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
-
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [token, setToken] = useState<string | null>(() =>
