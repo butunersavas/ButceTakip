@@ -27,7 +27,6 @@ import { useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 
 import { useAuth } from "../../context/AuthContext";
-import brandLogo from "../../assets/brand-logo.svg";
 import { useThemeMode } from "../../context/ThemeModeContext";
 import { useDashboardPlayback } from "../../context/DashboardPlaybackContext";
 
@@ -83,21 +82,13 @@ export default function AppLayout({ children }: AppLayoutProps) {
 
   const drawer = (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      <Box sx={{ p: 3, display: "flex", alignItems: "center", gap: 2 }}>
-        <Box
-          component="img"
-          src={brandLogo}
-          alt="Bütçe Takip"
-          sx={{ width: 48, height: 48, flexShrink: 0 }}
-        />
-        <Box>
-          <Typography variant="h6" fontWeight={700} color="primary">
-            Bütçe Takip
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Yönetim Platformu
-          </Typography>
-        </Box>
+      <Box sx={{ p: 3 }}>
+        <Typography variant="h6" fontWeight={700} color="primary">
+          Bütçe Takip
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          Yönetim Platformu
+        </Typography>
       </Box>
       <Divider />
       <List sx={{ flexGrow: 1, py: 2 }}>

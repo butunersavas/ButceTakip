@@ -109,6 +109,25 @@ export default function DashboardView() {
     }
   });
 
+  const sortedBudgetItems = useMemo(() => {
+    if (!budgetItems?.length) return [];
+
+    return [...budgetItems].sort((first, second) => {
+      const firstCode = first.code ?? "";
+      const secondCode = second.code ?? "";
+      const codeComparison = firstCode.localeCompare(secondCode, "tr", {
+        numeric: true,
+        sensitivity: "base"
+      });
+
+      if (codeComparison !== 0) return codeComparison;
+
+      const firstName = first.name ?? "";
+      const secondName = second.name ?? "";
+      return firstName.localeCompare(secondName, "tr", { sensitivity: "base" });
+    });
+  }, [budgetItems]);
+
   useEffect(() => {
     if (!scenarios?.length) return;
     const matchingScenario = scenarios.find((scenario) => scenario.year === year);
@@ -169,19 +188,19 @@ export default function DashboardView() {
   );
   const pieKeys = useMemo(() => ["planned", "actual", "saving"] as const, []);
 
-  const playbackSequence = useMemo(() => {
-    const itemIds = budgetItems?.map((item) => item.id) ?? [];
-    return [null, ...itemIds];
-  }, [budgetItems]);
+  const playbackSequence = useMemo(
+    () => sortedBudgetItems.map((item) => item.id),
+    [sortedBudgetItems]
+  );
 
   useEffect(() => {
     if (isLoading || !dashboard) return;
     if (!autoPlay) return;
     if (!playbackSequence.length) return;
 
-    let currentIndex = playbackSequence.findIndex(
-      (itemId) => itemId === (budgetItemId ?? null)
-    );
+    let currentIndex = budgetItemId
+      ? playbackSequence.findIndex((itemId) => itemId === budgetItemId)
+      : -1;
 
     if (currentIndex === -1) {
       currentIndex = 0;
@@ -194,7 +213,14 @@ export default function DashboardView() {
     }, 6000);
 
     return () => window.clearInterval(interval);
-  }, [autoPlay, playbackSequence, budgetItemId, dashboard, isLoading, setBudgetItemId]);
+  }, [
+    autoPlay,
+    playbackSequence,
+    budgetItemId,
+    dashboard,
+    isLoading,
+    setBudgetItemId
+  ]);
 
   const handleBudgetItemChange = (event: ChangeEvent<HTMLInputElement>) => {
     const value = event.target.value ? Number(event.target.value) : null;
@@ -246,7 +272,7 @@ export default function DashboardView() {
                 fullWidth
               >
                 <MenuItem value="">Tümü</MenuItem>
-                {budgetItems?.map((item) => (
+                {sortedBudgetItems.map((item) => (
                   <MenuItem key={item.id} value={item.id}>
                     {item.code} — {item.name}
                     {item.map_attribute ? ` (${item.map_attribute})` : ""}
@@ -328,7 +354,7 @@ export default function DashboardView() {
             <Chip
               label={
                 budgetItemId
-                  ? budgetItems?.find((item) => item.id === budgetItemId)?.name
+                  ? sortedBudgetItems.find((item) => item.id === budgetItemId)?.name
                   : "Tüm Kalemler"
               }
               color={budgetItemId ? "primary" : "default"}
