@@ -63,6 +63,19 @@ interface BudgetItem {
   map_attribute?: string | null;
 }
 
+function getBudgetItemLabel(item: BudgetItem) {
+  const code = item.code?.trim();
+  const name = item.name?.trim();
+  const parts = [code, name].filter(Boolean);
+  const baseLabel = parts.length
+    ? parts.join(" — ")
+    : item.map_attribute?.trim() ?? "Tanımsız Kalem";
+  if (item.map_attribute && parts.length) {
+    return `${baseLabel} (${item.map_attribute})`;
+  }
+  return baseLabel;
+}
+
 const monthLabels = [
   "Ocak",
   "Şubat",
@@ -193,6 +206,36 @@ export default function DashboardView() {
     [sortedBudgetItems]
   );
 
+  const selectedBudgetItem = useMemo(() => {
+    if (!budgetItemId) return null;
+    return (
+      sortedBudgetItems.find((item) => item.id === budgetItemId) ?? null
+    );
+  }, [budgetItemId, sortedBudgetItems]);
+
+  useEffect(() => {
+    if (!sortedBudgetItems.length) {
+      if (budgetItemId !== null) {
+        setBudgetItemId(null);
+      }
+      return;
+    }
+
+    const exists = sortedBudgetItems.some((item) => item.id === budgetItemId);
+    if (!exists) {
+      if (autoPlay) {
+        setBudgetItemId(sortedBudgetItems[0].id);
+      } else if (budgetItemId !== null) {
+        setBudgetItemId(null);
+      }
+    }
+  }, [
+    autoPlay,
+    budgetItemId,
+    setBudgetItemId,
+    sortedBudgetItems
+  ]);
+
   useEffect(() => {
     if (isLoading || !dashboard) return;
     if (!autoPlay) return;
@@ -274,8 +317,7 @@ export default function DashboardView() {
                 <MenuItem value="">Tümü</MenuItem>
                 {sortedBudgetItems.map((item) => (
                   <MenuItem key={item.id} value={item.id}>
-                    {item.code} — {item.name}
-                    {item.map_attribute ? ` (${item.map_attribute})` : ""}
+                    {getBudgetItemLabel(item)}
                   </MenuItem>
                 ))}
               </TextField>
@@ -353,9 +395,7 @@ export default function DashboardView() {
             </Typography>
             <Chip
               label={
-                budgetItemId
-                  ? sortedBudgetItems.find((item) => item.id === budgetItemId)?.name
-                  : "Tüm Kalemler"
+                selectedBudgetItem ? getBudgetItemLabel(selectedBudgetItem) : "Tüm Kalemler"
               }
               color={budgetItemId ? "primary" : "default"}
               variant={budgetItemId ? "filled" : "outlined"}
