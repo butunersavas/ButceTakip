@@ -1,7 +1,6 @@
 import {
   Box,
   Avatar,
-  Divider,
   Drawer,
   List,
   ListItemButton,
@@ -82,15 +81,6 @@ export default function AppLayout({ children }: AppLayoutProps) {
 
   const drawer = (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      <Box sx={{ p: 3 }}>
-        <Typography variant="h6" fontWeight={700} color="primary">
-          Bütçe Takip
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          Yönetim Platformu
-        </Typography>
-      </Box>
-      <Divider />
       <List sx={{ flexGrow: 1, py: 2 }}>
         {navItems.map((item) => {
           const selected = location.pathname === item.path;
