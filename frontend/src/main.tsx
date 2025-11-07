@@ -41,6 +41,12 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
               scrollbarGutter: "stable both-edges",
               width: "100%"
             },
+            ".MuiAppBar-root": {
+              display: "none"
+            },
+            ".MuiToolbar-root": {
+              display: "none"
+            },
             "#root": {
               minHeight: "100%"
             }
