@@ -2,6 +2,7 @@
 
 __all__ = [
     "analytics",
+    "dashboard_insights",
     "cleanup",
     "exporter",
     "importer",

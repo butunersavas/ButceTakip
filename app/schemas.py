@@ -1,6 +1,8 @@
 from datetime import date, datetime
 from typing import Optional
 
+from typing import Literal
+
 from pydantic import BaseModel, Field, validator
 
 from app.models import ExpenseStatus
@@ -182,9 +184,33 @@ class DashboardKPI(BaseModel):
     total_overrun: float
 
 
+class DashboardReminder(BaseModel):
+    severity: Literal["info", "warning", "success", "error"] = "info"
+    message: str
+
+
+class DashboardTodayEntry(BaseModel):
+    id: int
+    budget_item_id: int
+    budget_item_code: str | None = None
+    budget_item_name: str | None = None
+    amount: float
+    description: str | None = None
+    expense_date: date
+    status: ExpenseStatus
+
+
+class DashboardTodayPanel(BaseModel):
+    recorded: list[DashboardTodayEntry]
+    cancelled: list[DashboardTodayEntry]
+    out_of_budget: list[DashboardTodayEntry]
+
+
 class DashboardResponse(BaseModel):
     kpi: DashboardKPI
     monthly: list[DashboardSummary]
+    reminders: list[DashboardReminder]
+    today: DashboardTodayPanel
 
 
 class ImportSummary(BaseModel):

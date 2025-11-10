@@ -4,6 +4,10 @@ from sqlmodel import Session
 from app.dependencies import get_current_user, get_db_session
 from app.schemas import DashboardKPI, DashboardResponse, DashboardSummary
 from app.services.analytics import compute_monthly_summary, totalize
+from app.services.dashboard_insights import (
+    build_dashboard_reminders,
+    build_today_panel,
+)
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
@@ -23,6 +27,18 @@ def get_dashboard(
     total_remaining = total_plan - total_actual
     total_saving = sum(item.saving for item in monthly if item.saving > 0)
     total_overrun = sum(-item.saving for item in monthly if item.saving < 0)
+    reminders = build_dashboard_reminders(
+        session,
+        year=year,
+        scenario_id=scenario_id,
+        budget_item_id=budget_item_id,
+        monthly=monthly,
+    )
+    today_panel = build_today_panel(
+        session,
+        scenario_id=scenario_id,
+        budget_item_id=budget_item_id,
+    )
     return DashboardResponse(
         kpi=DashboardKPI(
             total_plan=total_plan,
@@ -35,4 +51,6 @@ def get_dashboard(
             DashboardSummary(month=item.month, planned=item.planned, actual=item.actual, saving=item.saving)
             for item in monthly
         ],
+        reminders=reminders,
+        today=today_panel,
     )

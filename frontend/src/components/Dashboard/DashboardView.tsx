@@ -1,9 +1,11 @@
-import { ChangeEvent, useEffect, useMemo } from "react";
+import { ChangeEvent, Fragment, useEffect, useMemo } from "react";
 import {
+  Alert,
   Box,
   Card,
   CardContent,
   Chip,
+  Divider,
   Grid,
   MenuItem,
   Skeleton,
@@ -45,9 +47,33 @@ interface DashboardKPI {
   total_overrun: number;
 }
 
+interface DashboardReminder {
+  severity: "info" | "warning" | "success" | "error";
+  message: string;
+}
+
+interface DashboardTodayEntry {
+  id: number;
+  budget_item_id: number;
+  budget_item_code?: string | null;
+  budget_item_name?: string | null;
+  amount: number;
+  description?: string | null;
+  expense_date: string;
+  status: "recorded" | "cancelled";
+}
+
+interface DashboardTodayPanel {
+  recorded: DashboardTodayEntry[];
+  cancelled: DashboardTodayEntry[];
+  out_of_budget: DashboardTodayEntry[];
+}
+
 interface DashboardResponse {
   kpi: DashboardKPI;
   monthly: DashboardSummary[];
+  reminders: DashboardReminder[];
+  today: DashboardTodayPanel;
 }
 
 interface Scenario {
@@ -96,6 +122,13 @@ function formatCurrency(value: number) {
     style: "currency",
     currency: "USD"
   }).format(value ?? 0);
+}
+
+function formatBudgetItemLabel(entry: Pick<DashboardTodayEntry, "budget_item_code" | "budget_item_name">) {
+  const code = entry.budget_item_code?.trim() ?? "";
+  const name = entry.budget_item_name?.trim() ?? "";
+  const parts = [code, name].filter(Boolean);
+  return parts.length ? parts.join(" — ") : "Tanımsız Kalem";
 }
 
 export default function DashboardView() {
@@ -325,6 +358,136 @@ export default function DashboardView() {
           </Grid>
         </CardContent>
       </Card>
+
+      <Grid container spacing={3}>
+        <Grid item xs={12} md={6}>
+          <Card>
+            <CardContent>
+              <Stack spacing={2}>
+                <Typography variant="h6" fontWeight={600}>
+                  Görev & Hatırlatmalar
+                </Typography>
+                {isLoading ? (
+                  <Stack spacing={1}>
+                    {Array.from({ length: 3 }).map((_, index) => (
+                      <Skeleton
+                        // eslint-disable-next-line react/no-array-index-key
+                        key={index}
+                        variant="rounded"
+                        height={48}
+                      />
+                    ))}
+                  </Stack>
+                ) : dashboard?.reminders?.length ? (
+                  <Stack spacing={1.5}>
+                    {dashboard.reminders.map((reminder, index) => (
+                      <Alert
+                        key={`${reminder.message}-${index}`}
+                        severity={reminder.severity}
+                        variant="outlined"
+                      >
+                        {reminder.message}
+                      </Alert>
+                    ))}
+                  </Stack>
+                ) : (
+                  <Typography variant="body2" color="text.secondary">
+                    Şu anda gösterilecek hatırlatma bulunmuyor.
+                  </Typography>
+                )}
+              </Stack>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        <Grid item xs={12} md={6}>
+          <Card>
+            <CardContent>
+              <Stack spacing={2}>
+                <Typography variant="h6" fontWeight={600}>
+                  Bugün İçin
+                </Typography>
+                {isLoading ? (
+                  <Stack spacing={1}>
+                    {Array.from({ length: 3 }).map((_, sectionIndex) => (
+                      <Fragment key={sectionIndex}>
+                        <Skeleton variant="text" height={28} width="40%" />
+                        <Skeleton variant="rounded" height={56} />
+                        {sectionIndex < 2 ? <Divider /> : null}
+                      </Fragment>
+                    ))}
+                  </Stack>
+                ) : (
+                  <Stack spacing={2}>
+                    {(
+                      [
+                        {
+                          title: "Bugün girilen harcamalar",
+                          key: "recorded" as const,
+                          emptyText: "Bugün herhangi bir harcama kaydedilmedi."
+                        },
+                        {
+                          title: "Bugün reddedilenler",
+                          key: "cancelled" as const,
+                          emptyText: "Bugün reddedilen kayıt bulunmuyor."
+                        },
+                        {
+                          title: "Bugün bütçe dışı girişler",
+                          key: "out_of_budget" as const,
+                          emptyText: "Bugün bütçe dışı kayıt bulunmuyor."
+                        }
+                      ]
+                    ).map((section, index) => {
+                      const entries = dashboard?.today?.[section.key] ?? [];
+                      return (
+                        <Fragment key={section.key}>
+                          <Stack spacing={1}>
+                            <Typography variant="subtitle1" fontWeight={600}>
+                              {section.title}
+                            </Typography>
+                            {entries.length ? (
+                              <Stack spacing={1.5}>
+                                {entries.map((entry) => (
+                                  <Stack
+                                    key={entry.id}
+                                    direction="row"
+                                    justifyContent="space-between"
+                                    alignItems="flex-start"
+                                    spacing={2}
+                                  >
+                                    <Stack spacing={0.5}>
+                                      <Typography variant="body2" fontWeight={600}>
+                                        {formatBudgetItemLabel(entry)}
+                                      </Typography>
+                                      {entry.description ? (
+                                        <Typography variant="caption" color="text.secondary">
+                                          {entry.description}
+                                        </Typography>
+                                      ) : null}
+                                    </Stack>
+                                    <Typography variant="body2" color="text.secondary">
+                                      {formatCurrency(entry.amount)}
+                                    </Typography>
+                                  </Stack>
+                                ))}
+                              </Stack>
+                            ) : (
+                              <Typography variant="body2" color="text.secondary">
+                                {section.emptyText}
+                              </Typography>
+                            )}
+                          </Stack>
+                          {index < 2 ? <Divider /> : null}
+                        </Fragment>
+                      );
+                    })}
+                  </Stack>
+                )}
+              </Stack>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
 
       <Grid container spacing={3}>
         {(
