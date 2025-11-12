@@ -63,6 +63,8 @@ class BudgetItemBase(BaseModel):
     name: str
     description: Optional[str] = None
     map_attribute: Optional[str] = None
+    capex_opex: Optional[str] = None
+    asset_type: Optional[str] = None
 
 
 class BudgetItemCreate(BudgetItemBase):
@@ -74,6 +76,8 @@ class BudgetItemUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     map_attribute: Optional[str] = None
+    capex_opex: Optional[str] = None
+    asset_type: Optional[str] = None
 
 
 class BudgetItemRead(BudgetItemBase):

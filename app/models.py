@@ -48,6 +48,8 @@ class BudgetItem(TimestampMixin, SQLModel, table=True):
     name: str = Field(nullable=False)
     description: Optional[str] = Field(default=None)
     map_attribute: Optional[str] = Field(default=None, nullable=True)
+    capex_opex: Optional[str] = Field(default=None, nullable=True)
+    asset_type: Optional[str] = Field(default=None, nullable=True)
 
     plans: list["PlanEntry"] = Relationship(back_populates="budget_item")
     expenses: list["Expense"] = Relationship(back_populates="budget_item")

@@ -17,6 +17,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import usePersistentState from "../../hooks/usePersistentState";
+import { formatAssetType, formatCapexOpex, formatMapAttribute } from "../../utils/formatters";
 
 interface Scenario {
   id: number;
@@ -29,6 +30,8 @@ interface BudgetItem {
   code: string;
   name: string;
   map_attribute?: string | null;
+  capex_opex?: string | null;
+  asset_type?: string | null;
 }
 
 interface ImportSummary {
@@ -38,7 +41,7 @@ interface ImportSummary {
   message?: string;
 }
 
-const sampleCsv = `type,budget_code,budget_name,map_attribute,scenario,year,month,amount,date,quantity,unit_price,vendor,description,out_of_budget\nplan,MARKETING,Marketing Temel,Hizmet,Temel,2024,1,15000,,,,,,false\nexpense,MARKETING,Marketing Temel,Hizmet,Temel,2024,,12000,2024-01-15,1,12000,ACME Ltd,Reklam harcaması,false\n`;
+const sampleCsv = `type,budget_code,budget_name,map_attribute,capex_opex,asset_type,scenario,year,month,amount,date,quantity,unit_price,vendor,description,out_of_budget\nplan,MARKETING,Marketing Temel,Hizmet,OPEX,Hizmet,Temel,2024,1,15000,,,,,,false\nexpense,MARKETING,Marketing Temel,Hizmet,OPEX,Hizmet,Temel,2024,,12000,2024-01-15,1,12000,ACME Ltd,Reklam harcaması,false\n`;
 
 export default function ImportExportView() {
   const client = useAuthorizedClient();
@@ -305,12 +308,21 @@ export default function ImportExportView() {
                       fullWidth
                     >
                       <MenuItem value="">Tümü</MenuItem>
-                      {budgetItems?.map((item) => (
-                        <MenuItem key={item.id} value={item.id}>
-                          {item.code} — {item.name}
-                          {item.map_attribute ? ` (${item.map_attribute})` : ""}
-                        </MenuItem>
-                      ))}
+                      {budgetItems?.map((item) => {
+                        const details = [
+                          formatMapAttribute(item.map_attribute),
+                          formatCapexOpex(item.capex_opex),
+                          formatAssetType(item.asset_type)
+                        ]
+                          .filter((label) => label !== "-")
+                          .join(" • ");
+                        return (
+                          <MenuItem key={item.id} value={item.id}>
+                            {item.code} — {item.name}
+                            {details ? ` (${details})` : ""}
+                          </MenuItem>
+                        );
+                      })}
                     </TextField>
                   </Grid>
                 </Grid>
