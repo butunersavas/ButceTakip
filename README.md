@@ -131,9 +131,9 @@ Varsayılan olarak arayüz `http://localhost:5173` portundan yayına alınır. A
 
 ## Örnek CSV Şablonu
 ```
-type,budget_code,budget_name,scenario,year,month,amount,date,quantity,unit_price,vendor,description,out_of_budget
-plan,MARKETING,Marketing Temel,Temel,2024,1,15000,,,,,
-expense,MARKETING,Marketing Temel,Temel,2024,,12000,2024-01-15,1,12000,ACME Ltd,Reklam harcaması,false
+type,budget_code,budget_name,scenario,year,month,amount,date,quantity,unit_price,vendor,description,out_of_budget,capex_opex,asset_type
+plan,MARKETING,Marketing Temel,Temel,2026,1,15000,,,,,,,CAPEX,Donanım
+expense,MARKETING,Marketing Temel,Temel,2026,,12000,2026-01-15,1,12000,ACME Ltd,Reklam harcaması,false,OPEX,Yazılım
 ```
 
 ## Pivot tablo (Row Labels) XLSX dosyaları
