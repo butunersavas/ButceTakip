@@ -16,32 +16,59 @@ from app.schemas import ImportSummary
 
 MONTH_ALIASES = {
     "jan": 1,
+    "january": 1,
     "feb": 2,
+    "february": 2,
+    "mar": 3,
+    "march": 3,
     "mart": 3,
     "apr": 4,
+    "april": 4,
     "may": 5,
     "jun": 6,
+    "june": 6,
     "jul": 7,
+    "july": 7,
     "aug": 8,
+    "august": 8,
     "sep": 9,
     "sept": 9,
+    "september": 9,
     "oct": 10,
+    "october": 10,
     "nov": 11,
+    "november": 11,
     "dec": 12,
+    "december": 12,
     "oca": 1,
+    "ocak": 1,
     "şub": 2,
+    "şubat": 2,
     "sub": 2,
+    "subat": 2,
     "nis": 4,
+    "nisan": 4,
     "mayıs": 5,
     "mayis": 5,
     "haz": 6,
+    "haziran": 6,
     "tem": 7,
+    "temmuz": 7,
     "ağu": 8,
+    "ağustos": 8,
     "agu": 8,
+    "agustos": 8,
     "eyl": 9,
+    "eylül": 9,
+    "eylul": 9,
     "eki": 10,
+    "ekim": 10,
     "kas": 11,
+    "kasım": 11,
+    "kasim": 11,
     "ara": 12,
+    "aralık": 12,
+    "aralik": 12,
 }
 
 EXPENSE_COLUMN_KEYWORDS = {"actual", "expense", "spend", "spent", "harcama", "gerçekleşen"}
@@ -245,14 +272,68 @@ def _coerce_int(value: Any, field: str) -> int:
 
 
 def _coerce_float(value: Any, field: str) -> float:
+    try:
+        return _parse_amount(value)
+    except ValueError as exc:
+        raise ValueError(f"Missing value for {field}") from exc
+
+
+def _parse_amount(value: Any) -> float:
     if value is None:
-        raise ValueError(f"Missing value for {field}")
+        raise ValueError("Missing amount")
     if isinstance(value, (int, float)):
         return float(value)
     text = str(value).strip()
     if not text:
-        raise ValueError(f"Missing value for {field}")
-    return float(text)
+        raise ValueError("Missing amount")
+
+    # Remove common currency symbols and whitespace variations
+    text = text.replace("\u00a0", "")  # non-breaking space
+    text = text.replace(" ", "")
+    for symbol in ("₺", "TL", "tl", "TRY", "try", "$", "€", "£", "₤", "¥"):
+        text = text.replace(symbol, "")
+
+    # Normalise minus sign variations
+    text = text.replace("–", "-")
+
+    cleaned = re.sub(r"[^0-9,.-]", "", text)
+    if not cleaned or cleaned in {"-", ",", "."}:
+        raise ValueError("Invalid amount")
+
+    last_comma = cleaned.rfind(",")
+    last_dot = cleaned.rfind(".")
+
+    decimal_sep = None
+    thousands_sep = None
+
+    if last_comma != -1 and last_dot != -1:
+        if last_comma > last_dot:
+            decimal_sep = ","
+            thousands_sep = "."
+        else:
+            decimal_sep = "."
+            thousands_sep = ","
+    elif last_comma != -1:
+        # Assume comma is decimal when there are exactly two digits after it
+        if len(cleaned) - last_comma - 1 in {2, 3}:
+            decimal_sep = ","
+        else:
+            thousands_sep = ","
+    elif last_dot != -1:
+        if len(cleaned) - last_dot - 1 in {2, 3}:
+            decimal_sep = "."
+        else:
+            thousands_sep = "."
+
+    if thousands_sep:
+        cleaned = cleaned.replace(thousands_sep, "")
+    if decimal_sep and decimal_sep != ".":
+        cleaned = cleaned.replace(decimal_sep, ".")
+
+    try:
+        return float(cleaned)
+    except ValueError as exc:
+        raise ValueError("Invalid amount") from exc
 
 
 def _coerce_date(value: Any, field: str) -> date:
@@ -315,7 +396,7 @@ def _import_plan_list(data: list[dict], session: Session) -> int:
             plan = PlanEntry(
                 year=int(entry["year"]),
                 month=int(entry["month"]),
-                amount=float(entry["amount"]),
+                amount=_parse_amount(entry["amount"]),
                 scenario_id=scenario.id,
                 budget_item_id=item.id,
             )
@@ -347,7 +428,7 @@ def _import_year_month_structure(data: dict, session: Session) -> int:
             plan = PlanEntry(
                 year=year,
                 month=int(month_str),
-                amount=float(amount),
+                amount=_parse_amount(amount),
                 scenario_id=scenario.id,
                 budget_item_id=item.id,
             )
@@ -490,11 +571,13 @@ def _import_pivot_style_rows(
             if index >= len(row):
                 continue
             amount = row[index]
-            if amount in (None, "", 0):
+            if amount in (None, ""):
                 continue
             try:
-                amount_value = float(amount)
-            except (TypeError, ValueError):
+                amount_value = _parse_amount(amount)
+            except ValueError:
+                continue
+            if amount_value == 0:
                 continue
             scenario = _get_or_create_scenario(session, scenario_value, year)
             plan = PlanEntry(
