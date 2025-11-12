@@ -52,6 +52,8 @@ def _ensure_budget_item(
     code: str,
     name: str | None = None,
     map_attribute: str | None = None,
+    capex_opex: str | None = None,
+    asset_type: str | None = None,
 ) -> BudgetItem:
     item = session.exec(select(BudgetItem).where(BudgetItem.code == code)).first()
     if item:
@@ -62,6 +64,12 @@ def _ensure_budget_item(
         if map_attribute and item.map_attribute != map_attribute:
             item.map_attribute = map_attribute
             updated = True
+        if capex_opex and item.capex_opex != capex_opex:
+            item.capex_opex = capex_opex
+            updated = True
+        if asset_type and item.asset_type != asset_type:
+            item.asset_type = asset_type
+            updated = True
         if updated:
             session.add(item)
             session.commit()
@@ -69,7 +77,13 @@ def _ensure_budget_item(
         return item
     if not name:
         raise HTTPException(status_code=400, detail=f"Missing name for budget item {code}")
-    item = BudgetItem(code=code, name=name, map_attribute=map_attribute)
+    item = BudgetItem(
+        code=code,
+        name=name,
+        map_attribute=map_attribute,
+        capex_opex=capex_opex,
+        asset_type=asset_type,
+    )
     session.add(item)
     session.commit()
     session.refresh(item)
@@ -88,6 +102,71 @@ def _extract_map_attribute(data: dict[str, Any]) -> str | None:
         if stripped:
             return stripped
     return None
+
+
+def _normalize_optional_str(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        text = value.strip()
+    else:
+        text = str(value).strip()
+    return text or None
+
+
+def _extract_text_with_aliases(data: dict[str, Any], *aliases: str) -> str | None:
+    if not aliases:
+        return None
+    normalized_map: dict[str, str] = {}
+    for key in data.keys():
+        normalized = re.sub(r"[^a-z0-9]", "", key.lower())
+        normalized_map[normalized] = key
+    for alias in aliases:
+        normalized_alias = re.sub(r"[^a-z0-9]", "", alias.lower())
+        source_key = normalized_map.get(normalized_alias)
+        if source_key is None:
+            continue
+        candidate = _normalize_optional_str(data.get(source_key))
+        if candidate:
+            return candidate
+    return None
+
+
+def _normalize_capex_opex(value: Any) -> str | None:
+    text = _normalize_optional_str(value)
+    if not text:
+        return None
+    normalized = text.upper()
+    if "CAPEX" in normalized:
+        return "CAPEX"
+    if "OPEX" in normalized:
+        return "OPEX"
+    return text
+
+
+def _extract_capex_opex(data: dict[str, Any]) -> str | None:
+    value = _extract_text_with_aliases(
+        data,
+        "capex_opex",
+        "capex opex",
+        "capex-opex",
+        "capex/opex",
+        "capexopex",
+    )
+    return _normalize_capex_opex(value)
+
+
+def _normalize_asset_type(value: Any) -> str | None:
+    text = _normalize_optional_str(value)
+    if not text:
+        return None
+    return text
+
+
+def _extract_asset_type(data: dict[str, Any]) -> str | None:
+    return _normalize_asset_type(
+        _extract_text_with_aliases(data, "asset_type", "asset type", "varlik tipi", "varlik_tipi", "varliktipi")
+    )
 
 
 def _normalize_code(value: str) -> str:
@@ -220,8 +299,15 @@ def _import_plan_list(data: list[dict], session: Session) -> int:
     for entry in data:
         try:
             map_attribute = _extract_map_attribute(entry)
+            capex_opex = _extract_capex_opex(entry)
+            asset_type = _extract_asset_type(entry)
             item = _ensure_budget_item(
-                session, entry["budget_code"], entry.get("budget_name"), map_attribute
+                session,
+                entry["budget_code"],
+                entry.get("budget_name"),
+                map_attribute,
+                capex_opex,
+                asset_type,
             )
             scenario = _get_or_create_scenario(
                 session, entry.get("scenario"), int(entry.get("year"))
@@ -246,8 +332,16 @@ def _import_year_month_structure(data: dict, session: Session) -> int:
     year = int(data["year"])
     scenario = _get_or_create_scenario(session, data.get("scenario"), year)
     for item_code, months in data.get("items", {}).items():
+        map_attribute = _extract_map_attribute(months)
+        capex_opex = _extract_capex_opex(months)
+        asset_type = _extract_asset_type(months)
         item = _ensure_budget_item(
-            session, item_code, months.get("name"), _extract_map_attribute(months)
+            session,
+            item_code,
+            months.get("name"),
+            map_attribute,
+            capex_opex,
+            asset_type,
         )
         for month_str, amount in months.get("plan", {}).items():
             plan = PlanEntry(
@@ -316,6 +410,22 @@ def _import_pivot_style_rows(
     map_index = _find_header_index(headers_raw, "map attribute", "map_attribute", "map nitelik", "map")
     scenario_index = _find_header_index(headers_raw, "scenario", "senaryo", "bench")
     type_index = _find_header_index(headers_raw, "type", "tip", "type export")
+    capex_index = _find_header_index(
+        headers_raw,
+        "capex_opex",
+        "capex opex",
+        "capex-opex",
+        "capex/opex",
+        "capexopex",
+    )
+    asset_index = _find_header_index(
+        headers_raw,
+        "asset_type",
+        "asset type",
+        "varlık tipi",
+        "varlik tipi",
+        "varlik_tipi",
+    )
 
     for row in data_rows:
         if not row or name_index >= len(row):
@@ -334,9 +444,15 @@ def _import_pivot_style_rows(
 
         map_attribute_value: str | None = None
         if map_index is not None and map_index < len(row):
-            value = row[map_index]
-            if value not in (None, ""):
-                map_attribute_value = str(value).strip()
+            map_attribute_value = _normalize_optional_str(row[map_index])
+
+        capex_opex_value: str | None = None
+        if capex_index is not None and capex_index < len(row):
+            capex_opex_value = _normalize_capex_opex(row[capex_index])
+
+        asset_type_value: str | None = None
+        if asset_index is not None and asset_index < len(row):
+            asset_type_value = _normalize_asset_type(row[asset_index])
 
         code_value: str | None = None
         if code_index is not None and code_index < len(row):
@@ -361,7 +477,14 @@ def _import_pivot_style_rows(
             # Currently only plan rows are supported
             continue
 
-        item = _ensure_budget_item(session, budget_code, name, map_attribute_value)
+        item = _ensure_budget_item(
+            session,
+            budget_code,
+            name,
+            map_attribute_value,
+            capex_opex_value,
+            asset_type_value,
+        )
 
         for index, month, year in month_columns:
             if index >= len(row):
@@ -399,9 +522,16 @@ def import_csv(file: UploadFile, session: Session) -> ImportSummary:
         try:
             entry_type = row.get("type", "plan").lower()
             map_attribute = _extract_map_attribute(row)
+            capex_opex = _extract_capex_opex(row)
+            asset_type = _extract_asset_type(row)
             if entry_type == "plan":
                 item = _ensure_budget_item(
-                    session, row["budget_code"], row.get("budget_name"), map_attribute
+                    session,
+                    row["budget_code"],
+                    row.get("budget_name"),
+                    map_attribute,
+                    capex_opex,
+                    asset_type,
                 )
                 scenario = _get_or_create_scenario(session, row.get("scenario"), int(row["year"]))
                 plan = PlanEntry(
@@ -416,7 +546,12 @@ def import_csv(file: UploadFile, session: Session) -> ImportSummary:
                 summary.imported_plans += 1
             elif entry_type == "expense":
                 item = _ensure_budget_item(
-                    session, row["budget_code"], row.get("budget_name"), map_attribute
+                    session,
+                    row["budget_code"],
+                    row.get("budget_name"),
+                    map_attribute,
+                    capex_opex,
+                    asset_type,
                 )
                 scenario = _get_or_create_scenario(session, row.get("scenario"), int(row["year"]))
                 expense = Expense(
@@ -486,6 +621,8 @@ def import_xlsx(file: UploadFile, session: Session) -> ImportSummary:
             continue
         entry_type = str(row.get("type") or "plan").lower()
         map_attribute = _extract_map_attribute(row)
+        capex_opex = _extract_capex_opex(row)
+        asset_type = _extract_asset_type(row)
         try:
             budget_code = _coerce_str(
                 _get_value(row, "budget_code", "budget code", "kod"),
@@ -498,7 +635,14 @@ def import_xlsx(file: UploadFile, session: Session) -> ImportSummary:
             if entry_type == "plan":
                 month_value = _coerce_int(_get_value(row, "month", "ay"), "month")
                 amount_value = _coerce_float(_get_value(row, "amount", "tutar"), "amount")
-                item = _ensure_budget_item(session, budget_code, budget_name, map_attribute)
+                item = _ensure_budget_item(
+                    session,
+                    budget_code,
+                    budget_name,
+                    map_attribute,
+                    capex_opex,
+                    asset_type,
+                )
                 scenario = _get_or_create_scenario(session, scenario_name, year_value)
                 plan = PlanEntry(
                     year=year_value,
@@ -511,7 +655,14 @@ def import_xlsx(file: UploadFile, session: Session) -> ImportSummary:
                 session.commit()
                 summary.imported_plans += 1
             elif entry_type == "expense":
-                item = _ensure_budget_item(session, budget_code, budget_name, map_attribute)
+                item = _ensure_budget_item(
+                    session,
+                    budget_code,
+                    budget_name,
+                    map_attribute,
+                    capex_opex,
+                    asset_type,
+                )
                 scenario = _get_or_create_scenario(session, scenario_name, year_value)
                 amount_value = _coerce_float(_get_value(row, "amount", "tutar"), "amount")
                 quantity_value = _get_value(row, "quantity", "adet")

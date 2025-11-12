@@ -24,7 +24,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import usePersistentState from "../../hooks/usePersistentState";
 import { useAuth } from "../../context/AuthContext";
-import { formatMapAttribute } from "../../utils/formatters";
+import { formatAssetType, formatCapexOpex, formatMapAttribute } from "../../utils/formatters";
 
 interface Scenario {
   id: number;
@@ -37,6 +37,8 @@ interface BudgetItem {
   code: string;
   name: string;
   map_attribute?: string | null;
+  capex_opex?: string | null;
+  asset_type?: string | null;
 }
 
 interface PlanEntry {
@@ -226,6 +228,24 @@ export default function PlansView() {
           return formatMapAttribute(item?.map_attribute);
         }
       },
+      {
+        field: "capex_opex",
+        headerName: "CAPEX/OPEX",
+        flex: 1,
+        valueGetter: (params) => {
+          const item = budgetItems?.find((budget) => budget.id === params.row.budget_item_id);
+          return formatCapexOpex(item?.capex_opex);
+        }
+      },
+      {
+        field: "asset_type",
+        headerName: "Varlık Tipi",
+        flex: 1,
+        valueGetter: (params) => {
+          const item = budgetItems?.find((budget) => budget.id === params.row.budget_item_id);
+          return formatAssetType(item?.asset_type);
+        }
+      },
       { field: "year", headerName: "Yıl", width: 110 },
       {
         field: "month",
@@ -331,10 +351,15 @@ export default function PlansView() {
                 <MenuItem value="">Tümü</MenuItem>
                 {budgetItems?.map((item) => {
                   const attributeLabel = formatMapAttribute(item.map_attribute);
+                  const capexLabel = formatCapexOpex(item.capex_opex);
+                  const assetLabel = formatAssetType(item.asset_type);
+                  const details = [attributeLabel, capexLabel, assetLabel]
+                    .filter((label) => label !== "-")
+                    .join(" • ");
                   return (
                     <MenuItem key={item.id} value={item.id}>
                       {item.code} — {item.name}
-                      {attributeLabel !== "-" ? ` (${attributeLabel})` : ""}
+                      {details ? ` (${details})` : ""}
                     </MenuItem>
                   );
                 })}
@@ -454,10 +479,15 @@ export default function PlansView() {
               >
                 {budgetItems?.map((item) => {
                   const attributeLabel = formatMapAttribute(item.map_attribute);
+                  const capexLabel = formatCapexOpex(item.capex_opex);
+                  const assetLabel = formatAssetType(item.asset_type);
+                  const details = [attributeLabel, capexLabel, assetLabel]
+                    .filter((label) => label !== "-")
+                    .join(" • ");
                   return (
                     <MenuItem key={item.id} value={item.id}>
                       {item.code} — {item.name}
-                      {attributeLabel !== "-" ? ` (${attributeLabel})` : ""}
+                      {details ? ` (${details})` : ""}
                     </MenuItem>
                   );
                 })}

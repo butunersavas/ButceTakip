@@ -1,12 +1,12 @@
 import {
   Box,
-  Avatar,
+  Divider,
   Drawer,
+  IconButton,
   List,
   ListItemButton,
   ListItemIcon,
   ListItemText,
-  Fab,
   Switch,
   Tooltip,
   Typography
@@ -22,9 +22,10 @@ import DarkModeIcon from "@mui/icons-material/DarkModeOutlined";
 import LightModeIcon from "@mui/icons-material/LightModeOutlined";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import PauseIcon from "@mui/icons-material/Pause";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 
+import brandLogo from "../../assets/brand-logo.svg";
 import { useAuth } from "../../context/AuthContext";
 import { useThemeMode } from "../../context/ThemeModeContext";
 import { useDashboardPlayback } from "../../context/DashboardPlaybackContext";
@@ -32,31 +33,11 @@ import { useDashboardPlayback } from "../../context/DashboardPlaybackContext";
 const drawerWidth = 260;
 
 const navItems = [
-  {
-    label: "Dashboard",
-    icon: <DashboardIcon />,
-    path: "/"
-  },
-  {
-    label: "Plan Yönetimi",
-    icon: <ListAltIcon />,
-    path: "/plans"
-  },
-  {
-    label: "Harcama Yönetimi",
-    icon: <ReceiptIcon />,
-    path: "/expenses"
-  },
-  {
-    label: "Raporlama",
-    icon: <CloudUploadIcon />,
-    path: "/import-export"
-  },
-  {
-    label: "Temizleme Araçları",
-    icon: <CleaningServicesIcon />,
-    path: "/cleanup"
-  }
+  { label: "Dashboard", icon: <DashboardIcon />, path: "/" },
+  { label: "Plan Yönetimi", icon: <ListAltIcon />, path: "/plans" },
+  { label: "Harcama Yönetimi", icon: <ReceiptIcon />, path: "/expenses" },
+  { label: "Raporlama", icon: <CloudUploadIcon />, path: "/import-export" },
+  { label: "Temizleme Araçları", icon: <CleaningServicesIcon />, path: "/cleanup" }
 ];
 
 interface AppLayoutProps {
@@ -70,17 +51,32 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const { mode, toggleMode, setMode } = useThemeMode();
   const { autoPlay, toggleAutoPlay } = useDashboardPlayback();
 
-  const initials = useMemo(() => {
-    if (!user) return "?";
-    const segments = user.full_name.split(" ");
-    return segments
-      .map((segment) => segment[0])
-      .join("")
-      .toUpperCase();
-  }, [user]);
-
   const drawer = (
-    <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
+    <Box
+      sx={{
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        bgcolor: "background.paper"
+      }}
+    >
+      <Box sx={{ p: 2, display: "flex", alignItems: "center", gap: 1.5 }}>
+        <Box component="img" src={brandLogo} alt="Bütçe Takip" sx={{ height: 32, width: 32 }} />
+        <Box>
+          <Typography variant="h6" fontWeight={700} color="primary">
+            Bütçe Takip
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Yönetim Platformu
+          </Typography>
+          {user?.full_name && (
+            <Typography variant="caption" color="text.secondary">
+              {user.full_name}
+            </Typography>
+          )}
+        </Box>
+      </Box>
+      <Divider />
       <List sx={{ flexGrow: 1, py: 2 }}>
         {navItems.map((item) => {
           const selected = location.pathname === item.path;
@@ -100,10 +96,9 @@ export default function AppLayout({ children }: AppLayoutProps) {
                   color: "primary.main"
                 }
               }}
+              onClick={() => setMobileOpen(false)}
             >
-              <ListItemIcon
-                sx={{ color: selected ? "primary.main" : "text.secondary" }}
-              >
+              <ListItemIcon sx={{ color: selected ? "primary.main" : "text.secondary" }}>
                 {item.icon}
               </ListItemIcon>
               <ListItemText primary={item.label} />
@@ -111,26 +106,10 @@ export default function AppLayout({ children }: AppLayoutProps) {
           );
         })}
       </List>
+
       <Box sx={{ p: 2, display: "flex", flexDirection: "column", gap: 1.5 }}>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-          <Avatar sx={{ bgcolor: "primary.main" }}>{initials}</Avatar>
-          <Box>
-            <Typography variant="subtitle2" fontWeight={600} noWrap>
-              {user?.full_name}
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              {(user?.role ?? "user").toLowerCase() === "admin" ? "Yönetici" : "Kullanıcı"}
-            </Typography>
-          </Box>
-        </Box>
-        <Tooltip
-          title={autoPlay ? "Grafik oynatımını durdur" : "Grafik oynatımını başlat"}
-          placement="top"
-        >
-          <ListItemButton
-            onClick={toggleAutoPlay}
-            sx={{ borderRadius: 2, color: "text.secondary" }}
-          >
+        <Tooltip title={autoPlay ? "Grafik oynatımını durdur" : "Grafik oynatımını başlat"} placement="top">
+          <ListItemButton onClick={toggleAutoPlay} sx={{ borderRadius: 2, color: "text.secondary" }}>
             <ListItemIcon sx={{ color: "text.secondary" }}>
               {autoPlay ? <PauseIcon /> : <PlayArrowIcon />}
             </ListItemIcon>
@@ -141,11 +120,9 @@ export default function AppLayout({ children }: AppLayoutProps) {
             />
           </ListItemButton>
         </Tooltip>
+
         <Tooltip title={mode === "dark" ? "Açık moda geç" : "Karanlık moda geç"} placement="top">
-          <ListItemButton
-            onClick={toggleMode}
-            sx={{ borderRadius: 2, color: "text.secondary" }}
-          >
+          <ListItemButton onClick={toggleMode} sx={{ borderRadius: 2, color: "text.secondary" }}>
             <ListItemIcon sx={{ color: "text.secondary" }}>
               {mode === "dark" ? <DarkModeIcon /> : <LightModeIcon />}
             </ListItemIcon>
@@ -166,11 +143,9 @@ export default function AppLayout({ children }: AppLayoutProps) {
             />
           </ListItemButton>
         </Tooltip>
+
         <Tooltip title="Çıkış Yap">
-          <ListItemButton
-            onClick={logout}
-            sx={{ borderRadius: 2, color: "text.secondary" }}
-          >
+          <ListItemButton onClick={logout} sx={{ borderRadius: 2, color: "text.secondary" }}>
             <ListItemIcon>
               <LogoutIcon />
             </ListItemIcon>
@@ -204,17 +179,24 @@ export default function AppLayout({ children }: AppLayoutProps) {
         >
           {drawer}
         </Drawer>
+
         <Drawer
           variant="permanent"
-          open
           sx={{
             display: { xs: "none", md: "block" },
-            "& .MuiDrawer-paper": { boxSizing: "border-box", width: drawerWidth }
+            "& .MuiDrawer-paper": {
+              boxSizing: "border-box",
+              width: drawerWidth,
+              borderRight: "1px solid",
+              borderColor: "divider"
+            }
           }}
+          open
         >
           {drawer}
         </Drawer>
       </Box>
+
       <Box
         component="main"
         sx={{
@@ -222,29 +204,19 @@ export default function AppLayout({ children }: AppLayoutProps) {
           minWidth: 0,
           width: "100%",
           maxWidth: "100vw",
-          px: { xs: 3, md: 5 },
-          pt: { xs: 3, md: 5 },
-          pb: { xs: 10, md: 5 }
+          p: { xs: 3, md: 5 },
+          mt: 0
         }}
       >
+        <Box sx={{ display: { xs: "flex", md: "none" }, justifyContent: "flex-end", mb: 2 }}>
+          <Tooltip title="Menüyü aç">
+            <IconButton onClick={() => setMobileOpen(true)} color="primary">
+              <MenuIcon />
+            </IconButton>
+          </Tooltip>
+        </Box>
         {children}
       </Box>
-      <Tooltip title="Menüyü aç" placement="left">
-        <Fab
-          color="primary"
-          aria-label="Menüyü aç"
-          onClick={() => setMobileOpen(true)}
-          sx={{
-            position: "fixed",
-            bottom: 24,
-            right: 24,
-            zIndex: (theme) => theme.zIndex.drawer + 1,
-            display: { xs: mobileOpen ? "none" : "flex", md: "none" }
-          }}
-        >
-          <MenuIcon />
-        </Fab>
-      </Tooltip>
     </Box>
   );
 }

@@ -87,6 +87,8 @@ interface BudgetItem {
   code: string;
   name: string;
   map_attribute?: string | null;
+  capex_opex?: string | null;
+  asset_type?: string | null;
 }
 
 function getBudgetItemLabel(item: BudgetItem) {
