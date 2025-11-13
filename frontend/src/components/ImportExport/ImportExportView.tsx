@@ -17,6 +17,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import usePersistentState from "../../hooks/usePersistentState";
+import { formatBudgetItemLabel } from "../../utils/budgetItem";
 
 interface Scenario {
   id: number;
@@ -28,6 +29,7 @@ interface BudgetItem {
   id: number;
   code: string;
   name: string;
+  map_category?: string | null;
   map_attribute?: string | null;
 }
 
@@ -38,7 +40,7 @@ interface ImportSummary {
   message?: string;
 }
 
-const sampleCsv = `type,budget_code,budget_name,scenario,year,month,amount,date,quantity,unit_price,vendor,description,out_of_budget,capex_opex,asset_type\nplan,MARKETING,Marketing Temel,Temel,2026,1,15000,,,,,,,CAPEX,Donanım\nexpense,MARKETING,Marketing Temel,Temel,2026,,12000,2026-01-15,1,12000,ACME Ltd,Reklam harcaması,false,OPEX,Yazılım\n`;
+const sampleCsv = `type,budget_code,budget_name,scenario,year,month,amount,date,quantity,unit_price,vendor,description,out_of_budget,map_category,map_attribute\nplan,MARKETING,Marketing Temel,Temel,2026,1,15000,,,,,,,false,CAPEX,Donanım\nexpense,MARKETING,Marketing Temel,Temel,2026,,12000,2026-01-15,1,12000,ACME Ltd,Reklam harcaması,false,OPEX,Yazılım\n`;
 
 export default function ImportExportView() {
   const client = useAuthorizedClient();
@@ -304,13 +306,12 @@ export default function ImportExportView() {
                       }
                       fullWidth
                     >
-                      <MenuItem value="">Tümü</MenuItem>
-                      {budgetItems?.map((item) => (
-                        <MenuItem key={item.id} value={item.id}>
-                          {item.code} — {item.name}
-                          {item.map_attribute ? ` (${item.map_attribute})` : ""}
-                        </MenuItem>
-                      ))}
+                <MenuItem value="">Tümü</MenuItem>
+                {budgetItems?.map((item) => (
+                  <MenuItem key={item.id} value={item.id}>
+                    {formatBudgetItemLabel(item)}
+                  </MenuItem>
+                ))}
                     </TextField>
                   </Grid>
                 </Grid>

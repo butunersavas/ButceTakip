@@ -66,3 +66,6 @@ def _apply_schema_upgrades() -> None:
     if "map_attribute" not in existing_columns:
         with engine.begin() as connection:
             connection.execute(text("ALTER TABLE budget_items ADD COLUMN map_attribute TEXT"))
+    if "map_category" not in existing_columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE budget_items ADD COLUMN map_category TEXT"))

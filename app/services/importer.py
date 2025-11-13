@@ -52,6 +52,7 @@ def _ensure_budget_item(
     code: str,
     name: str | None = None,
     map_attribute: str | None = None,
+    map_category: str | None = None,
 ) -> BudgetItem:
     item = session.exec(select(BudgetItem).where(BudgetItem.code == code)).first()
     if item:
@@ -62,6 +63,9 @@ def _ensure_budget_item(
         if map_attribute and item.map_attribute != map_attribute:
             item.map_attribute = map_attribute
             updated = True
+        if map_category and item.map_category != map_category:
+            item.map_category = map_category
+            updated = True
         if updated:
             session.add(item)
             session.commit()
@@ -69,7 +73,7 @@ def _ensure_budget_item(
         return item
     if not name:
         raise HTTPException(status_code=400, detail=f"Missing name for budget item {code}")
-    item = BudgetItem(code=code, name=name, map_attribute=map_attribute)
+    item = BudgetItem(code=code, name=name, map_attribute=map_attribute, map_category=map_category)
     session.add(item)
     session.commit()
     session.refresh(item)
@@ -77,7 +81,45 @@ def _ensure_budget_item(
 
 
 def _extract_map_attribute(data: dict[str, Any]) -> str | None:
-    for key in ("map_attribute", "map nitelik", "map-nitelik", "mapnitelik", "map_nitelik"):
+    for key in (
+        "map_attribute",
+        "map nitelik",
+        "map-nitelik",
+        "mapnitelik",
+        "map_nitelik",
+        "nitelik",
+        "asset_type",
+        "asset type",
+    ):
+        value = data.get(key)
+        if value is None:
+            continue
+        if isinstance(value, str):
+            stripped = value.strip()
+        else:
+            stripped = str(value).strip()
+        if stripped:
+            return stripped
+    return None
+
+
+def _extract_map_category(data: dict[str, Any]) -> str | None:
+    for key in (
+        "map_category",
+        "map category",
+        "map kategori",
+        "map_kategori",
+        "map-capex or opex",
+        "map capex or opex",
+        "map_capex_or_opex",
+        "map_capex_opex",
+        "capex_opex",
+        "capex-opex",
+        "capex / opex",
+        "capex or opex",
+        "map tür",
+        "map tur",
+    ):
         value = data.get(key)
         if value is None:
             continue
@@ -220,8 +262,13 @@ def _import_plan_list(data: list[dict], session: Session) -> int:
     for entry in data:
         try:
             map_attribute = _extract_map_attribute(entry)
+            map_category = _extract_map_category(entry)
             item = _ensure_budget_item(
-                session, entry["budget_code"], entry.get("budget_name"), map_attribute
+                session,
+                entry["budget_code"],
+                entry.get("budget_name"),
+                map_attribute,
+                map_category,
             )
             scenario = _get_or_create_scenario(
                 session, entry.get("scenario"), int(entry.get("year"))
@@ -247,7 +294,11 @@ def _import_year_month_structure(data: dict, session: Session) -> int:
     scenario = _get_or_create_scenario(session, data.get("scenario"), year)
     for item_code, months in data.get("items", {}).items():
         item = _ensure_budget_item(
-            session, item_code, months.get("name"), _extract_map_attribute(months)
+            session,
+            item_code,
+            months.get("name"),
+            _extract_map_attribute(months),
+            _extract_map_category(months),
         )
         for month_str, amount in months.get("plan", {}).items():
             plan = PlanEntry(
@@ -313,7 +364,18 @@ def _import_pivot_style_rows(
         return False
 
     code_index = _find_header_index(headers_raw, "budget_code", "budget code", "kod", "code")
-    map_index = _find_header_index(headers_raw, "map attribute", "map_attribute", "map nitelik", "map")
+    map_index = _find_header_index(
+        headers_raw, "map attribute", "map_attribute", "map nitelik", "map", "nitelik"
+    )
+    map_category_index = _find_header_index(
+        headers_raw,
+        "map capex or opex",
+        "map_category",
+        "map capex",
+        "capex_opex",
+        "map tür",
+        "map tur",
+    )
     scenario_index = _find_header_index(headers_raw, "scenario", "senaryo", "bench")
     type_index = _find_header_index(headers_raw, "type", "tip", "type export")
 
@@ -338,6 +400,12 @@ def _import_pivot_style_rows(
             if value not in (None, ""):
                 map_attribute_value = str(value).strip()
 
+        map_category_value: str | None = None
+        if map_category_index is not None and map_category_index < len(row):
+            value = row[map_category_index]
+            if value not in (None, ""):
+                map_category_value = str(value).strip()
+
         code_value: str | None = None
         if code_index is not None and code_index < len(row):
             code_cell = row[code_index]
@@ -361,7 +429,9 @@ def _import_pivot_style_rows(
             # Currently only plan rows are supported
             continue
 
-        item = _ensure_budget_item(session, budget_code, name, map_attribute_value)
+        item = _ensure_budget_item(
+            session, budget_code, name, map_attribute_value, map_category_value
+        )
 
         for index, month, year in month_columns:
             if index >= len(row):
@@ -399,9 +469,14 @@ def import_csv(file: UploadFile, session: Session) -> ImportSummary:
         try:
             entry_type = row.get("type", "plan").lower()
             map_attribute = _extract_map_attribute(row)
+            map_category = _extract_map_category(row)
             if entry_type == "plan":
                 item = _ensure_budget_item(
-                    session, row["budget_code"], row.get("budget_name"), map_attribute
+                    session,
+                    row["budget_code"],
+                    row.get("budget_name"),
+                    map_attribute,
+                    map_category,
                 )
                 scenario = _get_or_create_scenario(session, row.get("scenario"), int(row["year"]))
                 plan = PlanEntry(
@@ -416,7 +491,11 @@ def import_csv(file: UploadFile, session: Session) -> ImportSummary:
                 summary.imported_plans += 1
             elif entry_type == "expense":
                 item = _ensure_budget_item(
-                    session, row["budget_code"], row.get("budget_name"), map_attribute
+                    session,
+                    row["budget_code"],
+                    row.get("budget_name"),
+                    map_attribute,
+                    map_category,
                 )
                 scenario = _get_or_create_scenario(session, row.get("scenario"), int(row["year"]))
                 expense = Expense(
@@ -486,6 +565,7 @@ def import_xlsx(file: UploadFile, session: Session) -> ImportSummary:
             continue
         entry_type = str(row.get("type") or "plan").lower()
         map_attribute = _extract_map_attribute(row)
+        map_category = _extract_map_category(row)
         try:
             budget_code = _coerce_str(
                 _get_value(row, "budget_code", "budget code", "kod"),
@@ -498,7 +578,9 @@ def import_xlsx(file: UploadFile, session: Session) -> ImportSummary:
             if entry_type == "plan":
                 month_value = _coerce_int(_get_value(row, "month", "ay"), "month")
                 amount_value = _coerce_float(_get_value(row, "amount", "tutar"), "amount")
-                item = _ensure_budget_item(session, budget_code, budget_name, map_attribute)
+                item = _ensure_budget_item(
+                    session, budget_code, budget_name, map_attribute, map_category
+                )
                 scenario = _get_or_create_scenario(session, scenario_name, year_value)
                 plan = PlanEntry(
                     year=year_value,
@@ -511,7 +593,9 @@ def import_xlsx(file: UploadFile, session: Session) -> ImportSummary:
                 session.commit()
                 summary.imported_plans += 1
             elif entry_type == "expense":
-                item = _ensure_budget_item(session, budget_code, budget_name, map_attribute)
+                item = _ensure_budget_item(
+                    session, budget_code, budget_name, map_attribute, map_category
+                )
                 scenario = _get_or_create_scenario(session, scenario_name, year_value)
                 amount_value = _coerce_float(_get_value(row, "amount", "tutar"), "amount")
                 quantity_value = _get_value(row, "quantity", "adet")

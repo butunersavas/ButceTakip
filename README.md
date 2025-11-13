@@ -94,10 +94,12 @@ Varsayılan olarak arayüz `http://localhost:5173` portundan yayına alınır. A
 
 ## Örnek CSV Şablonu
 ```
-type,budget_code,budget_name,scenario,year,month,amount,date,quantity,unit_price,vendor,description,out_of_budget,capex_opex,asset_type
-plan,MARKETING,Marketing Temel,Temel,2026,1,15000,,,,,,,CAPEX,Donanım
+type,budget_code,budget_name,scenario,year,month,amount,date,quantity,unit_price,vendor,description,out_of_budget,map_category,map_attribute
+plan,MARKETING,Marketing Temel,Temel,2026,1,15000,,,,,,,false,CAPEX,Donanım
 expense,MARKETING,Marketing Temel,Temel,2026,,12000,2026-01-15,1,12000,ACME Ltd,Reklam harcaması,false,OPEX,Yazılım
 ```
+
+> `map_category` sütununda CAPEX/OPEX bilgisi, `map_attribute` sütununda ise Donanım/Yazılım/Hizmet gibi nitelikler tutulur. Başlıklar "Map-Capex or Opex", "Capex_Opex", "Nitelik" gibi benzer ifadelerle de yazılabilir.
 
 ## Pivot tablo (Row Labels) XLSX dosyaları
 

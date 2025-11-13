@@ -30,6 +30,7 @@ import dayjs from "dayjs";
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import usePersistentState from "../../hooks/usePersistentState";
 import { useAuth } from "../../context/AuthContext";
+import { formatBudgetItemLabel } from "../../utils/budgetItem";
 
 interface Scenario {
   id: number;
@@ -41,6 +42,7 @@ interface BudgetItem {
   id: number;
   code: string;
   name: string;
+  map_category?: string | null;
   map_attribute?: string | null;
 }
 
@@ -303,6 +305,15 @@ export default function ExpensesView() {
         }
       },
       {
+        field: "map_category",
+        headerName: "Map Capex/Opex",
+        flex: 1,
+        valueGetter: (params) => {
+          const item = budgetItems?.find((budget) => budget.id === params.row.budget_item_id);
+          return item?.map_category ?? "-";
+        }
+      },
+      {
         field: "map_attribute",
         headerName: "Map Nitelik",
         flex: 1,
@@ -433,8 +444,7 @@ export default function ExpensesView() {
                 <MenuItem value="">Tümü</MenuItem>
                 {budgetItems?.map((item) => (
                   <MenuItem key={item.id} value={item.id}>
-                    {item.code} — {item.name}
-                    {item.map_attribute ? ` (${item.map_attribute})` : ""}
+                    {formatBudgetItemLabel(item)}
                   </MenuItem>
                 ))}
               </TextField>
@@ -633,8 +643,7 @@ export default function ExpensesView() {
                   >
                 {budgetItems?.map((item) => (
                   <MenuItem key={item.id} value={item.id}>
-                    {item.code} — {item.name}
-                    {item.map_attribute ? ` (${item.map_attribute})` : ""}
+                    {formatBudgetItemLabel(item)}
                   </MenuItem>
                 ))}
               </TextField>
