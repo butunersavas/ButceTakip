@@ -53,6 +53,7 @@ def export_csv(
         [
             "type",
             "budget_item_id",
+            "map_category",
             "map_attribute",
             "scenario_id",
             "year",
@@ -73,11 +74,14 @@ def export_csv(
     if budget_item_id is not None:
         plan_query = plan_query.where(PlanEntry.budget_item_id == budget_item_id)
     for plan in session.exec(plan_query).all():
-        map_attribute = budget_items.get(plan.budget_item_id).map_attribute if plan.budget_item_id in budget_items else ""
+        budget_item = budget_items.get(plan.budget_item_id)
+        map_attribute = budget_item.map_attribute if budget_item else ""
+        map_category = budget_item.map_category if budget_item else ""
         writer.writerow(
             [
                 "plan",
                 plan.budget_item_id,
+                map_category or "",
                 map_attribute or "",
                 plan.scenario_id,
                 plan.year,
@@ -94,15 +98,14 @@ def export_csv(
 
     expenses = _get_expenses(session, year, scenario_id, budget_item_id)
     for expense in expenses:
-        map_attribute = (
-            budget_items.get(expense.budget_item_id).map_attribute
-            if expense.budget_item_id in budget_items
-            else ""
-        )
+        budget_item = budget_items.get(expense.budget_item_id)
+        map_attribute = budget_item.map_attribute if budget_item else ""
+        map_category = budget_item.map_category if budget_item else ""
         writer.writerow(
             [
                 "expense",
                 expense.budget_item_id,
+                map_category or "",
                 map_attribute or "",
                 expense.scenario_id,
                 expense.expense_date.year,
@@ -130,14 +133,17 @@ def export_xlsx(
     wb = Workbook()
     plan_sheet = wb.active
     plan_sheet.title = "Plans"
-    plan_sheet.append([
-        "Budget Item ID",
-        "Map Nitelik",
-        "Scenario ID",
-        "Year",
-        "Month",
-        "Amount (USD)",
-    ])
+    plan_sheet.append(
+        [
+            "Budget Item ID",
+            "Map Capex/Opex",
+            "Map Nitelik",
+            "Scenario ID",
+            "Year",
+            "Month",
+            "Amount (USD)",
+        ]
+    )
     budget_items = _get_budget_item_map(session)
     plan_query = select(PlanEntry).where(PlanEntry.year == year)
     if scenario_id is not None:
@@ -145,10 +151,13 @@ def export_xlsx(
     if budget_item_id is not None:
         plan_query = plan_query.where(PlanEntry.budget_item_id == budget_item_id)
     for plan in session.exec(plan_query).all():
-        map_attribute = budget_items.get(plan.budget_item_id).map_attribute if plan.budget_item_id in budget_items else ""
+        budget_item = budget_items.get(plan.budget_item_id)
+        map_attribute = budget_item.map_attribute if budget_item else ""
+        map_category = budget_item.map_category if budget_item else ""
         plan_sheet.append(
             [
                 plan.budget_item_id,
+                map_category or "",
                 map_attribute or "",
                 plan.scenario_id,
                 plan.year,
@@ -161,6 +170,7 @@ def export_xlsx(
     expense_sheet.append(
         [
             "Budget Item ID",
+            "Map Capex/Opex",
             "Map Nitelik",
             "Scenario ID",
             "Date",
@@ -175,14 +185,13 @@ def export_xlsx(
     )
     expenses = _get_expenses(session, year, scenario_id, budget_item_id)
     for expense in expenses:
-        map_attribute = (
-            budget_items.get(expense.budget_item_id).map_attribute
-            if expense.budget_item_id in budget_items
-            else ""
-        )
+        budget_item = budget_items.get(expense.budget_item_id)
+        map_attribute = budget_item.map_attribute if budget_item else ""
+        map_category = budget_item.map_category if budget_item else ""
         expense_sheet.append(
             [
                 expense.budget_item_id,
+                map_category or "",
                 map_attribute or "",
                 expense.scenario_id,
                 expense.expense_date.isoformat(),
@@ -230,6 +239,7 @@ def export_filtered_expenses_xlsx(
     sheet.append(
         [
             "Budget Item ID",
+            "Map Capex/Opex",
             "Map Nitelik",
             "Scenario ID",
             "Date",
@@ -243,14 +253,13 @@ def export_filtered_expenses_xlsx(
         ]
     )
     for expense in filtered:
-        map_attribute = (
-            budget_items.get(expense.budget_item_id).map_attribute
-            if expense.budget_item_id in budget_items
-            else ""
-        )
+        budget_item = budget_items.get(expense.budget_item_id)
+        map_attribute = budget_item.map_attribute if budget_item else ""
+        map_category = budget_item.map_category if budget_item else ""
         sheet.append(
             [
                 expense.budget_item_id,
+                map_category or "",
                 map_attribute or "",
                 expense.scenario_id,
                 expense.expense_date.isoformat(),

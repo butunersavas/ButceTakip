@@ -19,6 +19,7 @@ import { useQuery } from "@tanstack/react-query";
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import usePersistentState from "../../hooks/usePersistentState";
 import { useAuth } from "../../context/AuthContext";
+import { formatBudgetItemLabel } from "../../utils/budgetItem";
 
 interface Scenario {
   id: number;
@@ -30,6 +31,7 @@ interface BudgetItem {
   id: number;
   code: string;
   name: string;
+  map_category?: string | null;
   map_attribute?: string | null;
 }
 
@@ -148,13 +150,12 @@ export default function CleanupView() {
                   }
                   fullWidth
                 >
-                  <MenuItem value="">Tümü</MenuItem>
-                  {budgetItems?.map((item) => (
-                    <MenuItem key={item.id} value={item.id}>
-                      {item.code} — {item.name}
-                      {item.map_attribute ? ` (${item.map_attribute})` : ""}
-                    </MenuItem>
-                  ))}
+                <MenuItem value="">Tümü</MenuItem>
+                {budgetItems?.map((item) => (
+                  <MenuItem key={item.id} value={item.id}>
+                    {formatBudgetItemLabel(item)}
+                  </MenuItem>
+                ))}
                 </TextField>
               </Grid>
               <Grid item xs={12} md={4}>
