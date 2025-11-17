@@ -47,6 +47,46 @@ MONTH_ALIASES = {
 EXPENSE_COLUMN_KEYWORDS = {"actual", "expense", "spend", "spent", "harcama", "gerçekleşen"}
 
 
+def _normalize_header_key(key: str) -> str:
+    """Return a simplified, comparable representation of a column name."""
+
+    return re.sub(r"[^a-z0-9]+", "_", key.strip().lower())
+
+
+def _extract_column_value(data: dict[str, Any], *candidates: str) -> str | None:
+    """Lookup a value in ``data`` by trying multiple candidate column names.
+
+    CSV headers can differ in casing (``Map Capex/Opex`` vs ``map_capex_opex``) or
+    contain punctuation differences like slashes or dashes.  ``csv.DictReader``
+    keeps the original header string as-is, so a direct ``dict.get("map_category")``
+    lookup fails for these variations.  To make the lookup resilient, we normalize
+    both the header names from the file and our candidate names before comparing
+    them.  This allows headers such as ``Map Capex/Opex`` or ``MAP-KATEGORİ`` to
+    correctly match ``map_category``.
+    """
+
+    normalized_data: dict[str, Any] = {}
+    for raw_key, value in data.items():
+        if not isinstance(raw_key, str):
+            continue
+        normalized = _normalize_header_key(raw_key)
+        if not normalized:
+            continue
+        if normalized not in normalized_data:
+            normalized_data[normalized] = value
+
+    for candidate in candidates:
+        normalized_candidate = _normalize_header_key(candidate)
+        if normalized_candidate not in normalized_data:
+            continue
+        raw_value = normalized_data[normalized_candidate]
+        if raw_value in (None, ""):
+            continue
+        return str(raw_value).strip()
+
+    return None
+
+
 def _ensure_budget_item(
     session: Session,
     code: str,
@@ -81,7 +121,8 @@ def _ensure_budget_item(
 
 
 def _extract_map_attribute(data: dict[str, Any]) -> str | None:
-    for key in (
+    return _extract_column_value(
+        data,
         "map_attribute",
         "map nitelik",
         "map-nitelik",
@@ -90,21 +131,12 @@ def _extract_map_attribute(data: dict[str, Any]) -> str | None:
         "nitelik",
         "asset_type",
         "asset type",
-    ):
-        value = data.get(key)
-        if value is None:
-            continue
-        if isinstance(value, str):
-            stripped = value.strip()
-        else:
-            stripped = str(value).strip()
-        if stripped:
-            return stripped
-    return None
+    )
 
 
 def _extract_map_category(data: dict[str, Any]) -> str | None:
-    for key in (
+    return _extract_column_value(
+        data,
         "map_category",
         "map category",
         "map kategori",
@@ -113,23 +145,14 @@ def _extract_map_category(data: dict[str, Any]) -> str | None:
         "map capex or opex",
         "map_capex_or_opex",
         "map_capex_opex",
+        "map capex/opex",
         "capex_opex",
         "capex-opex",
         "capex / opex",
         "capex or opex",
         "map tür",
         "map tur",
-    ):
-        value = data.get(key)
-        if value is None:
-            continue
-        if isinstance(value, str):
-            stripped = value.strip()
-        else:
-            stripped = str(value).strip()
-        if stripped:
-            return stripped
-    return None
+    )
 
 
 def _normalize_code(value: str) -> str:
