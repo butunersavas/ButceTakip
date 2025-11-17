@@ -1,6 +1,4 @@
 import {
-  AppBar,
-  Avatar,
   Box,
   Divider,
   Drawer,
@@ -10,7 +8,6 @@ import {
   ListItemIcon,
   ListItemText,
   Switch,
-  Toolbar,
   Tooltip,
   Typography
 } from "@mui/material";
@@ -23,7 +20,7 @@ import LogoutIcon from "@mui/icons-material/Logout";
 import MenuIcon from "@mui/icons-material/Menu";
 import DarkModeIcon from "@mui/icons-material/DarkModeOutlined";
 import LightModeIcon from "@mui/icons-material/LightModeOutlined";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 
 import { useAuth } from "../../context/AuthContext";
@@ -65,22 +62,20 @@ interface AppLayoutProps {
 }
 
 export default function AppLayout({ children }: AppLayoutProps) {
-  const { user, logout } = useAuth();
+  const { logout } = useAuth();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const { mode, toggleMode, setMode } = useThemeMode();
 
-  const initials = useMemo(() => {
-    if (!user) return "?";
-    const segments = user.full_name.split(" ");
-    return segments
-      .map((segment) => segment[0])
-      .join("")
-      .toUpperCase();
-  }, [user]);
-
   const drawer = (
-    <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
+    <Box
+      sx={{
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        bgcolor: "background.paper"
+      }}
+    >
       <Box sx={{ p: 3, display: "flex", alignItems: "center", gap: 2 }}>
         <Box
           component="img"
@@ -117,6 +112,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                   color: "primary.main"
                 }
               }}
+              onClick={() => setMobileOpen(false)}
             >
               <ListItemIcon
                 sx={{ color: selected ? "primary.main" : "text.secondary" }}
@@ -179,97 +175,23 @@ export default function AppLayout({ children }: AppLayoutProps) {
         overflowX: "hidden"
       }}
     >
-      <AppBar
-        position="fixed"
+      <IconButton
+        aria-label="Menüyü aç"
+        onClick={() => setMobileOpen(true)}
         sx={{
-          width: { md: `calc(100% - ${drawerWidth}px)` },
-          ml: { md: `${drawerWidth}px` },
-          left: { md: `${drawerWidth}px` },
-          right: 0,
-          boxShadow: "none",
-          backgroundColor: "transparent"
+          position: "fixed",
+          top: 16,
+          left: 16,
+          zIndex: (theme) => theme.zIndex.drawer + 2,
+          display: { xs: "flex", md: "none" },
+          backgroundColor: "background.paper",
+          boxShadow: 1,
+          border: "1px solid",
+          borderColor: "divider"
         }}
       >
-        <Toolbar
-          sx={{
-            backgroundColor: "background.paper",
-            borderBottom: "1px solid",
-            borderColor: "divider",
-            columnGap: 2,
-            py: 1.5
-          }}
-        >
-          <Box
-            sx={{
-              width: "100%",
-              maxWidth: { xl: 1440, lg: 1280 },
-              mx: "auto",
-              display: "flex",
-              alignItems: "center",
-              flexWrap: "wrap",
-              gap: { xs: 1.5, md: 2 }
-            }}
-          >
-            <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, minWidth: 0 }}>
-              <IconButton
-                color="inherit"
-                edge="start"
-                onClick={() => setMobileOpen(true)}
-                sx={{ mr: 1, display: { md: "none" } }}
-              >
-                <MenuIcon />
-              </IconButton>
-              <Box
-                component="img"
-                src={brandLogo}
-                alt="Bütçe Takip"
-                sx={{ height: 32, width: 32, display: { xs: "none", sm: "block" } }}
-              />
-              <Typography
-                variant="subtitle1"
-                color="text.secondary"
-                sx={{ fontWeight: 600, display: { xs: "none", lg: "block" } }}
-              >
-                Bütçe Takip Platformu
-              </Typography>
-            </Box>
-            <Typography
-              component="h1"
-              sx={{
-                flexGrow: 1,
-                textAlign: { xs: "left", md: "center" },
-                fontWeight: 700,
-                fontSize: { xs: "1.3rem", md: "1.75rem" },
-                color: "text.primary",
-                order: { xs: 3, md: 2 },
-                width: { xs: "100%", md: "auto" }
-              }}
-            >
-              {navItems.find((item) => item.path === location.pathname)?.label ?? "Bütçe Yönetimi"}
-            </Typography>
-            <Box
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                gap: 2,
-                minWidth: 0,
-                marginLeft: { md: "auto" },
-                order: { xs: 2, md: 3 }
-              }}
-            >
-              <Box sx={{ textAlign: "right" }}>
-                <Typography variant="subtitle2" fontWeight={600}>
-                  {user?.full_name}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {user?.role === "admin" ? "Yönetici" : "Kullanıcı"}
-                </Typography>
-              </Box>
-              <Avatar sx={{ bgcolor: "primary.main" }}>{initials}</Avatar>
-            </Box>
-          </Box>
-        </Toolbar>
-      </AppBar>
+        <MenuIcon />
+      </IconButton>
       <Box component="nav" sx={{ width: { md: drawerWidth }, flexShrink: { md: 0 } }}>
         <Drawer
           variant="temporary"
@@ -288,7 +210,12 @@ export default function AppLayout({ children }: AppLayoutProps) {
           open
           sx={{
             display: { xs: "none", md: "block" },
-            "& .MuiDrawer-paper": { boxSizing: "border-box", width: drawerWidth }
+            "& .MuiDrawer-paper": {
+              boxSizing: "border-box",
+              width: drawerWidth,
+              borderRight: "1px solid",
+              borderColor: "divider"
+            }
           }}
         >
           {drawer}
@@ -302,7 +229,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
           width: "100%",
           maxWidth: "100vw",
           p: { xs: 3, md: 5 },
-          mt: { xs: 8, md: 10 }
+          mt: 0
         }}
       >
         {children}
