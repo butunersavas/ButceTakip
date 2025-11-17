@@ -101,6 +101,18 @@ expense,MARKETING,Marketing Temel,Temel,2026,,12000,2026-01-15,1,12000,ACME Ltd,
 
 > `map_category` sütununda CAPEX/OPEX bilgisi, `map_attribute` sütununda ise Donanım/Yazılım/Hizmet gibi nitelikler tutulur. Başlıklar "Map-Capex or Opex", "Capex_Opex", "Nitelik" gibi benzer ifadelerle de yazılabilir.
 
+### 2026 planı için hazır CSV
+
+`data/butce_plan_2026.csv` dosyası yukarıdaki şablona göre düzenlenmiş ve sorudaki satır/sütun tablosu baz alınarak hazırlanmış tüm plan kayıtlarını içerir. Dosyayı içe aktararak 2026 yılındaki her ay için CAPEX/OPEX kırılımlı bütçe kalemlerini doğrudan sisteme yükleyebilirsiniz.
+
+Kaynağı güncellemek veya farklı biçimlerde yeniden üretmek isterseniz `scripts/generate_budget_csv.py` betiğini çalıştırmanız yeterlidir:
+
+```bash
+python scripts/generate_budget_csv.py
+```
+
+Betik aynı klasördeki ham tablo metnini parse ederek `data/butce_plan_2026.csv` dosyasını yeniden oluşturur.
+
 ## Pivot tablo (Row Labels) XLSX dosyaları
 
 Qlik veya benzeri raporlama araçlarından çıkan ve satırlarda harcama kalemi isimleri, sütunlarda ise ay bazlı plan tutarları

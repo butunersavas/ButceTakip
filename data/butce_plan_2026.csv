@@ -1,0 +1,491 @@
+type,budget_code,budget_name,scenario,year,month,amount,date,quantity,unit_price,vendor,description,out_of_budget,map_category,map_attribute
+plan,SAN_CEP_TELEFONU_CAKMAKLIK_SARJ_KILIF_KORUYUCU_500_ADET,ŞAN Cep Telefonu + Çakmaklık Şarj + Kılıf + Koruyucu  (500 Adet),Temel,2026,1,50000.00,,,,,,false,CAPEX,Donanım
+plan,SAN_CEP_TELEFONU_CAKMAKLIK_SARJ_KILIF_KORUYUCU_500_ADET,ŞAN Cep Telefonu + Çakmaklık Şarj + Kılıf + Koruyucu  (500 Adet),Temel,2026,6,50000.00,,,,,,false,CAPEX,Donanım
+plan,SAN_CEP_TELEFONU_CAKMAKLIK_SARJ_KILIF_KORUYUCU_500_ADET,ŞAN Cep Telefonu + Çakmaklık Şarj + Kılıf + Koruyucu  (500 Adet),Temel,2026,10,50000.00,,,,,,false,CAPEX,Donanım
+plan,AKTARMA_GIYEBILIR_OKUYUCU_CEP_TELEFONU_KILIF_200_ADET,Aktarma Giyebilir Okuyucu + Cep Telefonu + Kılıf (200 Adet),Temel,2026,2,89200.00,,,,,,false,CAPEX,Donanım
+plan,AKTARMA_GIYEBILIR_OKUYUCU_CEP_TELEFONU_KILIF_200_ADET,Aktarma Giyebilir Okuyucu + Cep Telefonu + Kılıf (200 Adet),Temel,2026,6,89200.00,,,,,,false,CAPEX,Donanım
+plan,AKTARMA_GIYEBILIR_OKUYUCU_CEP_TELEFONU_KILIF_200_ADET,Aktarma Giyebilir Okuyucu + Cep Telefonu + Kılıf (200 Adet),Temel,2026,9,89200.00,,,,,,false,CAPEX,Donanım
+plan,AKTARMA_ANDROID_EL_TERMINALI_210_ADET,Aktarma Android El Terminali  (210 Adet),Temel,2026,1,54600.00,,,,,,false,CAPEX,Donanım
+plan,SUBE_ANDROID_EL_TERMINALI_500_ADET,Şube Android El Terminali (500 Adet),Temel,2026,2,152750.00,,,,,,false,CAPEX,Donanım
+plan,SUBE_ANDROID_EL_TERMINALI_500_ADET,Şube Android El Terminali (500 Adet),Temel,2026,7,152750.00,,,,,,false,CAPEX,Donanım
+plan,NOTEBOOK_MOUSE_CANTA_80_ADET,Notebook + Mouse + Çanta(80 Adet),Temel,2026,1,55000.00,,,,,,false,CAPEX,Donanım
+plan,NOTEBOOK_MOUSE_CANTA_80_ADET,Notebook + Mouse + Çanta(80 Adet),Temel,2026,8,55000.00,,,,,,false,CAPEX,Donanım
+plan,LAZER_YAZICI_100_ADET,Lazer Yazıcı (100 Adet),Temel,2026,3,22875.00,,,,,,false,CAPEX,Donanım
+plan,LAZER_YAZICI_100_ADET,Lazer Yazıcı (100 Adet),Temel,2026,8,22875.00,,,,,,false,CAPEX,Donanım
+plan,12_PORT_POE_SWITCH_SAHA_800_ADET,12 Port POE Switch Saha (800 Adet),Temel,2026,4,170000.00,,,,,,false,CAPEX,Donanım
+plan,ACCESS_POINT_25_ADET,Access Point (25 Adet),Temel,2026,6,2500.00,,,,,,false,CAPEX,Donanım
+plan,ALL_IN_ONE_PC_75_ADET,All In One Pc (75 Adet),Temel,2026,3,18360.00,,,,,,false,CAPEX,Donanım
+plan,ALL_IN_ONE_PC_75_ADET,All In One Pc (75 Adet),Temel,2026,6,18360.00,,,,,,false,CAPEX,Donanım
+plan,ALL_IN_ONE_PC_75_ADET,All In One Pc (75 Adet),Temel,2026,9,18360.00,,,,,,false,CAPEX,Donanım
+plan,BARKOD_YAZICI_200_ADET,Barkod Yazıcı (200 Adet),Temel,2026,2,10000.00,,,,,,false,CAPEX,Donanım
+plan,BARKOD_YAZICI_200_ADET,Barkod Yazıcı (200 Adet),Temel,2026,7,10000.00,,,,,,false,CAPEX,Donanım
+plan,BARKOD_YAZICI_200_ADET,Barkod Yazıcı (200 Adet),Temel,2026,10,10000.00,,,,,,false,CAPEX,Donanım
+plan,SAHA_NETWORK_KABINET_4U_700_ADET,Saha Network Kabinet 4U (700 Adet),Temel,2026,2,8700.00,,,,,,false,CAPEX,Donanım
+plan,SAHA_NETWORK_KABINET_4U_700_ADET,Saha Network Kabinet 4U (700 Adet),Temel,2026,5,8700.00,,,,,,false,CAPEX,Donanım
+plan,SAHA_NETWORK_KABINET_4U_700_ADET,Saha Network Kabinet 4U (700 Adet),Temel,2026,8,8700.00,,,,,,false,CAPEX,Donanım
+plan,THIN_CLIENT_250_ADET,Thin Client (250 Adet),Temel,2026,1,58437.00,,,,,,false,CAPEX,Donanım
+plan,MONITOR_VGA_250_ADET,Monitör + VGA (250 Adet),Temel,2026,3,25000.00,,,,,,false,CAPEX,Donanım
+plan,MONITOR_VGA_250_ADET,Monitör + VGA (250 Adet),Temel,2026,9,25000.00,,,,,,false,CAPEX,Donanım
+plan,3_PARTY_YAZILIM_DESTEKLEYICI_DONANIM_IHTIYACI,3 Party Yazılım Destekleyici Donanım İhtiyacı,Temel,2026,1,15000.00,,,,,,false,CAPEX,Donanım
+plan,3_PARTY_YAZILIM_DESTEKLEYICI_DONANIM_IHTIYACI,3 Party Yazılım Destekleyici Donanım İhtiyacı,Temel,2026,4,15000.00,,,,,,false,CAPEX,Donanım
+plan,3_PARTY_YAZILIM_DESTEKLEYICI_DONANIM_IHTIYACI,3 Party Yazılım Destekleyici Donanım İhtiyacı,Temel,2026,7,15000.00,,,,,,false,CAPEX,Donanım
+plan,3_PARTY_YAZILIM_DESTEKLEYICI_DONANIM_IHTIYACI,3 Party Yazılım Destekleyici Donanım İhtiyacı,Temel,2026,10,15000.00,,,,,,false,CAPEX,Donanım
+plan,BARKOD_OKUYUCU_KABLOSUZ_100_ADET,Barkod Okuyucu Kablosuz (100 Adet),Temel,2026,1,10500.00,,,,,,false,CAPEX,Donanım
+plan,BARKOD_OKUYUCU_KABLOSUZ_100_ADET,Barkod Okuyucu Kablosuz (100 Adet),Temel,2026,6,10500.00,,,,,,false,CAPEX,Donanım
+plan,BARKOD_OKUYUCU_KABLOSUZ_100_ADET,Barkod Okuyucu Kablosuz (100 Adet),Temel,2026,10,10500.00,,,,,,false,CAPEX,Donanım
+plan,URUN_DONANIM_TAMIRAT_12_AY,Ürün/Donanım Tamirat (12 Ay),Temel,2026,1,3000.00,,,,,,false,OPEX,Hizmet
+plan,URUN_DONANIM_TAMIRAT_12_AY,Ürün/Donanım Tamirat (12 Ay),Temel,2026,2,3000.00,,,,,,false,OPEX,Hizmet
+plan,URUN_DONANIM_TAMIRAT_12_AY,Ürün/Donanım Tamirat (12 Ay),Temel,2026,3,3000.00,,,,,,false,OPEX,Hizmet
+plan,URUN_DONANIM_TAMIRAT_12_AY,Ürün/Donanım Tamirat (12 Ay),Temel,2026,4,3000.00,,,,,,false,OPEX,Hizmet
+plan,URUN_DONANIM_TAMIRAT_12_AY,Ürün/Donanım Tamirat (12 Ay),Temel,2026,5,3000.00,,,,,,false,OPEX,Hizmet
+plan,URUN_DONANIM_TAMIRAT_12_AY,Ürün/Donanım Tamirat (12 Ay),Temel,2026,6,3000.00,,,,,,false,OPEX,Hizmet
+plan,URUN_DONANIM_TAMIRAT_12_AY,Ürün/Donanım Tamirat (12 Ay),Temel,2026,7,3000.00,,,,,,false,OPEX,Hizmet
+plan,URUN_DONANIM_TAMIRAT_12_AY,Ürün/Donanım Tamirat (12 Ay),Temel,2026,8,3000.00,,,,,,false,OPEX,Hizmet
+plan,URUN_DONANIM_TAMIRAT_12_AY,Ürün/Donanım Tamirat (12 Ay),Temel,2026,9,3000.00,,,,,,false,OPEX,Hizmet
+plan,URUN_DONANIM_TAMIRAT_12_AY,Ürün/Donanım Tamirat (12 Ay),Temel,2026,10,3000.00,,,,,,false,OPEX,Hizmet
+plan,URUN_DONANIM_TAMIRAT_12_AY,Ürün/Donanım Tamirat (12 Ay),Temel,2026,11,3000.00,,,,,,false,OPEX,Hizmet
+plan,URUN_DONANIM_TAMIRAT_12_AY,Ürün/Donanım Tamirat (12 Ay),Temel,2026,12,3000.00,,,,,,false,OPEX,Hizmet
+plan,TEKNIK_DONANIM_SARF_MALZEME,Teknik Donanım Sarf Malzeme,Temel,2026,1,3250.00,,,,,,false,OPEX,Donanım
+plan,TEKNIK_DONANIM_SARF_MALZEME,Teknik Donanım Sarf Malzeme,Temel,2026,2,3250.00,,,,,,false,OPEX,Donanım
+plan,TEKNIK_DONANIM_SARF_MALZEME,Teknik Donanım Sarf Malzeme,Temel,2026,3,3250.00,,,,,,false,OPEX,Donanım
+plan,TEKNIK_DONANIM_SARF_MALZEME,Teknik Donanım Sarf Malzeme,Temel,2026,4,3250.00,,,,,,false,OPEX,Donanım
+plan,TEKNIK_DONANIM_SARF_MALZEME,Teknik Donanım Sarf Malzeme,Temel,2026,5,3250.00,,,,,,false,OPEX,Donanım
+plan,TEKNIK_DONANIM_SARF_MALZEME,Teknik Donanım Sarf Malzeme,Temel,2026,6,3250.00,,,,,,false,OPEX,Donanım
+plan,TEKNIK_DONANIM_SARF_MALZEME,Teknik Donanım Sarf Malzeme,Temel,2026,7,3250.00,,,,,,false,OPEX,Donanım
+plan,TEKNIK_DONANIM_SARF_MALZEME,Teknik Donanım Sarf Malzeme,Temel,2026,8,3250.00,,,,,,false,OPEX,Donanım
+plan,TEKNIK_DONANIM_SARF_MALZEME,Teknik Donanım Sarf Malzeme,Temel,2026,9,3250.00,,,,,,false,OPEX,Donanım
+plan,TEKNIK_DONANIM_SARF_MALZEME,Teknik Donanım Sarf Malzeme,Temel,2026,10,3250.00,,,,,,false,OPEX,Donanım
+plan,TEKNIK_DONANIM_SARF_MALZEME,Teknik Donanım Sarf Malzeme,Temel,2026,11,3250.00,,,,,,false,OPEX,Donanım
+plan,TEKNIK_DONANIM_SARF_MALZEME,Teknik Donanım Sarf Malzeme,Temel,2026,12,3250.00,,,,,,false,OPEX,Donanım
+plan,CCTV_KULLANMA_BEDELI_4150_KAMERA,CCTV Kullanma Bedeli (4150 Kamera),Temel,2026,1,3046.70,,,,,,false,OPEX,Yazılım
+plan,CCTV_KULLANMA_BEDELI_4150_KAMERA,CCTV Kullanma Bedeli (4150 Kamera),Temel,2026,2,3046.70,,,,,,false,OPEX,Yazılım
+plan,CCTV_KULLANMA_BEDELI_4150_KAMERA,CCTV Kullanma Bedeli (4150 Kamera),Temel,2026,3,3046.70,,,,,,false,OPEX,Yazılım
+plan,CCTV_KULLANMA_BEDELI_4150_KAMERA,CCTV Kullanma Bedeli (4150 Kamera),Temel,2026,4,3046.70,,,,,,false,OPEX,Yazılım
+plan,CCTV_KULLANMA_BEDELI_4150_KAMERA,CCTV Kullanma Bedeli (4150 Kamera),Temel,2026,5,3046.70,,,,,,false,OPEX,Yazılım
+plan,CCTV_KULLANMA_BEDELI_4150_KAMERA,CCTV Kullanma Bedeli (4150 Kamera),Temel,2026,6,3046.70,,,,,,false,OPEX,Yazılım
+plan,CCTV_KULLANMA_BEDELI_4150_KAMERA,CCTV Kullanma Bedeli (4150 Kamera),Temel,2026,7,3046.70,,,,,,false,OPEX,Yazılım
+plan,CCTV_KULLANMA_BEDELI_4150_KAMERA,CCTV Kullanma Bedeli (4150 Kamera),Temel,2026,8,3046.70,,,,,,false,OPEX,Yazılım
+plan,CCTV_KULLANMA_BEDELI_4150_KAMERA,CCTV Kullanma Bedeli (4150 Kamera),Temel,2026,9,3046.70,,,,,,false,OPEX,Yazılım
+plan,CCTV_KULLANMA_BEDELI_4150_KAMERA,CCTV Kullanma Bedeli (4150 Kamera),Temel,2026,10,3046.70,,,,,,false,OPEX,Yazılım
+plan,CCTV_KULLANMA_BEDELI_4150_KAMERA,CCTV Kullanma Bedeli (4150 Kamera),Temel,2026,11,3046.70,,,,,,false,OPEX,Yazılım
+plan,CCTV_KULLANMA_BEDELI_4150_KAMERA,CCTV Kullanma Bedeli (4150 Kamera),Temel,2026,12,3046.70,,,,,,false,OPEX,Yazılım
+plan,MDM_LISANS_ARTTIRMA_1500_ADET_TT_36K_ODEME_12_AY,MDM Lisans Arttırma (1500 Adet) TT - $36K Ödeme 12 Ay,Temel,2026,7,3000.00,,,,,,false,OPEX,Yazılım
+plan,MDM_LISANS_ARTTIRMA_1500_ADET_TT_36K_ODEME_12_AY,MDM Lisans Arttırma (1500 Adet) TT - $36K Ödeme 12 Ay,Temel,2026,8,3000.00,,,,,,false,OPEX,Yazılım
+plan,MDM_LISANS_ARTTIRMA_1500_ADET_TT_36K_ODEME_12_AY,MDM Lisans Arttırma (1500 Adet) TT - $36K Ödeme 12 Ay,Temel,2026,9,3000.00,,,,,,false,OPEX,Yazılım
+plan,MDM_LISANS_ARTTIRMA_1500_ADET_TT_36K_ODEME_12_AY,MDM Lisans Arttırma (1500 Adet) TT - $36K Ödeme 12 Ay,Temel,2026,10,3000.00,,,,,,false,OPEX,Yazılım
+plan,MDM_LISANS_ARTTIRMA_1500_ADET_TT_36K_ODEME_12_AY,MDM Lisans Arttırma (1500 Adet) TT - $36K Ödeme 12 Ay,Temel,2026,11,3000.00,,,,,,false,OPEX,Yazılım
+plan,MDM_LISANS_ARTTIRMA_1500_ADET_TT_36K_ODEME_12_AY,MDM Lisans Arttırma (1500 Adet) TT - $36K Ödeme 12 Ay,Temel,2026,12,3000.00,,,,,,false,OPEX,Yazılım
+plan,BARKOD_OKUYUCU_KABLOLU_50_ADET,Barkod Okuyucu Kablolu (50 Adet),Temel,2026,3,1550.00,,,,,,false,CAPEX,Donanım
+plan,BARKOD_OKUYUCU_KABLOLU_50_ADET,Barkod Okuyucu Kablolu (50 Adet),Temel,2026,8,1550.00,,,,,,false,CAPEX,Donanım
+plan,MOBIL_BARKOD_YAZICI_100_ADET,Mobil Barkod Yazıcı (100 Adet),Temel,2026,1,18750.00,,,,,,false,CAPEX,Donanım
+plan,MOBIL_BARKOD_YAZICI_100_ADET,Mobil Barkod Yazıcı (100 Adet),Temel,2026,4,18750.00,,,,,,false,CAPEX,Donanım
+plan,MOBIL_BARKOD_YAZICI_100_ADET,Mobil Barkod Yazıcı (100 Adet),Temel,2026,7,18750.00,,,,,,false,CAPEX,Donanım
+plan,MOBIL_BARKOD_YAZICI_100_ADET,Mobil Barkod Yazıcı (100 Adet),Temel,2026,10,18750.00,,,,,,false,CAPEX,Donanım
+plan,ALL_IN_ONE_LAZER_YAZICI_50_ADET,All In One Lazer Yazıcı ( 50 Adet),Temel,2026,1,16250.00,,,,,,false,CAPEX,Donanım
+plan,ALL_IN_ONE_LAZER_YAZICI_50_ADET,All In One Lazer Yazıcı ( 50 Adet),Temel,2026,7,16250.00,,,,,,false,CAPEX,Donanım
+plan,MACBOOK_AIR_2_ADET,MacBook Air (2 Adet),Temel,2026,3,3000.00,,,,,,false,CAPEX,Donanım
+plan,MACBOOK_AIR_2_ADET,MacBook Air (2 Adet),Temel,2026,7,3000.00,,,,,,false,CAPEX,Donanım
+plan,TOPLANTI_VE_VIDEO_KONFERANS_SISTEMLERI,Toplantı ve Video Konferans Sistemleri,Temel,2026,2,10000.00,,,,,,false,CAPEX,Donanım
+plan,TOPLANTI_VE_VIDEO_KONFERANS_SISTEMLERI,Toplantı ve Video Konferans Sistemleri,Temel,2026,5,10000.00,,,,,,false,CAPEX,Donanım
+plan,PROJEKSIYON_CIHAZI_10_ADET,Projeksiyon Cihazı (10 Adet),Temel,2026,1,2500.00,,,,,,false,CAPEX,Donanım
+plan,PROJEKSIYON_CIHAZI_10_ADET,Projeksiyon Cihazı (10 Adet),Temel,2026,5,2500.00,,,,,,false,CAPEX,Donanım
+plan,PROJEKSIYON_CIHAZI_10_ADET,Projeksiyon Cihazı (10 Adet),Temel,2026,8,2500.00,,,,,,false,CAPEX,Donanım
+plan,PROJEKSIYON_CIHAZI_10_ADET,Projeksiyon Cihazı (10 Adet),Temel,2026,11,2500.00,,,,,,false,CAPEX,Donanım
+plan,DVR_120_ADET,DVR ((120 Adet),Temel,2026,4,4800.00,,,,,,false,CAPEX,Donanım
+plan,DVR_120_ADET,DVR ((120 Adet),Temel,2026,9,4800.00,,,,,,false,CAPEX,Donanım
+plan,IP_TELEFON_ADAPTOR_300_ADET,IP Telefon + Adaptör (300 Adet),Temel,2026,1,4500.00,,,,,,false,CAPEX,Donanım
+plan,IP_TELEFON_ADAPTOR_300_ADET,IP Telefon + Adaptör (300 Adet),Temel,2026,7,4500.00,,,,,,false,CAPEX,Donanım
+plan,KAMERA_900_ADET,Kamera 900 Adet),Temel,2026,3,6750.00,,,,,,false,CAPEX,Donanım
+plan,KAMERA_900_ADET,Kamera 900 Adet),Temel,2026,7,6750.00,,,,,,false,CAPEX,Donanım
+plan,BIRIM_ACILIS_TASIMA_GIDERLERI,Birim açılış/taşıma giderleri.,Temel,2026,1,2000.00,,,,,,false,OPEX,Hizmet
+plan,BIRIM_ACILIS_TASIMA_GIDERLERI,Birim açılış/taşıma giderleri.,Temel,2026,2,2000.00,,,,,,false,OPEX,Hizmet
+plan,BIRIM_ACILIS_TASIMA_GIDERLERI,Birim açılış/taşıma giderleri.,Temel,2026,3,2000.00,,,,,,false,OPEX,Hizmet
+plan,BIRIM_ACILIS_TASIMA_GIDERLERI,Birim açılış/taşıma giderleri.,Temel,2026,4,2000.00,,,,,,false,OPEX,Hizmet
+plan,BIRIM_ACILIS_TASIMA_GIDERLERI,Birim açılış/taşıma giderleri.,Temel,2026,5,2000.00,,,,,,false,OPEX,Hizmet
+plan,BIRIM_ACILIS_TASIMA_GIDERLERI,Birim açılış/taşıma giderleri.,Temel,2026,6,2000.00,,,,,,false,OPEX,Hizmet
+plan,BIRIM_ACILIS_TASIMA_GIDERLERI,Birim açılış/taşıma giderleri.,Temel,2026,7,2000.00,,,,,,false,OPEX,Hizmet
+plan,BIRIM_ACILIS_TASIMA_GIDERLERI,Birim açılış/taşıma giderleri.,Temel,2026,8,2000.00,,,,,,false,OPEX,Hizmet
+plan,BIRIM_ACILIS_TASIMA_GIDERLERI,Birim açılış/taşıma giderleri.,Temel,2026,9,2000.00,,,,,,false,OPEX,Hizmet
+plan,BIRIM_ACILIS_TASIMA_GIDERLERI,Birim açılış/taşıma giderleri.,Temel,2026,10,2000.00,,,,,,false,OPEX,Hizmet
+plan,BIRIM_ACILIS_TASIMA_GIDERLERI,Birim açılış/taşıma giderleri.,Temel,2026,11,2000.00,,,,,,false,OPEX,Hizmet
+plan,BIRIM_ACILIS_TASIMA_GIDERLERI,Birim açılış/taşıma giderleri.,Temel,2026,12,2000.00,,,,,,false,OPEX,Hizmet
+plan,BARKOD_GORSELLESTIRME_SUNUCU_SATINALMA,Barkod Görselleştirme Sunucu Satınalma,Temel,2026,1,24000.00,,,,,,false,CAPEX,Donanım
+plan,GUVENLIK_URUNLERI,Güvenlik Ürünleri,Temel,2026,1,30000.00,,,,,,false,OPEX,Yazılım
+plan,GUVENLIK_URUNLERI,Güvenlik Ürünleri,Temel,2026,2,30000.00,,,,,,false,OPEX,Yazılım
+plan,GUVENLIK_URUNLERI,Güvenlik Ürünleri,Temel,2026,3,30000.00,,,,,,false,OPEX,Yazılım
+plan,GUVENLIK_URUNLERI,Güvenlik Ürünleri,Temel,2026,4,30000.00,,,,,,false,OPEX,Yazılım
+plan,GUVENLIK_URUNLERI,Güvenlik Ürünleri,Temel,2026,5,30000.00,,,,,,false,OPEX,Yazılım
+plan,GUVENLIK_URUNLERI,Güvenlik Ürünleri,Temel,2026,6,30000.00,,,,,,false,OPEX,Yazılım
+plan,GUVENLIK_URUNLERI,Güvenlik Ürünleri,Temel,2026,7,30000.00,,,,,,false,OPEX,Yazılım
+plan,GUVENLIK_URUNLERI,Güvenlik Ürünleri,Temel,2026,8,30000.00,,,,,,false,OPEX,Yazılım
+plan,GUVENLIK_URUNLERI,Güvenlik Ürünleri,Temel,2026,9,30000.00,,,,,,false,OPEX,Yazılım
+plan,GUVENLIK_URUNLERI,Güvenlik Ürünleri,Temel,2026,10,30000.00,,,,,,false,OPEX,Yazılım
+plan,GUVENLIK_URUNLERI,Güvenlik Ürünleri,Temel,2026,11,30000.00,,,,,,false,OPEX,Yazılım
+plan,GUVENLIK_URUNLERI,Güvenlik Ürünleri,Temel,2026,12,30000.00,,,,,,false,OPEX,Yazılım
+plan,DISASTER_FELAKET_KURTARMA_12_AY_25K_MAYIS_ITIBARIYLE_AYLIK_ODENECEK,Disaster Felaket Kurtarma (12 Ay) - $25K Mayıs itibariyle Aylık Ödenecek,Temel,2026,5,25000.00,,,,,,false,OPEX,Hizmet
+plan,DISASTER_FELAKET_KURTARMA_12_AY_25K_MAYIS_ITIBARIYLE_AYLIK_ODENECEK,Disaster Felaket Kurtarma (12 Ay) - $25K Mayıs itibariyle Aylık Ödenecek,Temel,2026,6,25000.00,,,,,,false,OPEX,Hizmet
+plan,DISASTER_FELAKET_KURTARMA_12_AY_25K_MAYIS_ITIBARIYLE_AYLIK_ODENECEK,Disaster Felaket Kurtarma (12 Ay) - $25K Mayıs itibariyle Aylık Ödenecek,Temel,2026,7,25000.00,,,,,,false,OPEX,Hizmet
+plan,DISASTER_FELAKET_KURTARMA_12_AY_25K_MAYIS_ITIBARIYLE_AYLIK_ODENECEK,Disaster Felaket Kurtarma (12 Ay) - $25K Mayıs itibariyle Aylık Ödenecek,Temel,2026,8,25000.00,,,,,,false,OPEX,Hizmet
+plan,DISASTER_FELAKET_KURTARMA_12_AY_25K_MAYIS_ITIBARIYLE_AYLIK_ODENECEK,Disaster Felaket Kurtarma (12 Ay) - $25K Mayıs itibariyle Aylık Ödenecek,Temel,2026,9,25000.00,,,,,,false,OPEX,Hizmet
+plan,DISASTER_FELAKET_KURTARMA_12_AY_25K_MAYIS_ITIBARIYLE_AYLIK_ODENECEK,Disaster Felaket Kurtarma (12 Ay) - $25K Mayıs itibariyle Aylık Ödenecek,Temel,2026,10,25000.00,,,,,,false,OPEX,Hizmet
+plan,DISASTER_FELAKET_KURTARMA_12_AY_25K_MAYIS_ITIBARIYLE_AYLIK_ODENECEK,Disaster Felaket Kurtarma (12 Ay) - $25K Mayıs itibariyle Aylık Ödenecek,Temel,2026,11,25000.00,,,,,,false,OPEX,Hizmet
+plan,DISASTER_FELAKET_KURTARMA_12_AY_25K_MAYIS_ITIBARIYLE_AYLIK_ODENECEK,Disaster Felaket Kurtarma (12 Ay) - $25K Mayıs itibariyle Aylık Ödenecek,Temel,2026,12,25000.00,,,,,,false,OPEX,Hizmet
+plan,DISASTER_FELAKET_KURTARMA_12_AY,Disaster Felaket Kurtarma (12 Ay),Temel,2026,2,700000.00,,,,,,false,CAPEX,Donanım
+plan,DIS_KAYNAK_YAZILIM_GELISTIRME_KOD_TRANSFERI,Dış Kaynak Yazılım Geliştirme Kod Transferi,Temel,2026,1,39000.00,,,,,,false,CAPEX,Hizmet
+plan,DIS_KAYNAK_YAZILIM_GELISTIRME_KOD_TRANSFERI,Dış Kaynak Yazılım Geliştirme Kod Transferi,Temel,2026,2,39000.00,,,,,,false,CAPEX,Hizmet
+plan,DIS_KAYNAK_YAZILIM_GELISTIRME_KOD_TRANSFERI,Dış Kaynak Yazılım Geliştirme Kod Transferi,Temel,2026,3,39000.00,,,,,,false,CAPEX,Hizmet
+plan,DIS_KAYNAK_YAZILIM_GELISTIRME_KOD_TRANSFERI,Dış Kaynak Yazılım Geliştirme Kod Transferi,Temel,2026,4,39000.00,,,,,,false,CAPEX,Hizmet
+plan,DIS_KAYNAK_YAZILIM_GELISTIRME_KOD_TRANSFERI,Dış Kaynak Yazılım Geliştirme Kod Transferi,Temel,2026,5,39000.00,,,,,,false,CAPEX,Hizmet
+plan,DIS_KAYNAK_YAZILIM_GELISTIRME_KOD_TRANSFERI,Dış Kaynak Yazılım Geliştirme Kod Transferi,Temel,2026,6,39000.00,,,,,,false,CAPEX,Hizmet
+plan,DIS_KAYNAK_YAZILIM_GELISTIRME_KOD_TRANSFERI,Dış Kaynak Yazılım Geliştirme Kod Transferi,Temel,2026,7,39000.00,,,,,,false,CAPEX,Hizmet
+plan,DIS_KAYNAK_YAZILIM_GELISTIRME_KOD_TRANSFERI,Dış Kaynak Yazılım Geliştirme Kod Transferi,Temel,2026,8,39000.00,,,,,,false,CAPEX,Hizmet
+plan,DIS_KAYNAK_YAZILIM_GELISTIRME_KOD_TRANSFERI,Dış Kaynak Yazılım Geliştirme Kod Transferi,Temel,2026,9,39000.00,,,,,,false,CAPEX,Hizmet
+plan,DIS_KAYNAK_YAZILIM_GELISTIRME_KOD_TRANSFERI,Dış Kaynak Yazılım Geliştirme Kod Transferi,Temel,2026,10,39000.00,,,,,,false,CAPEX,Hizmet
+plan,DIS_KAYNAK_YAZILIM_GELISTIRME_KOD_TRANSFERI,Dış Kaynak Yazılım Geliştirme Kod Transferi,Temel,2026,11,39000.00,,,,,,false,CAPEX,Hizmet
+plan,DIS_KAYNAK_YAZILIM_GELISTIRME_KOD_TRANSFERI,Dış Kaynak Yazılım Geliştirme Kod Transferi,Temel,2026,12,39000.00,,,,,,false,CAPEX,Hizmet
+plan,ERP_EK_GELISTIRME_IHTIYACLARI,ERP Ek geliştirme ihtiyaçları,Temel,2026,3,14000.00,,,,,,false,CAPEX,Hizmet
+plan,ERP_EK_GELISTIRME_IHTIYACLARI,ERP Ek geliştirme ihtiyaçları,Temel,2026,6,14000.00,,,,,,false,CAPEX,Hizmet
+plan,ERP_EK_GELISTIRME_IHTIYACLARI,ERP Ek geliştirme ihtiyaçları,Temel,2026,9,14000.00,,,,,,false,CAPEX,Hizmet
+plan,ERP_EK_GELISTIRME_IHTIYACLARI,ERP Ek geliştirme ihtiyaçları,Temel,2026,12,14000.00,,,,,,false,CAPEX,Hizmet
+plan,DIS_KAYNAK_YAZILIM_GELISTIRME_BAKIM,Dış Kaynak Yazılım Geliştirme Bakım,Temel,2026,1,9375.00,,,,,,false,OPEX,Bakım
+plan,DIS_KAYNAK_YAZILIM_GELISTIRME_BAKIM,Dış Kaynak Yazılım Geliştirme Bakım,Temel,2026,2,9375.00,,,,,,false,OPEX,Bakım
+plan,DIS_KAYNAK_YAZILIM_GELISTIRME_BAKIM,Dış Kaynak Yazılım Geliştirme Bakım,Temel,2026,3,9375.00,,,,,,false,OPEX,Bakım
+plan,DIS_KAYNAK_YAZILIM_GELISTIRME_BAKIM,Dış Kaynak Yazılım Geliştirme Bakım,Temel,2026,4,9375.00,,,,,,false,OPEX,Bakım
+plan,DIS_KAYNAK_YAZILIM_GELISTIRME_BAKIM,Dış Kaynak Yazılım Geliştirme Bakım,Temel,2026,5,9375.00,,,,,,false,OPEX,Bakım
+plan,DIS_KAYNAK_YAZILIM_GELISTIRME_BAKIM,Dış Kaynak Yazılım Geliştirme Bakım,Temel,2026,6,9375.00,,,,,,false,OPEX,Bakım
+plan,DIS_KAYNAK_YAZILIM_GELISTIRME_BAKIM,Dış Kaynak Yazılım Geliştirme Bakım,Temel,2026,7,9375.00,,,,,,false,OPEX,Bakım
+plan,DIS_KAYNAK_YAZILIM_GELISTIRME_BAKIM,Dış Kaynak Yazılım Geliştirme Bakım,Temel,2026,8,9375.00,,,,,,false,OPEX,Bakım
+plan,DIS_KAYNAK_YAZILIM_GELISTIRME_BAKIM,Dış Kaynak Yazılım Geliştirme Bakım,Temel,2026,9,9375.00,,,,,,false,OPEX,Bakım
+plan,DIS_KAYNAK_YAZILIM_GELISTIRME_BAKIM,Dış Kaynak Yazılım Geliştirme Bakım,Temel,2026,10,9375.00,,,,,,false,OPEX,Bakım
+plan,DIS_KAYNAK_YAZILIM_GELISTIRME_BAKIM,Dış Kaynak Yazılım Geliştirme Bakım,Temel,2026,11,9375.00,,,,,,false,OPEX,Bakım
+plan,DIS_KAYNAK_YAZILIM_GELISTIRME_BAKIM,Dış Kaynak Yazılım Geliştirme Bakım,Temel,2026,12,9375.00,,,,,,false,OPEX,Bakım
+plan,VERIMERKEZI_BARINDIRMA_ENERJI_GIDERI_12_AY,VeriMerkezi Barındırma+ Enerji Gideri (12 Ay),Temel,2026,1,13500.00,,,,,,false,OPEX,Hizmet
+plan,VERIMERKEZI_BARINDIRMA_ENERJI_GIDERI_12_AY,VeriMerkezi Barındırma+ Enerji Gideri (12 Ay),Temel,2026,2,13500.00,,,,,,false,OPEX,Hizmet
+plan,VERIMERKEZI_BARINDIRMA_ENERJI_GIDERI_12_AY,VeriMerkezi Barındırma+ Enerji Gideri (12 Ay),Temel,2026,3,13500.00,,,,,,false,OPEX,Hizmet
+plan,VERIMERKEZI_BARINDIRMA_ENERJI_GIDERI_12_AY,VeriMerkezi Barındırma+ Enerji Gideri (12 Ay),Temel,2026,4,13500.00,,,,,,false,OPEX,Hizmet
+plan,VERIMERKEZI_BARINDIRMA_ENERJI_GIDERI_12_AY,VeriMerkezi Barındırma+ Enerji Gideri (12 Ay),Temel,2026,5,13500.00,,,,,,false,OPEX,Hizmet
+plan,VERIMERKEZI_BARINDIRMA_ENERJI_GIDERI_12_AY,VeriMerkezi Barındırma+ Enerji Gideri (12 Ay),Temel,2026,6,13500.00,,,,,,false,OPEX,Hizmet
+plan,VERIMERKEZI_BARINDIRMA_ENERJI_GIDERI_12_AY,VeriMerkezi Barındırma+ Enerji Gideri (12 Ay),Temel,2026,7,13500.00,,,,,,false,OPEX,Hizmet
+plan,VERIMERKEZI_BARINDIRMA_ENERJI_GIDERI_12_AY,VeriMerkezi Barındırma+ Enerji Gideri (12 Ay),Temel,2026,8,13500.00,,,,,,false,OPEX,Hizmet
+plan,VERIMERKEZI_BARINDIRMA_ENERJI_GIDERI_12_AY,VeriMerkezi Barındırma+ Enerji Gideri (12 Ay),Temel,2026,9,13500.00,,,,,,false,OPEX,Hizmet
+plan,VERIMERKEZI_BARINDIRMA_ENERJI_GIDERI_12_AY,VeriMerkezi Barındırma+ Enerji Gideri (12 Ay),Temel,2026,10,13500.00,,,,,,false,OPEX,Hizmet
+plan,VERIMERKEZI_BARINDIRMA_ENERJI_GIDERI_12_AY,VeriMerkezi Barındırma+ Enerji Gideri (12 Ay),Temel,2026,11,13500.00,,,,,,false,OPEX,Hizmet
+plan,VERIMERKEZI_BARINDIRMA_ENERJI_GIDERI_12_AY,VeriMerkezi Barındırma+ Enerji Gideri (12 Ay),Temel,2026,12,13500.00,,,,,,false,OPEX,Hizmet
+plan,EGITIM,Eğitim,Temel,2026,1,5850.00,,,,,,false,OPEX,Hizmet
+plan,EGITIM,Eğitim,Temel,2026,9,5850.00,,,,,,false,OPEX,Hizmet
+plan,SIEM_SOC_AYLIK_ODEME_12_AY,SIEM + SOC Aylık Ödeme (12 Ay),Temel,2026,1,2560.00,,,,,,false,OPEX,Hizmet
+plan,SIEM_SOC_AYLIK_ODEME_12_AY,SIEM + SOC Aylık Ödeme (12 Ay),Temel,2026,2,2560.00,,,,,,false,OPEX,Hizmet
+plan,SIEM_SOC_AYLIK_ODEME_12_AY,SIEM + SOC Aylık Ödeme (12 Ay),Temel,2026,3,2560.00,,,,,,false,OPEX,Hizmet
+plan,SIEM_SOC_AYLIK_ODEME_12_AY,SIEM + SOC Aylık Ödeme (12 Ay),Temel,2026,4,2560.00,,,,,,false,OPEX,Hizmet
+plan,SIEM_SOC_AYLIK_ODEME_12_AY,SIEM + SOC Aylık Ödeme (12 Ay),Temel,2026,5,2560.00,,,,,,false,OPEX,Hizmet
+plan,SIEM_SOC_AYLIK_ODEME_12_AY,SIEM + SOC Aylık Ödeme (12 Ay),Temel,2026,6,2560.00,,,,,,false,OPEX,Hizmet
+plan,SIEM_SOC_AYLIK_ODEME_12_AY,SIEM + SOC Aylık Ödeme (12 Ay),Temel,2026,7,2560.00,,,,,,false,OPEX,Hizmet
+plan,SIEM_SOC_AYLIK_ODEME_12_AY,SIEM + SOC Aylık Ödeme (12 Ay),Temel,2026,8,2560.00,,,,,,false,OPEX,Hizmet
+plan,SIEM_SOC_AYLIK_ODEME_12_AY,SIEM + SOC Aylık Ödeme (12 Ay),Temel,2026,9,2560.00,,,,,,false,OPEX,Hizmet
+plan,SIEM_SOC_AYLIK_ODEME_12_AY,SIEM + SOC Aylık Ödeme (12 Ay),Temel,2026,10,2560.00,,,,,,false,OPEX,Hizmet
+plan,SIEM_SOC_AYLIK_ODEME_12_AY,SIEM + SOC Aylık Ödeme (12 Ay),Temel,2026,11,2560.00,,,,,,false,OPEX,Hizmet
+plan,SIEM_SOC_AYLIK_ODEME_12_AY,SIEM + SOC Aylık Ödeme (12 Ay),Temel,2026,12,2560.00,,,,,,false,OPEX,Hizmet
+plan,YAZILIM_GELISTIRME_COMPONENT_12_AY,Yazılım Geliştirme component (12 Ay),Temel,2026,1,3125.00,,,,,,false,OPEX,Yazılım
+plan,YAZILIM_GELISTIRME_COMPONENT_12_AY,Yazılım Geliştirme component (12 Ay),Temel,2026,2,3125.00,,,,,,false,OPEX,Yazılım
+plan,YAZILIM_GELISTIRME_COMPONENT_12_AY,Yazılım Geliştirme component (12 Ay),Temel,2026,3,3125.00,,,,,,false,OPEX,Yazılım
+plan,YAZILIM_GELISTIRME_COMPONENT_12_AY,Yazılım Geliştirme component (12 Ay),Temel,2026,4,3125.00,,,,,,false,OPEX,Yazılım
+plan,YAZILIM_GELISTIRME_COMPONENT_12_AY,Yazılım Geliştirme component (12 Ay),Temel,2026,5,3125.00,,,,,,false,OPEX,Yazılım
+plan,YAZILIM_GELISTIRME_COMPONENT_12_AY,Yazılım Geliştirme component (12 Ay),Temel,2026,6,3125.00,,,,,,false,OPEX,Yazılım
+plan,YAZILIM_GELISTIRME_COMPONENT_12_AY,Yazılım Geliştirme component (12 Ay),Temel,2026,7,3125.00,,,,,,false,OPEX,Yazılım
+plan,YAZILIM_GELISTIRME_COMPONENT_12_AY,Yazılım Geliştirme component (12 Ay),Temel,2026,8,3125.00,,,,,,false,OPEX,Yazılım
+plan,YAZILIM_GELISTIRME_COMPONENT_12_AY,Yazılım Geliştirme component (12 Ay),Temel,2026,9,3125.00,,,,,,false,OPEX,Yazılım
+plan,YAZILIM_GELISTIRME_COMPONENT_12_AY,Yazılım Geliştirme component (12 Ay),Temel,2026,10,3125.00,,,,,,false,OPEX,Yazılım
+plan,YAZILIM_GELISTIRME_COMPONENT_12_AY,Yazılım Geliştirme component (12 Ay),Temel,2026,11,3125.00,,,,,,false,OPEX,Yazılım
+plan,YAZILIM_GELISTIRME_COMPONENT_12_AY,Yazılım Geliştirme component (12 Ay),Temel,2026,12,3125.00,,,,,,false,OPEX,Yazılım
+plan,VERI_TABANI_BAKIM_DESTEK,Veri Tabanı Bakım/Destek,Temel,2026,1,15000.00,,,,,,false,CAPEX,Hizmet
+plan,VERI_TABANI_BAKIM_DESTEK,Veri Tabanı Bakım/Destek,Temel,2026,2,15000.00,,,,,,false,CAPEX,Hizmet
+plan,VERI_TABANI_BAKIM_DESTEK,Veri Tabanı Bakım/Destek,Temel,2026,3,15000.00,,,,,,false,CAPEX,Hizmet
+plan,VERI_TABANI_BAKIM_DESTEK,Veri Tabanı Bakım/Destek,Temel,2026,4,15000.00,,,,,,false,CAPEX,Hizmet
+plan,VERI_TABANI_BAKIM_DESTEK,Veri Tabanı Bakım/Destek,Temel,2026,5,15000.00,,,,,,false,CAPEX,Hizmet
+plan,VERI_TABANI_BAKIM_DESTEK,Veri Tabanı Bakım/Destek,Temel,2026,6,15000.00,,,,,,false,CAPEX,Hizmet
+plan,VERI_TABANI_BAKIM_DESTEK,Veri Tabanı Bakım/Destek,Temel,2026,7,15000.00,,,,,,false,CAPEX,Hizmet
+plan,VERI_TABANI_BAKIM_DESTEK,Veri Tabanı Bakım/Destek,Temel,2026,8,15000.00,,,,,,false,CAPEX,Hizmet
+plan,VERI_TABANI_BAKIM_DESTEK,Veri Tabanı Bakım/Destek,Temel,2026,9,15000.00,,,,,,false,CAPEX,Hizmet
+plan,VERI_TABANI_BAKIM_DESTEK,Veri Tabanı Bakım/Destek,Temel,2026,10,15000.00,,,,,,false,CAPEX,Hizmet
+plan,VERI_TABANI_BAKIM_DESTEK,Veri Tabanı Bakım/Destek,Temel,2026,11,15000.00,,,,,,false,CAPEX,Hizmet
+plan,VERI_TABANI_BAKIM_DESTEK,Veri Tabanı Bakım/Destek,Temel,2026,12,15000.00,,,,,,false,CAPEX,Hizmet
+plan,PROJE_YONETIMI_UYGULAMASI_25K_ODEME_12_AY,Proje Yönetimi Uygulaması - $25K Ödeme 12 Ay,Temel,2026,1,2083.00,,,,,,false,OPEX,Yazılım
+plan,PROJE_YONETIMI_UYGULAMASI_25K_ODEME_12_AY,Proje Yönetimi Uygulaması - $25K Ödeme 12 Ay,Temel,2026,2,2083.00,,,,,,false,OPEX,Yazılım
+plan,PROJE_YONETIMI_UYGULAMASI_25K_ODEME_12_AY,Proje Yönetimi Uygulaması - $25K Ödeme 12 Ay,Temel,2026,3,2083.00,,,,,,false,OPEX,Yazılım
+plan,PROJE_YONETIMI_UYGULAMASI_25K_ODEME_12_AY,Proje Yönetimi Uygulaması - $25K Ödeme 12 Ay,Temel,2026,4,2083.00,,,,,,false,OPEX,Yazılım
+plan,PROJE_YONETIMI_UYGULAMASI_25K_ODEME_12_AY,Proje Yönetimi Uygulaması - $25K Ödeme 12 Ay,Temel,2026,5,2083.00,,,,,,false,OPEX,Yazılım
+plan,PROJE_YONETIMI_UYGULAMASI_25K_ODEME_12_AY,Proje Yönetimi Uygulaması - $25K Ödeme 12 Ay,Temel,2026,6,2083.00,,,,,,false,OPEX,Yazılım
+plan,PROJE_YONETIMI_UYGULAMASI_25K_ODEME_12_AY,Proje Yönetimi Uygulaması - $25K Ödeme 12 Ay,Temel,2026,7,2083.00,,,,,,false,OPEX,Yazılım
+plan,PROJE_YONETIMI_UYGULAMASI_25K_ODEME_12_AY,Proje Yönetimi Uygulaması - $25K Ödeme 12 Ay,Temel,2026,8,2083.00,,,,,,false,OPEX,Yazılım
+plan,PROJE_YONETIMI_UYGULAMASI_25K_ODEME_12_AY,Proje Yönetimi Uygulaması - $25K Ödeme 12 Ay,Temel,2026,9,2083.00,,,,,,false,OPEX,Yazılım
+plan,PROJE_YONETIMI_UYGULAMASI_25K_ODEME_12_AY,Proje Yönetimi Uygulaması - $25K Ödeme 12 Ay,Temel,2026,10,2083.00,,,,,,false,OPEX,Yazılım
+plan,PROJE_YONETIMI_UYGULAMASI_25K_ODEME_12_AY,Proje Yönetimi Uygulaması - $25K Ödeme 12 Ay,Temel,2026,11,2083.00,,,,,,false,OPEX,Yazılım
+plan,PROJE_YONETIMI_UYGULAMASI_25K_ODEME_12_AY,Proje Yönetimi Uygulaması - $25K Ödeme 12 Ay,Temel,2026,12,2083.00,,,,,,false,OPEX,Yazılım
+plan,DDOS_AYLIK_ODEME_12_AY,DDOS Aylık Ödeme (12 Ay),Temel,2026,1,1000.00,,,,,,false,OPEX,Hizmet
+plan,DDOS_AYLIK_ODEME_12_AY,DDOS Aylık Ödeme (12 Ay),Temel,2026,2,1000.00,,,,,,false,OPEX,Hizmet
+plan,DDOS_AYLIK_ODEME_12_AY,DDOS Aylık Ödeme (12 Ay),Temel,2026,3,1000.00,,,,,,false,OPEX,Hizmet
+plan,DDOS_AYLIK_ODEME_12_AY,DDOS Aylık Ödeme (12 Ay),Temel,2026,4,1000.00,,,,,,false,OPEX,Hizmet
+plan,DDOS_AYLIK_ODEME_12_AY,DDOS Aylık Ödeme (12 Ay),Temel,2026,5,1000.00,,,,,,false,OPEX,Hizmet
+plan,DDOS_AYLIK_ODEME_12_AY,DDOS Aylık Ödeme (12 Ay),Temel,2026,6,1000.00,,,,,,false,OPEX,Hizmet
+plan,DDOS_AYLIK_ODEME_12_AY,DDOS Aylık Ödeme (12 Ay),Temel,2026,7,1000.00,,,,,,false,OPEX,Hizmet
+plan,DDOS_AYLIK_ODEME_12_AY,DDOS Aylık Ödeme (12 Ay),Temel,2026,8,1000.00,,,,,,false,OPEX,Hizmet
+plan,DDOS_AYLIK_ODEME_12_AY,DDOS Aylık Ödeme (12 Ay),Temel,2026,9,1000.00,,,,,,false,OPEX,Hizmet
+plan,DDOS_AYLIK_ODEME_12_AY,DDOS Aylık Ödeme (12 Ay),Temel,2026,10,1000.00,,,,,,false,OPEX,Hizmet
+plan,DDOS_AYLIK_ODEME_12_AY,DDOS Aylık Ödeme (12 Ay),Temel,2026,11,1000.00,,,,,,false,OPEX,Hizmet
+plan,DDOS_AYLIK_ODEME_12_AY,DDOS Aylık Ödeme (12 Ay),Temel,2026,12,1000.00,,,,,,false,OPEX,Hizmet
+plan,BTK_ESENYURT_MPLS_DEVRE_12_AY,BTK-Esenyurt MPLS Devre (12 Ay),Temel,2026,1,87.00,,,,,,false,OPEX,Hizmet
+plan,BTK_ESENYURT_MPLS_DEVRE_12_AY,BTK-Esenyurt MPLS Devre (12 Ay),Temel,2026,2,87.00,,,,,,false,OPEX,Hizmet
+plan,BTK_ESENYURT_MPLS_DEVRE_12_AY,BTK-Esenyurt MPLS Devre (12 Ay),Temel,2026,3,87.00,,,,,,false,OPEX,Hizmet
+plan,BTK_ESENYURT_MPLS_DEVRE_12_AY,BTK-Esenyurt MPLS Devre (12 Ay),Temel,2026,4,87.00,,,,,,false,OPEX,Hizmet
+plan,BTK_ESENYURT_MPLS_DEVRE_12_AY,BTK-Esenyurt MPLS Devre (12 Ay),Temel,2026,5,87.00,,,,,,false,OPEX,Hizmet
+plan,BTK_ESENYURT_MPLS_DEVRE_12_AY,BTK-Esenyurt MPLS Devre (12 Ay),Temel,2026,6,87.00,,,,,,false,OPEX,Hizmet
+plan,BTK_ESENYURT_MPLS_DEVRE_12_AY,BTK-Esenyurt MPLS Devre (12 Ay),Temel,2026,7,87.00,,,,,,false,OPEX,Hizmet
+plan,BTK_ESENYURT_MPLS_DEVRE_12_AY,BTK-Esenyurt MPLS Devre (12 Ay),Temel,2026,8,87.00,,,,,,false,OPEX,Hizmet
+plan,BTK_ESENYURT_MPLS_DEVRE_12_AY,BTK-Esenyurt MPLS Devre (12 Ay),Temel,2026,9,87.00,,,,,,false,OPEX,Hizmet
+plan,BTK_ESENYURT_MPLS_DEVRE_12_AY,BTK-Esenyurt MPLS Devre (12 Ay),Temel,2026,10,87.00,,,,,,false,OPEX,Hizmet
+plan,BTK_ESENYURT_MPLS_DEVRE_12_AY,BTK-Esenyurt MPLS Devre (12 Ay),Temel,2026,11,87.00,,,,,,false,OPEX,Hizmet
+plan,BTK_ESENYURT_MPLS_DEVRE_12_AY,BTK-Esenyurt MPLS Devre (12 Ay),Temel,2026,12,87.00,,,,,,false,OPEX,Hizmet
+plan,DOMAIN_SSL_YENILEME_12_AY,Domain/SSL Yenileme (12 Ay),Temel,2026,1,167.00,,,,,,false,OPEX,Hizmet
+plan,DOMAIN_SSL_YENILEME_12_AY,Domain/SSL Yenileme (12 Ay),Temel,2026,2,167.00,,,,,,false,OPEX,Hizmet
+plan,DOMAIN_SSL_YENILEME_12_AY,Domain/SSL Yenileme (12 Ay),Temel,2026,3,167.00,,,,,,false,OPEX,Hizmet
+plan,DOMAIN_SSL_YENILEME_12_AY,Domain/SSL Yenileme (12 Ay),Temel,2026,4,167.00,,,,,,false,OPEX,Hizmet
+plan,DOMAIN_SSL_YENILEME_12_AY,Domain/SSL Yenileme (12 Ay),Temel,2026,5,167.00,,,,,,false,OPEX,Hizmet
+plan,DOMAIN_SSL_YENILEME_12_AY,Domain/SSL Yenileme (12 Ay),Temel,2026,6,167.00,,,,,,false,OPEX,Hizmet
+plan,DOMAIN_SSL_YENILEME_12_AY,Domain/SSL Yenileme (12 Ay),Temel,2026,7,167.00,,,,,,false,OPEX,Hizmet
+plan,DOMAIN_SSL_YENILEME_12_AY,Domain/SSL Yenileme (12 Ay),Temel,2026,8,167.00,,,,,,false,OPEX,Hizmet
+plan,DOMAIN_SSL_YENILEME_12_AY,Domain/SSL Yenileme (12 Ay),Temel,2026,9,167.00,,,,,,false,OPEX,Hizmet
+plan,DOMAIN_SSL_YENILEME_12_AY,Domain/SSL Yenileme (12 Ay),Temel,2026,10,167.00,,,,,,false,OPEX,Hizmet
+plan,DOMAIN_SSL_YENILEME_12_AY,Domain/SSL Yenileme (12 Ay),Temel,2026,11,167.00,,,,,,false,OPEX,Hizmet
+plan,DOMAIN_SSL_YENILEME_12_AY,Domain/SSL Yenileme (12 Ay),Temel,2026,12,167.00,,,,,,false,OPEX,Hizmet
+plan,F5_LOADBLANCER_BAKIM_DESTEK_2_ADET_20K_ODEME_12_AY,F5 LoadBlancer Bakım/Destek (2 Adet) - $20K Ödeme 12 Ay,Temel,2026,1,1670.00,,,,,,false,OPEX,Bakım
+plan,F5_LOADBLANCER_BAKIM_DESTEK_2_ADET_20K_ODEME_12_AY,F5 LoadBlancer Bakım/Destek (2 Adet) - $20K Ödeme 12 Ay,Temel,2026,2,1670.00,,,,,,false,OPEX,Bakım
+plan,F5_LOADBLANCER_BAKIM_DESTEK_2_ADET_20K_ODEME_12_AY,F5 LoadBlancer Bakım/Destek (2 Adet) - $20K Ödeme 12 Ay,Temel,2026,3,1670.00,,,,,,false,OPEX,Bakım
+plan,F5_LOADBLANCER_BAKIM_DESTEK_2_ADET_20K_ODEME_12_AY,F5 LoadBlancer Bakım/Destek (2 Adet) - $20K Ödeme 12 Ay,Temel,2026,4,1670.00,,,,,,false,OPEX,Bakım
+plan,F5_LOADBLANCER_BAKIM_DESTEK_2_ADET_20K_ODEME_12_AY,F5 LoadBlancer Bakım/Destek (2 Adet) - $20K Ödeme 12 Ay,Temel,2026,5,1670.00,,,,,,false,OPEX,Bakım
+plan,F5_LOADBLANCER_BAKIM_DESTEK_2_ADET_20K_ODEME_12_AY,F5 LoadBlancer Bakım/Destek (2 Adet) - $20K Ödeme 12 Ay,Temel,2026,6,1670.00,,,,,,false,OPEX,Bakım
+plan,F5_LOADBLANCER_BAKIM_DESTEK_2_ADET_20K_ODEME_12_AY,F5 LoadBlancer Bakım/Destek (2 Adet) - $20K Ödeme 12 Ay,Temel,2026,7,1670.00,,,,,,false,OPEX,Bakım
+plan,F5_LOADBLANCER_BAKIM_DESTEK_2_ADET_20K_ODEME_12_AY,F5 LoadBlancer Bakım/Destek (2 Adet) - $20K Ödeme 12 Ay,Temel,2026,8,1670.00,,,,,,false,OPEX,Bakım
+plan,F5_LOADBLANCER_BAKIM_DESTEK_2_ADET_20K_ODEME_12_AY,F5 LoadBlancer Bakım/Destek (2 Adet) - $20K Ödeme 12 Ay,Temel,2026,9,1670.00,,,,,,false,OPEX,Bakım
+plan,F5_LOADBLANCER_BAKIM_DESTEK_2_ADET_20K_ODEME_12_AY,F5 LoadBlancer Bakım/Destek (2 Adet) - $20K Ödeme 12 Ay,Temel,2026,10,1670.00,,,,,,false,OPEX,Bakım
+plan,F5_LOADBLANCER_BAKIM_DESTEK_2_ADET_20K_ODEME_12_AY,F5 LoadBlancer Bakım/Destek (2 Adet) - $20K Ödeme 12 Ay,Temel,2026,11,1670.00,,,,,,false,OPEX,Bakım
+plan,F5_LOADBLANCER_BAKIM_DESTEK_2_ADET_20K_ODEME_12_AY,F5 LoadBlancer Bakım/Destek (2 Adet) - $20K Ödeme 12 Ay,Temel,2026,12,1670.00,,,,,,false,OPEX,Bakım
+plan,MAIL_ARSIV_BAKIM_DESTEK_12_AY_7500_ODEME_12_AY,Mail Arşiv Bakım/Destek (12 Ay) - $7500 Ödeme 12 Ay,Temel,2026,1,1250.00,,,,,,false,OPEX,Bakım
+plan,MAIL_ARSIV_BAKIM_DESTEK_12_AY_7500_ODEME_12_AY,Mail Arşiv Bakım/Destek (12 Ay) - $7500 Ödeme 12 Ay,Temel,2026,2,1250.00,,,,,,false,OPEX,Bakım
+plan,MAIL_ARSIV_BAKIM_DESTEK_12_AY_7500_ODEME_12_AY,Mail Arşiv Bakım/Destek (12 Ay) - $7500 Ödeme 12 Ay,Temel,2026,3,1250.00,,,,,,false,OPEX,Bakım
+plan,MAIL_ARSIV_BAKIM_DESTEK_12_AY_7500_ODEME_12_AY,Mail Arşiv Bakım/Destek (12 Ay) - $7500 Ödeme 12 Ay,Temel,2026,4,1250.00,,,,,,false,OPEX,Bakım
+plan,MAIL_ARSIV_BAKIM_DESTEK_12_AY_7500_ODEME_12_AY,Mail Arşiv Bakım/Destek (12 Ay) - $7500 Ödeme 12 Ay,Temel,2026,5,1250.00,,,,,,false,OPEX,Bakım
+plan,MAIL_ARSIV_BAKIM_DESTEK_12_AY_7500_ODEME_12_AY,Mail Arşiv Bakım/Destek (12 Ay) - $7500 Ödeme 12 Ay,Temel,2026,6,1250.00,,,,,,false,OPEX,Bakım
+plan,MAIL_ARSIV_BAKIM_DESTEK_12_AY_7500_ODEME_12_AY,Mail Arşiv Bakım/Destek (12 Ay) - $7500 Ödeme 12 Ay,Temel,2026,7,1250.00,,,,,,false,OPEX,Bakım
+plan,MAIL_ARSIV_BAKIM_DESTEK_12_AY_7500_ODEME_12_AY,Mail Arşiv Bakım/Destek (12 Ay) - $7500 Ödeme 12 Ay,Temel,2026,8,1250.00,,,,,,false,OPEX,Bakım
+plan,MAIL_ARSIV_BAKIM_DESTEK_12_AY_7500_ODEME_12_AY,Mail Arşiv Bakım/Destek (12 Ay) - $7500 Ödeme 12 Ay,Temel,2026,9,1250.00,,,,,,false,OPEX,Bakım
+plan,MAIL_ARSIV_BAKIM_DESTEK_12_AY_7500_ODEME_12_AY,Mail Arşiv Bakım/Destek (12 Ay) - $7500 Ödeme 12 Ay,Temel,2026,10,1250.00,,,,,,false,OPEX,Bakım
+plan,MAIL_ARSIV_BAKIM_DESTEK_12_AY_7500_ODEME_12_AY,Mail Arşiv Bakım/Destek (12 Ay) - $7500 Ödeme 12 Ay,Temel,2026,11,1250.00,,,,,,false,OPEX,Bakım
+plan,MAIL_ARSIV_BAKIM_DESTEK_12_AY_7500_ODEME_12_AY,Mail Arşiv Bakım/Destek (12 Ay) - $7500 Ödeme 12 Ay,Temel,2026,12,1250.00,,,,,,false,OPEX,Bakım
+plan,MAIL_ARSIV_LISANS_12_AY_40K_ODEME_12_AY,Mail Arşiv Lisans (12 Ay) - $40K Ödeme 12 Ay,Temel,2026,1,3350.00,,,,,,false,OPEX,Yazılım
+plan,MAIL_ARSIV_LISANS_12_AY_40K_ODEME_12_AY,Mail Arşiv Lisans (12 Ay) - $40K Ödeme 12 Ay,Temel,2026,2,3350.00,,,,,,false,OPEX,Yazılım
+plan,MAIL_ARSIV_LISANS_12_AY_40K_ODEME_12_AY,Mail Arşiv Lisans (12 Ay) - $40K Ödeme 12 Ay,Temel,2026,3,3350.00,,,,,,false,OPEX,Yazılım
+plan,MAIL_ARSIV_LISANS_12_AY_40K_ODEME_12_AY,Mail Arşiv Lisans (12 Ay) - $40K Ödeme 12 Ay,Temel,2026,4,3350.00,,,,,,false,OPEX,Yazılım
+plan,MAIL_ARSIV_LISANS_12_AY_40K_ODEME_12_AY,Mail Arşiv Lisans (12 Ay) - $40K Ödeme 12 Ay,Temel,2026,5,3350.00,,,,,,false,OPEX,Yazılım
+plan,MAIL_ARSIV_LISANS_12_AY_40K_ODEME_12_AY,Mail Arşiv Lisans (12 Ay) - $40K Ödeme 12 Ay,Temel,2026,6,3350.00,,,,,,false,OPEX,Yazılım
+plan,MAIL_ARSIV_LISANS_12_AY_40K_ODEME_12_AY,Mail Arşiv Lisans (12 Ay) - $40K Ödeme 12 Ay,Temel,2026,7,3350.00,,,,,,false,OPEX,Yazılım
+plan,MAIL_ARSIV_LISANS_12_AY_40K_ODEME_12_AY,Mail Arşiv Lisans (12 Ay) - $40K Ödeme 12 Ay,Temel,2026,8,3350.00,,,,,,false,OPEX,Yazılım
+plan,MAIL_ARSIV_LISANS_12_AY_40K_ODEME_12_AY,Mail Arşiv Lisans (12 Ay) - $40K Ödeme 12 Ay,Temel,2026,9,3350.00,,,,,,false,OPEX,Yazılım
+plan,MAIL_ARSIV_LISANS_12_AY_40K_ODEME_12_AY,Mail Arşiv Lisans (12 Ay) - $40K Ödeme 12 Ay,Temel,2026,10,3350.00,,,,,,false,OPEX,Yazılım
+plan,MAIL_ARSIV_LISANS_12_AY_40K_ODEME_12_AY,Mail Arşiv Lisans (12 Ay) - $40K Ödeme 12 Ay,Temel,2026,11,3350.00,,,,,,false,OPEX,Yazılım
+plan,MAIL_ARSIV_LISANS_12_AY_40K_ODEME_12_AY,Mail Arşiv Lisans (12 Ay) - $40K Ödeme 12 Ay,Temel,2026,12,3350.00,,,,,,false,OPEX,Yazılım
+plan,LOGO_BAKIM_DESTEK,Logo Bakım/Destek,Temel,2026,1,1720.00,,,,,,false,OPEX,Bakım
+plan,LOGO_BAKIM_DESTEK,Logo Bakım/Destek,Temel,2026,2,1720.00,,,,,,false,OPEX,Bakım
+plan,LOGO_BAKIM_DESTEK,Logo Bakım/Destek,Temel,2026,3,1720.00,,,,,,false,OPEX,Bakım
+plan,LOGO_BAKIM_DESTEK,Logo Bakım/Destek,Temel,2026,4,1720.00,,,,,,false,OPEX,Bakım
+plan,LOGO_BAKIM_DESTEK,Logo Bakım/Destek,Temel,2026,5,1720.00,,,,,,false,OPEX,Bakım
+plan,LOGO_BAKIM_DESTEK,Logo Bakım/Destek,Temel,2026,6,1720.00,,,,,,false,OPEX,Bakım
+plan,LOGO_BAKIM_DESTEK,Logo Bakım/Destek,Temel,2026,7,1720.00,,,,,,false,OPEX,Bakım
+plan,LOGO_BAKIM_DESTEK,Logo Bakım/Destek,Temel,2026,8,1720.00,,,,,,false,OPEX,Bakım
+plan,LOGO_BAKIM_DESTEK,Logo Bakım/Destek,Temel,2026,9,1720.00,,,,,,false,OPEX,Bakım
+plan,LOGO_BAKIM_DESTEK,Logo Bakım/Destek,Temel,2026,10,1720.00,,,,,,false,OPEX,Bakım
+plan,LOGO_BAKIM_DESTEK,Logo Bakım/Destek,Temel,2026,11,1720.00,,,,,,false,OPEX,Bakım
+plan,LOGO_BAKIM_DESTEK,Logo Bakım/Destek,Temel,2026,12,1720.00,,,,,,false,OPEX,Bakım
+plan,HARITA_SERVISI_12_AY_67K_OCAK_ODENECEK_12_AY,Harita Servisi (12 Ay) - $67K Ocak Ödenecek 12 Ay,Temel,2026,1,5600.00,,,,,,false,OPEX,Yazılım
+plan,HARITA_SERVISI_12_AY_67K_OCAK_ODENECEK_12_AY,Harita Servisi (12 Ay) - $67K Ocak Ödenecek 12 Ay,Temel,2026,2,5600.00,,,,,,false,OPEX,Yazılım
+plan,HARITA_SERVISI_12_AY_67K_OCAK_ODENECEK_12_AY,Harita Servisi (12 Ay) - $67K Ocak Ödenecek 12 Ay,Temel,2026,3,5600.00,,,,,,false,OPEX,Yazılım
+plan,HARITA_SERVISI_12_AY_67K_OCAK_ODENECEK_12_AY,Harita Servisi (12 Ay) - $67K Ocak Ödenecek 12 Ay,Temel,2026,4,5600.00,,,,,,false,OPEX,Yazılım
+plan,HARITA_SERVISI_12_AY_67K_OCAK_ODENECEK_12_AY,Harita Servisi (12 Ay) - $67K Ocak Ödenecek 12 Ay,Temel,2026,5,5600.00,,,,,,false,OPEX,Yazılım
+plan,HARITA_SERVISI_12_AY_67K_OCAK_ODENECEK_12_AY,Harita Servisi (12 Ay) - $67K Ocak Ödenecek 12 Ay,Temel,2026,6,5600.00,,,,,,false,OPEX,Yazılım
+plan,HARITA_SERVISI_12_AY_67K_OCAK_ODENECEK_12_AY,Harita Servisi (12 Ay) - $67K Ocak Ödenecek 12 Ay,Temel,2026,7,5600.00,,,,,,false,OPEX,Yazılım
+plan,HARITA_SERVISI_12_AY_67K_OCAK_ODENECEK_12_AY,Harita Servisi (12 Ay) - $67K Ocak Ödenecek 12 Ay,Temel,2026,8,5600.00,,,,,,false,OPEX,Yazılım
+plan,HARITA_SERVISI_12_AY_67K_OCAK_ODENECEK_12_AY,Harita Servisi (12 Ay) - $67K Ocak Ödenecek 12 Ay,Temel,2026,9,5600.00,,,,,,false,OPEX,Yazılım
+plan,HARITA_SERVISI_12_AY_67K_OCAK_ODENECEK_12_AY,Harita Servisi (12 Ay) - $67K Ocak Ödenecek 12 Ay,Temel,2026,10,5600.00,,,,,,false,OPEX,Yazılım
+plan,HARITA_SERVISI_12_AY_67K_OCAK_ODENECEK_12_AY,Harita Servisi (12 Ay) - $67K Ocak Ödenecek 12 Ay,Temel,2026,11,5600.00,,,,,,false,OPEX,Yazılım
+plan,HARITA_SERVISI_12_AY_67K_OCAK_ODENECEK_12_AY,Harita Servisi (12 Ay) - $67K Ocak Ödenecek 12 Ay,Temel,2026,12,5600.00,,,,,,false,OPEX,Yazılım
+plan,2_X_CISCO_9500_OMURGA_10_X_CISCO_9300_KENAR_GARANTI_BAKIM_35K_NISAN_ODEME_12_AY,2 x Cisco 9500 Omurga + 10 x Cisco 9300 Kenar Garanti/Bakım - $35K Nisan Ödeme 12 Ay,Temel,2026,4,3900.00,,,,,,false,OPEX,Bakım
+plan,2_X_CISCO_9500_OMURGA_10_X_CISCO_9300_KENAR_GARANTI_BAKIM_35K_NISAN_ODEME_12_AY,2 x Cisco 9500 Omurga + 10 x Cisco 9300 Kenar Garanti/Bakım - $35K Nisan Ödeme 12 Ay,Temel,2026,5,3900.00,,,,,,false,OPEX,Bakım
+plan,2_X_CISCO_9500_OMURGA_10_X_CISCO_9300_KENAR_GARANTI_BAKIM_35K_NISAN_ODEME_12_AY,2 x Cisco 9500 Omurga + 10 x Cisco 9300 Kenar Garanti/Bakım - $35K Nisan Ödeme 12 Ay,Temel,2026,6,3900.00,,,,,,false,OPEX,Bakım
+plan,2_X_CISCO_9500_OMURGA_10_X_CISCO_9300_KENAR_GARANTI_BAKIM_35K_NISAN_ODEME_12_AY,2 x Cisco 9500 Omurga + 10 x Cisco 9300 Kenar Garanti/Bakım - $35K Nisan Ödeme 12 Ay,Temel,2026,7,3900.00,,,,,,false,OPEX,Bakım
+plan,2_X_CISCO_9500_OMURGA_10_X_CISCO_9300_KENAR_GARANTI_BAKIM_35K_NISAN_ODEME_12_AY,2 x Cisco 9500 Omurga + 10 x Cisco 9300 Kenar Garanti/Bakım - $35K Nisan Ödeme 12 Ay,Temel,2026,8,3900.00,,,,,,false,OPEX,Bakım
+plan,2_X_CISCO_9500_OMURGA_10_X_CISCO_9300_KENAR_GARANTI_BAKIM_35K_NISAN_ODEME_12_AY,2 x Cisco 9500 Omurga + 10 x Cisco 9300 Kenar Garanti/Bakım - $35K Nisan Ödeme 12 Ay,Temel,2026,9,3900.00,,,,,,false,OPEX,Bakım
+plan,2_X_CISCO_9500_OMURGA_10_X_CISCO_9300_KENAR_GARANTI_BAKIM_35K_NISAN_ODEME_12_AY,2 x Cisco 9500 Omurga + 10 x Cisco 9300 Kenar Garanti/Bakım - $35K Nisan Ödeme 12 Ay,Temel,2026,10,3900.00,,,,,,false,OPEX,Bakım
+plan,2_X_CISCO_9500_OMURGA_10_X_CISCO_9300_KENAR_GARANTI_BAKIM_35K_NISAN_ODEME_12_AY,2 x Cisco 9500 Omurga + 10 x Cisco 9300 Kenar Garanti/Bakım - $35K Nisan Ödeme 12 Ay,Temel,2026,11,3900.00,,,,,,false,OPEX,Bakım
+plan,2_X_CISCO_9500_OMURGA_10_X_CISCO_9300_KENAR_GARANTI_BAKIM_35K_NISAN_ODEME_12_AY,2 x Cisco 9500 Omurga + 10 x Cisco 9300 Kenar Garanti/Bakım - $35K Nisan Ödeme 12 Ay,Temel,2026,12,3900.00,,,,,,false,OPEX,Bakım
+plan,VEEAM_BACKUP_BAKIM_DESTEK_LISANS_12_AY_36K_MART_ODEME_12_AY_GECERLI,Veeam Backup Bakım/Destek / Lisans  (12 Ay)  -$36K Mart Ödeme 12 Ay Geçerli,Temel,2026,3,3000.00,,,,,,false,OPEX,Bakım
+plan,VEEAM_BACKUP_BAKIM_DESTEK_LISANS_12_AY_36K_MART_ODEME_12_AY_GECERLI,Veeam Backup Bakım/Destek / Lisans  (12 Ay)  -$36K Mart Ödeme 12 Ay Geçerli,Temel,2026,4,3000.00,,,,,,false,OPEX,Bakım
+plan,VEEAM_BACKUP_BAKIM_DESTEK_LISANS_12_AY_36K_MART_ODEME_12_AY_GECERLI,Veeam Backup Bakım/Destek / Lisans  (12 Ay)  -$36K Mart Ödeme 12 Ay Geçerli,Temel,2026,5,3000.00,,,,,,false,OPEX,Bakım
+plan,VEEAM_BACKUP_BAKIM_DESTEK_LISANS_12_AY_36K_MART_ODEME_12_AY_GECERLI,Veeam Backup Bakım/Destek / Lisans  (12 Ay)  -$36K Mart Ödeme 12 Ay Geçerli,Temel,2026,6,3000.00,,,,,,false,OPEX,Bakım
+plan,VEEAM_BACKUP_BAKIM_DESTEK_LISANS_12_AY_36K_MART_ODEME_12_AY_GECERLI,Veeam Backup Bakım/Destek / Lisans  (12 Ay)  -$36K Mart Ödeme 12 Ay Geçerli,Temel,2026,7,3000.00,,,,,,false,OPEX,Bakım
+plan,VEEAM_BACKUP_BAKIM_DESTEK_LISANS_12_AY_36K_MART_ODEME_12_AY_GECERLI,Veeam Backup Bakım/Destek / Lisans  (12 Ay)  -$36K Mart Ödeme 12 Ay Geçerli,Temel,2026,8,3000.00,,,,,,false,OPEX,Bakım
+plan,VEEAM_BACKUP_BAKIM_DESTEK_LISANS_12_AY_36K_MART_ODEME_12_AY_GECERLI,Veeam Backup Bakım/Destek / Lisans  (12 Ay)  -$36K Mart Ödeme 12 Ay Geçerli,Temel,2026,9,3000.00,,,,,,false,OPEX,Bakım
+plan,VEEAM_BACKUP_BAKIM_DESTEK_LISANS_12_AY_36K_MART_ODEME_12_AY_GECERLI,Veeam Backup Bakım/Destek / Lisans  (12 Ay)  -$36K Mart Ödeme 12 Ay Geçerli,Temel,2026,10,3000.00,,,,,,false,OPEX,Bakım
+plan,VEEAM_BACKUP_BAKIM_DESTEK_LISANS_12_AY_36K_MART_ODEME_12_AY_GECERLI,Veeam Backup Bakım/Destek / Lisans  (12 Ay)  -$36K Mart Ödeme 12 Ay Geçerli,Temel,2026,11,3000.00,,,,,,false,OPEX,Bakım
+plan,VEEAM_BACKUP_BAKIM_DESTEK_LISANS_12_AY_36K_MART_ODEME_12_AY_GECERLI,Veeam Backup Bakım/Destek / Lisans  (12 Ay)  -$36K Mart Ödeme 12 Ay Geçerli,Temel,2026,12,3000.00,,,,,,false,OPEX,Bakım
+plan,TERMINAL_SERVER_BAKIM_DESTEK_4_ADET_R640_40K_NISAN_ODEME_12_AY,Terminal Server Bakım/Destek (4 Adet R640) - $40K Nisan Ödeme 12 Ay,Temel,2026,4,3335.00,,,,,,false,OPEX,Bakım
+plan,TERMINAL_SERVER_BAKIM_DESTEK_4_ADET_R640_40K_NISAN_ODEME_12_AY,Terminal Server Bakım/Destek (4 Adet R640) - $40K Nisan Ödeme 12 Ay,Temel,2026,5,3335.00,,,,,,false,OPEX,Bakım
+plan,TERMINAL_SERVER_BAKIM_DESTEK_4_ADET_R640_40K_NISAN_ODEME_12_AY,Terminal Server Bakım/Destek (4 Adet R640) - $40K Nisan Ödeme 12 Ay,Temel,2026,6,3335.00,,,,,,false,OPEX,Bakım
+plan,TERMINAL_SERVER_BAKIM_DESTEK_4_ADET_R640_40K_NISAN_ODEME_12_AY,Terminal Server Bakım/Destek (4 Adet R640) - $40K Nisan Ödeme 12 Ay,Temel,2026,7,3335.00,,,,,,false,OPEX,Bakım
+plan,TERMINAL_SERVER_BAKIM_DESTEK_4_ADET_R640_40K_NISAN_ODEME_12_AY,Terminal Server Bakım/Destek (4 Adet R640) - $40K Nisan Ödeme 12 Ay,Temel,2026,8,3335.00,,,,,,false,OPEX,Bakım
+plan,TERMINAL_SERVER_BAKIM_DESTEK_4_ADET_R640_40K_NISAN_ODEME_12_AY,Terminal Server Bakım/Destek (4 Adet R640) - $40K Nisan Ödeme 12 Ay,Temel,2026,9,3335.00,,,,,,false,OPEX,Bakım
+plan,TERMINAL_SERVER_BAKIM_DESTEK_4_ADET_R640_40K_NISAN_ODEME_12_AY,Terminal Server Bakım/Destek (4 Adet R640) - $40K Nisan Ödeme 12 Ay,Temel,2026,10,3335.00,,,,,,false,OPEX,Bakım
+plan,TERMINAL_SERVER_BAKIM_DESTEK_4_ADET_R640_40K_NISAN_ODEME_12_AY,Terminal Server Bakım/Destek (4 Adet R640) - $40K Nisan Ödeme 12 Ay,Temel,2026,11,3335.00,,,,,,false,OPEX,Bakım
+plan,TERMINAL_SERVER_BAKIM_DESTEK_4_ADET_R640_40K_NISAN_ODEME_12_AY,Terminal Server Bakım/Destek (4 Adet R640) - $40K Nisan Ödeme 12 Ay,Temel,2026,12,3335.00,,,,,,false,OPEX,Bakım
+plan,TERMINAL_SERVER_BAKIM_DESTEK_3_ADET_R740_40K_EKIM_ODEME_12_AY,Terminal Server Bakım/Destek (3 Adet R740) - $40K Ekim Ödeme 12 Ay,Temel,2026,10,3335.00,,,,,,false,OPEX,Bakım
+plan,TERMINAL_SERVER_BAKIM_DESTEK_3_ADET_R740_40K_EKIM_ODEME_12_AY,Terminal Server Bakım/Destek (3 Adet R740) - $40K Ekim Ödeme 12 Ay,Temel,2026,11,3335.00,,,,,,false,OPEX,Bakım
+plan,TERMINAL_SERVER_BAKIM_DESTEK_3_ADET_R740_40K_EKIM_ODEME_12_AY,Terminal Server Bakım/Destek (3 Adet R740) - $40K Ekim Ödeme 12 Ay,Temel,2026,12,3335.00,,,,,,false,OPEX,Bakım
+plan,YEDEKLEME_UNITESI_BAKIM_DESTEK_DATADOMAIN_12_AY_30K_TEMMUZ_ODEME_12_AY,Yedekleme Ünitesi Bakım/Destek (Datadomain 12 Ay) - $30K Temmuz Ödeme 12 Ay,Temel,2026,7,2500.00,,,,,,false,OPEX,Bakım
+plan,YEDEKLEME_UNITESI_BAKIM_DESTEK_DATADOMAIN_12_AY_30K_TEMMUZ_ODEME_12_AY,Yedekleme Ünitesi Bakım/Destek (Datadomain 12 Ay) - $30K Temmuz Ödeme 12 Ay,Temel,2026,8,2500.00,,,,,,false,OPEX,Bakım
+plan,YEDEKLEME_UNITESI_BAKIM_DESTEK_DATADOMAIN_12_AY_30K_TEMMUZ_ODEME_12_AY,Yedekleme Ünitesi Bakım/Destek (Datadomain 12 Ay) - $30K Temmuz Ödeme 12 Ay,Temel,2026,9,2500.00,,,,,,false,OPEX,Bakım
+plan,YEDEKLEME_UNITESI_BAKIM_DESTEK_DATADOMAIN_12_AY_30K_TEMMUZ_ODEME_12_AY,Yedekleme Ünitesi Bakım/Destek (Datadomain 12 Ay) - $30K Temmuz Ödeme 12 Ay,Temel,2026,10,2500.00,,,,,,false,OPEX,Bakım
+plan,YEDEKLEME_UNITESI_BAKIM_DESTEK_DATADOMAIN_12_AY_30K_TEMMUZ_ODEME_12_AY,Yedekleme Ünitesi Bakım/Destek (Datadomain 12 Ay) - $30K Temmuz Ödeme 12 Ay,Temel,2026,11,2500.00,,,,,,false,OPEX,Bakım
+plan,YEDEKLEME_UNITESI_BAKIM_DESTEK_DATADOMAIN_12_AY_30K_TEMMUZ_ODEME_12_AY,Yedekleme Ünitesi Bakım/Destek (Datadomain 12 Ay) - $30K Temmuz Ödeme 12 Ay,Temel,2026,12,2500.00,,,,,,false,OPEX,Bakım
+plan,YEDEKLEME_UNITESI_SATINALMA_400TB,Yedekleme Ünitesi Satınalma 400TB,Temel,2026,2,250000.00,,,,,,false,CAPEX,Bakım
+plan,ANTISPAM_BAKIM_DESTEK_12_AY_7700_HAZIRAN_ODEME_12_AY,Antispam Bakım/Destek (12 Ay) - $7700 Haziran Ödeme 12 Ay,Temel,2026,6,641.00,,,,,,false,OPEX,Bakım
+plan,ANTISPAM_BAKIM_DESTEK_12_AY_7700_HAZIRAN_ODEME_12_AY,Antispam Bakım/Destek (12 Ay) - $7700 Haziran Ödeme 12 Ay,Temel,2026,7,641.00,,,,,,false,OPEX,Bakım
+plan,ANTISPAM_BAKIM_DESTEK_12_AY_7700_HAZIRAN_ODEME_12_AY,Antispam Bakım/Destek (12 Ay) - $7700 Haziran Ödeme 12 Ay,Temel,2026,8,641.00,,,,,,false,OPEX,Bakım
+plan,ANTISPAM_BAKIM_DESTEK_12_AY_7700_HAZIRAN_ODEME_12_AY,Antispam Bakım/Destek (12 Ay) - $7700 Haziran Ödeme 12 Ay,Temel,2026,9,641.00,,,,,,false,OPEX,Bakım
+plan,ANTISPAM_BAKIM_DESTEK_12_AY_7700_HAZIRAN_ODEME_12_AY,Antispam Bakım/Destek (12 Ay) - $7700 Haziran Ödeme 12 Ay,Temel,2026,10,641.00,,,,,,false,OPEX,Bakım
+plan,ANTISPAM_BAKIM_DESTEK_12_AY_7700_HAZIRAN_ODEME_12_AY,Antispam Bakım/Destek (12 Ay) - $7700 Haziran Ödeme 12 Ay,Temel,2026,11,641.00,,,,,,false,OPEX,Bakım
+plan,ANTISPAM_BAKIM_DESTEK_12_AY_7700_HAZIRAN_ODEME_12_AY,Antispam Bakım/Destek (12 Ay) - $7700 Haziran Ödeme 12 Ay,Temel,2026,12,641.00,,,,,,false,OPEX,Bakım
+plan,27001_DANISMANLIK_1_ADET,27001 Danışmanlık (1 Adet),Temel,2026,9,6500.00,,,,,,false,OPEX,Hizmet
+plan,LENOVA_THINKSYSTEM_SR590_20K_MAYIS_ODEME_12_AY,Lenova ThinkSystem SR590 - $20K Mayıs ödeme 12 Ay,Temel,2026,5,1666.00,,,,,,false,OPEX,Bakım
+plan,LENOVA_THINKSYSTEM_SR590_20K_MAYIS_ODEME_12_AY,Lenova ThinkSystem SR590 - $20K Mayıs ödeme 12 Ay,Temel,2026,6,1666.00,,,,,,false,OPEX,Bakım
+plan,LENOVA_THINKSYSTEM_SR590_20K_MAYIS_ODEME_12_AY,Lenova ThinkSystem SR590 - $20K Mayıs ödeme 12 Ay,Temel,2026,7,1666.00,,,,,,false,OPEX,Bakım
+plan,LENOVA_THINKSYSTEM_SR590_20K_MAYIS_ODEME_12_AY,Lenova ThinkSystem SR590 - $20K Mayıs ödeme 12 Ay,Temel,2026,8,1666.00,,,,,,false,OPEX,Bakım
+plan,LENOVA_THINKSYSTEM_SR590_20K_MAYIS_ODEME_12_AY,Lenova ThinkSystem SR590 - $20K Mayıs ödeme 12 Ay,Temel,2026,9,1666.00,,,,,,false,OPEX,Bakım
+plan,LENOVA_THINKSYSTEM_SR590_20K_MAYIS_ODEME_12_AY,Lenova ThinkSystem SR590 - $20K Mayıs ödeme 12 Ay,Temel,2026,10,1666.00,,,,,,false,OPEX,Bakım
+plan,LENOVA_THINKSYSTEM_SR590_20K_MAYIS_ODEME_12_AY,Lenova ThinkSystem SR590 - $20K Mayıs ödeme 12 Ay,Temel,2026,11,1666.00,,,,,,false,OPEX,Bakım
+plan,LENOVA_THINKSYSTEM_SR590_20K_MAYIS_ODEME_12_AY,Lenova ThinkSystem SR590 - $20K Mayıs ödeme 12 Ay,Temel,2026,12,1666.00,,,,,,false,OPEX,Bakım
+plan,AUTHTAKE_MFA_40K_AGUSTOS_ODEME_12_AY,Authtake MFA - $40K Ağustos Ödeme 12 Ay,Temel,2026,8,3000.00,,,,,,false,OPEX,Hizmet
+plan,AUTHTAKE_MFA_40K_AGUSTOS_ODEME_12_AY,Authtake MFA - $40K Ağustos Ödeme 12 Ay,Temel,2026,9,3000.00,,,,,,false,OPEX,Hizmet
+plan,AUTHTAKE_MFA_40K_AGUSTOS_ODEME_12_AY,Authtake MFA - $40K Ağustos Ödeme 12 Ay,Temel,2026,10,3000.00,,,,,,false,OPEX,Hizmet
+plan,AUTHTAKE_MFA_40K_AGUSTOS_ODEME_12_AY,Authtake MFA - $40K Ağustos Ödeme 12 Ay,Temel,2026,11,3000.00,,,,,,false,OPEX,Hizmet
+plan,AUTHTAKE_MFA_40K_AGUSTOS_ODEME_12_AY,Authtake MFA - $40K Ağustos Ödeme 12 Ay,Temel,2026,12,3000.00,,,,,,false,OPEX,Hizmet
+plan,PEPLINK_BALANCE_20X_ROUTER_LISANS_BAKIM_DESTEK_GARANTI_82K_OCAK_ODEME_24_AY_GECERLI,Peplink Balance 20X Router Lisans /Bakım Destek/Garanti -$82K Ocak ödeme 24 Ay geçerli,Temel,2026,1,3420.00,,,,,,false,OPEX,Bakım
+plan,PEPLINK_BALANCE_20X_ROUTER_LISANS_BAKIM_DESTEK_GARANTI_82K_OCAK_ODEME_24_AY_GECERLI,Peplink Balance 20X Router Lisans /Bakım Destek/Garanti -$82K Ocak ödeme 24 Ay geçerli,Temel,2026,2,3420.00,,,,,,false,OPEX,Bakım
+plan,PEPLINK_BALANCE_20X_ROUTER_LISANS_BAKIM_DESTEK_GARANTI_82K_OCAK_ODEME_24_AY_GECERLI,Peplink Balance 20X Router Lisans /Bakım Destek/Garanti -$82K Ocak ödeme 24 Ay geçerli,Temel,2026,3,3420.00,,,,,,false,OPEX,Bakım
+plan,PEPLINK_BALANCE_20X_ROUTER_LISANS_BAKIM_DESTEK_GARANTI_82K_OCAK_ODEME_24_AY_GECERLI,Peplink Balance 20X Router Lisans /Bakım Destek/Garanti -$82K Ocak ödeme 24 Ay geçerli,Temel,2026,4,3420.00,,,,,,false,OPEX,Bakım
+plan,PEPLINK_BALANCE_20X_ROUTER_LISANS_BAKIM_DESTEK_GARANTI_82K_OCAK_ODEME_24_AY_GECERLI,Peplink Balance 20X Router Lisans /Bakım Destek/Garanti -$82K Ocak ödeme 24 Ay geçerli,Temel,2026,5,3420.00,,,,,,false,OPEX,Bakım
+plan,PEPLINK_BALANCE_20X_ROUTER_LISANS_BAKIM_DESTEK_GARANTI_82K_OCAK_ODEME_24_AY_GECERLI,Peplink Balance 20X Router Lisans /Bakım Destek/Garanti -$82K Ocak ödeme 24 Ay geçerli,Temel,2026,6,3420.00,,,,,,false,OPEX,Bakım
+plan,PEPLINK_BALANCE_20X_ROUTER_LISANS_BAKIM_DESTEK_GARANTI_82K_OCAK_ODEME_24_AY_GECERLI,Peplink Balance 20X Router Lisans /Bakım Destek/Garanti -$82K Ocak ödeme 24 Ay geçerli,Temel,2026,7,3420.00,,,,,,false,OPEX,Bakım
+plan,PEPLINK_BALANCE_20X_ROUTER_LISANS_BAKIM_DESTEK_GARANTI_82K_OCAK_ODEME_24_AY_GECERLI,Peplink Balance 20X Router Lisans /Bakım Destek/Garanti -$82K Ocak ödeme 24 Ay geçerli,Temel,2026,8,3420.00,,,,,,false,OPEX,Bakım
+plan,PEPLINK_BALANCE_20X_ROUTER_LISANS_BAKIM_DESTEK_GARANTI_82K_OCAK_ODEME_24_AY_GECERLI,Peplink Balance 20X Router Lisans /Bakım Destek/Garanti -$82K Ocak ödeme 24 Ay geçerli,Temel,2026,9,3420.00,,,,,,false,OPEX,Bakım
+plan,PEPLINK_BALANCE_20X_ROUTER_LISANS_BAKIM_DESTEK_GARANTI_82K_OCAK_ODEME_24_AY_GECERLI,Peplink Balance 20X Router Lisans /Bakım Destek/Garanti -$82K Ocak ödeme 24 Ay geçerli,Temel,2026,10,3420.00,,,,,,false,OPEX,Bakım
+plan,PEPLINK_BALANCE_20X_ROUTER_LISANS_BAKIM_DESTEK_GARANTI_82K_OCAK_ODEME_24_AY_GECERLI,Peplink Balance 20X Router Lisans /Bakım Destek/Garanti -$82K Ocak ödeme 24 Ay geçerli,Temel,2026,11,3420.00,,,,,,false,OPEX,Bakım
+plan,PEPLINK_BALANCE_20X_ROUTER_LISANS_BAKIM_DESTEK_GARANTI_82K_OCAK_ODEME_24_AY_GECERLI,Peplink Balance 20X Router Lisans /Bakım Destek/Garanti -$82K Ocak ödeme 24 Ay geçerli,Temel,2026,12,3420.00,,,,,,false,OPEX,Bakım
+plan,PEPLINK_BALANCE_20X_MODEM_LISANS_BAKIM_DESTEK_GARANTI_72K_OCAK_ODEME_24_AY_GECERLI,Peplink Balance 20X Modem Lisans /Bakım Destek/Garanti - $72K Ocak ödeme 24 Ay geçerli,Temel,2026,1,3042.00,,,,,,false,OPEX,Bakım
+plan,PEPLINK_BALANCE_20X_MODEM_LISANS_BAKIM_DESTEK_GARANTI_72K_OCAK_ODEME_24_AY_GECERLI,Peplink Balance 20X Modem Lisans /Bakım Destek/Garanti - $72K Ocak ödeme 24 Ay geçerli,Temel,2026,2,3042.00,,,,,,false,OPEX,Bakım
+plan,PEPLINK_BALANCE_20X_MODEM_LISANS_BAKIM_DESTEK_GARANTI_72K_OCAK_ODEME_24_AY_GECERLI,Peplink Balance 20X Modem Lisans /Bakım Destek/Garanti - $72K Ocak ödeme 24 Ay geçerli,Temel,2026,3,3042.00,,,,,,false,OPEX,Bakım
+plan,PEPLINK_BALANCE_20X_MODEM_LISANS_BAKIM_DESTEK_GARANTI_72K_OCAK_ODEME_24_AY_GECERLI,Peplink Balance 20X Modem Lisans /Bakım Destek/Garanti - $72K Ocak ödeme 24 Ay geçerli,Temel,2026,4,3042.00,,,,,,false,OPEX,Bakım
+plan,PEPLINK_BALANCE_20X_MODEM_LISANS_BAKIM_DESTEK_GARANTI_72K_OCAK_ODEME_24_AY_GECERLI,Peplink Balance 20X Modem Lisans /Bakım Destek/Garanti - $72K Ocak ödeme 24 Ay geçerli,Temel,2026,5,3042.00,,,,,,false,OPEX,Bakım
+plan,PEPLINK_BALANCE_20X_MODEM_LISANS_BAKIM_DESTEK_GARANTI_72K_OCAK_ODEME_24_AY_GECERLI,Peplink Balance 20X Modem Lisans /Bakım Destek/Garanti - $72K Ocak ödeme 24 Ay geçerli,Temel,2026,6,3042.00,,,,,,false,OPEX,Bakım
+plan,PEPLINK_BALANCE_20X_MODEM_LISANS_BAKIM_DESTEK_GARANTI_72K_OCAK_ODEME_24_AY_GECERLI,Peplink Balance 20X Modem Lisans /Bakım Destek/Garanti - $72K Ocak ödeme 24 Ay geçerli,Temel,2026,7,3042.00,,,,,,false,OPEX,Bakım
+plan,PEPLINK_BALANCE_20X_MODEM_LISANS_BAKIM_DESTEK_GARANTI_72K_OCAK_ODEME_24_AY_GECERLI,Peplink Balance 20X Modem Lisans /Bakım Destek/Garanti - $72K Ocak ödeme 24 Ay geçerli,Temel,2026,8,3042.00,,,,,,false,OPEX,Bakım
+plan,PEPLINK_BALANCE_20X_MODEM_LISANS_BAKIM_DESTEK_GARANTI_72K_OCAK_ODEME_24_AY_GECERLI,Peplink Balance 20X Modem Lisans /Bakım Destek/Garanti - $72K Ocak ödeme 24 Ay geçerli,Temel,2026,9,3042.00,,,,,,false,OPEX,Bakım
+plan,PEPLINK_BALANCE_20X_MODEM_LISANS_BAKIM_DESTEK_GARANTI_72K_OCAK_ODEME_24_AY_GECERLI,Peplink Balance 20X Modem Lisans /Bakım Destek/Garanti - $72K Ocak ödeme 24 Ay geçerli,Temel,2026,10,3042.00,,,,,,false,OPEX,Bakım
+plan,PEPLINK_BALANCE_20X_MODEM_LISANS_BAKIM_DESTEK_GARANTI_72K_OCAK_ODEME_24_AY_GECERLI,Peplink Balance 20X Modem Lisans /Bakım Destek/Garanti - $72K Ocak ödeme 24 Ay geçerli,Temel,2026,11,3042.00,,,,,,false,OPEX,Bakım
+plan,PEPLINK_BALANCE_20X_MODEM_LISANS_BAKIM_DESTEK_GARANTI_72K_OCAK_ODEME_24_AY_GECERLI,Peplink Balance 20X Modem Lisans /Bakım Destek/Garanti - $72K Ocak ödeme 24 Ay geçerli,Temel,2026,12,3042.00,,,,,,false,OPEX,Bakım
+plan,SDWAN_MODEM_50_ADET,SDWAN Modem (50 Adet),Temel,2026,3,12000.00,,,,,,false,CAPEX,Donanım
+plan,SDWAN_MODEM_50_ADET,SDWAN Modem (50 Adet),Temel,2026,6,12000.00,,,,,,false,CAPEX,Donanım
+plan,SDWAN_MODEM_50_ADET,SDWAN Modem (50 Adet),Temel,2026,9,12000.00,,,,,,false,CAPEX,Donanım
+plan,SOCRADAR_20K_OCAK_ODEME_12_AY_GECERLI,SOCRadar - $20K Ocak ödeme 12 ay geçerli,Temel,2026,1,1700.00,,,,,,false,OPEX,Hizmet
+plan,SOCRADAR_20K_OCAK_ODEME_12_AY_GECERLI,SOCRadar - $20K Ocak ödeme 12 ay geçerli,Temel,2026,2,1700.00,,,,,,false,OPEX,Hizmet
+plan,SOCRADAR_20K_OCAK_ODEME_12_AY_GECERLI,SOCRadar - $20K Ocak ödeme 12 ay geçerli,Temel,2026,3,1700.00,,,,,,false,OPEX,Hizmet
+plan,SOCRADAR_20K_OCAK_ODEME_12_AY_GECERLI,SOCRadar - $20K Ocak ödeme 12 ay geçerli,Temel,2026,4,1700.00,,,,,,false,OPEX,Hizmet
+plan,SOCRADAR_20K_OCAK_ODEME_12_AY_GECERLI,SOCRadar - $20K Ocak ödeme 12 ay geçerli,Temel,2026,5,1700.00,,,,,,false,OPEX,Hizmet
+plan,SOCRADAR_20K_OCAK_ODEME_12_AY_GECERLI,SOCRadar - $20K Ocak ödeme 12 ay geçerli,Temel,2026,6,1700.00,,,,,,false,OPEX,Hizmet
+plan,SOCRADAR_20K_OCAK_ODEME_12_AY_GECERLI,SOCRadar - $20K Ocak ödeme 12 ay geçerli,Temel,2026,7,1700.00,,,,,,false,OPEX,Hizmet
+plan,SOCRADAR_20K_OCAK_ODEME_12_AY_GECERLI,SOCRadar - $20K Ocak ödeme 12 ay geçerli,Temel,2026,8,1700.00,,,,,,false,OPEX,Hizmet
+plan,SOCRADAR_20K_OCAK_ODEME_12_AY_GECERLI,SOCRadar - $20K Ocak ödeme 12 ay geçerli,Temel,2026,9,1700.00,,,,,,false,OPEX,Hizmet
+plan,SOCRADAR_20K_OCAK_ODEME_12_AY_GECERLI,SOCRadar - $20K Ocak ödeme 12 ay geçerli,Temel,2026,10,1700.00,,,,,,false,OPEX,Hizmet
+plan,SOCRADAR_20K_OCAK_ODEME_12_AY_GECERLI,SOCRadar - $20K Ocak ödeme 12 ay geçerli,Temel,2026,11,1700.00,,,,,,false,OPEX,Hizmet
+plan,SOCRADAR_20K_OCAK_ODEME_12_AY_GECERLI,SOCRadar - $20K Ocak ödeme 12 ay geçerli,Temel,2026,12,1700.00,,,,,,false,OPEX,Hizmet
+plan,CYMULATE_LISANS_67K_HAZIRAN_ODEME_12_AY_GECERLI,Cymulate Lisans - $67K Haziran ödeme 12 Ay geçerli,Temel,2026,6,5590.00,,,,,,false,OPEX,Hizmet
+plan,CYMULATE_LISANS_67K_HAZIRAN_ODEME_12_AY_GECERLI,Cymulate Lisans - $67K Haziran ödeme 12 Ay geçerli,Temel,2026,7,5590.00,,,,,,false,OPEX,Hizmet
+plan,CYMULATE_LISANS_67K_HAZIRAN_ODEME_12_AY_GECERLI,Cymulate Lisans - $67K Haziran ödeme 12 Ay geçerli,Temel,2026,8,5590.00,,,,,,false,OPEX,Hizmet
+plan,CYMULATE_LISANS_67K_HAZIRAN_ODEME_12_AY_GECERLI,Cymulate Lisans - $67K Haziran ödeme 12 Ay geçerli,Temel,2026,9,5590.00,,,,,,false,OPEX,Hizmet
+plan,CYMULATE_LISANS_67K_HAZIRAN_ODEME_12_AY_GECERLI,Cymulate Lisans - $67K Haziran ödeme 12 Ay geçerli,Temel,2026,10,5590.00,,,,,,false,OPEX,Hizmet
+plan,CYMULATE_LISANS_67K_HAZIRAN_ODEME_12_AY_GECERLI,Cymulate Lisans - $67K Haziran ödeme 12 Ay geçerli,Temel,2026,11,5590.00,,,,,,false,OPEX,Hizmet
+plan,CYMULATE_LISANS_67K_HAZIRAN_ODEME_12_AY_GECERLI,Cymulate Lisans - $67K Haziran ödeme 12 Ay geçerli,Temel,2026,12,5590.00,,,,,,false,OPEX,Hizmet
+plan,YENI_SORTER_4ADET_DONANIM_IHTIYACLARI,Yeni Sorter (4Adet) Donanım İhtiyaçları,Temel,2026,3,30000.00,,,,,,false,CAPEX,Donanım
+plan,STORAGE_SATINALMA_200_TB,Storage Satınalma  200 TB,Temel,2026,2,300000.00,,,,,,false,CAPEX,Donanım
+plan,SUNUCU_SATINALMA_2026_BUYUME_4_ADET,Sunucu Satınalma (2026 Büyüme)4 Adet ),Temel,2026,2,160000.00,,,,,,false,CAPEX,Donanım
+plan,SUNUCU_SATINALMA_2025_ALAMAZSAK_4_ADET,Sunucu Satınalma (2025 Alamazsak)4 Adet ),Temel,2026,2,160000.00,,,,,,false,CAPEX,Donanım
+plan,REGULASYON_GEREGINCE_10_BUYUME_SUNUCU_STORAGE,Regülasyon gereğince + %10 Büyüme Sunucu + Storage,Temel,2026,2,180000.00,,,,,,false,CAPEX,Donanım
+plan,AI_YAZILIM_DESTEKLI_DANISMANLIK_225K_MART_ODEME_YIL_SONUNA_KADAR_GECERLI,AI Yazılım Destekli Danışmanlık - $225K Mart ödeme Yıl sonuna kadar geçerli,Temel,2026,3,22500.00,,,,,,false,OPEX,Yazılım
+plan,AI_YAZILIM_DESTEKLI_DANISMANLIK_225K_MART_ODEME_YIL_SONUNA_KADAR_GECERLI,AI Yazılım Destekli Danışmanlık - $225K Mart ödeme Yıl sonuna kadar geçerli,Temel,2026,4,22500.00,,,,,,false,OPEX,Yazılım
+plan,AI_YAZILIM_DESTEKLI_DANISMANLIK_225K_MART_ODEME_YIL_SONUNA_KADAR_GECERLI,AI Yazılım Destekli Danışmanlık - $225K Mart ödeme Yıl sonuna kadar geçerli,Temel,2026,5,22500.00,,,,,,false,OPEX,Yazılım
+plan,AI_YAZILIM_DESTEKLI_DANISMANLIK_225K_MART_ODEME_YIL_SONUNA_KADAR_GECERLI,AI Yazılım Destekli Danışmanlık - $225K Mart ödeme Yıl sonuna kadar geçerli,Temel,2026,6,22500.00,,,,,,false,OPEX,Yazılım
+plan,AI_YAZILIM_DESTEKLI_DANISMANLIK_225K_MART_ODEME_YIL_SONUNA_KADAR_GECERLI,AI Yazılım Destekli Danışmanlık - $225K Mart ödeme Yıl sonuna kadar geçerli,Temel,2026,7,22500.00,,,,,,false,OPEX,Yazılım
+plan,AI_YAZILIM_DESTEKLI_DANISMANLIK_225K_MART_ODEME_YIL_SONUNA_KADAR_GECERLI,AI Yazılım Destekli Danışmanlık - $225K Mart ödeme Yıl sonuna kadar geçerli,Temel,2026,8,22500.00,,,,,,false,OPEX,Yazılım
+plan,AI_YAZILIM_DESTEKLI_DANISMANLIK_225K_MART_ODEME_YIL_SONUNA_KADAR_GECERLI,AI Yazılım Destekli Danışmanlık - $225K Mart ödeme Yıl sonuna kadar geçerli,Temel,2026,9,22500.00,,,,,,false,OPEX,Yazılım
+plan,AI_YAZILIM_DESTEKLI_DANISMANLIK_225K_MART_ODEME_YIL_SONUNA_KADAR_GECERLI,AI Yazılım Destekli Danışmanlık - $225K Mart ödeme Yıl sonuna kadar geçerli,Temel,2026,10,22500.00,,,,,,false,OPEX,Yazılım
+plan,AI_YAZILIM_DESTEKLI_DANISMANLIK_225K_MART_ODEME_YIL_SONUNA_KADAR_GECERLI,AI Yazılım Destekli Danışmanlık - $225K Mart ödeme Yıl sonuna kadar geçerli,Temel,2026,11,22500.00,,,,,,false,OPEX,Yazılım
+plan,AI_YAZILIM_DESTEKLI_DANISMANLIK_225K_MART_ODEME_YIL_SONUNA_KADAR_GECERLI,AI Yazılım Destekli Danışmanlık - $225K Mart ödeme Yıl sonuna kadar geçerli,Temel,2026,12,22500.00,,,,,,false,OPEX,Yazılım
+plan,AZURE_CLOUD_KULLANIM_KULLANDIKCA_ODE,Azure Cloud Kullanım (Kullandıkça Öde),Temel,2026,7,18000.00,,,,,,false,OPEX,Hizmet
+plan,AZURE_CLOUD_KULLANIM_KULLANDIKCA_ODE,Azure Cloud Kullanım (Kullandıkça Öde),Temel,2026,8,18000.00,,,,,,false,OPEX,Hizmet
+plan,AZURE_CLOUD_KULLANIM_KULLANDIKCA_ODE,Azure Cloud Kullanım (Kullandıkça Öde),Temel,2026,9,18000.00,,,,,,false,OPEX,Hizmet
+plan,AZURE_CLOUD_KULLANIM_KULLANDIKCA_ODE,Azure Cloud Kullanım (Kullandıkça Öde),Temel,2026,10,18000.00,,,,,,false,OPEX,Hizmet
+plan,AZURE_CLOUD_KULLANIM_KULLANDIKCA_ODE,Azure Cloud Kullanım (Kullandıkça Öde),Temel,2026,11,18000.00,,,,,,false,OPEX,Hizmet
+plan,AZURE_CLOUD_KULLANIM_KULLANDIKCA_ODE,Azure Cloud Kullanım (Kullandıkça Öde),Temel,2026,12,18000.00,,,,,,false,OPEX,Hizmet
+plan,NVI_UCRETLI_SERVISE_GECIS,NVI Ücretli servise geçiş,Temel,2026,1,10000.00,,,,,,false,OPEX,Yazılım
+plan,NVI_UCRETLI_SERVISE_GECIS,NVI Ücretli servise geçiş,Temel,2026,2,10000.00,,,,,,false,OPEX,Yazılım
+plan,NVI_UCRETLI_SERVISE_GECIS,NVI Ücretli servise geçiş,Temel,2026,3,10000.00,,,,,,false,OPEX,Yazılım
+plan,NVI_UCRETLI_SERVISE_GECIS,NVI Ücretli servise geçiş,Temel,2026,4,10000.00,,,,,,false,OPEX,Yazılım
+plan,NVI_UCRETLI_SERVISE_GECIS,NVI Ücretli servise geçiş,Temel,2026,5,10000.00,,,,,,false,OPEX,Yazılım
+plan,NVI_UCRETLI_SERVISE_GECIS,NVI Ücretli servise geçiş,Temel,2026,6,10000.00,,,,,,false,OPEX,Yazılım
+plan,NVI_UCRETLI_SERVISE_GECIS,NVI Ücretli servise geçiş,Temel,2026,7,10000.00,,,,,,false,OPEX,Yazılım
+plan,NVI_UCRETLI_SERVISE_GECIS,NVI Ücretli servise geçiş,Temel,2026,8,10000.00,,,,,,false,OPEX,Yazılım
+plan,NVI_UCRETLI_SERVISE_GECIS,NVI Ücretli servise geçiş,Temel,2026,9,10000.00,,,,,,false,OPEX,Yazılım
+plan,NVI_UCRETLI_SERVISE_GECIS,NVI Ücretli servise geçiş,Temel,2026,10,10000.00,,,,,,false,OPEX,Yazılım
+plan,NVI_UCRETLI_SERVISE_GECIS,NVI Ücretli servise geçiş,Temel,2026,11,10000.00,,,,,,false,OPEX,Yazılım
+plan,NVI_UCRETLI_SERVISE_GECIS,NVI Ücretli servise geçiş,Temel,2026,12,10000.00,,,,,,false,OPEX,Yazılım
+plan,MICROSOFT_2026_2_TAKSIT_MEVCUT,Microsoft 2026 2. Taksit (Mevcut),Temel,2026,6,413476.00,,,,,,false,CAPEX,Yazılım
+plan,MICROSOFT_2026_2_TAKSIT_MEVCUT_458K_HAZIRAN_ODEME_12_AY_GECERLI,Microsoft 2026 2. Taksit (Mevcut) - $458K Haziran ödeme 12 Ay geçerli,Temel,2026,6,38110.00,,,,,,false,OPEX,Yazılım
+plan,MICROSOFT_2026_2_TAKSIT_MEVCUT_458K_HAZIRAN_ODEME_12_AY_GECERLI,Microsoft 2026 2. Taksit (Mevcut) - $458K Haziran ödeme 12 Ay geçerli,Temel,2026,7,38110.00,,,,,,false,OPEX,Yazılım
+plan,MICROSOFT_2026_2_TAKSIT_MEVCUT_458K_HAZIRAN_ODEME_12_AY_GECERLI,Microsoft 2026 2. Taksit (Mevcut) - $458K Haziran ödeme 12 Ay geçerli,Temel,2026,8,38110.00,,,,,,false,OPEX,Yazılım
+plan,MICROSOFT_2026_2_TAKSIT_MEVCUT_458K_HAZIRAN_ODEME_12_AY_GECERLI,Microsoft 2026 2. Taksit (Mevcut) - $458K Haziran ödeme 12 Ay geçerli,Temel,2026,9,38110.00,,,,,,false,OPEX,Yazılım
+plan,MICROSOFT_2026_2_TAKSIT_MEVCUT_458K_HAZIRAN_ODEME_12_AY_GECERLI,Microsoft 2026 2. Taksit (Mevcut) - $458K Haziran ödeme 12 Ay geçerli,Temel,2026,10,38110.00,,,,,,false,OPEX,Yazılım
+plan,MICROSOFT_2026_2_TAKSIT_MEVCUT_458K_HAZIRAN_ODEME_12_AY_GECERLI,Microsoft 2026 2. Taksit (Mevcut) - $458K Haziran ödeme 12 Ay geçerli,Temel,2026,11,38110.00,,,,,,false,OPEX,Yazılım
+plan,MICROSOFT_2026_2_TAKSIT_MEVCUT_458K_HAZIRAN_ODEME_12_AY_GECERLI,Microsoft 2026 2. Taksit (Mevcut) - $458K Haziran ödeme 12 Ay geçerli,Temel,2026,12,38110.00,,,,,,false,OPEX,Yazılım
+plan,MICROSOFT_2026_TRUEUP_192_6K_HAZIRAN_ODEME_12_AY_GECERLI,Microsoft 2026 TrueUP - $192.6K Haziran ödeme 12 Ay geçerli,Temel,2026,6,17000.00,,,,,,false,OPEX,Yazılım
+plan,MICROSOFT_2026_TRUEUP_192_6K_HAZIRAN_ODEME_12_AY_GECERLI,Microsoft 2026 TrueUP - $192.6K Haziran ödeme 12 Ay geçerli,Temel,2026,7,17000.00,,,,,,false,OPEX,Yazılım
+plan,MICROSOFT_2026_TRUEUP_192_6K_HAZIRAN_ODEME_12_AY_GECERLI,Microsoft 2026 TrueUP - $192.6K Haziran ödeme 12 Ay geçerli,Temel,2026,8,17000.00,,,,,,false,OPEX,Yazılım
+plan,MICROSOFT_2026_TRUEUP_192_6K_HAZIRAN_ODEME_12_AY_GECERLI,Microsoft 2026 TrueUP - $192.6K Haziran ödeme 12 Ay geçerli,Temel,2026,9,17000.00,,,,,,false,OPEX,Yazılım
+plan,MICROSOFT_2026_TRUEUP_192_6K_HAZIRAN_ODEME_12_AY_GECERLI,Microsoft 2026 TrueUP - $192.6K Haziran ödeme 12 Ay geçerli,Temel,2026,10,17000.00,,,,,,false,OPEX,Yazılım
+plan,MICROSOFT_2026_TRUEUP_192_6K_HAZIRAN_ODEME_12_AY_GECERLI,Microsoft 2026 TrueUP - $192.6K Haziran ödeme 12 Ay geçerli,Temel,2026,11,17000.00,,,,,,false,OPEX,Yazılım
+plan,MICROSOFT_2026_TRUEUP_192_6K_HAZIRAN_ODEME_12_AY_GECERLI,Microsoft 2026 TrueUP - $192.6K Haziran ödeme 12 Ay geçerli,Temel,2026,12,17000.00,,,,,,false,OPEX,Yazılım
+plan,MICROSOFT_2026_TRUEUP,Microsoft 2026 TrueUP,Temel,2026,6,82944.00,,,,,,false,CAPEX,Yazılım
+plan,MS_BAKIM_DANISMANLIK,MS Bakım Danışmanlık,Temel,2026,1,6700.00,,,,,,false,OPEX,Hizmet
+plan,MS_BAKIM_DANISMANLIK,MS Bakım Danışmanlık,Temel,2026,2,6700.00,,,,,,false,OPEX,Hizmet
+plan,MS_BAKIM_DANISMANLIK,MS Bakım Danışmanlık,Temel,2026,3,6700.00,,,,,,false,OPEX,Hizmet
+plan,MS_BAKIM_DANISMANLIK,MS Bakım Danışmanlık,Temel,2026,4,6700.00,,,,,,false,OPEX,Hizmet
+plan,MS_BAKIM_DANISMANLIK,MS Bakım Danışmanlık,Temel,2026,5,6700.00,,,,,,false,OPEX,Hizmet
+plan,MS_BAKIM_DANISMANLIK,MS Bakım Danışmanlık,Temel,2026,6,6700.00,,,,,,false,OPEX,Hizmet
+plan,MS_BAKIM_DANISMANLIK,MS Bakım Danışmanlık,Temel,2026,7,6700.00,,,,,,false,OPEX,Hizmet
+plan,MS_BAKIM_DANISMANLIK,MS Bakım Danışmanlık,Temel,2026,8,6700.00,,,,,,false,OPEX,Hizmet
+plan,MS_BAKIM_DANISMANLIK,MS Bakım Danışmanlık,Temel,2026,9,6700.00,,,,,,false,OPEX,Hizmet
+plan,MS_BAKIM_DANISMANLIK,MS Bakım Danışmanlık,Temel,2026,10,6700.00,,,,,,false,OPEX,Hizmet
+plan,MS_BAKIM_DANISMANLIK,MS Bakım Danışmanlık,Temel,2026,11,6700.00,,,,,,false,OPEX,Hizmet
+plan,MS_BAKIM_DANISMANLIK,MS Bakım Danışmanlık,Temel,2026,12,6700.00,,,,,,false,OPEX,Hizmet
+plan,HYPERVISOR_LISANS_VMWARE_500K_TEMMUZ_ODEME_12_AY_GECERLI,Hypervisor Lisans (Vmware) - $500K Temmuz ödeme 12 Ay geçerli,Temel,2026,7,42000.00,,,,,,false,OPEX,Yazılım
+plan,HYPERVISOR_LISANS_VMWARE_500K_TEMMUZ_ODEME_12_AY_GECERLI,Hypervisor Lisans (Vmware) - $500K Temmuz ödeme 12 Ay geçerli,Temel,2026,8,42000.00,,,,,,false,OPEX,Yazılım
+plan,HYPERVISOR_LISANS_VMWARE_500K_TEMMUZ_ODEME_12_AY_GECERLI,Hypervisor Lisans (Vmware) - $500K Temmuz ödeme 12 Ay geçerli,Temel,2026,9,42000.00,,,,,,false,OPEX,Yazılım
+plan,HYPERVISOR_LISANS_VMWARE_500K_TEMMUZ_ODEME_12_AY_GECERLI,Hypervisor Lisans (Vmware) - $500K Temmuz ödeme 12 Ay geçerli,Temel,2026,10,42000.00,,,,,,false,OPEX,Yazılım
+plan,HYPERVISOR_LISANS_VMWARE_500K_TEMMUZ_ODEME_12_AY_GECERLI,Hypervisor Lisans (Vmware) - $500K Temmuz ödeme 12 Ay geçerli,Temel,2026,11,42000.00,,,,,,false,OPEX,Yazılım
+plan,HYPERVISOR_LISANS_VMWARE_500K_TEMMUZ_ODEME_12_AY_GECERLI,Hypervisor Lisans (Vmware) - $500K Temmuz ödeme 12 Ay geçerli,Temel,2026,12,42000.00,,,,,,false,OPEX,Yazılım
