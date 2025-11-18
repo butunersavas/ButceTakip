@@ -8,6 +8,31 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <style>
+      /* ---- LABEL SIZE (100mm x 100mm) ---- */
+      :root {
+        --label-w: 100mm;
+        --label-h: 100mm;
+      }
+      .etiket {
+        width: var(--label-w);
+        height: var(--label-h);
+      }
+      @media print {
+        @page {
+          size: 100mm 100mm;
+          margin: 0;
+        }
+        body {
+          margin: 0 !important;
+        }
+        .etiket {
+          width: 100mm;
+          height: 100mm;
+          break-after: page;
+        }
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>
