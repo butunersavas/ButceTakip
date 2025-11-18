@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import {
   Alert,
   Avatar,
@@ -18,6 +18,11 @@ import {
   Stack,
   Switch,
   Tab,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
   Tabs,
   TextField,
   Typography
@@ -68,6 +73,17 @@ interface CleanupResponse {
   cleared_plans: number;
   cleared_budget_items: number;
   reindexed_budget_items: number;
+}
+
+interface DispatchRecord {
+  id: string;
+  product: string;
+  asset: string;
+  region: string;
+  quantity: number;
+  createdAt: string;
+  recipient: string;
+  status: string;
 }
 
 export default function CleanupView() {
@@ -248,6 +264,146 @@ export default function CleanupView() {
 }
 
 function DailyDispatchTab() {
+  type RecordFormState = {
+    product: string;
+    asset: string;
+    region: string;
+    servicedeskId: string;
+    recipient: string;
+    note: string;
+    date: string;
+  };
+
+  const dispatches = useMemo<DispatchRecord[]>(
+    () => [
+      {
+        id: "SD-2412",
+        product: "LAPTOP",
+        asset: "DMR-4821",
+        region: "İSTANBUL",
+        quantity: 3,
+        createdAt: "2024-06-01T10:32",
+        recipient: "İstanbul Bölge",
+        status: "Etiket Hazır"
+      },
+      {
+        id: "SD-2413",
+        product: "MODEM",
+        asset: "DMR-3120",
+        region: "ANKARA",
+        quantity: 2,
+        createdAt: "2024-06-01T14:05",
+        recipient: "Ankara Teknik",
+        status: "Bekliyor"
+      },
+      {
+        id: "SD-2414",
+        product: "SUNUCU",
+        asset: "DMR-1208",
+        region: "İZMİR",
+        quantity: 1,
+        createdAt: "2024-06-02T09:15",
+        recipient: "Ege Data Center",
+        status: "Teslim Edildi"
+      },
+      {
+        id: "SD-2415",
+        product: "ROUTER",
+        asset: "DMR-8897",
+        region: "BURSA",
+        quantity: 4,
+        createdAt: "2024-06-02T11:42",
+        recipient: "Bursa Bölge",
+        status: "Etiket Hazır"
+      }
+    ],
+    []
+  );
+
+  const nowLabel = useMemo(
+    () =>
+      new Intl.DateTimeFormat("tr-TR", {
+        dateStyle: "full",
+        timeStyle: "short"
+      }).format(new Date()),
+    []
+  );
+
+  const [dispatchTab, setDispatchTab] = useState<"record" | "search" | "print">("record");
+  const [recordStatus, setRecordStatus] = useState<
+    { type: "success" | "error"; message: string } | null
+  >(null);
+  const [recordForm, setRecordForm] = useState<RecordFormState>(() => ({
+    product: "",
+    asset: "",
+    region: "",
+    servicedeskId: "",
+    recipient: "",
+    note: "",
+    date: new Date().toISOString().slice(0, 16)
+  }));
+  const [searchFilters, setSearchFilters] = useState({
+    product: "",
+    asset: "",
+    region: "",
+    from: "",
+    to: ""
+  });
+  const [selectedDispatchId, setSelectedDispatchId] = useState<string>(dispatches[0]?.id ?? "");
+  const [printMessage, setPrintMessage] = useState<string | null>(null);
+
+  const filteredDispatches = useMemo(() => {
+    const upper = (value: string) => value.trim().toUpperCase();
+    return dispatches.filter((dispatch) => {
+      const matchesProduct = searchFilters.product
+        ? dispatch.product.includes(upper(searchFilters.product))
+        : true;
+      const matchesAsset = searchFilters.asset
+        ? dispatch.asset.includes(upper(searchFilters.asset))
+        : true;
+      const matchesRegion = searchFilters.region
+        ? dispatch.region.includes(upper(searchFilters.region))
+        : true;
+      const matchesFrom = searchFilters.from ? dispatch.createdAt >= searchFilters.from : true;
+      const matchesTo = searchFilters.to ? dispatch.createdAt <= searchFilters.to : true;
+      return matchesProduct && matchesAsset && matchesRegion && matchesFrom && matchesTo;
+    });
+  }, [dispatches, searchFilters]);
+
+  const selectedDispatch = useMemo(
+    () => dispatches.find((dispatch) => dispatch.id === selectedDispatchId) ?? dispatches[0],
+    [dispatches, selectedDispatchId]
+  );
+
+  const handleRecordChange = (field: keyof RecordFormState, value: string) => {
+    const uppercaseFields: Array<keyof RecordFormState> = ["product", "asset", "region"];
+    setRecordForm((prev) => ({
+      ...prev,
+      [field]: uppercaseFields.includes(field) ? value.toUpperCase() : value
+    }));
+  };
+
+  const handleRecordSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!recordForm.product || !recordForm.asset || !recordForm.region || !recordForm.servicedeskId) {
+      setRecordStatus({ type: "error", message: "Ürün, Demirbaş, Bölge ve ServiceDesk ID alanları zorunludur." });
+      return;
+    }
+    setRecordStatus({
+      type: "success",
+      message: `${recordForm.asset} için kayıt bilgileri /api/kayit uç noktasına gönderilmeye hazır.`
+    });
+  };
+
+  const handleFilterChange = (field: keyof typeof searchFilters, value: string) => {
+    setSearchFilters((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handlePrint = (dispatchId: string) => {
+    setSelectedDispatchId(dispatchId);
+    setPrintMessage(`${dispatchId} numaralı çıkışın barkod içeriği güncellendi.`);
+  };
+
   const goals = [
     "Teknik Destek çıkışlarını bölge bazında kaydetmek ve ServiceDesk ID ile eşleştirmek.",
     "Seçilen kayıtlar için gönderen/alıcı bilgilerinin yer aldığı etiket (barkod) çıktıları üretmek.",
@@ -320,11 +476,6 @@ function DailyDispatchTab() {
     { region: "İzmir", count: 22 },
     { region: "Bursa", count: 18 }
   ];
-
-  const nowLabel = new Intl.DateTimeFormat("tr-TR", {
-    dateStyle: "full",
-    timeStyle: "short"
-  }).format(new Date());
 
   return (
     <Stack spacing={4}>
@@ -411,6 +562,297 @@ function DailyDispatchTab() {
           </Card>
         </Grid>
       </Grid>
+
+      <Card>
+        <Tabs
+          value={dispatchTab}
+          onChange={(_, value) => setDispatchTab(value)}
+          variant="scrollable"
+          allowScrollButtonsMobile
+          sx={{ px: 2 }}
+        >
+          <Tab
+            label="Kayıt"
+            value="record"
+            icon={<Inventory2OutlinedIcon fontSize="small" />}
+            iconPosition="start"
+          />
+          <Tab
+            label="Arama"
+            value="search"
+            icon={<SearchOutlinedIcon fontSize="small" />}
+            iconPosition="start"
+          />
+          <Tab
+            label="Yazdırma"
+            value="print"
+            icon={<PrintOutlinedIcon fontSize="small" />}
+            iconPosition="start"
+          />
+        </Tabs>
+        <Divider />
+        <CardContent>
+          {dispatchTab === "record" && (
+            <Stack spacing={3} component="form" onSubmit={handleRecordSubmit}>
+              <Typography variant="h6" fontWeight={700}>
+                Kayıt Formu
+              </Typography>
+              <Grid container spacing={2}>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    label="Ürün"
+                    value={recordForm.product}
+                    onChange={(event) => handleRecordChange("product", event.target.value)}
+                    fullWidth
+                    required
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    label="Demirbaş"
+                    value={recordForm.asset}
+                    onChange={(event) => handleRecordChange("asset", event.target.value)}
+                    fullWidth
+                    required
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    label="Bölge"
+                    value={recordForm.region}
+                    onChange={(event) => handleRecordChange("region", event.target.value)}
+                    fullWidth
+                    required
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    label="ServiceDesk ID"
+                    value={recordForm.servicedeskId}
+                    onChange={(event) => handleRecordChange("servicedeskId", event.target.value)}
+                    fullWidth
+                    required
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    label="Gönderilen Bölüm"
+                    value={recordForm.recipient}
+                    onChange={(event) => handleRecordChange("recipient", event.target.value)}
+                    fullWidth
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    label="Çıkış Tarihi"
+                    type="datetime-local"
+                    value={recordForm.date}
+                    onChange={(event) => handleRecordChange("date", event.target.value)}
+                    fullWidth
+                    InputLabelProps={{ shrink: true }}
+                  />
+                </Grid>
+                <Grid item xs={12}>
+                  <TextField
+                    label="Not"
+                    value={recordForm.note}
+                    onChange={(event) => handleRecordChange("note", event.target.value)}
+                    fullWidth
+                    multiline
+                    minRows={2}
+                  />
+                </Grid>
+              </Grid>
+              {recordStatus && <Alert severity={recordStatus.type}>{recordStatus.message}</Alert>}
+              <Box>
+                <Button type="submit" variant="contained" startIcon={<TaskAltOutlinedIcon />}>
+                  Kayıt Oluştur
+                </Button>
+              </Box>
+            </Stack>
+          )}
+          {dispatchTab === "search" && (
+            <Stack spacing={3}>
+              <Typography variant="h6" fontWeight={700}>
+                Kayıt Arama
+              </Typography>
+              <Grid container spacing={2}>
+                <Grid item xs={12} md={3}>
+                  <TextField
+                    label="Ürün"
+                    value={searchFilters.product}
+                    onChange={(event) => handleFilterChange("product", event.target.value)}
+                    fullWidth
+                  />
+                </Grid>
+                <Grid item xs={12} md={3}>
+                  <TextField
+                    label="Demirbaş"
+                    value={searchFilters.asset}
+                    onChange={(event) => handleFilterChange("asset", event.target.value)}
+                    fullWidth
+                  />
+                </Grid>
+                <Grid item xs={12} md={3}>
+                  <TextField
+                    label="Bölge"
+                    value={searchFilters.region}
+                    onChange={(event) => handleFilterChange("region", event.target.value)}
+                    fullWidth
+                  />
+                </Grid>
+                <Grid item xs={12} md={3}>
+                  <Button
+                    variant="text"
+                    sx={{ mt: { xs: 0, md: 3 } }}
+                    onClick={() =>
+                      setSearchFilters({ product: "", asset: "", region: "", from: "", to: "" })
+                    }
+                  >
+                    Filtreleri Temizle
+                  </Button>
+                </Grid>
+                <Grid item xs={12} md={3}>
+                  <TextField
+                    label="Başlangıç"
+                    type="datetime-local"
+                    value={searchFilters.from}
+                    onChange={(event) => handleFilterChange("from", event.target.value)}
+                    InputLabelProps={{ shrink: true }}
+                    fullWidth
+                  />
+                </Grid>
+                <Grid item xs={12} md={3}>
+                  <TextField
+                    label="Bitiş"
+                    type="datetime-local"
+                    value={searchFilters.to}
+                    onChange={(event) => handleFilterChange("to", event.target.value)}
+                    InputLabelProps={{ shrink: true }}
+                    fullWidth
+                  />
+                </Grid>
+              </Grid>
+              <Typography variant="body2" color="text.secondary">
+                {filteredDispatches.length} kayıt listeleniyor.
+              </Typography>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>ServiceDesk</TableCell>
+                    <TableCell>Ürün</TableCell>
+                    <TableCell>Demirbaş</TableCell>
+                    <TableCell>Bölge</TableCell>
+                    <TableCell align="right">Adet</TableCell>
+                    <TableCell>Tarih</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {filteredDispatches.map((dispatch) => (
+                    <TableRow
+                      key={dispatch.id}
+                      hover
+                      selected={dispatch.id === selectedDispatchId}
+                      sx={{ cursor: "pointer" }}
+                      onClick={() => setSelectedDispatchId(dispatch.id)}
+                    >
+                      <TableCell>
+                        <Stack direction="row" spacing={1} alignItems="center">
+                          <Chip label={dispatch.id} size="small" />
+                        </Stack>
+                      </TableCell>
+                      <TableCell>{dispatch.product}</TableCell>
+                      <TableCell>{dispatch.asset}</TableCell>
+                      <TableCell>{dispatch.region}</TableCell>
+                      <TableCell align="right">{dispatch.quantity}</TableCell>
+                      <TableCell>
+                        {new Date(dispatch.createdAt).toLocaleString("tr-TR", {
+                          dateStyle: "short",
+                          timeStyle: "short"
+                        })}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </Stack>
+          )}
+          {dispatchTab === "print" && (
+            <Stack spacing={3}>
+              <Typography variant="h6" fontWeight={700}>
+                Etiket Yazdırma
+              </Typography>
+              <Grid container spacing={3}>
+                <Grid item xs={12} md={5}>
+                  <List sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2 }}>
+                    {dispatches.map((dispatch) => (
+                      <ListItem
+                        key={dispatch.id}
+                        selected={dispatch.id === selectedDispatchId}
+                        secondaryAction={
+                          <Button size="small" onClick={() => handlePrint(dispatch.id)}>
+                            Yazdır
+                          </Button>
+                        }
+                        sx={{ cursor: "pointer" }}
+                        onClick={() => setSelectedDispatchId(dispatch.id)}
+                      >
+                        <ListItemIcon>
+                          <QrCode2OutlinedIcon />
+                        </ListItemIcon>
+                        <ListItemText
+                          primary={`${dispatch.id} · ${dispatch.product}`}
+                          secondary={`Demirbaş: ${dispatch.asset} • ${dispatch.region}`}
+                        />
+                      </ListItem>
+                    ))}
+                  </List>
+                </Grid>
+                <Grid item xs={12} md={7}>
+                  <Card variant="outlined">
+                    <CardContent>
+                      <Stack spacing={2}>
+                        <Stack direction="row" justifyContent="space-between" alignItems="center">
+                          <Typography variant="subtitle1" fontWeight={700}>
+                            Barkod Önizlemesi
+                          </Typography>
+                          {selectedDispatch && (
+                            <Chip label={selectedDispatch.status} color="primary" variant="outlined" />
+                          )}
+                        </Stack>
+                        {selectedDispatch ? (
+                          <Box
+                            sx={{
+                              border: "1px dashed",
+                              borderColor: "divider",
+                              borderRadius: 2,
+                              p: 3,
+                              textTransform: "uppercase",
+                              fontFamily: "'Fira Code', monospace"
+                            }}
+                          >
+                            <Typography variant="overline">Gönderen: Teknik Destek Merkezi</Typography>
+                            <Typography variant="h4" fontWeight={700}>
+                              {selectedDispatch.asset}
+                            </Typography>
+                            <Typography variant="subtitle1">ServiceDesk: {selectedDispatch.id}</Typography>
+                            <Typography variant="body2">Ürün: {selectedDispatch.product}</Typography>
+                            <Typography variant="body2">Bölge: {selectedDispatch.region}</Typography>
+                            <Typography variant="body2">Alıcı: {selectedDispatch.recipient}</Typography>
+                          </Box>
+                        ) : (
+                          <Typography color="text.secondary">Bir kayıt seçin.</Typography>
+                        )}
+                        {printMessage && <Alert severity="info">{printMessage}</Alert>}
+                      </Stack>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              </Grid>
+            </Stack>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardContent>
