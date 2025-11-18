@@ -42,6 +42,34 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
             },
             "#root": {
               minHeight: "100%"
+            },
+            "@page": {
+              size: "100mm 100mm",
+              margin: 0
+            },
+            "@media print": {
+              body: {
+                margin: 0,
+                backgroundColor: "#fff"
+              },
+              "#root": {
+                minHeight: "auto"
+              },
+              "body *": {
+                visibility: "hidden"
+              },
+              ".etiket-print-area": {
+                visibility: "visible",
+                position: "absolute",
+                left: "50%",
+                top: 0,
+                transform: "translateX(-50%)",
+                boxShadow: "none",
+                borderRadius: 0
+              },
+              ".etiket-print-area *": {
+                visibility: "visible"
+              }
             }
           }}
         />

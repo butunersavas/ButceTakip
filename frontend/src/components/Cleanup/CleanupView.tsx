@@ -1,4 +1,4 @@
-import { FormEvent, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Box,
@@ -33,6 +33,7 @@ import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
 import PrintOutlinedIcon from "@mui/icons-material/PrintOutlined";
 import TaskAltOutlinedIcon from "@mui/icons-material/TaskAltOutlined";
 import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "react-router-dom";
 
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import usePersistentState from "../../hooks/usePersistentState";
@@ -75,13 +76,14 @@ export default function CleanupView() {
   const client = useAuthorizedClient();
   const { user } = useAuth();
 
-  const [activeTab, setActiveTab] = usePersistentState<string>("cleanup:activeTab", "tools");
   const [scenarioId, setScenarioId] = usePersistentState<number | null>("cleanup:scenarioId", null);
   const [budgetItemId, setBudgetItemId] = usePersistentState<number | null>("cleanup:budgetItemId", null);
   const [clearImportedOnly, setClearImportedOnly] = usePersistentState<boolean>("cleanup:clearImported", false);
   const [resetPlans, setResetPlans] = usePersistentState<boolean>("cleanup:resetPlans", false);
   const [result, setResult] = useState<CleanupResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const location = useLocation();
+  const dailySectionRef = useRef<HTMLDivElement | null>(null);
 
   const { data: scenarios } = useQuery<Scenario[]>({
     queryKey: ["scenarios"],
@@ -124,37 +126,26 @@ export default function CleanupView() {
 
   const isAdmin = user?.role === "admin";
 
+  useEffect(() => {
+    if (location.hash === "#gunluk-cikis" && dailySectionRef.current) {
+      dailySectionRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [location.hash]);
+
   return (
     <Stack spacing={4}>
       <Card>
-        <Tabs
-          value={activeTab}
-          onChange={(_, value) => setActiveTab(value)}
-          variant="scrollable"
-          allowScrollButtonsMobile
-          sx={{ px: 2 }}
-        >
-          <Tab
-            label="Temizleme Araçları"
-            value="tools"
-            icon={<CleaningServicesIcon fontSize="small" />}
-            iconPosition="start"
-          />
-          <Tab
-            label="Günlük Çıkış"
-            value="daily"
-            icon={<Inventory2OutlinedIcon fontSize="small" />}
-            iconPosition="start"
-          />
-        </Tabs>
-        <Divider />
         <CardContent>
-          <Stack spacing={4}>
-            <Stack
-              id="temizleme-araclari"
-              spacing={3}
-              sx={{ display: activeTab === "tools" ? "flex" : "none" }}
-            >
+          <Stack spacing={3} id="temizleme-araclari">
+            <Stack spacing={0.5}>
+              <Typography variant="h5" fontWeight={700}>
+                Temizleme Araçları
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Senaryo ve bütçe kalemi temizlik işlemlerini burada yönetebilirsiniz.
+              </Typography>
+            </Stack>
+            <Stack spacing={3}>
               {!isAdmin && (
                 <Alert severity="warning">
                   Temizleme işlemleri yalnızca yönetici rolüne sahip kullanıcılar tarafından yapılabilir.
@@ -243,16 +234,12 @@ export default function CleanupView() {
                 </Button>
               </Box>
             </Stack>
-            <Box
-              id="gunluk-cikis"
-              data-section="gunluk-cikis"
-              sx={{ display: activeTab === "daily" ? "block" : "none", width: 1 }}
-            >
-              <DailyDispatchTab />
-            </Box>
           </Stack>
         </CardContent>
       </Card>
+      <Box id="gunluk-cikis" data-section="gunluk-cikis" ref={dailySectionRef}>
+        <DailyDispatchTab />
+      </Box>
     </Stack>
   );
 }
@@ -721,14 +708,16 @@ function DailyDispatchTab() {
                         </Stack>
                         {selectedDispatch ? (
                           <Box
-                            className="etiket"
+                            className="etiket etiket-print-area"
                             sx={{
                               border: "2px solid",
                               borderColor: "grey.800",
                               borderRadius: 2,
                               p: 3,
-                              maxWidth: 420,
-                              aspectRatio: "1",
+                              width: "100mm",
+                              height: "100mm",
+                              maxWidth: "100%",
+                              mx: "auto",
                               bgcolor: "background.paper",
                               boxShadow: (theme) => `inset 0 0 0 1px ${theme.palette.grey[300]}`,
                               fontFamily: "'IBM Plex Sans', 'Roboto', sans-serif"
