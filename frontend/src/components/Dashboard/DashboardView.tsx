@@ -136,10 +136,21 @@ export default function DashboardView() {
 
   const monthlyData = useMemo(() => {
     if (!dashboard?.monthly) return [];
-    return dashboard.monthly.map((entry) => ({
-      ...entry,
-      monthLabel: monthLabels[entry.month - 1]
-    }));
+    return dashboard.monthly.map((entry) => {
+      const planned = entry.planned ?? 0;
+      const actual = entry.actual ?? 0;
+      const saving = Math.max(planned - actual, 0);
+      const overrun = Math.max(actual - planned, 0);
+
+      return {
+        ...entry,
+        planned,
+        actual,
+        saving,
+        overrun,
+        monthLabel: monthLabels[entry.month - 1]
+      };
+    });
   }, [dashboard]);
 
   const quarterlyData = useMemo(() => {
@@ -163,7 +174,8 @@ export default function DashboardView() {
     () => ({
       planned: "#0d47a1",
       actual: "#26a69a",
-      saving: "#ff7043"
+      saving: "#ff7043",
+      overrun: "#d32f2f"
     }),
     []
   );
@@ -320,6 +332,7 @@ export default function DashboardView() {
                   <Bar dataKey="planned" name="Planlanan" fill={pieColors.planned} radius={[4, 4, 0, 0]} />
                   <Bar dataKey="actual" name="Gerçekleşen" fill={pieColors.actual} radius={[4, 4, 0, 0]} />
                   <Bar dataKey="saving" name="Tasarruf" fill={pieColors.saving} radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="overrun" name="Aşım" fill={pieColors.overrun} radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             )}
