@@ -14,6 +14,7 @@ import {
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
 import DownloadIcon from "@mui/icons-material/Download";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import * as XLSX from "xlsx";
 
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import usePersistentState from "../../hooks/usePersistentState";
@@ -40,7 +41,69 @@ interface ImportSummary {
   message?: string;
 }
 
-const sampleCsv = `type,budget_code,budget_name,scenario,year,month,amount,date,quantity,unit_price,vendor,description,out_of_budget,map_category,map_attribute\nplan,MARKETING,Marketing Temel,Temel,2026,1,15000,,,,,,,false,CAPEX,Donanım\nexpense,MARKETING,Marketing Temel,Temel,2026,,12000,2026-01-15,1,12000,ACME Ltd,Reklam harcaması,false,OPEX,Yazılım\n`;
+const sampleHeaders = [
+  "type",
+  "budget_code",
+  "budget_name",
+  "scenario",
+  "year",
+  "month",
+  "amount",
+  "date",
+  "quantity",
+  "unit_price",
+  "vendor",
+  "description",
+  "out_of_budget",
+  "capex_opex",
+  "asset_type"
+] as const;
+
+type SampleHeader = (typeof sampleHeaders)[number];
+
+type SampleRow = Record<SampleHeader, string>;
+
+const sampleRows: SampleRow[] = [
+  {
+    type: "plan",
+    budget_code: "SK01",
+    budget_name: "ŞAN Cep Telefonu + Çakmaklık Şarj + Kılıf + Koruyucu  (500 Adet)",
+    scenario: "Temel",
+    year: "2026",
+    month: "6",
+    amount: "50000",
+    date: "",
+    quantity: "1",
+    unit_price: "50000",
+    vendor: "",
+    description: "ŞAN Cep Telefonu + Çakmaklık Şarj + Kılıf + Koruyucu  (500 Adet)",
+    out_of_budget: "YANLIŞ",
+    capex_opex: "Capex",
+    asset_type: "Donanım"
+  },
+  {
+    type: "plan",
+    budget_code: "SK01",
+    budget_name: "ŞAN Cep Telefonu + Çakmaklık Şarj + Kılıf + Koruyucu  (500 Adet)",
+    scenario: "Temel",
+    year: "2026",
+    month: "10",
+    amount: "50000",
+    date: "",
+    quantity: "1",
+    unit_price: "50000",
+    vendor: "",
+    description: "ŞAN Cep Telefonu + Çakmaklık Şarj + Kılıf + Koruyucu  (500 Adet)",
+    out_of_budget: "YANLIŞ",
+    capex_opex: "Capex",
+    asset_type: "Donanım"
+  }
+];
+
+const sampleCsv = [
+  sampleHeaders.join(","),
+  ...sampleRows.map((row) => sampleHeaders.map((header) => row[header]).join(","))
+].join("\n");
 
 export default function ImportExportView() {
   const client = useAuthorizedClient();
@@ -128,8 +191,12 @@ export default function ImportExportView() {
     return params;
   };
 
-  const downloadBlob = (data: BlobPart, fileName: string) => {
-    const blob = new Blob([data]);
+  const downloadBlob = (
+    data: BlobPart | Blob,
+    fileName: string,
+    options?: BlobPropertyBag
+  ) => {
+    const blob = data instanceof Blob && !options ? data : new Blob([data], options);
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
     link.href = url;
@@ -195,16 +262,22 @@ export default function ImportExportView() {
     }
   };
 
-  const downloadSample = () => {
-    const blob = new Blob([sampleCsv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.setAttribute("download", "butce-ornek.csv");
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
+  const downloadSampleCsv = () => {
+    downloadBlob(sampleCsv, "butce-ornek.csv", { type: "text/csv;charset=utf-8;" });
+  };
+
+  const downloadSampleXlsx = () => {
+    const worksheetData = [
+      sampleHeaders,
+      ...sampleRows.map((row) => sampleHeaders.map((header) => row[header]))
+    ];
+    const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Örnek");
+    const workbookBuffer = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+    downloadBlob(workbookBuffer, "butce-ornek.xlsx", {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    });
   };
 
   return (
@@ -248,9 +321,14 @@ export default function ImportExportView() {
                     />
                   </Button>
                 </Stack>
-                <Button variant="text" startIcon={<DownloadIcon />} onClick={downloadSample} sx={{ alignSelf: "flex-start" }}>
-                  Örnek CSV indir
-                </Button>
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ alignSelf: "flex-start" }}>
+                  <Button variant="text" startIcon={<DownloadIcon />} onClick={downloadSampleCsv}>
+                    Örnek CSV indir
+                  </Button>
+                  <Button variant="text" startIcon={<DownloadIcon />} onClick={downloadSampleXlsx}>
+                    Örnek XLSX indir
+                  </Button>
+                </Stack>
               </Stack>
             </CardContent>
           </Card>
