@@ -20,7 +20,13 @@ def get_dashboard(
         raise HTTPException(status_code=400, detail="Year is required")
     monthly = compute_monthly_summary(session, year, scenario_id, budget_item_id)
     total_plan, total_actual = totalize(monthly)
-    total_remaining = total_plan - total_actual
+    # Remaining budget should never go below zero – once there is an overrun we
+    # already report that separately via ``total_overrun``.
+    # Having a negative "remaining" value makes the dashboard hard to interpret
+    # because it shows both an overrun and a negative remainder at the same
+    # time.  Clamp the value to zero so that "Kalan" only represents the
+    # actually available amount.
+    total_remaining = max(total_plan - total_actual, 0)
     total_saving = sum(item.saving for item in monthly if item.saving > 0)
     total_overrun = sum(-item.saving for item in monthly if item.saving < 0)
     return DashboardResponse(

@@ -253,7 +253,7 @@ export default function DashboardView() {
             },
             {
               title: "Kalan",
-              value: dashboard?.kpi.total_remaining ?? 0,
+              value: Math.max(dashboard?.kpi.total_remaining ?? 0, 0),
               color: "default"
             },
             {
