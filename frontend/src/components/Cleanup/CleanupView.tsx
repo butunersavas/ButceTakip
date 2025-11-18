@@ -1,4 +1,4 @@
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Box,
@@ -258,7 +258,23 @@ function DailyDispatchTab() {
     date: string;
   };
 
-  const regionOptions = ["İSTANBUL", "ANKARA", "İZMİR", "BURSA"] as const;
+  const regionOptions = [
+    "İSTANBUL",
+    "ANADOLU",
+    "ANKARA",
+    "ANTALYA",
+    "BATI KARADENİZ",
+    "BURSA",
+    "DIYARBAKIR",
+    "ERZURUM",
+    "GAZIANTEP",
+    "KARADENİZ",
+    "SURDIŞI",
+    "TRAKYA",
+    "ÇUKUROVA",
+    "İZMİR",
+    "İÇ ANADOLU"
+  ] as const;
 
   const dispatches = useMemo<DispatchRecord[]>(
     () => [
@@ -323,6 +339,8 @@ function DailyDispatchTab() {
   });
   const [selectedDispatchId, setSelectedDispatchId] = useState<string>(dispatches[0]?.id ?? "");
   const [printMessage, setPrintMessage] = useState<string | null>(null);
+  const [printSequence, setPrintSequence] = useState<Record<string, number>>({});
+  const sequenceRef = useRef(0);
 
   const filteredDispatches = useMemo(() => {
     const upper = (value: string) => value.trim().toUpperCase();
@@ -352,7 +370,7 @@ function DailyDispatchTab() {
         { label: "ServiceDesk", value: selectedDispatch.id },
         { label: "Ürün", value: selectedDispatch.product },
         { label: "Demirbaş", value: selectedDispatch.asset },
-        { label: "Bölge", value: selectedDispatch.region },
+        { label: "Alıcı Bölge", value: selectedDispatch.region },
         { label: "Adet", value: String(selectedDispatch.quantity) },
         {
           label: "Tarih",
@@ -387,7 +405,16 @@ function DailyDispatchTab() {
 
   const handlePrint = (dispatchId: string) => {
     setSelectedDispatchId(dispatchId);
-    setPrintMessage(`${dispatchId} numaralı çıkışın barkod içeriği güncellendi.`);
+    sequenceRef.current += 1;
+    const nextSequence = sequenceRef.current;
+    setPrintSequence((current) => ({
+      ...current,
+      [dispatchId]: nextSequence
+    }));
+    setPrintMessage(`${dispatchId} numaralı barkod Zebra ZD220 yazıcısına gönderildi.`);
+    if (typeof window !== "undefined" && typeof window.print === "function") {
+      window.print();
+    }
   };
 
   return (
@@ -643,9 +670,19 @@ function DailyDispatchTab() {
                         key={dispatch.id}
                         selected={dispatch.id === selectedDispatchId}
                         secondaryAction={
-                          <Button size="small" onClick={() => handlePrint(dispatch.id)}>
-                            Yazdır
-                          </Button>
+                          <Stack direction="row" spacing={1} alignItems="center">
+                            {printSequence[dispatch.id] && (
+                              <Chip
+                                label={`#${printSequence[dispatch.id]}`}
+                                color="secondary"
+                                size="small"
+                                variant="outlined"
+                              />
+                            )}
+                            <Button size="small" onClick={() => handlePrint(dispatch.id)}>
+                              Barkod Yazdır
+                            </Button>
+                          </Stack>
                         }
                         sx={{ cursor: "pointer" }}
                         onClick={() => setSelectedDispatchId(dispatch.id)}
@@ -689,18 +726,20 @@ function DailyDispatchTab() {
                             }}
                           >
                             <Stack spacing={1.5} sx={{ height: "100%" }}>
-                              <Stack direction="row" justifyContent="space-between" alignItems="center">
-                                <Typography variant="subtitle2" fontWeight={700}>
-                                  Zebra ZD220 · 10×10 cm
+                              <Stack spacing={0.5}>
+                                <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: 1.5 }}>
+                                  GÖNDERİCİ
                                 </Typography>
-                                <Typography variant="caption" color="text.secondary">
-                                  Teknik Çıkış Etiketi
+                                <Typography variant="subtitle1" fontWeight={700}>
+                                  Teknik Destek Departmanı
                                 </Typography>
+                                {printSequence[selectedDispatch.id] && (
+                                  <Typography variant="caption" color="text.secondary">
+                                    Yazdırma Sırası: #{printSequence[selectedDispatch.id]}
+                                  </Typography>
+                                )}
                               </Stack>
                               <Divider />
-                              <Typography variant="caption" sx={{ letterSpacing: 1.5 }} color="text.secondary">
-                                GÖNDEREN · TEKNİK DESTEK DEPARTMANI
-                              </Typography>
                               <Typography
                                 variant="h4"
                                 fontWeight={700}
