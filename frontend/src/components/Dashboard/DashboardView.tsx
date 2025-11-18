@@ -19,6 +19,7 @@ import {
   Legend,
   Pie,
   PieChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip as RechartsTooltip,
   XAxis,
@@ -34,14 +35,12 @@ interface DashboardSummary {
   month: number;
   planned: number;
   actual: number;
-  saving: number;
 }
 
 interface DashboardKPI {
   total_plan: number;
   total_actual: number;
   total_remaining: number;
-  total_saving: number;
   total_overrun: number;
 }
 
@@ -139,15 +138,13 @@ export default function DashboardView() {
     return dashboard.monthly.map((entry) => {
       const planned = entry.planned ?? 0;
       const actual = entry.actual ?? 0;
-      const saving = Math.max(planned - actual, 0);
-      const overrun = Math.max(actual - planned, 0);
+      const remaining = planned - actual;
 
       return {
         ...entry,
         planned,
         actual,
-        saving,
-        overrun,
+        remaining,
         monthLabel: monthLabels[entry.month - 1]
       };
     });
@@ -163,10 +160,10 @@ export default function DashboardView() {
     ];
     return quarters.map(({ label, months }) => {
       const entries = dashboard.monthly.filter((item) => months.includes(item.month));
-      const planned = entries.reduce((sum, item) => sum + item.planned, 0);
-      const actual = entries.reduce((sum, item) => sum + item.actual, 0);
-      const saving = Math.max(planned - actual, 0);
-      return { label, planned, actual, saving };
+      const planned = entries.reduce((sum, item) => sum + (item.planned ?? 0), 0);
+      const actual = entries.reduce((sum, item) => sum + (item.actual ?? 0), 0);
+      const remaining = planned - actual;
+      return { label, planned, actual, remaining };
     });
   }, [dashboard]);
 
@@ -174,12 +171,11 @@ export default function DashboardView() {
     () => ({
       planned: "#0d47a1",
       actual: "#26a69a",
-      saving: "#ff7043",
-      overrun: "#d32f2f"
+      remaining: "#ff8f00"
     }),
     []
   );
-  const pieKeys = useMemo(() => ["planned", "actual", "saving"] as const, []);
+  const pieKeys = useMemo(() => ["planned", "actual", "remaining"] as const, []);
 
   return (
     <Stack spacing={4}>
@@ -253,13 +249,8 @@ export default function DashboardView() {
             },
             {
               title: "Kalan",
-              value: Math.max(dashboard?.kpi.total_remaining ?? 0, 0),
+              value: dashboard?.kpi.total_remaining ?? 0,
               color: "default"
-            },
-            {
-              title: "Tasarruf",
-              value: dashboard?.kpi.total_saving ?? 0,
-              color: "success"
             },
             {
               title: "Aşım",
@@ -324,6 +315,7 @@ export default function DashboardView() {
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="monthLabel" />
                   <YAxis tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`} />
+                  <ReferenceLine y={0} stroke="#9e9e9e" strokeDasharray="3 3" />
                   <RechartsTooltip
                     formatter={(value: number) => formatCurrency(value)}
                     labelFormatter={(label) => label}
@@ -331,8 +323,7 @@ export default function DashboardView() {
                   <Legend />
                   <Bar dataKey="planned" name="Planlanan" fill={pieColors.planned} radius={[4, 4, 0, 0]} />
                   <Bar dataKey="actual" name="Gerçekleşen" fill={pieColors.actual} radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="saving" name="Tasarruf" fill={pieColors.saving} radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="overrun" name="Aşım" fill={pieColors.overrun} radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="remaining" name="Kalan (+) / Aşım (-)" fill={pieColors.remaining} radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -357,8 +348,8 @@ export default function DashboardView() {
                   <Typography variant="body2">Gerçekleşen</Typography>
                 </Stack>
                 <Stack direction="row" spacing={1} alignItems="center">
-                  <Box sx={{ width: 12, height: 12, borderRadius: "50%", backgroundColor: pieColors.saving }} />
-                  <Typography variant="body2">Tasarruf</Typography>
+                  <Box sx={{ width: 12, height: 12, borderRadius: "50%", backgroundColor: pieColors.remaining }} />
+                  <Typography variant="body2">Kalan</Typography>
                 </Stack>
               </Stack>
             </Box>
@@ -384,7 +375,7 @@ export default function DashboardView() {
                               data={[
                                 { name: "Planlanan", value: quarter.planned, key: "planned" },
                                 { name: "Gerçekleşen", value: quarter.actual, key: "actual" },
-                                { name: "Tasarruf", value: quarter.saving, key: "saving" }
+                                { name: "Kalan", value: Math.max(quarter.remaining, 0), key: "remaining" }
                               ]}
                               dataKey="value"
                               nameKey="name"
