@@ -149,8 +149,12 @@ export default function CleanupView() {
         </Tabs>
         <Divider />
         <CardContent>
-          {activeTab === "tools" ? (
-            <Stack spacing={3}>
+          <Stack spacing={4}>
+            <Stack
+              id="temizleme-araclari"
+              spacing={3}
+              sx={{ display: activeTab === "tools" ? "flex" : "none" }}
+            >
               {!isAdmin && (
                 <Alert severity="warning">
                   Temizleme işlemleri yalnızca yönetici rolüne sahip kullanıcılar tarafından yapılabilir.
@@ -239,9 +243,14 @@ export default function CleanupView() {
                 </Button>
               </Box>
             </Stack>
-          ) : (
-            <DailyDispatchTab />
-          )}
+            <Box
+              id="gunluk-cikis"
+              data-section="gunluk-cikis"
+              sx={{ display: activeTab === "daily" ? "block" : "none", width: 1 }}
+            >
+              <DailyDispatchTab />
+            </Box>
+          </Stack>
         </CardContent>
       </Card>
     </Stack>
@@ -712,12 +721,12 @@ function DailyDispatchTab() {
                         </Stack>
                         {selectedDispatch ? (
                           <Box
+                            className="etiket"
                             sx={{
                               border: "2px solid",
                               borderColor: "grey.800",
                               borderRadius: 2,
                               p: 3,
-                              width: 1,
                               maxWidth: 420,
                               aspectRatio: "1",
                               bgcolor: "background.paper",
