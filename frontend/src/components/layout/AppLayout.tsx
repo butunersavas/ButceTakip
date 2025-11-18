@@ -22,6 +22,7 @@ import DarkModeIcon from "@mui/icons-material/DarkModeOutlined";
 import LightModeIcon from "@mui/icons-material/LightModeOutlined";
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
+import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
 
 import { useAuth } from "../../context/AuthContext";
 import brandLogo from "../../assets/brand-logo.svg";
@@ -54,6 +55,11 @@ const navItems = [
     label: "Temizleme Araçları",
     icon: <CleaningServicesIcon />,
     path: "/cleanup"
+  },
+  {
+    label: "Günlük Çıkış",
+    icon: <Inventory2OutlinedIcon />,
+    path: "/cleanup/daily"
   }
 ];
 

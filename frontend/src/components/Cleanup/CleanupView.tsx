@@ -1,7 +1,6 @@
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   Alert,
-  Avatar,
   Box,
   Button,
   Card,
@@ -29,24 +28,11 @@ import {
 } from "@mui/material";
 import CleaningServicesIcon from "@mui/icons-material/CleaningServices";
 import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
-import LocalShippingOutlinedIcon from "@mui/icons-material/LocalShippingOutlined";
 import QrCode2OutlinedIcon from "@mui/icons-material/QrCode2Outlined";
 import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
 import PrintOutlinedIcon from "@mui/icons-material/PrintOutlined";
-import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
-import TabOutlinedIcon from "@mui/icons-material/TabOutlined";
 import TaskAltOutlinedIcon from "@mui/icons-material/TaskAltOutlined";
-import AccessTimeOutlinedIcon from "@mui/icons-material/AccessTimeOutlined";
 import { useQuery } from "@tanstack/react-query";
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip as RechartsTooltip,
-  XAxis,
-  YAxis
-} from "recharts";
 
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import usePersistentState from "../../hooks/usePersistentState";
@@ -82,15 +68,18 @@ interface DispatchRecord {
   region: string;
   quantity: number;
   createdAt: string;
-  recipient: string;
   status: string;
 }
 
-export default function CleanupView() {
+interface CleanupViewProps {
+  defaultTab?: "tools" | "daily";
+}
+
+export default function CleanupView({ defaultTab = "tools" }: CleanupViewProps) {
   const client = useAuthorizedClient();
   const { user } = useAuth();
 
-  const [activeTab, setActiveTab] = usePersistentState<string>("cleanup:activeTab", "tools");
+  const [activeTab, setActiveTab] = usePersistentState<string>("cleanup:activeTab", defaultTab);
   const [scenarioId, setScenarioId] = usePersistentState<number | null>("cleanup:scenarioId", null);
   const [budgetItemId, setBudgetItemId] = usePersistentState<number | null>("cleanup:budgetItemId", null);
   const [clearImportedOnly, setClearImportedOnly] = usePersistentState<boolean>("cleanup:clearImported", false);
@@ -138,6 +127,12 @@ export default function CleanupView() {
   };
 
   const isAdmin = user?.role === "admin";
+
+  useEffect(() => {
+    if (defaultTab === "daily") {
+      setActiveTab("daily");
+    }
+  }, [defaultTab, setActiveTab]);
 
   return (
     <Stack spacing={4}>
@@ -269,10 +264,26 @@ function DailyDispatchTab() {
     asset: string;
     region: string;
     servicedeskId: string;
-    recipient: string;
     note: string;
     date: string;
   };
+
+  const regionOptions = [
+    "ANADOLU",
+    "ANKARA",
+    "ANTALYA",
+    "BATI KARADENİZ",
+    "BURSA",
+    "DIYARBAKIR",
+    "ERZURUM",
+    "GAZIANTEP",
+    "KARADENİZ",
+    "SURDIŞI",
+    "TRAKYA",
+    "ÇUKUROVA",
+    "İZMİR",
+    "İÇ ANADOLU"
+  ] as const;
 
   const dispatches = useMemo<DispatchRecord[]>(
     () => [
@@ -283,7 +294,6 @@ function DailyDispatchTab() {
         region: "İSTANBUL",
         quantity: 3,
         createdAt: "2024-06-01T10:32",
-        recipient: "İstanbul Bölge",
         status: "Etiket Hazır"
       },
       {
@@ -293,7 +303,6 @@ function DailyDispatchTab() {
         region: "ANKARA",
         quantity: 2,
         createdAt: "2024-06-01T14:05",
-        recipient: "Ankara Teknik",
         status: "Bekliyor"
       },
       {
@@ -303,7 +312,6 @@ function DailyDispatchTab() {
         region: "İZMİR",
         quantity: 1,
         createdAt: "2024-06-02T09:15",
-        recipient: "Ege Data Center",
         status: "Teslim Edildi"
       },
       {
@@ -313,19 +321,9 @@ function DailyDispatchTab() {
         region: "BURSA",
         quantity: 4,
         createdAt: "2024-06-02T11:42",
-        recipient: "Bursa Bölge",
         status: "Etiket Hazır"
       }
     ],
-    []
-  );
-
-  const nowLabel = useMemo(
-    () =>
-      new Intl.DateTimeFormat("tr-TR", {
-        dateStyle: "full",
-        timeStyle: "short"
-      }).format(new Date()),
     []
   );
 
@@ -338,9 +336,8 @@ function DailyDispatchTab() {
     asset: "",
     region: "",
     servicedeskId: "",
-    recipient: "",
     note: "",
-    date: new Date().toISOString().slice(0, 16)
+    date: new Date().toISOString().slice(0, 10)
   }));
   const [searchFilters, setSearchFilters] = useState({
     product: "",
@@ -351,6 +348,7 @@ function DailyDispatchTab() {
   });
   const [selectedDispatchId, setSelectedDispatchId] = useState<string>(dispatches[0]?.id ?? "");
   const [printMessage, setPrintMessage] = useState<string | null>(null);
+  const [printedDispatchIds, setPrintedDispatchIds] = useState<string[]>([]);
 
   const filteredDispatches = useMemo(() => {
     const upper = (value: string) => value.trim().toUpperCase();
@@ -374,6 +372,20 @@ function DailyDispatchTab() {
     () => dispatches.find((dispatch) => dispatch.id === selectedDispatchId) ?? dispatches[0],
     [dispatches, selectedDispatchId]
   );
+
+  const labelRows = selectedDispatch
+    ? [
+        { label: "ServiceDesk", value: selectedDispatch.id },
+        { label: "Ürün", value: selectedDispatch.product },
+        { label: "Demirbaş", value: selectedDispatch.asset },
+        { label: "Bölge", value: selectedDispatch.region },
+        { label: "Adet", value: String(selectedDispatch.quantity) },
+        {
+          label: "Tarih",
+          value: new Date(selectedDispatch.createdAt).toLocaleDateString("tr-TR")
+        }
+      ]
+    : [];
 
   const handleRecordChange = (field: keyof RecordFormState, value: string) => {
     const uppercaseFields: Array<keyof RecordFormState> = ["product", "asset", "region"];
@@ -402,166 +414,26 @@ function DailyDispatchTab() {
   const handlePrint = (dispatchId: string) => {
     setSelectedDispatchId(dispatchId);
     setPrintMessage(`${dispatchId} numaralı çıkışın barkod içeriği güncellendi.`);
+    setPrintedDispatchIds((prev) => (prev.includes(dispatchId) ? prev : [...prev, dispatchId]));
   };
-
-  const goals = [
-    "Teknik Destek çıkışlarını bölge bazında kaydetmek ve ServiceDesk ID ile eşleştirmek.",
-    "Seçilen kayıtlar için gönderen/alıcı bilgilerinin yer aldığı etiket (barkod) çıktıları üretmek.",
-    "Kayıt arama, filtreleme, silme ve anlık tarih-saat bilgisi ile operasyonel akışı sadeleştirmek."
-  ];
-
-  const featureDetails = [
-    {
-      title: "Sekmeli yapı",
-      description:
-        '"Kayıt / Arama / Yazdırma" sekmeleri openTab fonksiyonu ile hangi ekran aktifse ilgili verileri yüklüyor.',
-      icon: <TabOutlinedIcon color="primary" />
-    },
-    {
-      title: "Kayıt formu",
-      description:
-        "Ürün, Demirbaş ve Bölge alanları otomatik büyük harfe çevrilir, tarih alanı set edilir ve /api/kayit ile kaydedilir.",
-      icon: <TaskAltOutlinedIcon color="success" />
-    },
-    {
-      title: "Arama & filtreleme",
-      description:
-        "GET /api/kayitlar sonucunu istemci tarafında ürün, demirbaş, bölge ve tarih filtreleriyle daraltabilirsiniz.",
-      icon: <SearchOutlinedIcon color="action" />
-    },
-    {
-      title: "Yazdırma akışı",
-      description:
-        "barkodYazdir(id) fonksiyonu sorumlu bilgilerini eşleyip demirbaş listesini etiket HTML'i içinde yazdırır.",
-      icon: <PrintOutlinedIcon color="secondary" />
-    },
-    {
-      title: "Bildirim sistemi",
-      description:
-        "bildirimGoster bileşeni başarılı veya hatalı işlemleri üst bildirimde göstererek kullanıcıyı uyarır.",
-      icon: <TaskAltOutlinedIcon color="info" />
-    },
-    {
-      title: "Silme güvenliği",
-      description:
-        "confirm diyaloğu ile onay alındıktan sonra DELETE /api/kayit/{id} çağrısı yapılır ve liste yeniden filtrelenir.",
-      icon: <DeleteOutlineOutlinedIcon color="error" />
-    }
-  ];
-
-  const quickStats = [
-    {
-      label: "Kayıtlı Çıkış",
-      value: "128",
-      icon: <LocalShippingOutlinedIcon />,
-      color: "primary"
-    },
-    {
-      label: "Etiket Hazır",
-      value: "64",
-      icon: <QrCode2OutlinedIcon />,
-      color: "secondary"
-    },
-    {
-      label: "Günlük Operasyon",
-      value: "32",
-      icon: <SearchOutlinedIcon />,
-      color: "warning"
-    }
-  ] as const;
-
-  const regionDispatchData = [
-    { region: "İstanbul", count: 42 },
-    { region: "Ankara", count: 28 },
-    { region: "İzmir", count: 22 },
-    { region: "Bursa", count: 18 }
-  ];
 
   return (
     <Stack spacing={4}>
-      <Stack spacing={1}>
-        <Typography variant="h5" fontWeight={700}>
-          Günlük Çıkış Operasyon Özeti
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          Temizleme araçlarının yanına eklenen bu alan, günlük teknik destek çıkışlarını tek ekrandan yönetmeniz için
-          bilgi kartları ve görsel özetler sunar.
-        </Typography>
+      <Stack
+        direction={{ xs: "column", sm: "row" }}
+        spacing={2}
+        justifyContent="space-between"
+        alignItems={{ xs: "flex-start", sm: "center" }}
+      >
+        <Stack spacing={0.5}>
+          <Typography variant="h5" fontWeight={700}>
+            Günlük Çıkış
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Kayıt oluşturma, arama ve yazdırma işlemlerini tek alandan yönetin.
+          </Typography>
+        </Stack>
       </Stack>
-
-      <Grid container spacing={3}>
-        <Grid item xs={12} md={6}>
-          <Card>
-            <CardContent>
-              <Stack spacing={2}>
-                <Stack direction="row" alignItems="center" spacing={1}>
-                  <Chip label="Sitenin Amacı" color="primary" variant="outlined" />
-                  <Chip label="index - Copy" size="small" />
-                </Stack>
-                <Typography variant="body1">
-                  Günlük çıkış ekranının amacı aşağıdaki operasyonları tek yerden yönetmek:
-                </Typography>
-                <List dense>
-                  {goals.map((goal) => (
-                    <ListItem key={goal} disableGutters>
-                      <ListItemIcon sx={{ minWidth: 36 }}>
-                        <TaskAltOutlinedIcon color="success" fontSize="small" />
-                      </ListItemIcon>
-                      <ListItemText primary={goal} />
-                    </ListItem>
-                  ))}
-                </List>
-                <Stack direction="row" spacing={1} alignItems="center" color="text.secondary">
-                  <AccessTimeOutlinedIcon fontSize="small" />
-                  <Typography variant="body2">Anlık durum: {nowLabel}</Typography>
-                </Stack>
-              </Stack>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} md={6}>
-          <Card>
-            <CardContent>
-              <Stack spacing={3}>
-                <Typography variant="subtitle1" fontWeight={600}>
-                  Operasyon Göstergeleri
-                </Typography>
-                <Grid container spacing={2}>
-                  {quickStats.map((stat) => (
-                    <Grid item xs={12} sm={4} key={stat.label}>
-                      <Stack spacing={1} alignItems="center">
-                        <Avatar sx={{ bgcolor: `${stat.color}.main`, width: 48, height: 48 }}>
-                          {stat.icon}
-                        </Avatar>
-                        <Typography variant="h6" fontWeight={700}>
-                          {stat.value}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary" textAlign="center">
-                          {stat.label}
-                        </Typography>
-                      </Stack>
-                    </Grid>
-                  ))}
-                </Grid>
-                <Box sx={{ height: 220 }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={regionDispatchData}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="region" />
-                      <YAxis allowDecimals={false} />
-                      <RechartsTooltip
-                        formatter={(value: number) => `${value} çıkış`}
-                        labelFormatter={(label) => `${label} bölgesi`}
-                      />
-                      <Bar dataKey="count" name="Çıkış Adedi" fill="#1976d2" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </Box>
-              </Stack>
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
 
       <Card>
         <Tabs
@@ -618,12 +490,20 @@ function DailyDispatchTab() {
                 </Grid>
                 <Grid item xs={12} md={4}>
                   <TextField
+                    select
                     label="Bölge"
                     value={recordForm.region}
                     onChange={(event) => handleRecordChange("region", event.target.value)}
                     fullWidth
                     required
-                  />
+                    helperText="Tek seferde yalnızca bir bölge seçebilirsiniz"
+                  >
+                    {regionOptions.map((region) => (
+                      <MenuItem key={region} value={region}>
+                        {region}
+                      </MenuItem>
+                    ))}
+                  </TextField>
                 </Grid>
                 <Grid item xs={12} md={4}>
                   <TextField
@@ -636,16 +516,8 @@ function DailyDispatchTab() {
                 </Grid>
                 <Grid item xs={12} md={4}>
                   <TextField
-                    label="Gönderilen Bölüm"
-                    value={recordForm.recipient}
-                    onChange={(event) => handleRecordChange("recipient", event.target.value)}
-                    fullWidth
-                  />
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <TextField
                     label="Çıkış Tarihi"
-                    type="datetime-local"
+                    type="date"
                     value={recordForm.date}
                     onChange={(event) => handleRecordChange("date", event.target.value)}
                     fullWidth
@@ -785,27 +657,49 @@ function DailyDispatchTab() {
               <Grid container spacing={3}>
                 <Grid item xs={12} md={5}>
                   <List sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2 }}>
-                    {dispatches.map((dispatch) => (
-                      <ListItem
-                        key={dispatch.id}
-                        selected={dispatch.id === selectedDispatchId}
-                        secondaryAction={
-                          <Button size="small" onClick={() => handlePrint(dispatch.id)}>
-                            Yazdır
-                          </Button>
-                        }
-                        sx={{ cursor: "pointer" }}
-                        onClick={() => setSelectedDispatchId(dispatch.id)}
-                      >
-                        <ListItemIcon>
-                          <QrCode2OutlinedIcon />
-                        </ListItemIcon>
-                        <ListItemText
-                          primary={`${dispatch.id} · ${dispatch.product}`}
-                          secondary={`Demirbaş: ${dispatch.asset} • ${dispatch.region}`}
-                        />
-                      </ListItem>
-                    ))}
+                    {dispatches.map((dispatch) => {
+                      const printed = printedDispatchIds.includes(dispatch.id);
+                      return (
+                        <ListItem
+                          key={dispatch.id}
+                          selected={dispatch.id === selectedDispatchId}
+                          secondaryAction={
+                            <Button
+                              size="medium"
+                              variant="contained"
+                              color="primary"
+                              onClick={() => handlePrint(dispatch.id)}
+                              sx={{ fontWeight: 600, px: 2.5 }}
+                            >
+                              Yazdır
+                            </Button>
+                          }
+                          sx={{
+                            cursor: "pointer",
+                            bgcolor: printed ? "action.selected" : undefined,
+                            transition: "background-color 0.2s ease",
+                            borderRadius: 2,
+                            mb: 1,
+                            "&.Mui-selected": {
+                              bgcolor: "rgba(25, 118, 210, 0.2)",
+                              "&:hover": {
+                                bgcolor: "rgba(25, 118, 210, 0.28)"
+                              }
+                            }
+                          }}
+                          onClick={() => setSelectedDispatchId(dispatch.id)}
+                        >
+                          <ListItemIcon sx={{ color: printed ? "primary.main" : "text.secondary" }}>
+                            <QrCode2OutlinedIcon />
+                          </ListItemIcon>
+                          <ListItemText
+                            primary={`${dispatch.id} · ${dispatch.product}`}
+                            secondary={`Demirbaş: ${dispatch.asset} • ${dispatch.region}`}
+                            primaryTypographyProps={{ fontWeight: printed ? 700 : 500 }}
+                          />
+                        </ListItem>
+                      );
+                    })}
                   </List>
                 </Grid>
                 <Grid item xs={12} md={7}>
@@ -823,22 +717,51 @@ function DailyDispatchTab() {
                         {selectedDispatch ? (
                           <Box
                             sx={{
-                              border: "1px dashed",
-                              borderColor: "divider",
+                              border: "2px solid",
+                              borderColor: "grey.800",
                               borderRadius: 2,
                               p: 3,
-                              textTransform: "uppercase",
-                              fontFamily: "'Fira Code', monospace"
+                              width: 1,
+                              maxWidth: 420,
+                              aspectRatio: "1",
+                              bgcolor: "background.paper",
+                              boxShadow: (theme) => `inset 0 0 0 1px ${theme.palette.grey[300]}`,
+                              fontFamily: "'IBM Plex Sans', 'Roboto', sans-serif"
                             }}
                           >
-                            <Typography variant="overline">Gönderen: Teknik Destek Merkezi</Typography>
-                            <Typography variant="h4" fontWeight={700}>
-                              {selectedDispatch.asset}
-                            </Typography>
-                            <Typography variant="subtitle1">ServiceDesk: {selectedDispatch.id}</Typography>
-                            <Typography variant="body2">Ürün: {selectedDispatch.product}</Typography>
-                            <Typography variant="body2">Bölge: {selectedDispatch.region}</Typography>
-                            <Typography variant="body2">Alıcı: {selectedDispatch.recipient}</Typography>
+                            <Stack spacing={1.5} sx={{ height: "100%" }}>
+                              <Typography variant="caption" sx={{ letterSpacing: 1.5 }} color="text.secondary">
+                                GÖNDEREN · TEKNİK DESTEK DEPARTMANI
+                              </Typography>
+                              <Typography
+                                variant="subtitle1"
+                                fontWeight={700}
+                                color="primary"
+                                sx={{ letterSpacing: 1.2 }}
+                              >
+                                ALICI · {selectedDispatch.region}
+                              </Typography>
+                              <Typography
+                                variant="h4"
+                                fontWeight={700}
+                                sx={{ letterSpacing: 1, textTransform: "uppercase" }}
+                              >
+                                {selectedDispatch.asset}
+                              </Typography>
+                              <Divider />
+                              <Grid container spacing={1} columns={12} sx={{ textTransform: "none" }}>
+                                {labelRows.map((row) => (
+                                  <Grid item xs={12} sm={6} key={row.label}>
+                                    <Typography variant="caption" color="text.secondary">
+                                      {row.label}
+                                    </Typography>
+                                    <Typography variant="body1" fontWeight={600}>
+                                      {row.value}
+                                    </Typography>
+                                  </Grid>
+                                ))}
+                              </Grid>
+                            </Stack>
                           </Box>
                         ) : (
                           <Typography color="text.secondary">Bir kayıt seçin.</Typography>
@@ -851,27 +774,6 @@ function DailyDispatchTab() {
               </Grid>
             </Stack>
           )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardContent>
-          <Stack spacing={2}>
-            <Typography variant="h6" fontWeight={700}>
-              Yapılanlar / Özellikler
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Günlük çıkış modülü kayıt, arama ve yazdırma sekmelerinde aşağıdaki işlevleri içerir:
-            </Typography>
-            <List>
-              {featureDetails.map((feature) => (
-                <ListItem key={feature.title} alignItems="flex-start">
-                  <ListItemIcon sx={{ minWidth: 42 }}>{feature.icon}</ListItemIcon>
-                  <ListItemText primary={feature.title} secondary={feature.description} />
-                </ListItem>
-              ))}
-            </List>
-          </Stack>
         </CardContent>
       </Card>
     </Stack>

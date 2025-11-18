@@ -53,7 +53,14 @@ export default function App() {
         path="/import-export"
         element={<LayoutRoute><ImportExportView /></LayoutRoute>}
       />
-      <Route path="/cleanup" element={<LayoutRoute><CleanupView /></LayoutRoute>} />
+      <Route
+        path="/cleanup"
+        element={<LayoutRoute><CleanupView /></LayoutRoute>}
+      />
+      <Route
+        path="/cleanup/daily"
+        element={<LayoutRoute><CleanupView defaultTab="daily" /></LayoutRoute>}
+      />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
