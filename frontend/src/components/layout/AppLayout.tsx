@@ -16,12 +16,14 @@ import ListAltIcon from "@mui/icons-material/ListAltOutlined";
 import ReceiptIcon from "@mui/icons-material/ReceiptLongOutlined";
 import CloudUploadIcon from "@mui/icons-material/CloudUploadOutlined";
 import CleaningServicesIcon from "@mui/icons-material/CleaningServicesOutlined";
+import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
 import LogoutIcon from "@mui/icons-material/Logout";
 import MenuIcon from "@mui/icons-material/Menu";
 import DarkModeIcon from "@mui/icons-material/DarkModeOutlined";
 import LightModeIcon from "@mui/icons-material/LightModeOutlined";
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
+import type { Location, To } from "react-router-dom";
 
 import { useAuth } from "../../context/AuthContext";
 import brandLogo from "../../assets/brand-logo.svg";
@@ -29,7 +31,15 @@ import { useThemeMode } from "../../context/ThemeModeContext";
 
 const drawerWidth = 260;
 
-const navItems = [
+type NavItem = {
+  label: string;
+  icon: React.ReactNode;
+  path: string;
+  to?: To;
+  isSelected?: (location: Location) => boolean;
+};
+
+const navItems: NavItem[] = [
   {
     label: "Dashboard",
     icon: <DashboardIcon />,
@@ -53,7 +63,16 @@ const navItems = [
   {
     label: "Temizleme Araçları",
     icon: <CleaningServicesIcon />,
-    path: "/cleanup"
+    path: "/cleanup",
+    isSelected: (location) => location.pathname === "/cleanup" && !location.hash,
+    to: "/cleanup"
+  },
+  {
+    label: "Günlük Çıkış",
+    icon: <Inventory2OutlinedIcon />,
+    path: "/cleanup",
+    to: { pathname: "/cleanup", hash: "#gunluk-cikis" },
+    isSelected: (location) => location.pathname === "/cleanup" && location.hash === "#gunluk-cikis"
   }
 ];
 
@@ -95,11 +114,14 @@ export default function AppLayout({ children }: AppLayoutProps) {
       <Divider />
       <List sx={{ flexGrow: 1, py: 2 }}>
         {navItems.map((item) => {
-          const selected = location.pathname === item.path;
+          const resolvedTo = item.to ?? item.path;
+          const selected = item.isSelected
+            ? item.isSelected(location)
+            : location.pathname === item.path;
           return (
             <ListItemButton
               component={Link}
-              to={item.path}
+              to={resolvedTo}
               key={item.label}
               selected={selected}
               sx={{
