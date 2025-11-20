@@ -16,7 +16,6 @@ import ListAltIcon from "@mui/icons-material/ListAltOutlined";
 import ReceiptIcon from "@mui/icons-material/ReceiptLongOutlined";
 import CloudUploadIcon from "@mui/icons-material/CloudUploadOutlined";
 import CleaningServicesIcon from "@mui/icons-material/CleaningServicesOutlined";
-import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
 import LogoutIcon from "@mui/icons-material/Logout";
 import MenuIcon from "@mui/icons-material/Menu";
 import DarkModeIcon from "@mui/icons-material/DarkModeOutlined";
@@ -66,13 +65,6 @@ const navItems: NavItem[] = [
     path: "/cleanup",
     isSelected: (location) => location.pathname === "/cleanup" && !location.hash,
     to: "/cleanup"
-  },
-  {
-    label: "Günlük Çıkış",
-    icon: <Inventory2OutlinedIcon />,
-    path: "/cleanup",
-    to: { pathname: "/cleanup", hash: "#gunluk-cikis" },
-    isSelected: (location) => location.pathname === "/cleanup" && location.hash === "#gunluk-cikis"
   }
 ];
 
