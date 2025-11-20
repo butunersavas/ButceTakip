@@ -170,7 +170,22 @@ export default function DailyExportView() {
   const handlePrintLabel = () => {
     if (!labelRef.current) return;
 
-    const printWindow = window.open("", "_blank", "width=420,height=520");
+    const missingFields: string[] = [];
+    if (!receiverName.trim()) missingFields.push("Alıcı Adı");
+    if (!receiverRegion.trim()) missingFields.push("Alıcı Bölge");
+    if (!productName.trim()) missingFields.push("Gönderilen Ürün");
+    if (!assetNumber.trim()) missingFields.push("Demirbaş Numarası");
+    if (!date) missingFields.push("Tarih");
+
+    if (missingFields.length > 0) {
+      setExportStatus({
+        type: "error",
+        message: `${missingFields.join(", ")} alanlarını doldurmalısınız. Not alanı isteğe bağlıdır.`
+      });
+      return;
+    }
+
+    const printWindow = window.open("", "_blank", "width=520,height=680");
     if (!printWindow) {
       setExportStatus({ type: "error", message: "Yazdırma penceresi açılamadı." });
       return;
@@ -181,32 +196,37 @@ export default function DailyExportView() {
         <head>
           <title>Barkod Etiketi</title>
           <style>
+            :root { font-family: 'Inter', Arial, sans-serif; color: #0f172a; }
+            body { margin: 0; padding: 24px; background: #f8fafc; }
+            .sheet { max-width: 460px; margin: 0 auto; background: #fff; border-radius: 12px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.12); padding: 20px; }
+            .toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+            .toolbar h1 { font-size: 16px; margin: 0; }
+            .hint { font-size: 12px; color: #475569; margin: 12px 0 0; }
+            .label { width: 100mm; height: 100mm; box-sizing: border-box; padding: 10mm; border: 1px solid #cbd5e1; border-radius: 10px; background: #fff; }
+            .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+            .print-btn { background: #e11d48; color: #fff; border: none; padding: 10px 14px; border-radius: 8px; cursor: pointer; font-weight: 700; }
+            .print-btn:hover { background: #be123c; }
             @page { size: 100mm 100mm; margin: 0; }
-            body { margin: 0; display: flex; justify-content: center; align-items: center; font-family: Arial, sans-serif; }
-            .label { width: 100mm; height: 100mm; box-sizing: border-box; padding: 10mm; }
+            @media print { body { background: transparent; padding: 0; } .sheet { box-shadow: none; border: none; padding: 0; } .toolbar, .actions, .hint { display: none; } }
           </style>
         </head>
         <body>
-          <div class="label">${labelRef.current.innerHTML}</div>
+          <div class="sheet">
+            <div class="toolbar">
+              <h1>Günlük Çıkış Barkod Önizleme</h1>
+              <span style="font-size:12px; color:#64748b;">${new Date(date).toLocaleDateString("tr-TR")}</span>
+            </div>
+            <div class="label">${labelRef.current.innerHTML}</div>
+            <div class="actions">
+              <button class="print-btn" onclick="window.print()">Yazdır</button>
+            </div>
+            <p class="hint">Barkodun son halini bu pencerede görebilir, yazdırmadan önce yazıcı ayarlarını güncelleyebilirsiniz.</p>
+          </div>
         </body>
       </html>
     `);
     printWindow.document.close();
-
-    const triggerPrint = () => {
-      printWindow.focus();
-      printWindow.print();
-    };
-
-    if (printWindow.document.readyState === "complete") {
-      setTimeout(triggerPrint, 200);
-    } else {
-      printWindow.onload = () => setTimeout(triggerPrint, 200);
-    }
-
-    printWindow.onafterprint = () => {
-      printWindow.close();
-    };
+    printWindow.focus();
 
     const printedAt = new Date().toISOString();
     setLabelHistory((previous) => [
@@ -262,9 +282,7 @@ export default function DailyExportView() {
         </Typography>
       </Stack>
       <Typography variant="body1" color="text.secondary">
-        Seçtiğiniz gün için plan, gerçekleşen harcamalar ve tasarruf özetini tek ekrandan
-        dışa aktarın. Bu ekran yalnızca günlük çıkışa odaklanır; temizleme araçlarıyla
-        aynı sayfada değildir.
+        Günlük plan özetini indirip barkod yazdırma işlemlerini tek ekranda, gereksiz alanlar olmadan yönetin.
       </Typography>
       {exportStatus && <Alert severity={exportStatus.type}>{exportStatus.message}</Alert>}
       <Card>
@@ -278,13 +296,13 @@ export default function DailyExportView() {
                   value={date}
                   onChange={(event) => setDate(event.target.value)}
                   fullWidth
+                  required
                   InputLabelProps={{ shrink: true }}
                 />
               </Grid>
               <Grid item xs={12} md={8}>
                 <Typography variant="body2" color="text.secondary">
-                  Tarihi seçtikten sonra tek tıkla XLSX veya CSV formatında günlük çıkış dosyasını
-                  indirebilirsiniz.
+                  Tarihi belirledikten sonra tek tıkla XLSX veya CSV formatında günlük çıkış özetini indirebilirsiniz.
                 </Typography>
               </Grid>
             </Grid>
@@ -347,21 +365,17 @@ export default function DailyExportView() {
         </CardContent>
       </Card>
 
-      <Card sx={{ border: 2, borderColor: "error.main" }}>
+      <Card sx={{ border: 1, borderColor: "divider" }}>
         <CardContent>
           <Stack spacing={3}>
             <Stack direction="row" spacing={1} alignItems="center">
-              <Typography variant="h6" fontWeight={700} color="error.main">
-                Günlük Çıkış Etiket Alanı
+              <Typography variant="h6" fontWeight={700}>
+                Barkod ve Etiket Bilgileri
               </Typography>
               <Typography variant="body2" color="text.secondary">
                 Etiket yazdırma sırası: #{labelSequence.toString().padStart(3, "0")}
               </Typography>
             </Stack>
-            <Typography variant="body2" color="text.secondary">
-              Kırmızı çerçeve içindeki alan yalnızca Günlük Çıkış etiketleri içindir. Gönderici sabit olarak
-              "Teknik Destek Departmanı" olarak kalır; alıcı bölgesi listeden seçilir ve etiket üzerine yazılır.
-            </Typography>
             <Grid container spacing={2}>
               <Grid item xs={12} md={6} lg={4}>
                 <TextField
@@ -370,6 +384,7 @@ export default function DailyExportView() {
                   onChange={(event) => setReceiverName(event.target.value)}
                   placeholder="Alıcı adı veya firma"
                   fullWidth
+                  required
                 />
               </Grid>
               <Grid item xs={12} md={6} lg={4}>
@@ -379,6 +394,7 @@ export default function DailyExportView() {
                   value={receiverRegion}
                   onChange={(event) => setReceiverRegion(event.target.value)}
                   fullWidth
+                  required
                 >
                   {receiverRegions.map((region) => (
                     <MenuItem key={region} value={region}>
@@ -403,6 +419,7 @@ export default function DailyExportView() {
                   onChange={(event) => setProductName(event.target.value)}
                   placeholder="Ürün adı"
                   fullWidth
+                  required
                 />
               </Grid>
               <Grid item xs={12} md={6} lg={4}>
@@ -412,6 +429,7 @@ export default function DailyExportView() {
                   onChange={(event) => setAssetNumber(event.target.value)}
                   placeholder="örn. DM-1024"
                   fullWidth
+                  required
                 />
               </Grid>
             </Grid>
@@ -469,9 +487,8 @@ export default function DailyExportView() {
               <Grid item xs={12} md={4}>
                 <Stack spacing={1.5}>
                   <Typography variant="body2" color="text.secondary">
-                    Barkod yazdır butonuna bastığınızda Zebra ZD220 (10×10 cm) yazıcıdan etiket çıktısı alınır. Etiket
-                    içeriklerinde "Teknik Çıkış Etiketi" metni gösterilmez, yalnızca gönderici ve alıcı bilgileri
-                    yer alır.
+                    Barkod yazdır butonuna bastığınızda açılan pencerede etiketin son halini görebilir, ardından yazıcı ayarlarını
+                    güncelleyerek çıktıyı alabilirsiniz.
                   </Typography>
                   <Button
                     variant="contained"
@@ -496,8 +513,7 @@ export default function DailyExportView() {
               Yazdırma Geçmişi
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Bu bölümde yazdırılan tüm etiketler kaydedilir. Gönderilen ürün, alıcı ismi, alıcı bölge ve demirbaş
-              numarası gibi alanlarda arama yapabilirsiniz.
+              Gönderilen ürün, alıcı ismi, alıcı bölge ve demirbaş numarası alanlarında hızlı arama yapabilirsiniz.
             </Typography>
             <Grid container spacing={2}>
               <Grid item xs={12} md={6} lg={4}>
