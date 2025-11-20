@@ -6,6 +6,7 @@ import PlansView from "./components/Plans/PlansView";
 import ExpensesView from "./components/Expenses/ExpensesView";
 import ImportExportView from "./components/ImportExport/ImportExportView";
 import CleanupView from "./components/Cleanup/CleanupView";
+import DailyExportView from "./components/DailyExport/DailyExportView";
 import AppLayout from "./components/layout/AppLayout";
 import { useAuth } from "./context/AuthContext";
 import LoginPage from "./pages/LoginPage";
@@ -53,6 +54,7 @@ export default function App() {
         path="/import-export"
         element={<LayoutRoute><ImportExportView /></LayoutRoute>}
       />
+      <Route path="/daily-export" element={<LayoutRoute><DailyExportView /></LayoutRoute>} />
       <Route path="/cleanup" element={<LayoutRoute><CleanupView /></LayoutRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
