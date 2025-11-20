@@ -138,13 +138,15 @@ export default function DashboardView() {
     return dashboard.monthly.map((entry) => {
       const planned = entry.planned ?? 0;
       const actual = entry.actual ?? 0;
-      const remaining = planned - actual;
+      const remaining = Math.max(planned - actual, 0);
+      const overrun = Math.max(actual - planned, 0);
 
       return {
         ...entry,
         planned,
         actual,
         remaining,
+        overrun,
         monthLabel: monthLabels[entry.month - 1]
       };
     });
@@ -162,8 +164,9 @@ export default function DashboardView() {
       const entries = dashboard.monthly.filter((item) => months.includes(item.month));
       const planned = entries.reduce((sum, item) => sum + (item.planned ?? 0), 0);
       const actual = entries.reduce((sum, item) => sum + (item.actual ?? 0), 0);
-      const remaining = planned - actual;
-      return { label, planned, actual, remaining };
+      const remaining = Math.max(planned - actual, 0);
+      const overrun = Math.max(actual - planned, 0);
+      return { label, planned, actual, remaining, overrun };
     });
   }, [dashboard]);
 
@@ -171,11 +174,28 @@ export default function DashboardView() {
     () => ({
       planned: "#0d47a1",
       actual: "#26a69a",
-      remaining: "#ff8f00"
+      remaining: "#ff8f00",
+      overrun: "#d32f2f"
     }),
     []
   );
-  const pieKeys = useMemo(() => ["planned", "actual", "remaining"] as const, []);
+  const pieKeys = useMemo(() => ["planned", "actual", "remaining", "overrun"] as const, []);
+
+  const normalizedKpi = useMemo(() => {
+    const totalPlan = dashboard?.kpi.total_plan ?? 0;
+    const totalActual = dashboard?.kpi.total_actual ?? 0;
+    const rawRemaining = totalPlan - totalActual;
+
+    const totalRemaining = Math.max(rawRemaining, 0);
+    const totalOverrun = Math.max(totalActual - totalPlan, dashboard?.kpi.total_overrun ?? 0);
+
+    return {
+      total_plan: totalPlan,
+      total_actual: totalActual,
+      total_remaining: totalRemaining,
+      total_overrun: totalOverrun
+    } satisfies DashboardKPI;
+  }, [dashboard]);
 
   return (
     <Stack spacing={4}>
@@ -239,22 +259,22 @@ export default function DashboardView() {
           [
             {
               title: "Toplam Plan",
-              value: dashboard?.kpi.total_plan ?? 0,
+              value: normalizedKpi.total_plan,
               color: "primary"
             },
             {
               title: "Gerçekleşen",
-              value: dashboard?.kpi.total_actual ?? 0,
+              value: normalizedKpi.total_actual,
               color: "secondary"
             },
             {
               title: "Kalan",
-              value: dashboard?.kpi.total_remaining ?? 0,
-              color: "default"
+              value: normalizedKpi.total_remaining,
+              color: "warning"
             },
             {
               title: "Aşım",
-              value: dashboard?.kpi.total_overrun ?? 0,
+              value: normalizedKpi.total_overrun,
               color: "error"
             }
           ] as const
@@ -280,7 +300,12 @@ export default function DashboardView() {
                 {isLoading ? (
                   <Skeleton variant="text" height={40} width="60%" />
                 ) : (
-                  <Typography variant="h5" fontWeight={700} sx={{ mt: 1 }}>
+                  <Typography
+                    variant="h5"
+                    fontWeight={700}
+                    sx={{ mt: 1 }}
+                    color={kpi.title === "Aşım" ? "error" : undefined}
+                  >
                     {formatCurrency(kpi.value)}
                   </Typography>
                 )}
@@ -323,7 +348,8 @@ export default function DashboardView() {
                   <Legend />
                   <Bar dataKey="planned" name="Planlanan" fill={pieColors.planned} radius={[4, 4, 0, 0]} />
                   <Bar dataKey="actual" name="Gerçekleşen" fill={pieColors.actual} radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="remaining" name="Kalan (+) / Aşım (-)" fill={pieColors.remaining} radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="remaining" name="Kalan" fill={pieColors.remaining} radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="overrun" name="Aşım" fill={pieColors.overrun} radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -351,6 +377,10 @@ export default function DashboardView() {
                   <Box sx={{ width: 12, height: 12, borderRadius: "50%", backgroundColor: pieColors.remaining }} />
                   <Typography variant="body2">Kalan</Typography>
                 </Stack>
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <Box sx={{ width: 12, height: 12, borderRadius: "50%", backgroundColor: pieColors.overrun }} />
+                  <Typography variant="body2">Aşım</Typography>
+                </Stack>
               </Stack>
             </Box>
             <Grid container spacing={3}>
@@ -375,7 +405,8 @@ export default function DashboardView() {
                               data={[
                                 { name: "Planlanan", value: quarter.planned, key: "planned" },
                                 { name: "Gerçekleşen", value: quarter.actual, key: "actual" },
-                                { name: "Kalan", value: Math.max(quarter.remaining, 0), key: "remaining" }
+                                { name: "Kalan", value: Math.max(quarter.remaining, 0), key: "remaining" },
+                                { name: "Aşım", value: Math.max(quarter.overrun, 0), key: "overrun" }
                               ]}
                               dataKey="value"
                               nameKey="name"
