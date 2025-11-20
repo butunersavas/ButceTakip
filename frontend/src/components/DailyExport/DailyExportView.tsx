@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Box,
@@ -27,6 +27,17 @@ interface DailyExportRow {
   category: string;
   amount: number;
   note: string;
+}
+
+interface LabelHistoryEntry {
+  labelIdentifier: string;
+  receiverRegion: string;
+  receiverName: string;
+  dispatchNote: string;
+  productName: string;
+  assetNumber: string;
+  date: string;
+  printedAt: string;
 }
 
 const receiverRegions = [
@@ -88,7 +99,25 @@ export default function DailyExportView() {
   const [receiverRegion, setReceiverRegion] = useState<string>(receiverRegions[0]);
   const [receiverName, setReceiverName] = useState("");
   const [dispatchNote, setDispatchNote] = useState("");
+  const [productName, setProductName] = useState("");
+  const [assetNumber, setAssetNumber] = useState("");
   const [labelSequence, setLabelSequence] = useState(1);
+  const [labelHistory, setLabelHistory] = useState<LabelHistoryEntry[]>(() => {
+    if (typeof window === "undefined") return [];
+
+    const stored = window.localStorage.getItem("daily-export-label-history");
+    if (!stored) return [];
+
+    try {
+      const parsed = JSON.parse(stored);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+      console.error("Geçmiş verisi okunamadı", error);
+      return [];
+    }
+  });
+  const [searchTerm, setSearchTerm] = useState("");
+  const [regionFilter, setRegionFilter] = useState<string>("Tümü");
   const labelRef = useRef<HTMLDivElement>(null);
 
   const rows = useMemo(() => buildSampleRows(date), [date]);
@@ -97,6 +126,12 @@ export default function DailyExportView() {
     () => `${date.replace(/-/g, "")}-${labelSequence.toString().padStart(3, "0")}`,
     [date, labelSequence]
   );
+  const isLabelReady =
+    receiverName.trim() !== "" && productName.trim() !== "" && assetNumber.trim() !== "";
+
+  useEffect(() => {
+    window.localStorage.setItem("daily-export-label-history", JSON.stringify(labelHistory));
+  }, [labelHistory]);
 
   const handleExport = (format: "xlsx" | "csv") => {
     try {
@@ -137,6 +172,18 @@ export default function DailyExportView() {
   const handlePrintLabel = () => {
     if (!labelRef.current) return;
 
+    const trimmedReceiverName = receiverName.trim();
+    const trimmedProductName = productName.trim();
+    const trimmedAssetNumber = assetNumber.trim();
+
+    if (!trimmedReceiverName || !trimmedProductName || !trimmedAssetNumber) {
+      setExportStatus({
+        type: "error",
+        message: "Alıcı, ürün ve demirbaş numarası alanları zorunludur."
+      });
+      return;
+    }
+
     const printWindow = window.open("", "_blank", "width=420,height=520");
     if (!printWindow) {
       setExportStatus({ type: "error", message: "Yazdırma penceresi açılamadı." });
@@ -159,11 +206,66 @@ export default function DailyExportView() {
       </html>
     `);
     printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
-    printWindow.close();
+
+    const triggerPrint = () => {
+      printWindow.focus();
+      printWindow.print();
+    };
+
+    if (printWindow.document.readyState === "complete") {
+      setTimeout(triggerPrint, 200);
+    } else {
+      printWindow.onload = () => setTimeout(triggerPrint, 200);
+    }
+
+    printWindow.onafterprint = () => {
+      printWindow.close();
+    };
+
+    const printedAt = new Date().toISOString();
+    setLabelHistory((previous) => [
+      {
+        labelIdentifier,
+        receiverRegion,
+        receiverName: trimmedReceiverName,
+        dispatchNote,
+        productName: trimmedProductName,
+        assetNumber: trimmedAssetNumber,
+        date,
+        printedAt
+      },
+      ...previous
+    ]);
+
+    setExportStatus({ type: "success", message: "Etiket yazdırma işine gönderildi." });
     setLabelSequence((previous) => previous + 1);
   };
+
+  const filteredHistory = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+
+    return labelHistory.filter((entry) => {
+      const matchesRegion = regionFilter === "Tümü" || entry.receiverRegion === regionFilter;
+
+      if (!normalizedSearch) {
+        return matchesRegion;
+      }
+
+      const content = [
+        entry.receiverName,
+        entry.receiverRegion,
+        entry.productName,
+        entry.assetNumber,
+        entry.dispatchNote,
+        entry.labelIdentifier
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return matchesRegion && content.includes(normalizedSearch);
+    });
+  }, [labelHistory, regionFilter, searchTerm]);
 
   return (
     <Stack spacing={3} data-section="gunluk-cikis">
@@ -175,8 +277,7 @@ export default function DailyExportView() {
       </Stack>
       <Typography variant="body1" color="text.secondary">
         Seçtiğiniz gün için plan, gerçekleşen harcamalar ve tasarruf özetini tek ekrandan
-        dışa aktarın. Bu ekran yalnızca günlük çıkışa odaklanır; temizleme araçlarıyla
-        aynı sayfada değildir.
+        dışa aktarın.
       </Typography>
       {exportStatus && <Alert severity={exportStatus.type}>{exportStatus.message}</Alert>}
       <Card>
@@ -259,31 +360,18 @@ export default function DailyExportView() {
         </CardContent>
       </Card>
 
-      <Card sx={{ border: 2, borderColor: "error.main" }}>
+      <Card>
         <CardContent>
           <Stack spacing={3}>
             <Stack direction="row" spacing={1} alignItems="center">
-              <Typography variant="h6" fontWeight={700} color="error.main">
-                Günlük Çıkış Etiket Alanı
+              <Typography variant="h6" fontWeight={700}>
+                Günlük Çıkış Etiketi
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Etiket yazdırma sırası: #{labelSequence.toString().padStart(3, "0")}
+                Sıra: #{labelSequence.toString().padStart(3, "0")}
               </Typography>
             </Stack>
-            <Typography variant="body2" color="text.secondary">
-              Kırmızı çerçeve içindeki alan yalnızca Günlük Çıkış etiketleri içindir. Gönderici sabit olarak
-              "Teknik Destek Departmanı" olarak kalır; alıcı bölgesi listeden seçilir ve etiket üzerine yazılır.
-            </Typography>
             <Grid container spacing={2}>
-              <Grid item xs={12} md={6} lg={4}>
-                <TextField
-                  label="Alıcı Adı"
-                  value={receiverName}
-                  onChange={(event) => setReceiverName(event.target.value)}
-                  placeholder="Alıcı adı veya firma"
-                  fullWidth
-                />
-              </Grid>
               <Grid item xs={12} md={6} lg={4}>
                 <TextField
                   select
@@ -291,6 +379,7 @@ export default function DailyExportView() {
                   value={receiverRegion}
                   onChange={(event) => setReceiverRegion(event.target.value)}
                   fullWidth
+                  required
                 >
                   {receiverRegions.map((region) => (
                     <MenuItem key={region} value={region}>
@@ -299,13 +388,43 @@ export default function DailyExportView() {
                   ))}
                 </TextField>
               </Grid>
-              <Grid item xs={12} md={12} lg={4}>
+              <Grid item xs={12} md={6} lg={4}>
+                <TextField
+                  label="Alıcı İsmi"
+                  value={receiverName}
+                  onChange={(event) => setReceiverName(event.target.value)}
+                  placeholder="Alıcı adı"
+                  fullWidth
+                  required
+                />
+              </Grid>
+              <Grid item xs={12} md={6} lg={4}>
                 <TextField
                   label="Günlük Çıkış Notu"
                   value={dispatchNote}
                   onChange={(event) => setDispatchNote(event.target.value)}
                   placeholder="Örn. Acil teslimat"
                   fullWidth
+                />
+              </Grid>
+              <Grid item xs={12} md={6} lg={4}>
+                <TextField
+                  label="Gönderilen Ürün"
+                  value={productName}
+                  onChange={(event) => setProductName(event.target.value)}
+                  placeholder="Ürün adı"
+                  fullWidth
+                  required
+                />
+              </Grid>
+              <Grid item xs={12} md={6} lg={4}>
+                <TextField
+                  label="Demirbaş Numarası"
+                  value={assetNumber}
+                  onChange={(event) => setAssetNumber(event.target.value)}
+                  placeholder="örn. DM-1024"
+                  fullWidth
+                  required
                 />
               </Grid>
             </Grid>
@@ -331,7 +450,13 @@ export default function DailyExportView() {
                       Alıcı Bölge: {receiverRegion}
                     </Typography>
                     <Typography variant="subtitle2" color="text.secondary">
-                      Alıcı: {receiverName || "(Belirtilmedi)"}
+                      Alıcı: {receiverName.trim() || "(Belirtilmedi)"}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Gönderilen Ürün: {productName.trim() || "-"}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Demirbaş No: {assetNumber.trim() || "-"}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
                       Gönderici: Teknik Destek Departmanı
@@ -356,23 +481,85 @@ export default function DailyExportView() {
               </Grid>
               <Grid item xs={12} md={4}>
                 <Stack spacing={1.5}>
-                  <Typography variant="body2" color="text.secondary">
-                    Barkod yazdır butonuna bastığınızda Zebra ZD220 (10×10 cm) yazıcıdan etiket çıktısı alınır. Etiket
-                    içeriklerinde "Teknik Çıkış Etiketi" metni gösterilmez, yalnızca gönderici ve alıcı bilgileri
-                    yer alır.
-                  </Typography>
                   <Button
                     variant="contained"
-                    color="error"
+                    color="primary"
                     startIcon={<PrintIcon />}
                     onClick={handlePrintLabel}
                     fullWidth
+                    disabled={!isLabelReady}
                   >
                     Barkod Yazdır
                   </Button>
                 </Stack>
               </Grid>
             </Grid>
+          </Stack>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent>
+          <Stack spacing={2}>
+            <Typography variant="h6" fontWeight={700} component="h2">
+              Yazdırma Geçmişi
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Gönderilen ürün, alıcı ismi, alıcı bölge ve demirbaş numarası gibi alanlarda arama yapabilirsiniz.
+            </Typography>
+            <Grid container spacing={2}>
+              <Grid item xs={12} md={6} lg={4}>
+                <TextField
+                  label="Arama"
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  placeholder="Ürün, alıcı, demirbaş no vb."
+                  fullWidth
+                />
+              </Grid>
+              <Grid item xs={12} md={6} lg={4}>
+                <TextField
+                  select
+                  label="Bölge Filtresi"
+                  value={regionFilter}
+                  onChange={(event) => setRegionFilter(event.target.value)}
+                  fullWidth
+                >
+                  <MenuItem value="Tümü">Tümü</MenuItem>
+                  {receiverRegions.map((region) => (
+                    <MenuItem key={region} value={region}>
+                      {region}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Grid>
+            </Grid>
+
+            {filteredHistory.length === 0 ? (
+              <Alert severity="info">Henüz kayıtlı bir etiket yazdırma bulunmuyor.</Alert>
+            ) : (
+              <Stack spacing={1.5} divider={<Divider flexItem />}>
+                {filteredHistory.map((entry) => (
+                  <Stack key={`${entry.labelIdentifier}-${entry.printedAt}`} spacing={0.5}>
+                    <Typography variant="subtitle1" fontWeight={700}>
+                      {entry.productName || "(Ürün belirtilmedi)"}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Alıcı: {entry.receiverName || "-"} · Bölge: {entry.receiverRegion}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Demirbaş No: {entry.assetNumber || "-"} · Etiket ID: {entry.labelIdentifier}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Not: {entry.dispatchNote || "-"}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Yazdırılma tarihi: {new Date(entry.printedAt).toLocaleString("tr-TR")}
+                    </Typography>
+                  </Stack>
+                ))}
+              </Stack>
+            )}
           </Stack>
         </CardContent>
       </Card>
