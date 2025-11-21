@@ -1,19 +1,6 @@
-import { FormEvent, useEffect, useState } from "react";
-import {
-  Alert,
-  Box,
-  Button,
-  Card,
-  CardContent,
-  Checkbox,
-  FormControlLabel,
-  Grid,
-  MenuItem,
-  Stack,
-  TextField,
-  Typography
-} from "@mui/material";
-import CleaningServicesIcon from "@mui/icons-material/CleaningServicesOutlined";
+import { FormEvent, useState } from "react";
+import { Alert, Box, Button, Card, CardContent, MenuItem, Stack, TextField, Typography } from "@mui/material";
+import DeleteForeverIcon from "@mui/icons-material/DeleteForever";
 
 export default function CleanupView() {
   return (
@@ -24,49 +11,20 @@ export default function CleanupView() {
 }
 
 function CleaningToolsSection() {
-  const cleanupOptions = [
-    { value: "usage-logs", label: "İşlem Kayıtları" },
-    { value: "orphan-data", label: "Yetim Kayıtlar" },
-    { value: "archived-records", label: "Arşivlenmiş Veriler" }
-  ];
-
-  const [cleanupType, setCleanupType] = useState(cleanupOptions[0].value);
-  const [keyword, setKeyword] = useState("");
-  const [onlyPast, setOnlyPast] = useState(true);
-  const [includePlans, setIncludePlans] = useState(false);
-  const [selectedRecordId, setSelectedRecordId] = useState("");
-  const [selectedScenario, setSelectedScenario] = useState("");
-  const [deleteSelectedRecord, setDeleteSelectedRecord] = useState(false);
-  const [deleteSelectedScenario, setDeleteSelectedScenario] = useState(false);
-  const [cleanupStatus, setCleanupStatus] = useState<
-    { type: "success" | "info" | "error"; message: string } | null
-  >(null);
-
-  const selectedOption = cleanupOptions.find((option) => option.value === cleanupType);
-
-  useEffect(() => {
-    setDeleteSelectedScenario(Boolean(selectedScenario));
-  }, [selectedScenario]);
+  const scenarios = ["2025-Temel", "2024-Yedek", "Arşiv-1", "Test Senaryosu"];
+  const [selectedScenario, setSelectedScenario] = useState<string>(scenarios[0]);
+  const [cleanupStatus, setCleanupStatus] = useState<{ type: "success" | "info" | "error"; message: string } | null>(
+    null
+  );
 
   const handleCleanup = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const targetLabel = selectedOption?.label ?? "Veri";
-    setCleanupStatus({
-      type: "info",
-      message: `${targetLabel} için temizleme isteği oluşturuldu. Filtre: "${
-        keyword || "*"
-      }". Geçmiş tarihler: ${onlyPast ? "Evet" : "Hayır"}. Plan verileri: ${
-        includePlans ? "Silinecek" : "Korunacak"
-      }. ${
-        deleteSelectedRecord && selectedRecordId
-          ? `Seçili kayıt (${selectedRecordId}) silinecek.`
-          : "Seçili kayıt silinmeyecek."
-      } ${
-        deleteSelectedScenario && selectedScenario
-          ? `Senaryo (${selectedScenario}) silinecek.`
-          : "Senaryo korunacak."
-      }`
-    });
+    if (!selectedScenario) {
+      setCleanupStatus({ type: "error", message: "Lütfen silinecek bir senaryo seçin." });
+      return;
+    }
+
+    setCleanupStatus({ type: "success", message: `"${selectedScenario}" senaryosu silindi.` });
   };
 
   return (
@@ -76,105 +34,34 @@ function CleaningToolsSection() {
           Temizleme Araçları
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          Sorgulama ve toplu temizleme işlemini bu alandan yönetebilirsiniz.
+          Sadece senaryo seçip silme işlemini buradan yapabilirsiniz.
         </Typography>
       </Stack>
       <Card>
         <CardContent>
           <Stack spacing={3} component="form" onSubmit={handleCleanup}>
-            <Grid container spacing={3} alignItems="center">
-              <Grid item xs={12} md={4}>
-                <TextField
-                  select
-                  label="İşlem"
-                  value={cleanupType}
-                  onChange={(event) => setCleanupType(event.target.value)}
-                  fullWidth
-                >
-                  {cleanupOptions.map((option) => (
-                    <MenuItem key={option.value} value={option.value}>
-                      {option.label}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField
-                  label="Filtre kelime"
-                  value={keyword}
-                  onChange={(event) => setKeyword(event.target.value)}
-                  placeholder="Örn. LOG-2024"
-                  fullWidth
-                />
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField
-                  label="Seçili kayıt ID"
-                  value={selectedRecordId}
-                  onChange={(event) => setSelectedRecordId(event.target.value)}
-                  placeholder="Örn. REC-1024"
-                  fullWidth
-                />
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField
-                  label="Seçili senaryo"
-                  value={selectedScenario}
-                  onChange={(event) => setSelectedScenario(event.target.value)}
-                  placeholder="Örn. 2025-Temel"
-                  fullWidth
-                />
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <Stack direction="column" spacing={1.5}>
-                  <FormControlLabel
-                    control={
-                      <Checkbox
-                        checked={onlyPast}
-                        onChange={(event) => setOnlyPast(event.target.checked)}
-                      />
-                    }
-                    label="Yalnızca geçmiş tarihlerdeki verileri temizle"
-                  />
-                  <FormControlLabel
-                    control={
-                      <Checkbox
-                        checked={includePlans}
-                        onChange={(event) => setIncludePlans(event.target.checked)}
-                      />
-                    }
-                    label="Plan verilerini de sil"
-                  />
-                  <FormControlLabel
-                    control={
-                      <Checkbox
-                        checked={deleteSelectedRecord}
-                        onChange={(event) => setDeleteSelectedRecord(event.target.checked)}
-                      />
-                    }
-                    label="Seçili kaydı sil"
-                  />
-                  <FormControlLabel
-                    control={
-                      <Checkbox
-                        checked={deleteSelectedScenario}
-                        onChange={(event) => setDeleteSelectedScenario(event.target.checked)}
-                      />
-                    }
-                    label="Seçili senaryoyu sil"
-                  />
-                </Stack>
-              </Grid>
-            </Grid>
+            <TextField
+              select
+              label="Silinecek senaryo"
+              value={selectedScenario}
+              onChange={(event) => setSelectedScenario(event.target.value)}
+              fullWidth
+            >
+              {scenarios.map((scenario) => (
+                <MenuItem key={scenario} value={scenario}>
+                  {scenario}
+                </MenuItem>
+              ))}
+            </TextField>
             {cleanupStatus && <Alert severity={cleanupStatus.type}>{cleanupStatus.message}</Alert>}
             <Box>
               <Button
                 type="submit"
                 variant="contained"
                 color="error"
-                startIcon={<CleaningServicesIcon />}
+                startIcon={<DeleteForeverIcon />}
               >
-                Temizlik işlemini başlat
+                Senaryoyu Sil
               </Button>
             </Box>
           </Stack>
