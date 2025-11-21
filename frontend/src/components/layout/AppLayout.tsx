@@ -46,7 +46,7 @@ const navItems: NavItem[] = [
     path: "/"
   },
   {
-    label: "Plan Yönetimi",
+    label: "Bütçe Yönetimi",
     icon: <ListAltIcon />,
     path: "/plans"
   },
@@ -139,7 +139,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
               >
                 {item.icon}
               </ListItemIcon>
-              <ListItemText primary={item.label} />
+              <ListItemText primary={item.label} primaryTypographyProps={{ sx: { fontSize: "15px" } }} />
             </ListItemButton>
           );
         })}
@@ -157,6 +157,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
               primary="Karanlık Mod"
               secondary={mode === "dark" ? "Aktif" : "Pasif"}
               secondaryTypographyProps={{ color: "text.secondary" }}
+              primaryTypographyProps={{ sx: { fontSize: "15px" } }}
             />
             <Switch
               edge="end"
@@ -178,7 +179,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
             <ListItemIcon>
               <LogoutIcon />
             </ListItemIcon>
-            <ListItemText primary="Çıkış" />
+            <ListItemText primary="Çıkış" primaryTypographyProps={{ sx: { fontSize: "15px" } }} />
           </ListItemButton>
         </Tooltip>
       </Box>

@@ -174,7 +174,7 @@ export default function DashboardView() {
     () => ({
       planned: "#0d47a1",
       actual: "#26a69a",
-      remaining: "#ff8f00",
+      remaining: "#f57c00",
       overrun: "#d32f2f"
     }),
     []

@@ -17,6 +17,8 @@ import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
 import PrintIcon from "@mui/icons-material/Print";
 import CheckIcon from "@mui/icons-material/CheckCircle";
 import AddIcon from "@mui/icons-material/Add";
+import DeleteIcon from "@mui/icons-material/DeleteOutline";
+import EditIcon from "@mui/icons-material/EditOutlined";
 import { Link as RouterLink } from "react-router-dom";
 
 interface LabelHistoryEntry {
@@ -84,6 +86,7 @@ export default function DailyExportView() {
       return [];
     }
   });
+  const [editingIdentifier, setEditingIdentifier] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [regionFilter, setRegionFilter] = useState<string>("Tümü");
   const labelRef = useRef<HTMLDivElement>(null);
@@ -125,14 +128,11 @@ export default function DailyExportView() {
 
     return `
       <div style="display:flex;flex-direction:column;gap:8px;color:#0f172a;font-family:'Inter',Arial,sans-serif;">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+        <div style="display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap;">
           <div>
             <div style="font-size:18px;font-weight:800;">${entry.receiverRegion}</div>
             <div style="color:#475569;font-weight:600;">${entry.receiverName}</div>
           </div>
-          <div style="background:#e2e8f0;color:#0f172a;font-weight:700;padding:6px 10px;border-radius:8px;font-size:12px;">${
-            entry.date
-          }</div>
         </div>
         <div style="display:flex;flex-direction:column;gap:4px;">
           <div style="font-weight:700;">Ürün</div>
@@ -169,20 +169,38 @@ export default function DailyExportView() {
       return null;
     }
 
+    const targetIdentifier = editingIdentifier ?? labelIdentifier;
+    const existingEntry = editingIdentifier
+      ? labelHistory.find((item) => item.labelIdentifier === editingIdentifier)
+      : null;
+
     const newEntry: LabelHistoryEntry = {
-      labelIdentifier,
+      labelIdentifier: targetIdentifier,
       receiverRegion,
       receiverName,
       dispatchNote,
       productName,
       assetNumbers: parsedAssets,
       date,
-      createdAt: new Date().toISOString()
+      createdAt: existingEntry?.createdAt ?? new Date().toISOString(),
+      printedAt: existingEntry?.printedAt
     };
 
-    setLabelHistory((previous) => [newEntry, ...previous]);
-    setLabelSequence((previous) => previous + 1);
-    setExportStatus({ type: "success", message: "Kayıt oluşturuldu." });
+    setLabelHistory((previous) =>
+      editingIdentifier
+        ? previous.map((item) =>
+            item.labelIdentifier === editingIdentifier ? newEntry : item
+          )
+        : [newEntry, ...previous]
+    );
+    if (!editingIdentifier) {
+      setLabelSequence((previous) => previous + 1);
+    }
+    setExportStatus({
+      type: "success",
+      message: editingIdentifier ? "Kayıt güncellendi." : "Kayıt oluşturuldu."
+    });
+    setEditingIdentifier(null);
 
     return newEntry;
   };
@@ -211,7 +229,7 @@ export default function DailyExportView() {
             :root { font-family: 'Inter', Arial, sans-serif; color: #0f172a; }
             body { margin: 0; padding: 24px; background: #f8fafc; }
             .sheet { max-width: 460px; margin: 0 auto; background: #fff; border-radius: 12px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.12); padding: 20px; }
-            .toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+            .toolbar { display: flex; align-items: center; justify-content: flex-start; gap: 8px; margin-bottom: 14px; }
             .toolbar h1 { font-size: 16px; margin: 0; }
             .hint { font-size: 12px; color: #475569; margin: 12px 0 0; }
             .label { width: 100mm; height: 100mm; box-sizing: border-box; padding: 10mm; border: 1px solid #cbd5e1; border-radius: 10px; background: #fff; }
@@ -226,7 +244,6 @@ export default function DailyExportView() {
           <div class="sheet">
             <div class="toolbar">
               <h1>Günlük Çıkış Barkod Önizleme</h1>
-              <span style="font-size:12px; color:#64748b;">${new Date(entry.date).toLocaleDateString("tr-TR")}</span>
             </div>
             <div class="label">${buildLabelMarkup(entry)}</div>
             <div class="actions">
@@ -247,6 +264,33 @@ export default function DailyExportView() {
       )
     );
     setExportStatus({ type: "success", message: "Etiket yazdırma işine gönderildi." });
+  };
+
+  const handleDeleteEntry = (entry: LabelHistoryEntry) => {
+    setLabelHistory((previous) =>
+      previous.filter((item) => item.labelIdentifier !== entry.labelIdentifier)
+    );
+    if (editingIdentifier === entry.labelIdentifier) {
+      setEditingIdentifier(null);
+    }
+    setExportStatus({
+      type: "success",
+      message: `${entry.labelIdentifier} numaralı kayıt silindi.`
+    });
+  };
+
+  const handleEditEntry = (entry: LabelHistoryEntry) => {
+    setEditingIdentifier(entry.labelIdentifier);
+    setDate(entry.date);
+    setReceiverRegion(entry.receiverRegion);
+    setReceiverName(entry.receiverName);
+    setProductName(entry.productName);
+    setDispatchNote(entry.dispatchNote);
+    setAssetNumbersInput(entry.assetNumbers.join("\n"));
+    setExportStatus({
+      type: "info",
+      message: `${entry.labelIdentifier} etiketi düzenlenmek üzere yüklendi.`
+    });
   };
 
   const filteredHistory = useMemo(() => {
@@ -544,7 +588,28 @@ export default function DailyExportView() {
                             Yazdırılma: {entry.printedAt ? new Date(entry.printedAt).toLocaleString("tr-TR") : "Henüz yazdırılmadı"}
                           </Typography>
                         </Stack>
-                        <Stack spacing={1} alignItems={{ xs: "stretch", sm: "flex-end" }}>
+                        <Stack
+                          direction="row"
+                          spacing={1}
+                          flexWrap="wrap"
+                          justifyContent={{ xs: "flex-start", sm: "flex-end" }}
+                        >
+                          <Button
+                            variant="outlined"
+                            color="primary"
+                            startIcon={<EditIcon />}
+                            onClick={() => handleEditEntry(entry)}
+                          >
+                            Düzenle
+                          </Button>
+                          <Button
+                            variant="outlined"
+                            color="error"
+                            startIcon={<DeleteIcon />}
+                            onClick={() => handleDeleteEntry(entry)}
+                          >
+                            Sil
+                          </Button>
                           <Button
                             variant="contained"
                             color="error"

@@ -1,4 +1,4 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Box,
@@ -14,6 +14,21 @@ import {
   Typography
 } from "@mui/material";
 import CleaningServicesIcon from "@mui/icons-material/CleaningServicesOutlined";
+import { useQuery } from "@tanstack/react-query";
+
+import useAuthorizedClient from "../../hooks/useAuthorizedClient";
+
+interface Scenario {
+  id: number;
+  name: string;
+  year: number;
+}
+
+interface BudgetItem {
+  id: number;
+  code: string;
+  name: string;
+}
 
 export default function CleanupView() {
   return (
@@ -24,6 +39,7 @@ export default function CleanupView() {
 }
 
 function CleaningToolsSection() {
+  const client = useAuthorizedClient();
   const cleanupOptions = [
     { value: "usage-logs", label: "İşlem Kayıtları" },
     { value: "orphan-data", label: "Yetim Kayıtlar" },
@@ -34,35 +50,118 @@ function CleaningToolsSection() {
   const [keyword, setKeyword] = useState("");
   const [onlyPast, setOnlyPast] = useState(true);
   const [includePlans, setIncludePlans] = useState(false);
-  const [selectedRecordId, setSelectedRecordId] = useState("");
-  const [selectedScenario, setSelectedScenario] = useState("");
+  const [selectedBudgetItemId, setSelectedBudgetItemId] = useState<number | null>(null);
+  const [selectedScenarioId, setSelectedScenarioId] = useState<number | null>(null);
   const [deleteSelectedRecord, setDeleteSelectedRecord] = useState(false);
   const [deleteSelectedScenario, setDeleteSelectedScenario] = useState(false);
   const [cleanupStatus, setCleanupStatus] = useState<
     { type: "success" | "info" | "error"; message: string } | null
   >(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const { data: scenarios } = useQuery<Scenario[]>({
+    queryKey: ["scenarios"],
+    queryFn: async () => {
+      const { data } = await client.get<Scenario[]>("/scenarios");
+      return data;
+    }
+  });
+
+  const { data: budgetItems } = useQuery<BudgetItem[]>({
+    queryKey: ["budget-items"],
+    queryFn: async () => {
+      const { data } = await client.get<BudgetItem[]>("/budget-items");
+      return data;
+    }
+  });
 
   const selectedOption = cleanupOptions.find((option) => option.value === cleanupType);
 
-  const handleCleanup = (event: FormEvent<HTMLFormElement>) => {
+  const scenarioOptions = useMemo(() => {
+    return scenarios?.map((scenario) => ({
+      value: scenario.id,
+      label: `${scenario.name} (${scenario.year})`
+    }));
+  }, [scenarios]);
+
+  const budgetOptions = useMemo(() => {
+    return budgetItems?.map((item) => ({
+      value: item.id,
+      label: `${item.code} - ${item.name}`
+    }));
+  }, [budgetItems]);
+
+  useEffect(() => {
+    setDeleteSelectedScenario(Boolean(selectedScenarioId));
+  }, [selectedScenarioId]);
+
+  useEffect(() => {
+    setDeleteSelectedRecord(Boolean(selectedBudgetItemId));
+  }, [selectedBudgetItemId]);
+
+  useEffect(() => {
+    if (!scenarios || !scenarios.length) return;
+    setSelectedScenarioId((previous) => previous ?? scenarios[0].id);
+  }, [scenarios]);
+
+  const handleCleanup = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const targetLabel = selectedOption?.label ?? "Veri";
-    setCleanupStatus({
-      type: "info",
-      message: `${targetLabel} için temizleme isteği oluşturuldu. Filtre: "${
-        keyword || "*"
-      }". Geçmiş tarihler: ${onlyPast ? "Evet" : "Hayır"}. Plan verileri: ${
-        includePlans ? "Silinecek" : "Korunacak"
-      }. ${
-        deleteSelectedRecord && selectedRecordId
-          ? `Seçili kayıt (${selectedRecordId}) silinecek.`
-          : "Seçili kayıt silinmeyecek."
-      } ${
-        deleteSelectedScenario && selectedScenario
-          ? `Senaryo (${selectedScenario}) silinecek.`
-          : "Senaryo korunacak."
-      }`
-    });
+
+    if (deleteSelectedScenario && !selectedScenarioId) {
+      setCleanupStatus({
+        type: "error",
+        message: "Temizlemek için bir senaryo seçmelisiniz."
+      });
+      return;
+    }
+
+    if (deleteSelectedRecord && !selectedBudgetItemId) {
+      setCleanupStatus({
+        type: "error",
+        message: "Silmek için bir bütçe kaydı seçmelisiniz."
+      });
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      setCleanupStatus({
+        type: "info",
+        message: `${targetLabel} için temizleme isteği gönderiliyor...`
+      });
+
+      const { data } = await client.post<{
+        status: string;
+        cleared_expenses: number;
+        cleared_plans: number;
+        cleared_budget_items: number;
+        reindexed_budget_items: number;
+      }>("/io/cleanup", {
+        budget_item_id: deleteSelectedRecord ? selectedBudgetItemId : null,
+        scenario_id: deleteSelectedScenario ? selectedScenarioId : null,
+        clear_imported_only: cleanupType === "archived-records",
+        reset_plans: includePlans
+      });
+
+      setCleanupStatus({
+        type: "success",
+        message: `${targetLabel} için temizlik tamamlandı. Silinen harcama: ${
+          data.cleared_expenses
+        }, silinen plan kaydı: ${data.cleared_plans}, silinen bütçe kaydı: ${
+          data.cleared_budget_items
+        }, yeniden sıralanan kod: ${data.reindexed_budget_items}.`
+      });
+    } catch (error) {
+      console.error(error);
+      setCleanupStatus({
+        type: "error",
+        message:
+          "Temizleme işlemi başarısız oldu. Lütfen seçimlerinizi ve bağlantıyı kontrol edin."
+      });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -105,21 +204,51 @@ function CleaningToolsSection() {
               </Grid>
               <Grid item xs={12} md={4}>
                 <TextField
-                  label="Seçili kayıt ID"
-                  value={selectedRecordId}
-                  onChange={(event) => setSelectedRecordId(event.target.value)}
-                  placeholder="Örn. REC-1024"
+                  select
+                  label="Seçili bütçe kaydı"
+                  value={selectedBudgetItemId ?? ""}
+                  onChange={(event) =>
+                    setSelectedBudgetItemId(
+                      event.target.value === "" ? null : Number(event.target.value)
+                    )
+                  }
+                  placeholder="Bütçe kaydı seçin"
                   fullWidth
-                />
+                  SelectProps={{ displayEmpty: true }}
+                >
+                  <MenuItem value="">
+                    <em>Seçilmedi</em>
+                  </MenuItem>
+                  {budgetOptions?.map((option) => (
+                    <MenuItem key={option.value} value={option.value}>
+                      {option.label}
+                    </MenuItem>
+                  ))}
+                </TextField>
               </Grid>
               <Grid item xs={12} md={4}>
                 <TextField
+                  select
                   label="Seçili senaryo"
-                  value={selectedScenario}
-                  onChange={(event) => setSelectedScenario(event.target.value)}
-                  placeholder="Örn. 2025-Temel"
+                  value={selectedScenarioId ?? ""}
+                  onChange={(event) =>
+                    setSelectedScenarioId(
+                      event.target.value === "" ? null : Number(event.target.value)
+                    )
+                  }
+                  placeholder="Senaryo seçin"
                   fullWidth
-                />
+                  SelectProps={{ displayEmpty: true }}
+                >
+                  <MenuItem value="">
+                    <em>Seçilmedi</em>
+                  </MenuItem>
+                  {scenarioOptions?.map((option) => (
+                    <MenuItem key={option.value} value={option.value}>
+                      {option.label}
+                    </MenuItem>
+                  ))}
+                </TextField>
               </Grid>
               <Grid item xs={12} md={4}>
                 <Stack direction="column" spacing={1.5}>
@@ -169,6 +298,7 @@ function CleaningToolsSection() {
                 variant="contained"
                 color="error"
                 startIcon={<CleaningServicesIcon />}
+                disabled={submitting}
               >
                 Temizlik işlemini başlat
               </Button>
