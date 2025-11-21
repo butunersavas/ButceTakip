@@ -1,4 +1,4 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import {
   Alert,
   Box,
@@ -43,6 +43,10 @@ function CleaningToolsSection() {
   >(null);
 
   const selectedOption = cleanupOptions.find((option) => option.value === cleanupType);
+
+  useEffect(() => {
+    setDeleteSelectedScenario(Boolean(selectedScenario));
+  }, [selectedScenario]);
 
   const handleCleanup = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
