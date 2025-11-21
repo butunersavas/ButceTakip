@@ -34,6 +34,10 @@ function CleaningToolsSection() {
   const [keyword, setKeyword] = useState("");
   const [onlyPast, setOnlyPast] = useState(true);
   const [includePlans, setIncludePlans] = useState(false);
+  const [selectedRecordId, setSelectedRecordId] = useState("");
+  const [selectedScenario, setSelectedScenario] = useState("");
+  const [deleteSelectedRecord, setDeleteSelectedRecord] = useState(false);
+  const [deleteSelectedScenario, setDeleteSelectedScenario] = useState(false);
   const [cleanupStatus, setCleanupStatus] = useState<
     { type: "success" | "info" | "error"; message: string } | null
   >(null);
@@ -49,7 +53,15 @@ function CleaningToolsSection() {
         keyword || "*"
       }". Geçmiş tarihler: ${onlyPast ? "Evet" : "Hayır"}. Plan verileri: ${
         includePlans ? "Silinecek" : "Korunacak"
-      }.`
+      }. ${
+        deleteSelectedRecord && selectedRecordId
+          ? `Seçili kayıt (${selectedRecordId}) silinecek.`
+          : "Seçili kayıt silinmeyecek."
+      } ${
+        deleteSelectedScenario && selectedScenario
+          ? `Senaryo (${selectedScenario}) silinecek.`
+          : "Senaryo korunacak."
+      }`
     });
   };
 
@@ -92,6 +104,24 @@ function CleaningToolsSection() {
                 />
               </Grid>
               <Grid item xs={12} md={4}>
+                <TextField
+                  label="Seçili kayıt ID"
+                  value={selectedRecordId}
+                  onChange={(event) => setSelectedRecordId(event.target.value)}
+                  placeholder="Örn. REC-1024"
+                  fullWidth
+                />
+              </Grid>
+              <Grid item xs={12} md={4}>
+                <TextField
+                  label="Seçili senaryo"
+                  value={selectedScenario}
+                  onChange={(event) => setSelectedScenario(event.target.value)}
+                  placeholder="Örn. 2025-Temel"
+                  fullWidth
+                />
+              </Grid>
+              <Grid item xs={12} md={4}>
                 <Stack direction="column" spacing={1.5}>
                   <FormControlLabel
                     control={
@@ -110,6 +140,24 @@ function CleaningToolsSection() {
                       />
                     }
                     label="Plan verilerini de sil"
+                  />
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={deleteSelectedRecord}
+                        onChange={(event) => setDeleteSelectedRecord(event.target.checked)}
+                      />
+                    }
+                    label="Seçili kaydı sil"
+                  />
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={deleteSelectedScenario}
+                        onChange={(event) => setDeleteSelectedScenario(event.target.checked)}
+                      />
+                    }
+                    label="Seçili senaryoyu sil"
                   />
                 </Stack>
               </Grid>

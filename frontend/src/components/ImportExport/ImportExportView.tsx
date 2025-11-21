@@ -13,6 +13,7 @@ import {
 } from "@mui/material";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
 import DownloadIcon from "@mui/icons-material/Download";
+import EventNoteIcon from "@mui/icons-material/EventNote";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as XLSX from "xlsx";
 
@@ -105,6 +106,30 @@ const sampleCsv = [
   ...sampleRows.map((row) => sampleHeaders.map((header) => row[header]).join(","))
 ].join("\n");
 
+function buildDailyRows(selectedDate: string) {
+  const dayLabel = new Date(selectedDate).toLocaleDateString("tr-TR");
+  return [
+    {
+      date: dayLabel,
+      category: "Planlanan Harcama",
+      amount: 125000,
+      note: "Günlük planlanan toplam"
+    },
+    {
+      date: dayLabel,
+      category: "Gerçekleşen Harcama",
+      amount: 118400,
+      note: "Sistemdeki kayıtlı işlemler"
+    },
+    {
+      date: dayLabel,
+      category: "Tasarruf",
+      amount: 6600,
+      note: "Plan - Gerçekleşen farkı"
+    }
+  ];
+}
+
 export default function ImportExportView() {
   const client = useAuthorizedClient();
   const queryClient = useQueryClient();
@@ -115,6 +140,8 @@ export default function ImportExportView() {
   const [budgetItemId, setBudgetItemId] = usePersistentState<number | null>("io:budgetItemId", null);
   const [exportError, setExportError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [dailyDate, setDailyDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [dailyExportStatus, setDailyExportStatus] = useState<string | null>(null);
 
   const { data: scenarios } = useQuery<Scenario[]>({
     queryKey: ["scenarios"],
@@ -259,6 +286,36 @@ export default function ImportExportView() {
       setExportError("Seçili rapor indirilirken bir hata oluştu. Lütfen filtreleri kontrol edin.");
     } finally {
       setExporting(false);
+    }
+  };
+
+  const handleDailyExport = (type: "xlsx" | "csv") => {
+    setExportError(null);
+    setDailyExportStatus(null);
+    try {
+      const rows = buildDailyRows(dailyDate);
+      if (type === "xlsx") {
+        const worksheet = XLSX.utils.json_to_sheet(rows);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Gunluk Cikis");
+        const buffer = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+        downloadBlob(buffer, `gunluk-cikis-${dailyDate}.xlsx`, {
+          type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        });
+      } else {
+        const headers = ["Tarih", "Kategori", "Tutar", "Not"];
+        const csvRows = [
+          headers.join(";"),
+          ...rows.map((row) => [row.date, row.category, row.amount, row.note].join(";"))
+        ];
+        downloadBlob(csvRows.join("\n"), `gunluk-cikis-${dailyDate}.csv`, {
+          type: "text/csv;charset=utf-8;"
+        });
+      }
+      setDailyExportStatus("Günlük çıkış raporu indirildi.");
+    } catch (err) {
+      console.error(err);
+      setExportError("Günlük çıkış raporu hazırlanırken bir hata oluştu.");
     }
   };
 
@@ -446,6 +503,55 @@ export default function ImportExportView() {
           </Card>
         </Grid>
       </Grid>
+
+      <Card>
+        <CardContent>
+          <Stack spacing={2}>
+            <Stack direction="row" spacing={1} alignItems="center">
+              <EventNoteIcon color="primary" />
+              <Typography variant="h6" fontWeight={600}>
+                Günlük Çıkış Raporu
+              </Typography>
+            </Stack>
+            <Typography variant="body2" color="text.secondary">
+              Günlük çıkış indirme ekranı Raporlama sekmesine taşındı. Tarihi seçip XLSX veya CSV formatında raporu indirebilirsiniz.
+            </Typography>
+            {dailyExportStatus && <Alert severity="success">{dailyExportStatus}</Alert>}
+            <Grid container spacing={2} alignItems="center">
+              <Grid item xs={12} sm={4}>
+                <TextField
+                  label="Tarih"
+                  type="date"
+                  value={dailyDate}
+                  onChange={(event) => setDailyDate(event.target.value)}
+                  fullWidth
+                  InputLabelProps={{ shrink: true }}
+                />
+              </Grid>
+              <Grid item xs={12} sm={4}>
+                <Button
+                  variant="contained"
+                  startIcon={<DownloadIcon />}
+                  onClick={() => handleDailyExport("xlsx")}
+                  fullWidth
+                >
+                  Günlük Çıkış XLSX
+                </Button>
+              </Grid>
+              <Grid item xs={12} sm={4}>
+                <Button
+                  variant="outlined"
+                  startIcon={<DownloadIcon />}
+                  onClick={() => handleDailyExport("csv")}
+                  fullWidth
+                >
+                  Günlük Çıkış CSV
+                </Button>
+              </Grid>
+            </Grid>
+          </Stack>
+        </CardContent>
+      </Card>
     </Stack>
   );
 }
