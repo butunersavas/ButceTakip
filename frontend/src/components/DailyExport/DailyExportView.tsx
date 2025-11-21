@@ -5,6 +5,7 @@ import {
   Button,
   Card,
   CardContent,
+  Chip,
   Divider,
   Grid,
   MenuItem,
@@ -12,22 +13,11 @@ import {
   TextField,
   Typography
 } from "@mui/material";
-import DownloadIcon from "@mui/icons-material/Download";
 import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
 import PrintIcon from "@mui/icons-material/Print";
-import * as XLSX from "xlsx";
-
-interface ExportStatus {
-  type: "success" | "error";
-  message: string;
-}
-
-interface DailyExportRow {
-  date: string;
-  category: string;
-  amount: number;
-  note: string;
-}
+import CheckIcon from "@mui/icons-material/CheckCircle";
+import AddIcon from "@mui/icons-material/Add";
+import { Link as RouterLink } from "react-router-dom";
 
 interface LabelHistoryEntry {
   labelIdentifier: string;
@@ -35,9 +25,10 @@ interface LabelHistoryEntry {
   receiverName: string;
   dispatchNote: string;
   productName: string;
-  assetNumber: string;
+  assetNumbers: string[];
   date: string;
-  printedAt: string;
+  createdAt: string;
+  printedAt?: string;
 }
 
 const receiverRegions = [
@@ -57,50 +48,14 @@ const receiverRegions = [
   "İÇ ANADOLU"
 ];
 
-function buildSampleRows(selectedDate: string): DailyExportRow[] {
-  const dayLabel = new Date(selectedDate).toLocaleDateString("tr-TR");
-  return [
-    {
-      date: dayLabel,
-      category: "Planlanan Harcama",
-      amount: 125000,
-      note: "Günlük planlanan toplam"
-    },
-    {
-      date: dayLabel,
-      category: "Gerçekleşen Harcama",
-      amount: 118400,
-      note: "Sistemdeki kayıtlı işlemler"
-    },
-    {
-      date: dayLabel,
-      category: "Tasarruf",
-      amount: 6600,
-      note: "Plan - Gerçekleşen farkı"
-    }
-  ];
-}
-
-function downloadBlob(data: BlobPart | Blob, fileName: string, options?: BlobPropertyBag) {
-  const blob = data instanceof Blob && !options ? data : new Blob([data], options);
-  const link = document.createElement("a");
-  const url = URL.createObjectURL(blob);
-  link.href = url;
-  link.setAttribute("download", fileName);
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
-}
-
 export default function DailyExportView() {
-  const [exportStatus, setExportStatus] = useState<ExportStatus | null>(null);
+  const [exportStatus, setExportStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [date, setDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [receiverRegion, setReceiverRegion] = useState<string>(receiverRegions[0]);
   const [receiverName, setReceiverName] = useState("");
   const [dispatchNote, setDispatchNote] = useState("");
   const [productName, setProductName] = useState("");
-  const [assetNumber, setAssetNumber] = useState("");
+  const [assetNumbersInput, setAssetNumbersInput] = useState("");
   const [labelSequence, setLabelSequence] = useState(1);
   const [labelHistory, setLabelHistory] = useState<LabelHistoryEntry[]>(() => {
     if (typeof window === "undefined") return [];
@@ -110,7 +65,20 @@ export default function DailyExportView() {
 
     try {
       const parsed = JSON.parse(stored);
-      return Array.isArray(parsed) ? parsed : [];
+      if (!Array.isArray(parsed)) return [];
+
+      return parsed.map((entry: LabelHistoryEntry) => ({
+        ...entry,
+        assetNumbers: Array.isArray(entry.assetNumbers)
+          ? entry.assetNumbers
+          : entry.assetNumbers
+            ? String(entry.assetNumbers)
+                .split(",")
+                .map((value) => value.trim())
+                .filter(Boolean)
+            : [],
+        createdAt: entry.createdAt ?? entry.printedAt ?? new Date().toISOString()
+      }));
     } catch (error) {
       console.error("Geçmiş verisi okunamadı", error);
       return [];
@@ -120,7 +88,15 @@ export default function DailyExportView() {
   const [regionFilter, setRegionFilter] = useState<string>("Tümü");
   const labelRef = useRef<HTMLDivElement>(null);
 
-  const rows = useMemo(() => buildSampleRows(date), [date]);
+  useEffect(() => {
+    const highestSequence = labelHistory.reduce((maxValue, entry) => {
+      const [, sequencePart] = entry.labelIdentifier.split("-");
+      const parsed = Number(sequencePart);
+      if (Number.isNaN(parsed)) return maxValue;
+      return Math.max(maxValue, parsed);
+    }, 0);
+    setLabelSequence(highestSequence + 1);
+  }, [labelHistory]);
 
   const labelIdentifier = useMemo(
     () => `${date.replace(/-/g, "")}-${labelSequence.toString().padStart(3, "0")}`,
@@ -131,50 +107,58 @@ export default function DailyExportView() {
     window.localStorage.setItem("daily-export-label-history", JSON.stringify(labelHistory));
   }, [labelHistory]);
 
-  const handleExport = (format: "xlsx" | "csv") => {
-    try {
-      if (!date) {
-        setExportStatus({ type: "error", message: "Lütfen geçerli bir tarih seçin." });
-        return;
-      }
+  const parseAssetNumbers = (value: string) =>
+    value
+      .split(/[\n,]/)
+      .map((item) => item.trim())
+      .filter(Boolean);
 
-      if (format === "xlsx") {
-        const worksheet = XLSX.utils.json_to_sheet(rows);
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "Gunluk Cikis");
-        const buffer = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
-        downloadBlob(buffer, `gunluk-cikis-${date}.xlsx`, {
-          type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        });
-      } else {
-        const headers = ["Tarih", "Kategori", "Tutar", "Not"];
-        const csvRows = [
-          headers.join(";"),
-          ...rows.map((row) => [row.date, row.category, row.amount, row.note].join(";"))
-        ];
-        downloadBlob(csvRows.join("\n"), `gunluk-cikis-${date}.csv`, {
-          type: "text/csv;charset=utf-8;"
-        });
-      }
+  const parsedAssetNumbers = useMemo(
+    () => parseAssetNumbers(assetNumbersInput),
+    [assetNumbersInput]
+  );
 
-      setExportStatus({ type: "success", message: "Günlük çıkış dosyası indirildi." });
-    } catch (error) {
-      console.error(error);
-      setExportStatus({
-        type: "error",
-        message: "Dosya hazırlanırken bir sorun oluştu. Lütfen tekrar deneyin."
-      });
-    }
+  const buildLabelMarkup = (entry: LabelHistoryEntry) => {
+    const assetList = entry.assetNumbers.length
+      ? entry.assetNumbers.map((asset) => `<li>${asset}</li>`).join("")
+      : "<li>-</li>";
+
+    return `
+      <div style="display:flex;flex-direction:column;gap:8px;color:#0f172a;font-family:'Inter',Arial,sans-serif;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+          <div>
+            <div style="font-size:18px;font-weight:800;">${entry.receiverRegion}</div>
+            <div style="color:#475569;font-weight:600;">${entry.receiverName}</div>
+          </div>
+          <div style="background:#e2e8f0;color:#0f172a;font-weight:700;padding:6px 10px;border-radius:8px;font-size:12px;">${
+            entry.date
+          }</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <div style="font-weight:700;">Ürün</div>
+          <div style="color:#0f172a;font-weight:600;">${entry.productName}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <div style="font-weight:700;">Demirbaş Numarası</div>
+          <ul style="margin:0;padding-left:18px;line-height:1.4;color:#0f172a;">${assetList}</ul>
+        </div>
+        <div style="font-size:12px;color:#475569;">Gönderici: Teknik Destek Departmanı</div>
+        <div style="font-size:12px;color:#334155;font-weight:600;">Not: ${entry.dispatchNote || "-"}</div>
+        <div style="margin-top:auto;text-align:center;padding:10px;border-radius:10px;background:#0f172a;color:#f1f5f9;font-weight:800;letter-spacing:2px;">${
+          entry.labelIdentifier
+        }</div>
+      </div>
+    `;
   };
 
-  const handlePrintLabel = () => {
-    if (!labelRef.current) return;
-
+  const createEntry = () => {
     const missingFields: string[] = [];
+    const parsedAssets = parseAssetNumbers(assetNumbersInput);
+
     if (!receiverName.trim()) missingFields.push("Alıcı Adı");
     if (!receiverRegion.trim()) missingFields.push("Alıcı Bölge");
-    if (!productName.trim()) missingFields.push("Gönderilen Ürün");
-    if (!assetNumber.trim()) missingFields.push("Demirbaş Numarası");
+    if (!productName.trim()) missingFields.push("Ürün");
+    if (!parsedAssets.length) missingFields.push("Demirbaş Numarası");
     if (!date) missingFields.push("Tarih");
 
     if (missingFields.length > 0) {
@@ -182,9 +166,37 @@ export default function DailyExportView() {
         type: "error",
         message: `${missingFields.join(", ")} alanlarını doldurmalısınız. Not alanı isteğe bağlıdır.`
       });
-      return;
+      return null;
     }
 
+    const newEntry: LabelHistoryEntry = {
+      labelIdentifier,
+      receiverRegion,
+      receiverName,
+      dispatchNote,
+      productName,
+      assetNumbers: parsedAssets,
+      date,
+      createdAt: new Date().toISOString()
+    };
+
+    setLabelHistory((previous) => [newEntry, ...previous]);
+    setLabelSequence((previous) => previous + 1);
+    setExportStatus({ type: "success", message: "Kayıt oluşturuldu." });
+
+    return newEntry;
+  };
+
+  const handleSave = () => {
+    const entry = createEntry();
+    if (entry) {
+      setDispatchNote("");
+      setProductName("");
+      setAssetNumbersInput("");
+    }
+  };
+
+  const handlePrintEntry = (entry: LabelHistoryEntry) => {
     const printWindow = window.open("", "_blank", "width=520,height=680");
     if (!printWindow) {
       setExportStatus({ type: "error", message: "Yazdırma penceresi açılamadı." });
@@ -214,9 +226,9 @@ export default function DailyExportView() {
           <div class="sheet">
             <div class="toolbar">
               <h1>Günlük Çıkış Barkod Önizleme</h1>
-              <span style="font-size:12px; color:#64748b;">${new Date(date).toLocaleDateString("tr-TR")}</span>
+              <span style="font-size:12px; color:#64748b;">${new Date(entry.date).toLocaleDateString("tr-TR")}</span>
             </div>
-            <div class="label">${labelRef.current.innerHTML}</div>
+            <div class="label">${buildLabelMarkup(entry)}</div>
             <div class="actions">
               <button class="print-btn" onclick="window.print()">Yazdır</button>
             </div>
@@ -229,22 +241,12 @@ export default function DailyExportView() {
     printWindow.focus();
 
     const printedAt = new Date().toISOString();
-    setLabelHistory((previous) => [
-      {
-        labelIdentifier,
-        receiverRegion,
-        receiverName,
-        dispatchNote,
-        productName,
-        assetNumber,
-        date,
-        printedAt
-      },
-      ...previous
-    ]);
-
+    setLabelHistory((previous) =>
+      previous.map((item) =>
+        item.labelIdentifier === entry.labelIdentifier ? { ...item, printedAt } : item
+      )
+    );
     setExportStatus({ type: "success", message: "Etiket yazdırma işine gönderildi." });
-    setLabelSequence((previous) => previous + 1);
   };
 
   const filteredHistory = useMemo(() => {
@@ -261,7 +263,7 @@ export default function DailyExportView() {
         entry.receiverName,
         entry.receiverRegion,
         entry.productName,
-        entry.assetNumber,
+        entry.assetNumbers.join(" "),
         entry.dispatchNote,
         entry.labelIdentifier
       ]
@@ -275,302 +277,292 @@ export default function DailyExportView() {
 
   return (
     <Stack spacing={3} data-section="gunluk-cikis">
-      <Stack direction="row" spacing={1} alignItems="center">
-        <CalendarMonthIcon color="primary" />
-        <Typography variant="h5" fontWeight={700} component="h1">
-          Günlük Çıkış
-        </Typography>
+      <Stack
+        direction={{ xs: "column", sm: "row" }}
+        spacing={1.5}
+        alignItems={{ xs: "flex-start", sm: "center" }}
+        justifyContent="space-between"
+        flexWrap="wrap"
+      >
+        <Stack direction="row" spacing={1} alignItems="center">
+          <CalendarMonthIcon color="primary" />
+          <Typography variant="h5" fontWeight={700} component="h1">
+            Günlük Çıkış
+          </Typography>
+        </Stack>
+        <Button component={RouterLink} to="/import-export" variant="outlined" startIcon={<CheckIcon />}>
+          Raporlama sekmesine git
+        </Button>
       </Stack>
       <Typography variant="body1" color="text.secondary">
-        Günlük plan özetini indirip barkod yazdırma işlemlerini tek ekranda, gereksiz alanlar olmadan yönetin.
+        Not hariç tüm alanlar zorunludur. Sol tarafta yeni günlük çıkış kayıtlarını oluşturun, sağ tarafta kayıtları yazdırın.
       </Typography>
       {exportStatus && <Alert severity={exportStatus.type}>{exportStatus.message}</Alert>}
-      <Card>
-        <CardContent>
-          <Stack spacing={3}>
-            <Grid container spacing={2} alignItems="center">
-              <Grid item xs={12} md={4}>
-                <TextField
-                  label="Tarih"
-                  type="date"
-                  value={date}
-                  onChange={(event) => setDate(event.target.value)}
-                  fullWidth
-                  required
-                  InputLabelProps={{ shrink: true }}
-                />
-              </Grid>
-              <Grid item xs={12} md={8}>
-                <Typography variant="body2" color="text.secondary">
-                  Tarihi belirledikten sonra tek tıkla XLSX veya CSV formatında günlük çıkış özetini indirebilirsiniz.
+
+      <Grid container spacing={3} alignItems="stretch">
+        <Grid item xs={12} md={6}>
+          <Card sx={{ height: "100%" }}>
+            <CardContent>
+              <Stack spacing={3}>
+                <Stack spacing={0.5}>
+                  <Typography variant="h6" fontWeight={700}>
+                    Kayıt Oluştur
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Günlük çıkış raporlarını indirmek için Raporlama sekmesini kullanın. Buradan depodan çıkan ürünleri kayıt
+                    altına alabilir ve 100×100 mm etiket çıktısı alabilirsiniz.
+                  </Typography>
+                </Stack>
+
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      label="Tarih"
+                      type="date"
+                      value={date}
+                      onChange={(event) => setDate(event.target.value)}
+                      fullWidth
+                      required
+                      InputLabelProps={{ shrink: true }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      label="Alıcı Adı"
+                      value={receiverName}
+                      onChange={(event) => setReceiverName(event.target.value)}
+                      placeholder="Alıcı adı"
+                      required
+                      fullWidth
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      select
+                      label="Alıcı Bölge"
+                      value={receiverRegion}
+                      onChange={(event) => setReceiverRegion(event.target.value)}
+                      fullWidth
+                      required
+                    >
+                      {receiverRegions.map((region) => (
+                        <MenuItem key={region} value={region}>
+                          {region}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      label="Gönderilen Ürün"
+                      value={productName}
+                      onChange={(event) => setProductName(event.target.value)}
+                      placeholder="Ürün adı"
+                      required
+                      fullWidth
+                    />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <TextField
+                      label="Demirbaş Numarası"
+                      value={assetNumbersInput}
+                      onChange={(event) => setAssetNumbersInput(event.target.value)}
+                      placeholder="Virgül veya satır sonuyla birden fazla numara ekleyin"
+                      required
+                      fullWidth
+                      multiline
+                      minRows={2}
+                      helperText="Birden fazla demirbaş numarası yazabilirsiniz."
+                    />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <TextField
+                      label="Not (Opsiyonel)"
+                      value={dispatchNote}
+                      onChange={(event) => setDispatchNote(event.target.value)}
+                      placeholder="İsteğe bağlı not"
+                      fullWidth
+                      multiline
+                      minRows={2}
+                    />
+                  </Grid>
+                </Grid>
+
+                <Grid container spacing={2} alignItems="center">
+                  <Grid item xs={12} md={7}>
+                    <Box
+                      ref={labelRef}
+                      sx={{
+                        border: "1px dashed",
+                        borderColor: "divider",
+                        borderRadius: 2,
+                        p: 2,
+                        width: "100%",
+                        bgcolor: "background.paper"
+                      }}
+                    >
+                      <Stack spacing={1}>
+                        <Typography variant="caption" color="text.secondary">
+                          Etiket #{labelSequence.toString().padStart(3, "0")} · {new Date(date).toLocaleDateString("tr-TR")}
+                        </Typography>
+                        <Typography variant="h6" fontWeight={700}>
+                          {receiverRegion}
+                        </Typography>
+                        <Typography variant="subtitle2" color="text.secondary">
+                          Alıcı: {receiverName || "(Belirtilmedi)"}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          Ürün: {productName || "-"}
+                        </Typography>
+                        <Stack direction="row" spacing={0.5} flexWrap="wrap">
+                          {(parsedAssetNumbers.length ? parsedAssetNumbers : ["-"]).map((item) => (
+                            <Chip key={item} label={item} size="small" color="default" />
+                          ))}
+                        </Stack>
+                        <Typography variant="body2" color="text.secondary">
+                          Gönderici: Teknik Destek Departmanı
+                        </Typography>
+                        <Typography variant="body2">Not: {dispatchNote || "-"}</Typography>
+                        <Box
+                          sx={{
+                            mt: 1.5,
+                            p: 1.5,
+                            borderRadius: 1,
+                            bgcolor: "grey.900",
+                            color: "grey.100",
+                            fontFamily: "monospace",
+                            letterSpacing: 2,
+                            textAlign: "center"
+                          }}
+                        >
+                          {labelIdentifier}
+                        </Box>
+                      </Stack>
+                    </Box>
+                  </Grid>
+                  <Grid item xs={12} md={5}>
+                    <Stack spacing={1.5}>
+                      <Typography variant="body2" color="text.secondary">
+                        Barkod yazdırma penceresi 100×100 mm ölçüsünde açılır. Yazdırmadan önce yazıcı ayarlarını kontrol edin.
+                      </Typography>
+                      <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+                        <Button variant="contained" startIcon={<AddIcon />} onClick={handleSave} fullWidth>
+                          Kaydı Oluştur
+                        </Button>
+                        <Button
+                          variant="outlined"
+                          startIcon={<PrintIcon />}
+                          onClick={() => {
+                            const entry = createEntry();
+                            if (entry) {
+                              handlePrintEntry(entry);
+                            }
+                          }}
+                          fullWidth
+                        >
+                          Kaydet ve Yazdır
+                        </Button>
+                      </Stack>
+                    </Stack>
+                  </Grid>
+                </Grid>
+              </Stack>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        <Grid item xs={12} md={6}>
+          <Card sx={{ height: "100%" }}>
+            <CardContent>
+              <Stack spacing={2} sx={{ height: "100%" }}>
+                <Typography variant="h6" fontWeight={700} component="h2">
+                  Kayıtlar ve Yazdırma
                 </Typography>
-              </Grid>
-            </Grid>
-            <Divider />
-            <Grid container spacing={2}>
-              <Grid item xs={12} sm={6}>
-                <Button
-                  variant="contained"
-                  startIcon={<DownloadIcon />}
-                  onClick={() => handleExport("xlsx")}
-                  fullWidth
-                >
-                  XLSX olarak indir
-                </Button>
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <Button
-                  variant="outlined"
-                  startIcon={<DownloadIcon />}
-                  onClick={() => handleExport("csv")}
-                  fullWidth
-                >
-                  CSV olarak indir
-                </Button>
-              </Grid>
-            </Grid>
-            <Box>
-              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                Önizleme
-              </Typography>
-              <Card variant="outlined">
-                <CardContent>
-                  <Stack spacing={1}>
-                    {rows.map((row) => (
+                <Typography variant="body2" color="text.secondary">
+                  Sağdaki listeden oluşturduğunuz kayıtları görebilir, her kaydın yanındaki yazdır butonuyla etiketi yazdırabilirsiniz.
+                </Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} md={6}>
+                    <TextField
+                      label="Arama"
+                      value={searchTerm}
+                      onChange={(event) => setSearchTerm(event.target.value)}
+                      placeholder="Ürün, alıcı, demirbaş no vb."
+                      fullWidth
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <TextField
+                      select
+                      label="Bölge Filtresi"
+                      value={regionFilter}
+                      onChange={(event) => setRegionFilter(event.target.value)}
+                      fullWidth
+                    >
+                      <MenuItem value="Tümü">Tümü</MenuItem>
+                      {receiverRegions.map((region) => (
+                        <MenuItem key={region} value={region}>
+                          {region}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                  </Grid>
+                </Grid>
+
+                {filteredHistory.length === 0 ? (
+                  <Alert severity="info">Henüz kayıtlı bir etiket bulunmuyor.</Alert>
+                ) : (
+                  <Stack spacing={1.5} divider={<Divider flexItem />}>
+                    {filteredHistory.map((entry) => (
                       <Stack
-                        key={`${row.category}-${row.note}`}
+                        key={`${entry.labelIdentifier}-${entry.createdAt}`}
                         direction={{ xs: "column", sm: "row" }}
-                        justifyContent="space-between"
                         spacing={1}
+                        justifyContent="space-between"
+                        alignItems={{ xs: "flex-start", sm: "center" }}
+                        flexWrap="wrap"
                       >
-                        <Typography variant="body2" fontWeight={600}>
-                          {row.category}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          {row.date}
-                        </Typography>
-                        <Typography variant="body2" color="primary" fontWeight={700}>
-                          {row.amount.toLocaleString("tr-TR", { style: "currency", currency: "TRY" })}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          {row.note}
-                        </Typography>
+                        <Stack spacing={0.5}>
+                          <Typography variant="subtitle1" fontWeight={700}>
+                            {entry.productName || "(Ürün belirtilmedi)"}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            Alıcı: {entry.receiverName || "-"} · Bölge: {entry.receiverRegion}
+                          </Typography>
+                          <Stack direction="row" spacing={0.5} flexWrap="wrap">
+                            {entry.assetNumbers.map((asset) => (
+                              <Chip key={asset} label={asset} size="small" />
+                            ))}
+                          </Stack>
+                          <Typography variant="body2" color="text.secondary">
+                            Not: {entry.dispatchNote || "-"}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            Etiket ID: {entry.labelIdentifier} · Kayıt: {new Date(entry.createdAt).toLocaleString("tr-TR")}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            Yazdırılma: {entry.printedAt ? new Date(entry.printedAt).toLocaleString("tr-TR") : "Henüz yazdırılmadı"}
+                          </Typography>
+                        </Stack>
+                        <Stack spacing={1} alignItems={{ xs: "stretch", sm: "flex-end" }}>
+                          <Button
+                            variant="contained"
+                            color="error"
+                            startIcon={<PrintIcon />}
+                            onClick={() => handlePrintEntry(entry)}
+                          >
+                            Yazdır
+                          </Button>
+                        </Stack>
                       </Stack>
                     ))}
                   </Stack>
-                </CardContent>
-              </Card>
-            </Box>
-          </Stack>
-        </CardContent>
-      </Card>
-
-      <Card sx={{ border: 1, borderColor: "divider" }}>
-        <CardContent>
-          <Stack spacing={3}>
-            <Stack direction="row" spacing={1} alignItems="center">
-              <Typography variant="h6" fontWeight={700}>
-                Barkod ve Etiket Bilgileri
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Etiket yazdırma sırası: #{labelSequence.toString().padStart(3, "0")}
-              </Typography>
-            </Stack>
-            <Grid container spacing={2}>
-              <Grid item xs={12} md={6} lg={4}>
-                <TextField
-                  label="Alıcı Adı"
-                  value={receiverName}
-                  onChange={(event) => setReceiverName(event.target.value)}
-                  placeholder="Alıcı adı veya firma"
-                  fullWidth
-                  required
-                />
-              </Grid>
-              <Grid item xs={12} md={6} lg={4}>
-                <TextField
-                  select
-                  label="Alıcı Bölge"
-                  value={receiverRegion}
-                  onChange={(event) => setReceiverRegion(event.target.value)}
-                  fullWidth
-                  required
-                >
-                  {receiverRegions.map((region) => (
-                    <MenuItem key={region} value={region}>
-                      {region}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              </Grid>
-              <Grid item xs={12} md={6} lg={4}>
-                <TextField
-                  label="Günlük Çıkış Notu"
-                  value={dispatchNote}
-                  onChange={(event) => setDispatchNote(event.target.value)}
-                  placeholder="Örn. Acil teslimat"
-                  fullWidth
-                />
-              </Grid>
-              <Grid item xs={12} md={6} lg={4}>
-                <TextField
-                  label="Gönderilen Ürün"
-                  value={productName}
-                  onChange={(event) => setProductName(event.target.value)}
-                  placeholder="Ürün adı"
-                  fullWidth
-                  required
-                />
-              </Grid>
-              <Grid item xs={12} md={6} lg={4}>
-                <TextField
-                  label="Demirbaş Numarası"
-                  value={assetNumber}
-                  onChange={(event) => setAssetNumber(event.target.value)}
-                  placeholder="örn. DM-1024"
-                  fullWidth
-                  required
-                />
-              </Grid>
-            </Grid>
-            <Grid container spacing={2} alignItems="center">
-              <Grid item xs={12} md={8}>
-                <Box
-                  ref={labelRef}
-                  sx={{
-                    border: "1px dashed",
-                    borderColor: "grey.400",
-                    borderRadius: 2,
-                    p: 2,
-                    width: "100%",
-                    maxWidth: 360,
-                    bgcolor: "background.paper"
-                  }}
-                >
-                  <Stack spacing={1}>
-                    <Typography variant="caption" color="text.secondary">
-                      Etiket #{labelSequence.toString().padStart(3, "0")} · {new Date(date).toLocaleDateString("tr-TR")}
-                    </Typography>
-                    <Typography variant="h6" fontWeight={700}>
-                      Alıcı Bölge: {receiverRegion}
-                    </Typography>
-                    <Typography variant="subtitle2" color="text.secondary">
-                      Alıcı: {receiverName || "(Belirtilmedi)"}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Gönderilen Ürün: {productName || "-"}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Demirbaş No: {assetNumber || "-"}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Gönderici: Teknik Destek Departmanı
-                    </Typography>
-                    <Typography variant="body2">Günlük Çıkış Notu: {dispatchNote || "-"}</Typography>
-                    <Box
-                      sx={{
-                        mt: 1.5,
-                        p: 1.5,
-                        borderRadius: 1,
-                        bgcolor: "grey.900",
-                        color: "grey.100",
-                        fontFamily: "monospace",
-                        letterSpacing: 2,
-                        textAlign: "center"
-                      }}
-                    >
-                      {labelIdentifier}
-                    </Box>
-                  </Stack>
-                </Box>
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <Stack spacing={1.5}>
-                  <Typography variant="body2" color="text.secondary">
-                    Barkod yazdır butonuna bastığınızda açılan pencerede etiketin son halini görebilir, ardından yazıcı ayarlarını
-                    güncelleyerek çıktıyı alabilirsiniz.
-                  </Typography>
-                  <Button
-                    variant="contained"
-                    color="error"
-                    startIcon={<PrintIcon />}
-                    onClick={handlePrintLabel}
-                    fullWidth
-                  >
-                    Barkod Yazdır
-                  </Button>
-                </Stack>
-              </Grid>
-            </Grid>
-          </Stack>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardContent>
-          <Stack spacing={2}>
-            <Typography variant="h6" fontWeight={700} component="h2">
-              Yazdırma Geçmişi
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Gönderilen ürün, alıcı ismi, alıcı bölge ve demirbaş numarası alanlarında hızlı arama yapabilirsiniz.
-            </Typography>
-            <Grid container spacing={2}>
-              <Grid item xs={12} md={6} lg={4}>
-                <TextField
-                  label="Arama"
-                  value={searchTerm}
-                  onChange={(event) => setSearchTerm(event.target.value)}
-                  placeholder="Ürün, alıcı, demirbaş no vb."
-                  fullWidth
-                />
-              </Grid>
-              <Grid item xs={12} md={6} lg={4}>
-                <TextField
-                  select
-                  label="Bölge Filtresi"
-                  value={regionFilter}
-                  onChange={(event) => setRegionFilter(event.target.value)}
-                  fullWidth
-                >
-                  <MenuItem value="Tümü">Tümü</MenuItem>
-                  {receiverRegions.map((region) => (
-                    <MenuItem key={region} value={region}>
-                      {region}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              </Grid>
-            </Grid>
-
-            {filteredHistory.length === 0 ? (
-              <Alert severity="info">Henüz kayıtlı bir etiket yazdırma bulunmuyor.</Alert>
-            ) : (
-              <Stack spacing={1.5} divider={<Divider flexItem />}>
-                {filteredHistory.map((entry) => (
-                  <Stack key={`${entry.labelIdentifier}-${entry.printedAt}`} spacing={0.5}>
-                    <Typography variant="subtitle1" fontWeight={700}>
-                      {entry.productName || "(Ürün belirtilmedi)"}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Alıcı: {entry.receiverName || "-"} · Bölge: {entry.receiverRegion}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Demirbaş No: {entry.assetNumber || "-"} · Etiket ID: {entry.labelIdentifier}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Not: {entry.dispatchNote || "-"}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      Yazdırılma tarihi: {new Date(entry.printedAt).toLocaleString("tr-TR")}
-                    </Typography>
-                  </Stack>
-                ))}
+                )}
               </Stack>
-            )}
-          </Stack>
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
     </Stack>
   );
 }
