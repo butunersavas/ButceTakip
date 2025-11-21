@@ -89,6 +89,8 @@ export default function DailyExportView() {
   const [editingIdentifier, setEditingIdentifier] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [regionFilter, setRegionFilter] = useState<string>("Tümü");
+  const [dateFilter, setDateFilter] = useState("");
+  const [assetFilter, setAssetFilter] = useState("");
   const labelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -295,12 +297,16 @@ export default function DailyExportView() {
 
   const filteredHistory = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase();
+    const normalizedAsset = assetFilter.trim().toLowerCase();
 
     return labelHistory.filter((entry) => {
       const matchesRegion = regionFilter === "Tümü" || entry.receiverRegion === regionFilter;
+      const matchesDate = !dateFilter || entry.date === dateFilter;
+      const matchesAsset =
+        !normalizedAsset || entry.assetNumbers.some((asset) => asset.toLowerCase().includes(normalizedAsset));
 
       if (!normalizedSearch) {
-        return matchesRegion;
+        return matchesRegion && matchesDate && matchesAsset;
       }
 
       const content = [
@@ -315,9 +321,9 @@ export default function DailyExportView() {
         .join(" ")
         .toLowerCase();
 
-      return matchesRegion && content.includes(normalizedSearch);
+      return matchesRegion && matchesDate && matchesAsset && content.includes(normalizedSearch);
     });
-  }, [labelHistory, regionFilter, searchTerm]);
+  }, [assetFilter, dateFilter, labelHistory, regionFilter, searchTerm]);
 
   return (
     <Stack spacing={3} data-section="gunluk-cikis">
@@ -550,6 +556,25 @@ export default function DailyExportView() {
                         </MenuItem>
                       ))}
                     </TextField>
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <TextField
+                      label="Tarih Filtresi"
+                      type="date"
+                      value={dateFilter}
+                      onChange={(event) => setDateFilter(event.target.value)}
+                      fullWidth
+                      InputLabelProps={{ shrink: true }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <TextField
+                      label="Demirbaş Filtresi"
+                      value={assetFilter}
+                      onChange={(event) => setAssetFilter(event.target.value)}
+                      placeholder="Demirbaş numarası girin"
+                      fullWidth
+                    />
                   </Grid>
                 </Grid>
 
