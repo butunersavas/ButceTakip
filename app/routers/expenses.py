@@ -25,7 +25,9 @@ def list_expenses(
     current_user: User = Depends(get_current_user),
 ) -> list[Expense]:
     query = select(Expense)
-    if year is not None:
+    if today_only:
+        query = query.where(Expense.expense_date == date.today())
+    elif year is not None:
         query = query.where(Expense.expense_date >= date(year, 1, 1)).where(
             Expense.expense_date <= date(year, 12, 31)
         )
@@ -33,10 +35,11 @@ def list_expenses(
         query = query.where(Expense.budget_item_id == budget_item_id)
     if scenario_id is not None:
         query = query.where(Expense.scenario_id == scenario_id)
-    if start_date is not None:
-        query = query.where(Expense.expense_date >= start_date)
-    if end_date is not None:
-        query = query.where(Expense.expense_date <= end_date)
+    if not today_only:
+        if start_date is not None:
+            query = query.where(Expense.expense_date >= start_date)
+        if end_date is not None:
+            query = query.where(Expense.expense_date <= end_date)
     if status_filter is not None:
         raw_statuses = [status_filter] if "," not in status_filter else status_filter.split(",")
         statuses = []
@@ -52,9 +55,6 @@ def list_expenses(
         query = query.where(Expense.is_out_of_budget.is_(False))
     if mine_only:
         query = query.where(Expense.created_by_id == current_user.id)
-    if today_only:
-        query = query.where(Expense.expense_date == date.today())
-
     return session.exec(query.order_by(Expense.expense_date.desc())).all()
 
 
