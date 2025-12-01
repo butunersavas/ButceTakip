@@ -84,6 +84,7 @@ class Expense(TimestampMixin, SQLModel, table=True):
     is_out_of_budget: bool = Field(default=False, nullable=False)
     created_by_id: Optional[int] = Field(default=None, foreign_key="users.id")
     client_hostname: Optional[str] = Field(default=None, nullable=True)
+    kaydi_giren_kullanici: Optional[str] = Field(default=None, nullable=True)
 
     budget_item: BudgetItem = Relationship(back_populates="expenses")
     scenario: Optional[Scenario] = Relationship(back_populates="expenses")

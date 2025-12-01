@@ -74,3 +74,6 @@ def _apply_schema_upgrades() -> None:
     if "client_hostname" not in expense_columns:
         with engine.begin() as connection:
             connection.execute(text("ALTER TABLE expenses ADD COLUMN client_hostname TEXT"))
+    if "kaydi_giren_kullanici" not in expense_columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE expenses ADD COLUMN kaydi_giren_kullanici TEXT"))
