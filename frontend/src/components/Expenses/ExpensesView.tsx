@@ -293,7 +293,7 @@ export default function ExpensesView() {
   }, [formQuantity, formUnitPrice]);
 
   const columns = useMemo<GridColDef[]>(() => {
-    return [
+    const baseColumns: GridColDef[] = [
       {
         field: "expense_date",
         headerName: "Tarih",
@@ -409,6 +409,12 @@ export default function ExpensesView() {
         )
       }
     ];
+
+    return baseColumns.map((column) => ({
+      ...column,
+      resizable: true,
+      minWidth: column.minWidth ?? (column.flex ? 160 : column.width ?? 120)
+    }));
   }, [budgetItems, handleDelete, handleEdit, scenarios]);
 
   return (
@@ -609,7 +615,7 @@ export default function ExpensesView() {
                   loading={isFetching}
                   getRowId={(row) => row.id}
                   disableRowSelectionOnClick
-                  disableColumnResize={false}
+                  columnResizeMode="onChange"
                   initialState={{
                     pagination: { paginationModel: { pageSize: 15, page: 0 } }
                   }}

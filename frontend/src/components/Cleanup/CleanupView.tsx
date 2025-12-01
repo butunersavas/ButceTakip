@@ -1,6 +1,15 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Alert, Box, Button, Card, CardContent, MenuItem, Stack, TextField, Typography } from "@mui/material";
 import DeleteForeverIcon from "@mui/icons-material/DeleteForever";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+
+import useAuthorizedClient from "../../hooks/useAuthorizedClient";
+
+interface Scenario {
+  id: number;
+  name: string;
+  year: number;
+}
 
 export default function CleanupView() {
   return (
@@ -11,11 +20,60 @@ export default function CleanupView() {
 }
 
 function CleaningToolsSection() {
-  const scenarios = ["2026-Temel", "2025-Temel", "2024-Yedek", "Arşiv-1", "Test Senaryosu"];
-  const [selectedScenario, setSelectedScenario] = useState<string>(scenarios[0]);
+  const client = useAuthorizedClient();
+  const queryClient = useQueryClient();
+
+  const [selectedScenario, setSelectedScenario] = useState<number | "">("");
   const [cleanupStatus, setCleanupStatus] = useState<{ type: "success" | "info" | "error"; message: string } | null>(
     null
   );
+
+  const { data: scenarios } = useQuery<Scenario[]>({
+    queryKey: ["scenarios"],
+    queryFn: async () => {
+      const { data } = await client.get<Scenario[]>("/scenarios");
+      return data;
+    }
+  });
+
+  useEffect(() => {
+    if (scenarios && scenarios.length > 0) {
+      setSelectedScenario((previous) => {
+        if (previous && scenarios.some((scenario) => scenario.id === previous)) {
+          return previous;
+        }
+        return scenarios[0]?.id ?? "";
+      });
+    } else {
+      setSelectedScenario("");
+    }
+  }, [scenarios]);
+
+  const selectedScenarioName = useMemo(() => {
+    if (!selectedScenario || !scenarios) return "";
+    const scenario = scenarios.find((item) => item.id === selectedScenario);
+    return scenario ? `${scenario.name} (${scenario.year})` : "";
+  }, [scenarios, selectedScenario]);
+
+  const deleteScenario = useMutation({
+    mutationFn: async (scenarioId: number) => {
+      await client.delete(`/scenarios/${scenarioId}`);
+    },
+    onSuccess: (_, scenarioId) => {
+      setCleanupStatus({ type: "success", message: `"${selectedScenarioName}" senaryosu silindi.` });
+      queryClient.invalidateQueries({ queryKey: ["scenarios"] });
+
+      setSelectedScenario((current) => {
+        if (current !== scenarioId) return current;
+        const remaining = scenarios?.filter((item) => item.id !== scenarioId) ?? [];
+        return remaining[0]?.id ?? "";
+      });
+    },
+    onError: (error: unknown) => {
+      console.error(error);
+      setCleanupStatus({ type: "error", message: "Senaryo silinirken bir hata oluştu." });
+    }
+  });
 
   const handleCleanup = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -24,7 +82,7 @@ function CleaningToolsSection() {
       return;
     }
 
-    setCleanupStatus({ type: "success", message: `"${selectedScenario}" senaryosu silindi.` });
+    deleteScenario.mutate(selectedScenario as number);
   };
 
   return (
@@ -44,12 +102,14 @@ function CleaningToolsSection() {
               select
               label="Silinecek senaryo"
               value={selectedScenario}
-              onChange={(event) => setSelectedScenario(event.target.value)}
+              onChange={(event) => setSelectedScenario(event.target.value as number)}
               fullWidth
+              disabled={!scenarios?.length}
             >
-              {scenarios.map((scenario) => (
-                <MenuItem key={scenario} value={scenario}>
-                  {scenario}
+              {!scenarios?.length && <MenuItem value="">Aktif senaryo bulunamadı</MenuItem>}
+              {scenarios?.map((scenario) => (
+                <MenuItem key={scenario.id} value={scenario.id}>
+                  {scenario.name} ({scenario.year})
                 </MenuItem>
               ))}
             </TextField>
@@ -60,6 +120,7 @@ function CleaningToolsSection() {
                 variant="contained"
                 color="error"
                 startIcon={<DeleteForeverIcon />}
+                disabled={deleteScenario.isPending || !scenarios?.length}
               >
                 Senaryoyu Sil
               </Button>
