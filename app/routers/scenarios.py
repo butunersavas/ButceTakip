@@ -1,10 +1,11 @@
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func
 from sqlmodel import Session, select
 
 from app.dependencies import get_admin_user, get_current_user, get_db_session
-from app.models import Scenario, User
+from app.models import Expense, PlanEntry, Scenario, User
 from app.schemas import ScenarioCreate, ScenarioRead, ScenarioUpdate
 
 router = APIRouter(prefix="/scenarios", tags=["Scenarios"])
@@ -58,5 +59,26 @@ def delete_scenario(
     scenario = session.get(Scenario, scenario_id)
     if not scenario:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
+
+    expense_count = session.exec(
+        select(func.count()).select_from(Expense).where(Expense.scenario_id == scenario_id)
+    ).scalar_one()
+    plan_count = session.exec(
+        select(func.count()).select_from(PlanEntry).where(PlanEntry.scenario_id == scenario_id)
+    ).scalar_one()
+
+    if expense_count or plan_count:
+        reasons: list[str] = []
+        if expense_count:
+            reasons.append("harcama kayıtlarında")
+        if plan_count:
+            reasons.append("plan kayıtlarında")
+        message = "Bu senaryo şu anda " + " ve ".join(reasons) + " kullanıldığı için silinemiyor."
+        detail_payload = {
+            "message": message,
+            "references": {"expenses": expense_count, "plan_entries": plan_count},
+        }
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail_payload)
+
     session.delete(scenario)
     session.commit()
