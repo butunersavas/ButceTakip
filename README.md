@@ -27,8 +27,10 @@ Kurumsal bütçe planlama ve gerçekleşen harcamaları takip etmeye yönelik AP
    docker compose up --build
    ```
 3. API `http://localhost:8000` adresinden ulaşılabilir. Etkileşimli dokümantasyon için `http://localhost:8000/docs` adresini ziyaret edin.
-4. Web arayüzüne `http://localhost:5173` adresinden erişebilirsiniz.
-4. PgAdmin arayüzüne `http://localhost:8080` adresinden erişebilirsiniz.
+4. Web arayüzüne `http://localhost:5173` adresinden erişebilirsiniz. Tarayıcıdan yapılan API çağrıları
+   için `VITE_API_URL` değeri `http://localhost:8000` olarak ayarlanmıştır; bu sayede front-end konteyneri
+   içinden gelen istekler de doğrudan ana makinedeki API adresini kullanır.
+5. PgAdmin arayüzüne `http://localhost:8080` adresinden erişebilirsiniz.
 
 ## Geliştirme Ortamı
 Yerel geliştirmede aşağıdaki adımları takip edebilirsiniz:
