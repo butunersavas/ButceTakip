@@ -62,6 +62,7 @@ export interface Expense {
   created_at: string;
   updated_at: string;
   client_hostname: string | null;
+  kaydi_giren_kullanici: string | null;
 }
 
 interface ExpensePayload {
@@ -77,6 +78,7 @@ interface ExpensePayload {
   status: "recorded" | "cancelled";
   is_out_of_budget: boolean;
   client_hostname?: string | null;
+  kaydi_giren_kullanici?: string | null;
 }
 
 function formatCurrency(value: number) {
@@ -239,8 +241,6 @@ export default function ExpensesView() {
       ? Math.round(quantity * unitPrice * 100) / 100
       : 0;
 
-    const clientHostname = window.location.hostname || undefined;
-
     const payload: ExpensePayload = {
       id: editingExpense?.id,
       budget_item_id: Number(formData.get("budget_item_id")),
@@ -255,7 +255,9 @@ export default function ExpensesView() {
       description: formData.get("description")?.toString() ?? undefined,
       status: formData.get("is_cancelled") === "on" ? "cancelled" : "recorded",
       is_out_of_budget: formData.get("is_out_of_budget") === "on",
-      client_hostname: editingExpense?.client_hostname ?? clientHostname
+      client_hostname: editingExpense?.client_hostname ?? undefined,
+      kaydi_giren_kullanici:
+        editingExpense?.kaydi_giren_kullanici ?? user?.email ?? user?.full_name ?? undefined
     };
 
     mutation.mutate(payload);
@@ -291,6 +293,19 @@ export default function ExpensesView() {
     }
     return Math.round(quantityNumber * unitPriceNumber * 100) / 100;
   }, [formQuantity, formUnitPrice]);
+
+  const renderTextWithTooltip = useCallback((value?: string | null) => {
+    if (!value) {
+      return "-";
+    }
+    return (
+      <Tooltip title={value} placement="top" arrow>
+        <span className="MuiDataGrid-cellContent" style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
+          {value}
+        </span>
+      </Tooltip>
+    );
+  }, []);
 
   const columns = useMemo<GridColDef[]>(() => {
     const baseColumns: GridColDef[] = [
@@ -355,14 +370,21 @@ export default function ExpensesView() {
         field: "vendor",
         headerName: "Satıcı",
         flex: 1,
-        valueGetter: (params) => params.row.vendor ?? "-"
+        renderCell: ({ row }) => renderTextWithTooltip(row.vendor)
       },
       {
         field: "client_hostname",
         headerName: "Bilgisayar",
         minWidth: 160,
         flex: 1,
-        valueGetter: (params) => params.row.client_hostname ?? "-"
+        renderCell: ({ row }) => renderTextWithTooltip(row.client_hostname)
+      },
+      {
+        field: "kaydi_giren_kullanici",
+        headerName: "Kaydı Giren",
+        minWidth: 180,
+        flex: 1,
+        renderCell: ({ row }) => renderTextWithTooltip(row.kaydi_giren_kullanici ?? "Bilinmiyor")
       },
       {
         field: "status",
@@ -415,7 +437,7 @@ export default function ExpensesView() {
       resizable: true,
       minWidth: column.minWidth ?? (column.flex ? 160 : column.width ?? 120)
     }));
-  }, [budgetItems, handleDelete, handleEdit, scenarios]);
+  }, [budgetItems, handleDelete, handleEdit, scenarios, renderTextWithTooltip]);
 
   return (
     <Stack spacing={4} sx={{ width: "100%", minWidth: 0, maxWidth: "100%", overflowX: "hidden" }}>
@@ -608,7 +630,15 @@ export default function ExpensesView() {
               <Typography variant="subtitle1" fontWeight={600} gutterBottom>
                 Harcamalar
               </Typography>
-              <Box sx={{ flexGrow: 1, minWidth: 0, width: "100%", overflow: "hidden" }}>
+              <Box
+                sx={{
+                  flexGrow: 1,
+                  minWidth: 0,
+                  width: "100%",
+                  overflowX: "auto",
+                  overflowY: "hidden"
+                }}
+              >
                 <DataGrid
                   rows={expenses ?? []}
                   columns={columns}
@@ -616,6 +646,7 @@ export default function ExpensesView() {
                   getRowId={(row) => row.id}
                   disableRowSelectionOnClick
                   columnResizeMode="onChange"
+                  disableColumnReorder={false}
                   initialState={{
                     pagination: { paginationModel: { pageSize: 15, page: 0 } }
                   }}

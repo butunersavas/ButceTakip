@@ -66,6 +66,7 @@ def export_csv(
             "vendor",
             "description",
             "client_hostname",
+            "kaydi_giren_kullanici",
         ]
     )
 
@@ -119,6 +120,7 @@ def export_csv(
                 expense.vendor or "",
                 expense.description or "",
                 expense.client_hostname or "",
+                expense.kaydi_giren_kullanici or "",
             ]
         )
     response = Response(content=output.getvalue(), media_type="text/csv")
@@ -184,6 +186,7 @@ def export_xlsx(
             "Status",
             "Out of Budget",
             "Client Hostname",
+            "Kaydı Giren",
         ]
     )
     expenses = _get_expenses(session, year, scenario_id, budget_item_id)
@@ -206,6 +209,7 @@ def export_xlsx(
                 expense.status.value,
                 expense.is_out_of_budget,
                 expense.client_hostname or "",
+                expense.kaydi_giren_kullanici or "",
             ]
         )
     output = io.BytesIO()
@@ -255,6 +259,7 @@ def export_filtered_expenses_xlsx(
             "Status",
             "Out of Budget",
             "Client Hostname",
+            "Kaydı Giren",
         ]
     )
     for expense in filtered:
@@ -276,6 +281,7 @@ def export_filtered_expenses_xlsx(
             expense.status.value,
             expense.is_out_of_budget,
             expense.client_hostname or "",
+            expense.kaydi_giren_kullanici or "",
         ]
     )
 

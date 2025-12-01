@@ -73,11 +73,12 @@ def create_expense(
     if not client_hostname and request.client:
         client_hostname = request.client.host
 
-    expense_data = expense_in.dict(exclude={"client_hostname"})
+    expense_data = expense_in.dict(exclude={"client_hostname", "kaydi_giren_kullanici"})
     expense = Expense(
         **expense_data,
         created_by_id=current_user.id,
         client_hostname=client_hostname,
+        kaydi_giren_kullanici=current_user.email,
     )
     session.add(expense)
     session.commit()
@@ -98,6 +99,8 @@ def update_expense(
     if expense.created_by_id not in (None, current_user.id) and current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Not allowed")
     for field, value in expense_in.dict(exclude_unset=True).items():
+        if field == "kaydi_giren_kullanici":
+            continue
         setattr(expense, field, value)
     expense.updated_at = datetime.utcnow()
     session.add(expense)
