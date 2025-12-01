@@ -1,4 +1,5 @@
 from datetime import date, datetime
+import ipaddress
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlmodel import Session, select
@@ -8,6 +9,35 @@ from app.models import BudgetItem, Expense, ExpenseStatus, Scenario, User
 from app.schemas import ExpenseCreate, ExpenseRead, ExpenseUpdate
 
 router = APIRouter(prefix="/expenses", tags=["Expenses"])
+
+
+def _extract_client_identifier(request: Request) -> str | None:
+    header_candidates = [
+        "x-forwarded-for",
+        "x-real-ip",
+        "x-client-ip",
+        "cf-connecting-ip",
+        "true-client-ip",
+    ]
+
+    for header_name in header_candidates:
+        header_value = request.headers.get(header_name)
+        if not header_value:
+            continue
+
+        first_value = header_value.split(",")[0].strip()
+        if not first_value or first_value.lower() == "localhost":
+            continue
+
+        try:
+            ip_value = ipaddress.ip_address(first_value)
+        except ValueError:
+            return first_value
+
+        if not (ip_value.is_loopback or ip_value.is_unspecified):
+            return first_value
+
+    return None
 
 
 @router.get("/", response_model=list[ExpenseRead])
@@ -69,9 +99,7 @@ def create_expense(
         raise HTTPException(status_code=400, detail="Budget item not found")
     if expense_in.scenario_id and not session.get(Scenario, expense_in.scenario_id):
         raise HTTPException(status_code=400, detail="Scenario not found")
-    client_hostname = expense_in.client_hostname or request.headers.get("X-Client-Hostname")
-    if not client_hostname and request.client:
-        client_hostname = request.client.host
+    client_hostname = expense_in.client_hostname or _extract_client_identifier(request)
 
     expense_data = expense_in.dict(exclude={"client_hostname", "kaydi_giren_kullanici"})
     expense = Expense(

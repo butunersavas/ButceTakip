@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Alert, Box, Button, Card, CardContent, MenuItem, Stack, TextField, Typography } from "@mui/material";
 import DeleteForeverIcon from "@mui/icons-material/DeleteForever";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AxiosError } from "axios";
 
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 
@@ -71,7 +72,24 @@ function CleaningToolsSection() {
     },
     onError: (error: unknown) => {
       console.error(error);
-      setCleanupStatus({ type: "error", message: "Senaryo silinirken bir hata oluştu." });
+      const axiosError = error as AxiosError<{ detail?: string | { message?: string; references?: Record<string, number> } }>;
+      const detail = axiosError.response?.data?.detail;
+      const baseMessage =
+        typeof detail === "string"
+          ? detail
+          : detail?.message ?? "Senaryo silinirken bir hata oluştu.";
+
+      let referenceMessage = "";
+      if (detail && typeof detail !== "string" && detail.references) {
+        const entries = Object.entries(detail.references)
+          .filter(([, count]) => Boolean(count))
+          .map(([key, count]) => `${key}: ${count}`);
+        if (entries.length) {
+          referenceMessage = ` (${entries.join(", ")})`;
+        }
+      }
+
+      setCleanupStatus({ type: "error", message: `${baseMessage}${referenceMessage}` });
     }
   });
 
