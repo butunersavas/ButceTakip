@@ -1,17 +1,21 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.config import get_settings
 from app.database import init_db
 from app.routers import auth, budget_items, dashboard, expenses, import_export, plans, scenarios
 
 app = FastAPI()
 
-origins = ["http://localhost:5173"]
+settings = get_settings()
+origins = [origin.strip() for origin in settings.cors_origins.split(",") if origin.strip()]
+allow_all_origins = "*" in origins or not origins
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
+    allow_origins=["*"] if allow_all_origins else origins,
+    allow_origin_regex=r"http://localhost:\d+",
+    allow_credentials=not allow_all_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
