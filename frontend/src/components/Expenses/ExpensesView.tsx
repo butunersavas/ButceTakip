@@ -24,11 +24,11 @@ import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/DeleteOutline";
 import {
-  DataGrid,
+  DataGridPro,
   GridColDef,
   GridColumnOrderChangeParams,
   GridColumnResizeParams
-} from "@mui/x-data-grid";
+} from "@mui/x-data-grid-pro";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import dayjs from "dayjs";
 
@@ -710,7 +710,7 @@ export default function ExpensesView() {
                   overflowY: "hidden"
                 }}
               >
-                <DataGrid
+                <DataGridPro
                   rows={expenses ?? []}
                   columns={columns}
                   loading={isFetching}
