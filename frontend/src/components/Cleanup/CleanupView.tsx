@@ -1,5 +1,17 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Alert, Box, Button, Card, CardContent, MenuItem, Stack, TextField, Typography } from "@mui/material";
+import {
+  Alert,
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Checkbox,
+  FormControlLabel,
+  MenuItem,
+  Stack,
+  TextField,
+  Typography
+} from "@mui/material";
 import DeleteForeverIcon from "@mui/icons-material/DeleteForever";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
@@ -25,6 +37,7 @@ function CleaningToolsSection() {
   const queryClient = useQueryClient();
 
   const [selectedScenario, setSelectedScenario] = useState<number | "">("");
+  const [forceDelete, setForceDelete] = useState(false);
   const [cleanupStatus, setCleanupStatus] = useState<{ type: "success" | "info" | "error"; message: string } | null>(
     null
   );
@@ -57,11 +70,14 @@ function CleaningToolsSection() {
   }, [scenarios, selectedScenario]);
 
   const deleteScenario = useMutation({
-    mutationFn: async (scenarioId: number) => {
-      await client.delete(`/scenarios/${scenarioId}`);
+    mutationFn: async ({ scenarioId, force }: { scenarioId: number; force: boolean }) => {
+      await client.delete(`/scenarios/${scenarioId}`, { params: { force } });
     },
-    onSuccess: (_, scenarioId) => {
-      setCleanupStatus({ type: "success", message: `"${selectedScenarioName}" senaryosu silindi.` });
+    onSuccess: (_, { scenarioId, force }) => {
+      setCleanupStatus({
+        type: "success",
+        message: `"${selectedScenarioName}" senaryosu${force ? " ve ilişkili verileri" : ""} silindi.`
+      });
       queryClient.invalidateQueries({ queryKey: ["scenarios"] });
 
       setSelectedScenario((current) => {
@@ -69,6 +85,7 @@ function CleaningToolsSection() {
         const remaining = scenarios?.filter((item) => item.id !== scenarioId) ?? [];
         return remaining[0]?.id ?? "";
       });
+      setForceDelete(false);
     },
     onError: (error: unknown) => {
       console.error(error);
@@ -114,19 +131,19 @@ function CleaningToolsSection() {
       return;
     }
 
-    deleteScenario.mutate(selectedScenario as number);
+    deleteScenario.mutate({ scenarioId: selectedScenario as number, force: forceDelete });
   };
 
   return (
     <Stack spacing={3}>
-      <Stack spacing={0.5}>
-        <Typography variant="h5" fontWeight={700}>
-          Temizleme Araçları
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          Sadece senaryo seçip silme işlemini buradan yapabilirsiniz.
-        </Typography>
-      </Stack>
+        <Stack spacing={0.5}>
+          <Typography variant="h5" fontWeight={700}>
+            Temizleme Araçları
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Senaryoları ve gerekirse ilişkili plan/harcama kayıtlarını buradan silebilirsiniz.
+          </Typography>
+        </Stack>
       <Card>
         <CardContent>
           <Stack spacing={3} component="form" onSubmit={handleCleanup}>
@@ -134,7 +151,10 @@ function CleaningToolsSection() {
               select
               label="Silinecek senaryo"
               value={selectedScenario}
-              onChange={(event) => setSelectedScenario(event.target.value as number)}
+              onChange={(event) => {
+                const value = event.target.value;
+                setSelectedScenario(value === "" ? "" : Number(value));
+              }}
               fullWidth
               disabled={!scenarios?.length}
             >
@@ -145,6 +165,16 @@ function CleaningToolsSection() {
                 </MenuItem>
               ))}
             </TextField>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={forceDelete}
+                  onChange={(event) => setForceDelete(event.target.checked)}
+                  disabled={!scenarios?.length}
+                />
+              }
+              label="İlişkili plan ve harcama kayıtlarını da sil"
+            />
             {cleanupStatus && <Alert severity={cleanupStatus.type}>{cleanupStatus.message}</Alert>}
             <Box>
               <Button
