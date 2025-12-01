@@ -294,14 +294,15 @@ export default function ExpensesView() {
     return Math.round(quantityNumber * unitPriceNumber * 100) / 100;
   }, [formQuantity, formUnitPrice]);
 
-  const renderTextWithTooltip = useCallback((value?: string | null) => {
-    if (!value) {
+  const renderTextWithTooltip = useCallback((value?: string | null, fallback = "-") => {
+    const displayValue = value?.trim() || fallback;
+    if (!displayValue) {
       return "-";
     }
     return (
-      <Tooltip title={value} placement="top" arrow>
+      <Tooltip title={displayValue} placement="top" arrow>
         <span className="MuiDataGrid-cellContent" style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
-          {value}
+          {displayValue}
         </span>
       </Tooltip>
     );
@@ -377,14 +378,14 @@ export default function ExpensesView() {
         headerName: "Bilgisayar",
         minWidth: 160,
         flex: 1,
-        renderCell: ({ row }) => renderTextWithTooltip(row.client_hostname)
+        renderCell: ({ row }) => renderTextWithTooltip(row.client_hostname, "Bilinmiyor")
       },
       {
         field: "kaydi_giren_kullanici",
         headerName: "Kaydı Giren",
         minWidth: 180,
         flex: 1,
-        renderCell: ({ row }) => renderTextWithTooltip(row.kaydi_giren_kullanici ?? "Bilinmiyor")
+        renderCell: ({ row }) => renderTextWithTooltip(row.kaydi_giren_kullanici, "Bilinmiyor")
       },
       {
         field: "status",
@@ -646,6 +647,7 @@ export default function ExpensesView() {
                   getRowId={(row) => row.id}
                   disableRowSelectionOnClick
                   columnResizeMode="onChange"
+                  disableColumnResize={false}
                   disableColumnReorder={false}
                   initialState={{
                     pagination: { paginationModel: { pageSize: 15, page: 0 } }
@@ -656,6 +658,12 @@ export default function ExpensesView() {
                     flexGrow: 1,
                     minWidth: 0,
                     width: "100%",
+                    "& .MuiDataGrid-columnHeader": {
+                      cursor: "grab"
+                    },
+                    "& .MuiDataGrid-columnSeparator--resizable": {
+                      cursor: "col-resize"
+                    },
                     "& .MuiDataGrid-main": {
                       overflowX: "auto",
                       scrollbarGutter: "stable"
