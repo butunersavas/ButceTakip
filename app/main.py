@@ -9,14 +9,21 @@ settings = get_settings()
 
 app = FastAPI(title=settings.app_name)
 
-origins = [
-    "http://localhost:5173",
-]
+default_origins = ["http://localhost:5173"]
+configured_origins = [origin.strip() for origin in settings.cors_origins.split(",") if origin.strip()]
+allow_credentials = True
+
+if "*" in configured_origins:
+    origins = ["*"]
+    allow_credentials = False
+else:
+    origins = configured_origins or default_origins
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    allow_credentials=True,
+    allow_origin_regex=r"https?://localhost(?::\d+)?",
+    allow_credentials=allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
