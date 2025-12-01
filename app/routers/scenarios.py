@@ -2,6 +2,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from app.dependencies import get_admin_user, get_current_user, get_db_session
@@ -68,17 +69,17 @@ def delete_scenario(
     ).scalar_one()
 
     if expense_count or plan_count:
-        reasons: list[str] = []
-        if expense_count:
-            reasons.append("harcama kayıtlarında")
-        if plan_count:
-            reasons.append("plan kayıtlarında")
-        message = "Bu senaryo şu anda " + " ve ".join(reasons) + " kullanıldığı için silinemiyor."
-        detail_payload = {
-            "message": message,
-            "references": {"expenses": expense_count, "plan_entries": plan_count},
-        }
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail_payload)
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Bu senaryo mevcut kayıtlar tarafından kullanıldığı için silinemez.",
+        )
 
-    session.delete(scenario)
-    session.commit()
+    try:
+        session.delete(scenario)
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Bu senaryo mevcut kayıtlar tarafından kullanıldığı için silinemez.",
+        )
