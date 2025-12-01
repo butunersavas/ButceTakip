@@ -23,7 +23,12 @@ import {
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/DeleteOutline";
-import { DataGrid, GridColDef } from "@mui/x-data-grid";
+import {
+  DataGrid,
+  GridColDef,
+  GridColumnOrderChangeParams,
+  GridColumnResizeParams
+} from "@mui/x-data-grid";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import dayjs from "dayjs";
 
@@ -308,8 +313,8 @@ export default function ExpensesView() {
     );
   }, []);
 
-  const columns = useMemo<GridColDef[]>(() => {
-    const baseColumns: GridColDef[] = [
+  const baseColumns = useMemo<GridColDef[]>(() => {
+    return [
       {
         field: "expense_date",
         headerName: "Tarih",
@@ -319,7 +324,7 @@ export default function ExpensesView() {
       {
         field: "budget_item_id",
         headerName: "Bütçe Kalemi",
-        flex: 1,
+        width: 240,
         valueGetter: (params) => {
           const item = budgetItems?.find((budget) => budget.id === params.row.budget_item_id);
           return item ? `${item.code} — ${item.name}` : "-";
@@ -328,7 +333,7 @@ export default function ExpensesView() {
       {
         field: "map_category",
         headerName: "Map Capex/Opex",
-        flex: 1,
+        width: 180,
         valueGetter: (params) => {
           const item = budgetItems?.find((budget) => budget.id === params.row.budget_item_id);
           return item?.map_category ?? "-";
@@ -337,7 +342,7 @@ export default function ExpensesView() {
       {
         field: "map_attribute",
         headerName: "Map Nitelik",
-        flex: 1,
+        width: 180,
         valueGetter: (params) => {
           const item = budgetItems?.find((budget) => budget.id === params.row.budget_item_id);
           return item?.map_attribute ?? "-";
@@ -370,21 +375,19 @@ export default function ExpensesView() {
       {
         field: "vendor",
         headerName: "Satıcı",
-        flex: 1,
+        width: 200,
         renderCell: ({ row }) => renderTextWithTooltip(row.vendor)
       },
       {
         field: "client_hostname",
         headerName: "Bilgisayar",
-        minWidth: 160,
-        flex: 1,
+        width: 200,
         renderCell: ({ row }) => renderTextWithTooltip(row.client_hostname, "Bilinmiyor")
       },
       {
         field: "kaydi_giren_kullanici",
         headerName: "Kaydı Giren",
-        minWidth: 180,
-        flex: 1,
+        width: 220,
         renderCell: ({ row }) => renderTextWithTooltip(row.kaydi_giren_kullanici, "Bilinmiyor")
       },
       {
@@ -432,13 +435,80 @@ export default function ExpensesView() {
         )
       }
     ];
-
-    return baseColumns.map((column) => ({
-      ...column,
-      resizable: true,
-      minWidth: column.minWidth ?? (column.flex ? 160 : column.width ?? 120)
-    }));
   }, [budgetItems, handleDelete, handleEdit, scenarios, renderTextWithTooltip]);
+
+  const defaultColumnOrder = useMemo(
+    () => baseColumns.map((column) => column.field),
+    [baseColumns]
+  );
+
+  const defaultColumnWidths = useMemo(
+    () =>
+      baseColumns.reduce<Record<string, number>>((acc, column) => {
+        if (column.width) {
+          acc[column.field] = column.width;
+        }
+        return acc;
+      }, {}),
+    [baseColumns]
+  );
+
+  const [columnOrder, setColumnOrder] = usePersistentState<string[]>(
+    "expenses:columnOrder",
+    defaultColumnOrder
+  );
+  const [columnWidths, setColumnWidths] = usePersistentState<Record<string, number>>(
+    "expenses:columnWidths",
+    defaultColumnWidths
+  );
+
+  const columns = useMemo<GridColDef[]>(() => {
+    const orderedFields = columnOrder.length ? columnOrder : defaultColumnOrder;
+
+    const columnMap = baseColumns.map((column) => {
+      const savedWidth = columnWidths[column.field];
+      return {
+        ...column,
+        resizable: true,
+        width: savedWidth ?? column.width ?? 160,
+        minWidth: column.minWidth ?? 140
+      } as GridColDef;
+    });
+
+    const lookup = new Map(columnMap.map((column) => [column.field, column]));
+    const orderedColumns = orderedFields
+      .map((field) => lookup.get(field))
+      .filter(Boolean) as GridColDef[];
+
+    const missingColumns = columnMap.filter((column) => !orderedFields.includes(column.field));
+
+    return [...orderedColumns, ...missingColumns];
+  }, [baseColumns, columnOrder, columnWidths, defaultColumnOrder]);
+
+  const handleColumnOrderChange = useCallback(
+    (params: GridColumnOrderChangeParams) => {
+      const { column, targetIndex } = params;
+      setColumnOrder((previous) => {
+        const baseOrder = previous.length ? [...previous] : columns.map((col) => col.field);
+        const filtered = baseOrder.filter((field) => field !== column.field);
+        const clampedIndex = Math.min(Math.max(targetIndex, 0), filtered.length);
+        filtered.splice(clampedIndex, 0, column.field);
+        return filtered;
+      });
+    },
+    [columns, setColumnOrder]
+  );
+
+  const handleColumnResize = useCallback(
+    (params: GridColumnResizeParams) => {
+      if (!params.width) return;
+      setColumnWidths((previous) => ({
+        ...previous,
+        [params.colDef.field]: params.width
+      }));
+    },
+    [setColumnWidths]
+  );
 
   return (
     <Stack spacing={4} sx={{ width: "100%", minWidth: 0, maxWidth: "100%", overflowX: "hidden" }}>
@@ -649,6 +719,8 @@ export default function ExpensesView() {
                   columnResizeMode="onChange"
                   disableColumnResize={false}
                   disableColumnReorder={false}
+                  onColumnOrderChange={handleColumnOrderChange}
+                  onColumnResize={handleColumnResize}
                   initialState={{
                     pagination: { paginationModel: { pageSize: 15, page: 0 } }
                   }}

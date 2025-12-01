@@ -6,7 +6,9 @@ import {
   useMemo,
   useState
 } from "react";
-import axios, { AxiosError } from "axios";
+import { AxiosError } from "axios";
+
+import { apiClient } from "../api/client";
 
 export interface AuthUser {
   id: number;
@@ -26,8 +28,6 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [token, setToken] = useState<string | null>(() =>
     localStorage.getItem("butce_token")
@@ -39,7 +39,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const fetchCurrentUser = useCallback(
     async (authToken: string) => {
       try {
-        const response = await axios.get<AuthUser>(`${API_URL}/auth/me`, {
+        const response = await apiClient.get<AuthUser>('/auth/me', {
           headers: {
             Authorization: `Bearer ${authToken}`
           }
@@ -72,8 +72,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       params.append("username", email);
       params.append("password", password);
       params.append("grant_type", "password");
-      const response = await axios.post<{ access_token: string }>(
-        `${API_URL}/auth/token`,
+      const response = await apiClient.post<{ access_token: string }>(
+        "/auth/token",
         params,
         {
           headers: {
