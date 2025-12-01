@@ -72,8 +72,10 @@ def create_expense(
     client_hostname = expense_in.client_hostname or request.headers.get("X-Client-Hostname")
     if not client_hostname and request.client:
         client_hostname = request.client.host
+
+    expense_data = expense_in.dict(exclude={"client_hostname"})
     expense = Expense(
-        **expense_in.dict(),
+        **expense_data,
         created_by_id=current_user.id,
         client_hostname=client_hostname,
     )
