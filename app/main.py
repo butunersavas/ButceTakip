@@ -15,11 +15,15 @@ def on_startup() -> None:
     init_db()
 
 
+cors_origins = [origin.strip() for origin in settings.cors_origins.split(",") if origin]
+if "http://localhost:5173" not in cors_origins:
+    cors_origins.append("http://localhost:5173")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[origin.strip() for origin in settings.cors_origins.split(",") if origin],
+    allow_origins=cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 

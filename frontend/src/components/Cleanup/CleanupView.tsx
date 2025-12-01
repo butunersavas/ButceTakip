@@ -76,8 +76,15 @@ function CleaningToolsSection() {
       let message = "Senaryo silinirken bir hata oluştu.";
       let referenceMessage = "";
 
-      if (axios.isAxiosError<{ detail?: string | { message?: string; references?: Record<string, number> } }>(error)) {
-        const detail = error.response?.data?.detail;
+      if (
+        axios.isAxiosError<{
+          detail?: string | { message?: string; references?: Record<string, number> };
+          message?: string;
+        }>(error)
+      ) {
+        const detail =
+          error.response?.data?.detail ??
+          (typeof error.response?.data?.message === "string" ? error.response?.data?.message : undefined);
 
         if (detail) {
           message = typeof detail === "string" ? detail : detail.message ?? message;
@@ -91,8 +98,8 @@ function CleaningToolsSection() {
               referenceMessage = ` (${entries.join(", ")})`;
             }
           }
-        } else if (!error.response) {
-          message = "Network Error";
+        } else if (error.code === "ERR_NETWORK") {
+          message = "Sunucuya ulaşılamadı veya CORS hatası oluştu.";
         }
       }
 

@@ -1,13 +1,16 @@
 from datetime import datetime
+import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import func
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlmodel import Session, select
 
 from app.dependencies import get_admin_user, get_current_user, get_db_session
 from app.models import Expense, PlanEntry, Scenario, User
 from app.schemas import ScenarioCreate, ScenarioRead, ScenarioUpdate
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/scenarios", tags=["Scenarios"])
 
@@ -83,3 +86,12 @@ def delete_scenario(
             status_code=status.HTTP_409_CONFLICT,
             detail="Bu senaryo mevcut kayıtlar tarafından kullanıldığı için silinemez.",
         )
+    except SQLAlchemyError:
+        session.rollback()
+        logger.exception("Beklenmedik bir hata nedeniyle senaryo silinemedi", extra={"scenario_id": scenario_id})
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Senaryo silinirken beklenmedik bir hata oluştu.",
+        )
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
