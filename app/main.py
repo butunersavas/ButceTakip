@@ -9,12 +9,6 @@ settings = get_settings()
 
 app = FastAPI(title=settings.app_name)
 
-
-@app.on_event("startup")
-def on_startup() -> None:
-    init_db()
-
-
 origins = [
     "http://localhost:5173",
 ]
@@ -26,6 +20,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+def on_startup() -> None:
+    init_db()
+
 
 app.include_router(auth.router)
 app.include_router(scenarios.router)
