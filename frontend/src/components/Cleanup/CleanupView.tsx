@@ -11,7 +11,7 @@ export default function CleanupView() {
 }
 
 function CleaningToolsSection() {
-  const scenarios = ["2025-Temel", "2024-Yedek", "Arşiv-1", "Test Senaryosu"];
+  const scenarios = ["2026-Temel", "2025-Temel", "2024-Yedek", "Arşiv-1", "Test Senaryosu"];
   const [selectedScenario, setSelectedScenario] = useState<string>(scenarios[0]);
   const [cleanupStatus, setCleanupStatus] = useState<{ type: "success" | "info" | "error"; message: string } | null>(
     null

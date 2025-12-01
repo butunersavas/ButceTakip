@@ -65,6 +65,7 @@ def export_csv(
             "expense_date",
             "vendor",
             "description",
+            "client_hostname",
         ]
     )
 
@@ -117,6 +118,7 @@ def export_csv(
                 expense.expense_date.isoformat(),
                 expense.vendor or "",
                 expense.description or "",
+                expense.client_hostname or "",
             ]
         )
     response = Response(content=output.getvalue(), media_type="text/csv")
@@ -181,6 +183,7 @@ def export_xlsx(
             "Description",
             "Status",
             "Out of Budget",
+            "Client Hostname",
         ]
     )
     expenses = _get_expenses(session, year, scenario_id, budget_item_id)
@@ -202,6 +205,7 @@ def export_xlsx(
                 expense.description or "",
                 expense.status.value,
                 expense.is_out_of_budget,
+                expense.client_hostname or "",
             ]
         )
     output = io.BytesIO()
@@ -250,6 +254,7 @@ def export_filtered_expenses_xlsx(
             "Description",
             "Status",
             "Out of Budget",
+            "Client Hostname",
         ]
     )
     for expense in filtered:
@@ -265,13 +270,14 @@ def export_filtered_expenses_xlsx(
                 expense.expense_date.isoformat(),
                 _format_currency(expense.amount),
                 expense.quantity,
-                expense.unit_price,
-                expense.vendor or "",
-                expense.description or "",
-                expense.status.value,
-                expense.is_out_of_budget,
-            ]
-        )
+            expense.unit_price,
+            expense.vendor or "",
+            expense.description or "",
+            expense.status.value,
+            expense.is_out_of_budget,
+            expense.client_hostname or "",
+        ]
+    )
 
     output = io.BytesIO()
     wb.save(output)

@@ -61,6 +61,7 @@ export interface Expense {
   created_by_id: number | null;
   created_at: string;
   updated_at: string;
+  client_hostname: string | null;
 }
 
 interface ExpensePayload {
@@ -75,6 +76,7 @@ interface ExpensePayload {
   description?: string;
   status: "recorded" | "cancelled";
   is_out_of_budget: boolean;
+  client_hostname?: string | null;
 }
 
 function formatCurrency(value: number) {
@@ -237,6 +239,8 @@ export default function ExpensesView() {
       ? Math.round(quantity * unitPrice * 100) / 100
       : 0;
 
+    const clientHostname = window.location.hostname || undefined;
+
     const payload: ExpensePayload = {
       id: editingExpense?.id,
       budget_item_id: Number(formData.get("budget_item_id")),
@@ -250,7 +254,8 @@ export default function ExpensesView() {
       vendor: formData.get("vendor")?.toString() ?? undefined,
       description: formData.get("description")?.toString() ?? undefined,
       status: formData.get("is_cancelled") === "on" ? "cancelled" : "recorded",
-      is_out_of_budget: formData.get("is_out_of_budget") === "on"
+      is_out_of_budget: formData.get("is_out_of_budget") === "on",
+      client_hostname: editingExpense?.client_hostname ?? clientHostname
     };
 
     mutation.mutate(payload);
@@ -351,6 +356,13 @@ export default function ExpensesView() {
         headerName: "Satıcı",
         flex: 1,
         valueGetter: (params) => params.row.vendor ?? "-"
+      },
+      {
+        field: "client_hostname",
+        headerName: "Bilgisayar",
+        minWidth: 160,
+        flex: 1,
+        valueGetter: (params) => params.row.client_hostname ?? "-"
       },
       {
         field: "status",
@@ -597,6 +609,7 @@ export default function ExpensesView() {
                   loading={isFetching}
                   getRowId={(row) => row.id}
                   disableRowSelectionOnClick
+                  disableColumnResize={false}
                   initialState={{
                     pagination: { paginationModel: { pageSize: 15, page: 0 } }
                   }}
@@ -611,7 +624,7 @@ export default function ExpensesView() {
                       scrollbarGutter: "stable"
                     },
                     "& .MuiDataGrid-virtualScroller": {
-                      overflowX: "hidden",
+                      overflowX: "auto",
                       overscrollBehaviorX: "contain"
                     },
                     "& .MuiDataGrid-virtualScrollerContent": {

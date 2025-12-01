@@ -69,3 +69,8 @@ def _apply_schema_upgrades() -> None:
     if "map_category" not in existing_columns:
         with engine.begin() as connection:
             connection.execute(text("ALTER TABLE budget_items ADD COLUMN map_category TEXT"))
+
+    expense_columns = {column["name"] for column in inspector.get_columns("expenses")}
+    if "client_hostname" not in expense_columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE expenses ADD COLUMN client_hostname TEXT"))
