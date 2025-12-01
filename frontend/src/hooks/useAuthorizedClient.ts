@@ -1,21 +1,18 @@
 import { useMemo } from "react";
-import axios from "axios";
 
+import { apiClient } from "../api/client";
 import { useAuth } from "../context/AuthContext";
-
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
 export default function useAuthorizedClient() {
   const { token } = useAuth();
 
   return useMemo(() => {
-    return axios.create({
-      baseURL: API_URL,
-      headers: token
-        ? {
-            Authorization: `Bearer ${token}`
-          }
-        : undefined
-    });
+    if (token) {
+      apiClient.defaults.headers.common.Authorization = `Bearer ${token}`;
+    } else {
+      delete apiClient.defaults.headers.common.Authorization;
+    }
+
+    return apiClient;
   }, [token]);
 }
