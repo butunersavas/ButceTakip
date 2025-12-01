@@ -1,14 +1,15 @@
 from datetime import datetime
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlmodel import Session, select
 
 from app.dependencies import get_admin_user, get_current_user, get_db_session
 from app.models import Expense, PlanEntry, Scenario, User
-from app.schemas import ScenarioCreate, ScenarioRead, ScenarioUpdate
+from app.schemas import CleanupRequest, ScenarioCreate, ScenarioRead, ScenarioUpdate
+from app.services import cleanup as cleanup_service
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +58,7 @@ def update_scenario(
 @router.delete("/{scenario_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_scenario(
     scenario_id: int,
+    force: bool = Query(False, description="İlişkili tüm verileri de silerek kaldır"),
     session: Session = Depends(get_db_session),
     _: User = Depends(get_admin_user),
 ) -> None:
@@ -71,10 +73,23 @@ def delete_scenario(
         select(func.count()).select_from(PlanEntry).where(PlanEntry.scenario_id == scenario_id)
     ).scalar_one()
 
-    if expense_count or plan_count:
+    if (expense_count or plan_count) and not force:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Bu senaryo mevcut kayıtlar tarafından kullanıldığı için silinemez.",
+            detail={
+                "message": "Bu senaryo mevcut kayıtlar tarafından kullanıldığı için silinemez.",
+                "references": {"expenses": expense_count, "plans": plan_count},
+            },
+        )
+
+    if force:
+        cleanup_service.perform_cleanup(
+            session,
+            CleanupRequest(
+                scenario_id=scenario_id,
+                clear_imported_only=False,
+                reset_plans=True,
+            ),
         )
 
     try:
