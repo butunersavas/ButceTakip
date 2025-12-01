@@ -133,6 +133,7 @@ class ExpenseBase(BaseModel):
     description: Optional[str] = None
     status: ExpenseStatus = ExpenseStatus.RECORDED
     is_out_of_budget: bool = False
+    client_hostname: Optional[str] = None
 
     @validator("amount", "quantity", "unit_price")
     def validate_non_negative(cls, value: float) -> float:
@@ -156,6 +157,7 @@ class ExpenseUpdate(BaseModel):
     description: Optional[str] = None
     status: Optional[ExpenseStatus] = None
     is_out_of_budget: Optional[bool] = None
+    client_hostname: Optional[str] = None
 
 
 class ExpenseRead(ExpenseBase):

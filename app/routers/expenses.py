@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlmodel import Session, select
 
 from app.dependencies import get_current_user, get_db_session
@@ -61,6 +61,7 @@ def list_expenses(
 @router.post("/", response_model=ExpenseRead, status_code=201)
 def create_expense(
     expense_in: ExpenseCreate,
+    request: Request,
     session: Session = Depends(get_db_session),
     current_user: User = Depends(get_current_user),
 ) -> Expense:
@@ -68,7 +69,14 @@ def create_expense(
         raise HTTPException(status_code=400, detail="Budget item not found")
     if expense_in.scenario_id and not session.get(Scenario, expense_in.scenario_id):
         raise HTTPException(status_code=400, detail="Scenario not found")
-    expense = Expense(**expense_in.dict(), created_by_id=current_user.id)
+    client_hostname = expense_in.client_hostname or request.headers.get("X-Client-Hostname")
+    if not client_hostname and request.client:
+        client_hostname = request.client.host
+    expense = Expense(
+        **expense_in.dict(),
+        created_by_id=current_user.id,
+        client_hostname=client_hostname,
+    )
     session.add(expense)
     session.commit()
     session.refresh(expense)
