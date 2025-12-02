@@ -33,6 +33,20 @@ Kurumsal bütçe planlama ve gerçekleşen harcamaları takip etmeye yönelik AP
    kullanmaya geçer.
 5. PgAdmin arayüzüne `http://localhost:8080` adresinden erişebilirsiniz.
 
+### Docker Compose sorun giderme
+
+`butce_db` benzeri bir kapsayıcı adının zaten kullanımda olduğuna dair uyarı alırsanız önce ilgili kapsayıcının durdurulup silindiğinden emin olun:
+
+```bash
+docker stop butce_db  # çalışıyorsa durdur
+docker rm butce_db    # durdurulduysa sil
+
+# kapsayıcı hala çalışıyorsa tek adımda zorla silmek için
+docker rm -f butce_db
+```
+
+Ardından tekrar `docker compose up --build` komutunu çalıştırabilirsiniz. Aynı hatanın sık yaşanmaması için yeni bir kurulum öncesinde `docker compose down` komutuyla mevcut servisleri kapatmak da yardımcı olur.
+
 ## Geliştirme Ortamı
 Yerel geliştirmede aşağıdaki adımları takip edebilirsiniz:
 ```bash
