@@ -6,7 +6,7 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlmodel import Session, select
 
-from app.dependencies import get_admin_user, get_current_user, get_db_session, get_primary_admin_user
+from app.dependencies import get_admin_user, get_current_user, get_db_session
 from app.models import Expense, PlanEntry, Scenario, User
 from app.schemas import CleanupRequest, ScenarioCreate, ScenarioRead, ScenarioUpdate
 from app.services import cleanup as cleanup_service
@@ -60,7 +60,7 @@ def delete_scenario(
     scenario_id: int,
     force: bool = Query(False, description="İlişkili tüm verileri de silerek kaldır"),
     session: Session = Depends(get_db_session),
-    _: User = Depends(get_primary_admin_user),
+    _: User = Depends(get_current_user),
 ) -> None:
     scenario = session.get(Scenario, scenario_id)
     if not scenario:
