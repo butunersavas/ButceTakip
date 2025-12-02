@@ -28,17 +28,21 @@ function resolveApiUrl() {
     }
   }
 
-  // In development we keep the /api prefix to leverage Vite's proxy, otherwise
-  // default to the current origin.
-  if (import.meta.env.DEV) {
-    return "/api";
+  // Prefer the backend's default local port when running via Vite dev/preview
+  // servers (commonly on 5173/4173) without an explicit API URL. This avoids
+  // sending requests back to the frontend server, which results in 404s.
+  const isViteClient = typeof window !== "undefined" &&
+    ["5173", "4173", "4174"].includes(window.location?.port ?? "");
+
+  if (import.meta.env.DEV || isViteClient) {
+    return "http://localhost:8000";
   }
 
   if (typeof window !== "undefined") {
     return `${window.location.protocol}//${window.location.host}`;
   }
 
-  return "/api";
+  return "http://localhost:8000";
 }
 
 const API_URL = resolveApiUrl();
