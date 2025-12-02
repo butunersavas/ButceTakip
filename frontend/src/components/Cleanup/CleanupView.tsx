@@ -12,16 +12,30 @@ import {
   TextField,
   Typography
 } from "@mui/material";
-import DeleteForeverIcon from "@mui/icons-material/DeleteForever";
+import CleaningServicesIcon from "@mui/icons-material/CleaningServicesOutlined";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import axios from "axios";
 
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
+import { useAuth } from "../../context/AuthContext";
 
 interface Scenario {
   id: number;
   name: string;
   year: number;
+}
+
+interface BudgetItem {
+  id: number;
+  code: string;
+  name: string;
+}
+
+interface CleanupResponse {
+  status: string;
+  cleared_expenses: number;
+  cleared_plans: number;
+  cleared_budget_items: number;
+  reindexed_budget_items: number;
 }
 
 export default function CleanupView() {
@@ -35,12 +49,16 @@ export default function CleanupView() {
 function CleaningToolsSection() {
   const client = useAuthorizedClient();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
-  const [selectedScenario, setSelectedScenario] = useState<number | "">("");
-  const [forceDelete, setForceDelete] = useState(false);
-  const [cleanupStatus, setCleanupStatus] = useState<{ type: "success" | "info" | "error"; message: string } | null>(
-    null
-  );
+  const isAdmin = user?.role === "admin";
+
+  const [scenarioId, setScenarioId] = useState<number | "">("");
+  const [budgetItemId, setBudgetItemId] = useState<number | "">("");
+  const [clearImportedOnly, setClearImportedOnly] = useState(false);
+  const [resetPlans, setResetPlans] = useState(false);
+  const [result, setResult] = useState<CleanupResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const { data: scenarios } = useQuery<Scenario[]>({
     queryKey: ["scenarios"],
@@ -50,113 +68,136 @@ function CleaningToolsSection() {
     }
   });
 
+  const { data: budgetItems } = useQuery<BudgetItem[]>({
+    queryKey: ["budget-items"],
+    queryFn: async () => {
+      const { data } = await client.get<BudgetItem[]>("/budget-items");
+      return data;
+    }
+  });
+
   useEffect(() => {
     if (scenarios && scenarios.length > 0) {
-      setSelectedScenario((previous) => {
+      setScenarioId((previous) => {
         if (previous && scenarios.some((scenario) => scenario.id === previous)) {
           return previous;
         }
         return scenarios[0]?.id ?? "";
       });
     } else {
-      setSelectedScenario("");
+      setScenarioId("");
     }
   }, [scenarios]);
 
-  const selectedScenarioName = useMemo(() => {
-    if (!selectedScenario || !scenarios) return "";
-    const scenario = scenarios.find((item) => item.id === selectedScenario);
-    return scenario ? `${scenario.name} (${scenario.year})` : "";
-  }, [scenarios, selectedScenario]);
-
-  const deleteScenario = useMutation({
-    mutationFn: async ({ scenarioId, force }: { scenarioId: number; force: boolean }) => {
-      await client.delete(`/scenarios/${scenarioId}`, { params: { force } });
-    },
-    onSuccess: (_, { scenarioId, force }) => {
-      setCleanupStatus({
-        type: "success",
-        message: `"${selectedScenarioName}" senaryosu${force ? " ve ilişkili verileri" : ""} silindi.`
-      });
-      queryClient.invalidateQueries({ queryKey: ["scenarios"] });
-
-      setSelectedScenario((current) => {
-        if (current !== scenarioId) return current;
-        const remaining = scenarios?.filter((item) => item.id !== scenarioId) ?? [];
-        return remaining[0]?.id ?? "";
-      });
-      setForceDelete(false);
-    },
-    onError: (error: unknown) => {
-      console.error(error);
-
-      let message = "Senaryo silinirken bir hata oluştu.";
-      let referenceMessage = "";
-
-      if (
-        axios.isAxiosError<{
-          detail?: string | { message?: string; references?: Record<string, number> };
-          message?: string;
-        }>(error)
-      ) {
-        const detail =
-          error.response?.data?.detail ??
-          (typeof error.response?.data?.message === "string" ? error.response?.data?.message : undefined);
-
-        if (detail) {
-          message = typeof detail === "string" ? detail : detail.message ?? message;
-
-          if (typeof detail !== "string" && detail.references) {
-            const entries = Object.entries(detail.references)
-              .filter(([, count]) => Boolean(count))
-              .map(([key, count]) => `${key}: ${count}`);
-
-            if (entries.length) {
-              referenceMessage = ` (${entries.join(", ")})`;
-            }
-          }
-        } else if (error.code === "ERR_NETWORK") {
-          message = "Sunucuya ulaşılamadı veya CORS hatası oluştu.";
+  useEffect(() => {
+    if (budgetItems && budgetItems.length > 0) {
+      setBudgetItemId((previous) => {
+        if (previous && budgetItems.some((item) => item.id === previous)) {
+          return previous;
         }
-      }
+        return budgetItems[0]?.id ?? "";
+      });
+    } else {
+      setBudgetItemId("");
+    }
+  }, [budgetItems]);
 
-      setCleanupStatus({ type: "error", message: `${message}${referenceMessage}` });
+  const selectedScenarioName = useMemo(() => {
+    if (!scenarioId || !scenarios) return "";
+    const scenario = scenarios.find((item) => item.id === scenarioId);
+    return scenario ? `${scenario.name} (${scenario.year})` : "";
+  }, [scenarioId, scenarios]);
+
+  const cleanupMutation = useMutation({
+    mutationFn: async () => {
+      const { data } = await client.post<CleanupResponse>("/io/cleanup", {
+        scenario_id: scenarioId === "" ? undefined : scenarioId,
+        budget_item_id: budgetItemId === "" ? undefined : budgetItemId,
+        clear_imported_only: clearImportedOnly,
+        reset_plans: resetPlans
+      });
+      return data;
+    },
+    onSuccess: (data) => {
+      setResult(data);
+      setError(null);
+      queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      queryClient.invalidateQueries({ queryKey: ["plans"] });
+      queryClient.invalidateQueries({ queryKey: ["budget-items"] });
+    },
+    onError: (err) => {
+      console.error(err);
+      setResult(null);
+      setError(
+        "Temizlik işlemi sırasında hata oluştu. Yalnızca yöneticiler bu işlemi yapabilir."
+      );
     }
   });
 
   const handleCleanup = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!selectedScenario) {
-      setCleanupStatus({ type: "error", message: "Lütfen silinecek bir senaryo seçin." });
-      return;
-    }
 
-    deleteScenario.mutate({ scenarioId: selectedScenario as number, force: forceDelete });
+    const confirmed = window.confirm(
+      `"${selectedScenarioName || "Tüm senaryolar"}" için temizlik işlemini onaylıyor musunuz?`
+    );
+
+    if (!confirmed) return;
+
+    cleanupMutation.mutate();
   };
 
   return (
-    <Stack spacing={3}>
-        <Stack spacing={0.5}>
-          <Typography variant="h5" fontWeight={700}>
-            Temizleme Araçları
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Senaryoları ve gerekirse ilişkili plan/harcama kayıtlarını buradan silebilirsiniz.
-          </Typography>
-        </Stack>
+    <Stack spacing={3} component="form" onSubmit={handleCleanup}>
+      <Stack spacing={0.5}>
+        <Typography variant="h5" fontWeight={700}>
+          Temizleme Araçları
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          İlgili senaryo veya bütçe kalemleri için plan ve harcama verilerini temizleyin.
+        </Typography>
+      </Stack>
+
       <Card>
         <CardContent>
-          <Stack spacing={3} component="form" onSubmit={handleCleanup}>
+          <Stack spacing={3}>
+            {!isAdmin && (
+              <Alert severity="warning">
+                Bu işlemi yalnızca yönetici yetkisine sahip kullanıcılar gerçekleştirebilir.
+              </Alert>
+            )}
+            {error && <Alert severity="error">{error}</Alert>}
+            {result && (
+              <Alert severity="success">
+                <Stack spacing={0.5}>
+                  <Typography variant="subtitle2" fontWeight={700}>
+                    Temizlik tamamlandı
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Harcama kayıtları: {result.cleared_expenses}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Plan kayıtları: {result.cleared_plans}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Silinen bütçe kalemleri: {result.cleared_budget_items}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Yeniden numaralandırılan bütçe kalemleri: {result.reindexed_budget_items}
+                  </Typography>
+                </Stack>
+              </Alert>
+            )}
             <TextField
               select
-              label="Silinecek senaryo"
-              value={selectedScenario}
+              label="Senaryo"
+              value={scenarioId}
               onChange={(event) => {
                 const value = event.target.value;
-                setSelectedScenario(value === "" ? "" : Number(value));
+                setScenarioId(value === "" ? "" : Number(value));
               }}
               fullWidth
               disabled={!scenarios?.length}
+              helperText="Temizlik işlemi sadece seçilen senaryoda uygulanır."
             >
               {!scenarios?.length && <MenuItem value="">Aktif senaryo bulunamadı</MenuItem>}
               {scenarios?.map((scenario) => (
@@ -164,27 +205,55 @@ function CleaningToolsSection() {
                   {scenario.name} ({scenario.year})
                 </MenuItem>
               ))}
+              <MenuItem value="">Tüm senaryolar</MenuItem>
+            </TextField>
+            <TextField
+              select
+              label="Bütçe Kalemi"
+              value={budgetItemId}
+              onChange={(event) => {
+                const value = event.target.value;
+                setBudgetItemId(value === "" ? "" : Number(value));
+              }}
+              fullWidth
+              disabled={!budgetItems?.length}
+              helperText="İsteğe bağlı olarak belirli bir bütçe kalemine göre filtreleyin."
+            >
+              {!budgetItems?.length && <MenuItem value="">Bütçe kalemi bulunamadı</MenuItem>}
+              {budgetItems?.map((item) => (
+                <MenuItem key={item.id} value={item.id}>
+                  {item.code} - {item.name}
+                </MenuItem>
+              ))}
+              <MenuItem value="">Tüm bütçe kalemleri</MenuItem>
             </TextField>
             <FormControlLabel
               control={
                 <Checkbox
-                  checked={forceDelete}
-                  onChange={(event) => setForceDelete(event.target.checked)}
-                  disabled={!scenarios?.length}
+                  checked={clearImportedOnly}
+                  onChange={(event) => setClearImportedOnly(event.target.checked)}
                 />
               }
-              label="İlişkili plan ve harcama kayıtlarını da sil"
+              label="Yalnızca içe aktarılan harcamaları temizle"
             />
-            {cleanupStatus && <Alert severity={cleanupStatus.type}>{cleanupStatus.message}</Alert>}
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={resetPlans}
+                  onChange={(event) => setResetPlans(event.target.checked)}
+                />
+              }
+              label="Plan kayıtlarını sıfırla ve bütçe kalemlerini yeniden numaralandır"
+            />
             <Box>
               <Button
                 type="submit"
                 variant="contained"
                 color="error"
-                startIcon={<DeleteForeverIcon />}
-                disabled={deleteScenario.isPending || !scenarios?.length}
+                startIcon={<CleaningServicesIcon />}
+                disabled={!isAdmin || cleanupMutation.isPending}
               >
-                Senaryoyu Sil
+                Temizleme İşlemini Başlat
               </Button>
             </Box>
           </Stack>

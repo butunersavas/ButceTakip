@@ -4,6 +4,7 @@ import {
   Button,
   Card,
   CardContent,
+  Box,
   Dialog,
   DialogActions,
   DialogContent,
@@ -381,23 +382,37 @@ export default function PlansView() {
           </Card>
         </Grid>
         <Grid item xs={12} md={8}>
-          <Card sx={{ height: 520 }}>
+          <Card>
             <CardContent sx={{ height: "100%" }}>
               <Typography variant="subtitle1" fontWeight={600} gutterBottom>
                 Plan Kayıtları
               </Typography>
-              <DataGrid
-                rows={plans ?? []}
-                columns={columns}
-                loading={isFetching}
-                getRowId={(row) => row.id}
-                disableRowSelectionOnClick
-                initialState={{
-                  pagination: { paginationModel: { pageSize: 10, page: 0 } }
-                }}
-                pageSizeOptions={[10, 25, 50]}
-                sx={{ border: "none" }}
-              />
+              <Box sx={{ width: "100%", overflowX: "auto" }}>
+                <DataGrid
+                  autoHeight
+                  rows={plans ?? []}
+                  columns={columns}
+                  loading={isFetching}
+                  getRowId={(row) => row.id}
+                  disableRowSelectionOnClick
+                  initialState={{
+                    pagination: { paginationModel: { pageSize: 10, page: 0 } }
+                  }}
+                  pageSizeOptions={[10, 25, 50]}
+                  sx={{
+                    border: "none",
+                    "& .MuiDataGrid-main": {
+                      overflowX: "auto"
+                    },
+                    "& .MuiDataGrid-virtualScroller": {
+                      overflowX: "visible"
+                    },
+                    "& .MuiDataGrid-virtualScrollerContent": {
+                      overflowX: "visible"
+                    }
+                  }}
+                />
+              </Box>
             </CardContent>
           </Card>
         </Grid>
