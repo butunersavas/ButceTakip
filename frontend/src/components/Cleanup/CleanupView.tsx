@@ -307,10 +307,11 @@ function CleaningToolsSection() {
               }}
               fullWidth
               disabled={!scenarios?.length}
-              helperText=
+              helperText={
                 actionType === "delete-scenario"
                   ? "Silme işlemi yalnızca seçilen senaryoya uygulanır."
                   : "Temizlik işlemi sadece seçilen senaryoda uygulanır."
+              }
             >
               {!scenarios?.length && <MenuItem value="">Aktif senaryo bulunamadı</MenuItem>}
               {scenarios?.map((scenario) => (
