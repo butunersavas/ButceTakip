@@ -6,7 +6,7 @@ from sqlmodel import Session, SQLModel, create_engine, select
 
 from .config import get_settings
 from .models import User
-from .utils.security import get_password_hash, verify_password
+from .utils.security import get_password_hash
 
 
 settings = get_settings()
@@ -23,7 +23,8 @@ engine = create_engine(
 def init_db() -> None:
     SQLModel.metadata.create_all(engine)
     _apply_schema_upgrades()
-    _ensure_default_admin()
+    with Session(engine) as session:
+        ensure_default_admin(session)
 
 
 @contextmanager
@@ -32,46 +33,34 @@ def get_session() -> Iterator[Session]:
         yield session
 
 
-def _ensure_default_admin() -> None:
-    if not settings.default_admin_email or not settings.default_admin_password:
-        return
+def ensure_default_admin(session: Session) -> None:
+    """Geliştirme/test ortamı için varsayılan admin kullanıcısını garanti eder."""
 
-    admin_email = settings.default_admin_email.strip()
-    admin_password = settings.default_admin_password.strip()
-    admin_full_name = settings.default_admin_full_name.strip() or "Admin Kullanıcı"
-    admin_role = settings.default_admin_role.strip() or "admin"
+    normalized_email = "admin@example.com"
 
-    if not admin_email or not admin_password:
-        return
+    user = session.exec(select(User).where(User.email == normalized_email)).first()
 
-    with Session(engine) as session:
-        existing_user = session.exec(select(User).where(User.email == admin_email)).first()
-        if existing_user:
-            needs_update = False
-            if not verify_password(admin_password, existing_user.hashed_password):
-                existing_user.hashed_password = get_password_hash(admin_password)
-                needs_update = True
-            if existing_user.role != admin_role:
-                existing_user.role = admin_role
-                needs_update = True
-            if not existing_user.full_name:
-                existing_user.full_name = admin_full_name
-                needs_update = True
-            if not existing_user.is_active:
-                existing_user.is_active = True
-                needs_update = True
-            if needs_update:
-                session.add(existing_user)
-                session.commit()
-            return
-
+    if user is None:
+        # Kullanıcı yoksa yeni admin oluştur
         user = User(
-            email=admin_email,
-            full_name=admin_full_name,
-            hashed_password=get_password_hash(admin_password),
-            role=admin_role,
-            is_active=True,
+            email=normalized_email,
+            full_name="Admin Kullanıcı",
+            hashed_password=get_password_hash("Admin123!"),
         )
+        # Eğer User modelinde role alanı varsa admin yap
+        if hasattr(user, "role"):
+            setattr(user, "role", "admin")
+
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+    else:
+        # Kullanıcı varsa şifresini Admin123! olarak resetle
+        user.hashed_password = get_password_hash("Admin123!")
+        # role alanı varsa admin olarak güncelle
+        if hasattr(user, "role"):
+            setattr(user, "role", "admin")
+
         session.add(user)
         session.commit()
 
