@@ -6,7 +6,7 @@ from sqlmodel import Session, SQLModel, create_engine, select
 
 from .config import get_settings
 from .models import User
-from .utils.security import get_password_hash
+from .utils.security import get_password_hash, verify_password
 
 
 settings = get_settings()
@@ -47,6 +47,22 @@ def _ensure_default_admin() -> None:
     with Session(engine) as session:
         existing_user = session.exec(select(User).where(User.email == admin_email)).first()
         if existing_user:
+            needs_update = False
+            if not verify_password(admin_password, existing_user.hashed_password):
+                existing_user.hashed_password = get_password_hash(admin_password)
+                needs_update = True
+            if existing_user.role != admin_role:
+                existing_user.role = admin_role
+                needs_update = True
+            if not existing_user.full_name:
+                existing_user.full_name = admin_full_name
+                needs_update = True
+            if not existing_user.is_active:
+                existing_user.is_active = True
+                needs_update = True
+            if needs_update:
+                session.add(existing_user)
+                session.commit()
             return
 
         user = User(
