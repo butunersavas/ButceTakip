@@ -6,7 +6,7 @@ from sqlmodel import Session, SQLModel, create_engine, select
 
 from .config import get_settings
 from .models import User
-from .utils.security import get_password_hash
+from .utils.security import get_password_hash, verify_password
 
 
 settings = get_settings()
@@ -36,33 +36,35 @@ def get_session() -> Iterator[Session]:
 def ensure_default_admin(session: Session) -> None:
     """Geliştirme/test ortamı için varsayılan admin kullanıcısını garanti eder."""
 
-    normalized_email = "admin@example.com"
+    if not settings.default_admin_email or not settings.default_admin_password:
+        return
+
+    normalized_email = settings.default_admin_email.strip().lower()
+    normalized_full_name = settings.default_admin_full_name.strip()
+    normalized_role = settings.default_admin_role.strip()
+    normalized_password = settings.default_admin_password.strip()
 
     user = session.exec(select(User).where(User.email == normalized_email)).first()
 
-    if user is None:
-        # Kullanıcı yoksa yeni admin oluştur
-        user = User(
-            email=normalized_email,
-            full_name="Admin Kullanıcı",
-            hashed_password=get_password_hash("Admin123!"),
-        )
-        # Eğer User modelinde role alanı varsa admin yap
-        if hasattr(user, "role"):
-            setattr(user, "role", "admin")
+    if user is not None:
+        if not verify_password(normalized_password, user.hashed_password):
+            user.hashed_password = get_password_hash(normalized_password)
+            user.full_name = normalized_full_name
+            user.role = normalized_role
+            session.add(user)
+            session.commit()
+            session.refresh(user)
+        return
 
-        session.add(user)
-        session.commit()
-        session.refresh(user)
-    else:
-        # Kullanıcı varsa şifresini Admin123! olarak resetle
-        user.hashed_password = get_password_hash("Admin123!")
-        # role alanı varsa admin olarak güncelle
-        if hasattr(user, "role"):
-            setattr(user, "role", "admin")
-
-        session.add(user)
-        session.commit()
+    user = User(
+        email=normalized_email,
+        full_name=normalized_full_name,
+        hashed_password=get_password_hash(normalized_password),
+        role=normalized_role,
+    )
+    session.add(user)
+    session.commit()
+    session.refresh(user)
 
 
 def _apply_schema_upgrades() -> None:
