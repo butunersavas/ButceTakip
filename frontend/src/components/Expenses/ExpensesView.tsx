@@ -681,14 +681,7 @@ export default function ExpensesView() {
           </Card>
         </Grid>
         <Grid item xs={12}>
-          <Card
-            sx={{
-              height: { xs: 520, lg: 640 },
-              display: "flex",
-              flexDirection: "column",
-              overflow: "hidden"
-            }}
-          >
+          <Card>
             <CardContent
               sx={{
                 flexGrow: 1,
@@ -701,16 +694,9 @@ export default function ExpensesView() {
               <Typography variant="subtitle1" fontWeight={600} gutterBottom>
                 Harcamalar
               </Typography>
-              <Box
-                sx={{
-                  flexGrow: 1,
-                  minWidth: 0,
-                  width: "100%",
-                  overflowX: "auto",
-                  overflowY: "hidden"
-                }}
-              >
+              <Box sx={{ flexGrow: 1, minWidth: 0, width: "100%", overflowX: "auto" }}>
                 <DataGridPro
+                  autoHeight
                   rows={expenses ?? []}
                   columns={columns}
                   loading={isFetching}
@@ -727,9 +713,6 @@ export default function ExpensesView() {
                   pageSizeOptions={[15, 30, 50]}
                   sx={{
                     border: "none",
-                    flexGrow: 1,
-                    minWidth: 0,
-                    width: "100%",
                     "& .MuiDataGrid-columnHeader": {
                       cursor: "grab"
                     },
@@ -737,15 +720,13 @@ export default function ExpensesView() {
                       cursor: "col-resize"
                     },
                     "& .MuiDataGrid-main": {
-                      overflowX: "auto",
-                      scrollbarGutter: "stable"
+                      overflowX: "auto"
                     },
                     "& .MuiDataGrid-virtualScroller": {
-                      overflowX: "auto",
-                      overscrollBehaviorX: "contain"
+                      overflowX: "visible"
                     },
                     "& .MuiDataGrid-virtualScrollerContent": {
-                      minWidth: "100%"
+                      overflowX: "visible"
                     }
                   }}
                 />

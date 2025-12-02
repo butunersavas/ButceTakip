@@ -15,7 +15,6 @@ import DashboardIcon from "@mui/icons-material/SpaceDashboardOutlined";
 import ListAltIcon from "@mui/icons-material/ListAltOutlined";
 import ReceiptIcon from "@mui/icons-material/ReceiptLongOutlined";
 import CloudUploadIcon from "@mui/icons-material/CloudUploadOutlined";
-import EventNoteIcon from "@mui/icons-material/EventNote";
 import CleaningServicesIcon from "@mui/icons-material/CleaningServicesOutlined";
 import LogoutIcon from "@mui/icons-material/Logout";
 import MenuIcon from "@mui/icons-material/Menu";
@@ -46,7 +45,7 @@ const navItems: NavItem[] = [
     path: "/"
   },
   {
-    label: "Bütçe Yönetimi",
+    label: "Plan Yönetimi",
     icon: <ListAltIcon />,
     path: "/plans"
   },
@@ -59,11 +58,6 @@ const navItems: NavItem[] = [
     label: "Raporlama",
     icon: <CloudUploadIcon />,
     path: "/import-export"
-  },
-  {
-    label: "Günlük Çıkış",
-    icon: <EventNoteIcon />,
-    path: "/daily-export"
   },
   {
     label: "Temizleme Araçları",
