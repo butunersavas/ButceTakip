@@ -56,13 +56,28 @@ def perform_cleanup(session: Session, request: CleanupRequest) -> dict[str, int]
 
 def _resequence_budget_codes(session: Session) -> int:
     items = session.exec(select(BudgetItem).order_by(BudgetItem.created_at, BudgetItem.id)).all()
-    updated = 0
+    now = datetime.utcnow()
+
+    pending_updates: list[tuple[BudgetItem, str]] = []
     for index, item in enumerate(items, start=1):
         expected_code = f"SK{index:02d}"
-        if item.code == expected_code:
-            continue
-        item.code = expected_code
-        item.updated_at = datetime.utcnow()
+        if item.code != expected_code:
+            pending_updates.append((item, expected_code))
+
+    if not pending_updates:
+        return 0
+
+    # Assign temporary unique codes first to avoid unique constraint collisions while resequencing.
+    for item, _ in pending_updates:
+        item.code = f"TMP-{item.id}-{item.code}"
+        item.updated_at = now
         session.add(item)
-        updated += 1
-    return updated
+
+    session.flush()
+
+    for item, expected_code in pending_updates:
+        item.code = expected_code
+        item.updated_at = now
+        session.add(item)
+
+    return len(pending_updates)
