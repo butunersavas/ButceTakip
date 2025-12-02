@@ -58,8 +58,12 @@ function CleaningToolsSection() {
   const { user } = useAuth();
 
   const normalizedEmail = (user?.email || "").trim().toLowerCase();
-  const isAdmin = (user?.role || "").toLowerCase() === "admin";
-  const isPrimaryAdmin = isAdmin && normalizedEmail === "admin@example.com";
+  const normalizedRole = (user?.role || "").trim().toLowerCase();
+
+  // admin@example.com is treated as the super admin, and users explicitly marked as
+  // super_admin can also perform cleanup and deletion tasks.
+  const isPrimaryAdmin =
+    normalizedEmail === "admin@example.com" || normalizedRole === "super_admin";
 
   const [scenarioId, setScenarioId] = useState<number | "">("");
   const [budgetItemId, setBudgetItemId] = useState<number | "">("");
@@ -307,10 +311,11 @@ function CleaningToolsSection() {
               }}
               fullWidth
               disabled={!scenarios?.length}
-              helperText=
+              helperText={
                 actionType === "delete-scenario"
                   ? "Silme işlemi yalnızca seçilen senaryoya uygulanır."
                   : "Temizlik işlemi sadece seçilen senaryoda uygulanır."
+              }
             >
               {!scenarios?.length && <MenuItem value="">Aktif senaryo bulunamadı</MenuItem>}
               {scenarios?.map((scenario) => (
