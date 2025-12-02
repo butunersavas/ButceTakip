@@ -21,6 +21,10 @@ class UserBase(BaseModel):
     full_name: str
     role: str = "user"
 
+    @validator("email")
+    def normalize_email(cls, value: str) -> str:  # noqa: D417
+        return value.strip().lower()
+
 
 class UserCreate(UserBase):
     password: str = Field(min_length=8)
