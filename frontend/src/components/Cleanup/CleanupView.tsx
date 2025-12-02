@@ -52,7 +52,7 @@ function CleaningToolsSection() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
 
-  const isAdmin = user?.role === "admin";
+  const isAdmin = (user?.role || "").toLowerCase() === "admin";
 
   const [scenarioId, setScenarioId] = useState<number | "">("");
   const [budgetItemId, setBudgetItemId] = useState<number | "">("");

@@ -40,17 +40,26 @@ def ensure_default_admin(session: Session) -> None:
         return
 
     normalized_email = settings.default_admin_email.strip().lower()
+    normalized_role = (settings.default_admin_role or "admin").strip().lower() or "admin"
 
     user = session.exec(select(User).where(User.email == normalized_email)).first()
 
     if user is not None:
+        # Admin hesabı yanlış veya büyük/küçük harf hassasiyeti farklı bir rol ile
+        # oluşturulmuşsa düzeltelim.
+        stored_normalized_role = (user.role or "").strip().lower()
+        if stored_normalized_role != normalized_role or user.role != normalized_role:
+            user.role = normalized_role
+            session.add(user)
+            session.commit()
+            session.refresh(user)
         return
 
     user = User(
         email=normalized_email,
         full_name=settings.default_admin_full_name,
         hashed_password=get_password_hash(settings.default_admin_password),
-        role=settings.default_admin_role,
+        role=normalized_role,
     )
     session.add(user)
     session.commit()
