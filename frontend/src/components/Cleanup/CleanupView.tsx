@@ -52,7 +52,7 @@ function CleaningToolsSection() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
 
-  const isAdmin = user?.role === "admin";
+  const isAdmin = (user?.role || "").toLowerCase() === "admin";
 
   const [scenarioId, setScenarioId] = useState<number | "">("");
   const [budgetItemId, setBudgetItemId] = useState<number | "">("");
@@ -131,6 +131,18 @@ function CleaningToolsSection() {
       setResult(null);
 
       if (axios.isAxiosError(err)) {
+        if (err.response?.status === 401) {
+          setError("Oturumunuz doğrulanamadı. Lütfen tekrar giriş yapın.");
+          return;
+        }
+
+        if (err.response?.status === 403) {
+          const permissionDetail =
+            (err.response.data as { detail?: string } | undefined)?.detail;
+          setError(permissionDetail || "Bu işlem için yönetici yetkisi gerekiyor.");
+          return;
+        }
+
         const detail =
           (err.response?.data as { detail?: string; message?: string } | undefined)?.detail ||
           err.response?.data?.message;
