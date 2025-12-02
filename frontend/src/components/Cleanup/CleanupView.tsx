@@ -14,6 +14,7 @@ import {
 } from "@mui/material";
 import CleaningServicesIcon from "@mui/icons-material/CleaningServicesOutlined";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import axios from "axios";
 
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import { useAuth } from "../../context/AuthContext";
@@ -128,8 +129,20 @@ function CleaningToolsSection() {
     onError: (err) => {
       console.error(err);
       setResult(null);
+
+      if (axios.isAxiosError(err)) {
+        const detail =
+          (err.response?.data as { detail?: string; message?: string } | undefined)?.detail ||
+          err.response?.data?.message;
+
+        if (detail) {
+          setError(detail);
+          return;
+        }
+      }
+
       setError(
-        "Temizlik işlemi sırasında hata oluştu. Yalnızca yöneticiler bu işlemi yapabilir."
+        "Temizlik işlemi sırasında beklenmedik bir hata oluştu. Lütfen yetkilerinizi ve bağlantınızı kontrol edin."
       );
     }
   });
