@@ -6,8 +6,13 @@ import {
   Card,
   CardContent,
   Checkbox,
+  Divider,
+  FormControl,
   FormControlLabel,
+  FormLabel,
   MenuItem,
+  Radio,
+  RadioGroup,
   Stack,
   TextField,
   Typography
@@ -52,14 +57,18 @@ function CleaningToolsSection() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
 
+  const normalizedEmail = (user?.email || "").trim().toLowerCase();
   const isAdmin = (user?.role || "").toLowerCase() === "admin";
+  const isPrimaryAdmin = isAdmin && normalizedEmail === "admin@example.com";
 
   const [scenarioId, setScenarioId] = useState<number | "">("");
   const [budgetItemId, setBudgetItemId] = useState<number | "">("");
   const [clearImportedOnly, setClearImportedOnly] = useState(false);
   const [resetPlans, setResetPlans] = useState(false);
   const [result, setResult] = useState<CleanupResponse | null>(null);
+  const [operationMessage, setOperationMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [actionType, setActionType] = useState<"cleanup" | "delete-scenario">("cleanup");
 
   const { data: scenarios } = useQuery<Scenario[]>({
     queryKey: ["scenarios"],
@@ -121,6 +130,7 @@ function CleaningToolsSection() {
     },
     onSuccess: (data) => {
       setResult(data);
+      setOperationMessage(null);
       setError(null);
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
       queryClient.invalidateQueries({ queryKey: ["plans"] });
@@ -129,6 +139,7 @@ function CleaningToolsSection() {
     onError: (err) => {
       console.error(err);
       setResult(null);
+      setOperationMessage(null);
 
       if (axios.isAxiosError(err)) {
         const detail =
@@ -147,11 +158,70 @@ function CleaningToolsSection() {
     }
   });
 
+  const deleteScenarioMutation = useMutation({
+    mutationFn: async (scenarioToDelete: number) => {
+      await client.delete(`/scenarios/${scenarioToDelete}?force=true`);
+      return scenarioToDelete;
+    },
+    onSuccess: (deletedId) => {
+      const deletedScenarioName = scenarios?.find((item) => item.id === deletedId)?.name;
+      setResult(null);
+      setError(null);
+      setOperationMessage(
+        `${deletedScenarioName || "Senaryo"} ve ilişkili bütçe verileri veritabanından kalıcı olarak silindi.`
+      );
+      queryClient.invalidateQueries({ queryKey: ["scenarios"] });
+      queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      queryClient.invalidateQueries({ queryKey: ["plans"] });
+    },
+    onError: (err) => {
+      console.error(err);
+      setResult(null);
+      setOperationMessage(null);
+
+      if (axios.isAxiosError(err)) {
+        const detail =
+          (err.response?.data as { detail?: string; message?: string } | undefined)?.detail ||
+          err.response?.data?.message;
+
+        if (detail) {
+          setError(detail);
+          return;
+        }
+      }
+
+      setError(
+        "Senaryo silme işlemi sırasında beklenmedik bir hata oluştu. Lütfen yetkilerinizi ve bağlantınızı kontrol edin."
+      );
+    }
+  });
+
   const handleCleanup = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
+    if (!isPrimaryAdmin) {
+      setError("Bu işlemi yalnızca admin@example.com kullanıcısı gerçekleştirebilir.");
+      return;
+    }
+
+    if (actionType === "delete-scenario") {
+      if (!scenarioId || typeof scenarioId !== "number") {
+        setError("Silmek için bir senaryo seçmelisiniz.");
+        return;
+      }
+
+      const confirmed = window.confirm(
+        `${selectedScenarioName} senaryosunu ve ilgili kayıtları kalıcı olarak silmek istediğinize emin misiniz?`
+      );
+
+      if (!confirmed) return;
+
+      deleteScenarioMutation.mutate(scenarioId);
+      return;
+    }
+
     const confirmed = window.confirm(
-      `"${selectedScenarioName || "Tüm senaryolar"}" için temizlik işlemini onaylıyor musunuz?`
+      `"${selectedScenarioName || "Tüm senaryolar"}" için tüm harcama kayıtlarını silmek istediğinize emin misiniz?`
     );
 
     if (!confirmed) return;
@@ -173,12 +243,14 @@ function CleaningToolsSection() {
       <Card>
         <CardContent>
           <Stack spacing={3}>
-            {!isAdmin && (
+            {!isPrimaryAdmin && (
               <Alert severity="warning">
-                Bu işlemi yalnızca yönetici yetkisine sahip kullanıcılar gerçekleştirebilir.
+                Bu işlemi yalnızca <strong>admin@example.com</strong> adresine sahip yönetici
+                kullanıcı gerçekleştirebilir.
               </Alert>
             )}
             {error && <Alert severity="error">{error}</Alert>}
+            {operationMessage && <Alert severity="success">{operationMessage}</Alert>}
             {result && (
               <Alert severity="success">
                 <Stack spacing={0.5}>
@@ -200,6 +272,31 @@ function CleaningToolsSection() {
                 </Stack>
               </Alert>
             )}
+            <FormControl component="fieldset">
+              <FormLabel component="legend">İşlem</FormLabel>
+              <RadioGroup
+                row
+                value={actionType}
+                onChange={(event) => {
+                  const selectedAction = event.target.value as "cleanup" | "delete-scenario";
+                  setActionType(selectedAction);
+                  setResult(null);
+                  setOperationMessage(null);
+                  setError(null);
+                }}
+              >
+                <FormControlLabel
+                  value="cleanup"
+                  control={<Radio />}
+                  label="Harcama temizliği (tüm harcamaları sil)"
+                />
+                <FormControlLabel
+                  value="delete-scenario"
+                  control={<Radio />}
+                  label="Senaryoyu/Bütçeyi tamamen sil"
+                />
+              </RadioGroup>
+            </FormControl>
             <TextField
               select
               label="Senaryo"
@@ -210,7 +307,10 @@ function CleaningToolsSection() {
               }}
               fullWidth
               disabled={!scenarios?.length}
-              helperText="Temizlik işlemi sadece seçilen senaryoda uygulanır."
+              helperText=
+                actionType === "delete-scenario"
+                  ? "Silme işlemi yalnızca seçilen senaryoya uygulanır."
+                  : "Temizlik işlemi sadece seçilen senaryoda uygulanır."
             >
               {!scenarios?.length && <MenuItem value="">Aktif senaryo bulunamadı</MenuItem>}
               {scenarios?.map((scenario) => (
@@ -218,55 +318,72 @@ function CleaningToolsSection() {
                   {scenario.name} ({scenario.year})
                 </MenuItem>
               ))}
-              <MenuItem value="">Tüm senaryolar</MenuItem>
+              {actionType === "cleanup" && <MenuItem value="">Tüm senaryolar</MenuItem>}
             </TextField>
-            <TextField
-              select
-              label="Bütçe Kalemi"
-              value={budgetItemId}
-              onChange={(event) => {
-                const value = event.target.value;
-                setBudgetItemId(value === "" ? "" : Number(value));
-              }}
-              fullWidth
-              disabled={!budgetItems?.length}
-              helperText="İsteğe bağlı olarak belirli bir bütçe kalemine göre filtreleyin."
-            >
-              {!budgetItems?.length && <MenuItem value="">Bütçe kalemi bulunamadı</MenuItem>}
-              {budgetItems?.map((item) => (
-                <MenuItem key={item.id} value={item.id}>
-                  {item.code} - {item.name}
-                </MenuItem>
-              ))}
-              <MenuItem value="">Tüm bütçe kalemleri</MenuItem>
-            </TextField>
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={clearImportedOnly}
-                  onChange={(event) => setClearImportedOnly(event.target.checked)}
+            {actionType === "cleanup" ? (
+              <>
+                <TextField
+                  select
+                  label="Bütçe Kalemi"
+                  value={budgetItemId}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setBudgetItemId(value === "" ? "" : Number(value));
+                  }}
+                  fullWidth
+                  disabled={!budgetItems?.length}
+                  helperText="İsteğe bağlı olarak belirli bir bütçe kalemine göre filtreleyin."
+                >
+                  {!budgetItems?.length && <MenuItem value="">Bütçe kalemi bulunamadı</MenuItem>}
+                  {budgetItems?.map((item) => (
+                    <MenuItem key={item.id} value={item.id}>
+                      {item.code} - {item.name}
+                    </MenuItem>
+                  ))}
+                  <MenuItem value="">Tüm bütçe kalemleri</MenuItem>
+                </TextField>
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={clearImportedOnly}
+                      onChange={(event) => setClearImportedOnly(event.target.checked)}
+                    />
+                  }
+                  label="Yalnızca içe aktarılan harcamaları temizle"
                 />
-              }
-              label="Yalnızca içe aktarılan harcamaları temizle"
-            />
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={resetPlans}
-                  onChange={(event) => setResetPlans(event.target.checked)}
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={resetPlans}
+                      onChange={(event) => setResetPlans(event.target.checked)}
+                    />
+                  }
+                  label="Plan kayıtlarını sıfırla ve bütçe kalemlerini yeniden numaralandır"
                 />
-              }
-              label="Plan kayıtlarını sıfırla ve bütçe kalemlerini yeniden numaralandır"
-            />
+              </>
+            ) : (
+              <>
+                <Divider />
+                <Typography variant="body2" color="text.secondary">
+                  Bu seçenek, seçilen senaryoyu ve ona bağlı bütçe kayıtlarını veritabanından kalıcı
+                  olarak siler.
+                </Typography>
+              </>
+            )}
             <Box>
               <Button
                 type="submit"
                 variant="contained"
                 color="error"
                 startIcon={<CleaningServicesIcon />}
-                disabled={!isAdmin || cleanupMutation.isPending}
+                disabled={
+                  !isPrimaryAdmin ||
+                  cleanupMutation.isPending ||
+                  deleteScenarioMutation.isPending ||
+                  (actionType === "delete-scenario" && scenarioId === "")
+                }
               >
-                Temizleme İşlemini Başlat
+                {actionType === "delete-scenario" ? "Senaryoyu Sil" : "Temizleme İşlemini Başlat"}
               </Button>
             </Box>
           </Stack>
