@@ -6,7 +6,7 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlmodel import Session, select
 
-from app.dependencies import get_admin_user, get_current_user, get_db_session
+from app.dependencies import get_current_user, get_db_session
 from app.models import Expense, PlanEntry, Scenario, User
 from app.schemas import CleanupRequest, ScenarioCreate, ScenarioRead, ScenarioUpdate
 from app.services import cleanup as cleanup_service
@@ -27,7 +27,7 @@ def list_scenarios(
 def create_scenario(
     scenario_in: ScenarioCreate,
     session: Session = Depends(get_db_session),
-    _: User = Depends(get_admin_user),
+    current_user: User = Depends(get_current_user),
 ) -> Scenario:
     scenario = Scenario(**scenario_in.dict())
     session.add(scenario)
@@ -41,7 +41,7 @@ def update_scenario(
     scenario_id: int,
     scenario_in: ScenarioUpdate,
     session: Session = Depends(get_db_session),
-    _: User = Depends(get_admin_user),
+    current_user: User = Depends(get_current_user),
 ) -> Scenario:
     scenario = session.get(Scenario, scenario_id)
     if not scenario:
@@ -60,8 +60,10 @@ def delete_scenario(
     scenario_id: int,
     force: bool = Query(False, description="İlişkili tüm verileri de silerek kaldır"),
     session: Session = Depends(get_db_session),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ) -> None:
+    # Artık sadece giriş yapmış kullanıcı kontrolü var (get_current_user),
+    # ek bir role/admin kontrolü yok.
     scenario = session.get(Scenario, scenario_id)
     if not scenario:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
