@@ -12,6 +12,14 @@ settings = get_settings()
 allowed_origins = [origin.strip() for origin in settings.cors_origins.split(",") if origin.strip()]
 allow_all_origins = "*" in allowed_origins
 
+default_origins = [
+    "http://localhost:5173",
+    "http://localhost:4173",
+    "http://localhost:4174",
+    "https://butcetakip.erban.com.tr",
+    "https://api.butcetakip.erban.com.tr",
+]
+
 cors_params = {
     "allow_credentials": True,
     "allow_methods": ["*"],
@@ -21,7 +29,7 @@ cors_params = {
 if allow_all_origins:
     cors_params["allow_origin_regex"] = r".*"
 else:
-    cors_params["allow_origins"] = allowed_origins or ["http://localhost:5173", "http://localhost:4173"]
+    cors_params["allow_origins"] = allowed_origins or default_origins
 
 app.add_middleware(
     CORSMiddleware,
