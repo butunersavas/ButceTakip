@@ -57,9 +57,7 @@ function CleaningToolsSection() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
 
-  const normalizedUsername = (user?.username || "").trim().toLowerCase();
-
-  const isPrimaryAdmin = user?.is_admin && normalizedUsername === "admin";
+  const isAdmin = !!user?.is_admin;
 
   const [scenarioId, setScenarioId] = useState<number | "">("");
   const [budgetItemId, setBudgetItemId] = useState<number | "">("");
@@ -199,8 +197,8 @@ function CleaningToolsSection() {
   const handleCleanup = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    if (!isPrimaryAdmin) {
-      setError("Bu işlemi yalnızca ana admin kullanıcısı gerçekleştirebilir.");
+    if (!isAdmin) {
+      setError("Bu işlemi yalnızca admin kullanıcıları gerçekleştirebilir.");
       return;
     }
 
@@ -243,9 +241,9 @@ function CleaningToolsSection() {
       <Card>
         <CardContent>
           <Stack spacing={3}>
-            {!isPrimaryAdmin && (
+            {!isAdmin && (
               <Alert severity="warning">
-                Bu işlemi yalnızca <strong>admin</strong> kullanıcısı gerçekleştirebilir.
+                Bu işlemi yalnızca <strong>admin</strong> kullanıcıları gerçekleştirebilir.
               </Alert>
             )}
             {error && <Alert severity="error">{error}</Alert>}
@@ -377,7 +375,7 @@ function CleaningToolsSection() {
                 color="error"
                 startIcon={<CleaningServicesIcon />}
                 disabled={
-                  !isPrimaryAdmin ||
+                  !isAdmin ||
                   cleanupMutation.isPending ||
                   deleteScenarioMutation.isPending ||
                   (actionType === "delete-scenario" && scenarioId === "")

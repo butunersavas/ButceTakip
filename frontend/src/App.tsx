@@ -6,6 +6,7 @@ import PlansView from "./components/Plans/PlansView";
 import ExpensesView from "./components/Expenses/ExpensesView";
 import ImportExportView from "./components/ImportExport/ImportExportView";
 import CleanupView from "./components/Cleanup/CleanupView";
+import UsersView from "./components/Users/UsersView";
 import DailyExportView from "./components/DailyExport/DailyExportView";
 import AppLayout from "./components/layout/AppLayout";
 import { useAuth } from "./context/AuthContext";
@@ -22,7 +23,13 @@ function ProtectedRoute({ children }: { children: JSX.Element }) {
   return children;
 }
 
-function LayoutRoute({ children }: { children: JSX.Element }) {
+function LayoutRoute({ children, requireAdmin = false }: { children: JSX.Element; requireAdmin?: boolean }) {
+  const { user } = useAuth();
+
+  if (requireAdmin && !user?.is_admin) {
+    return <Navigate to="/" replace />;
+  }
+
   return (
     <ProtectedRoute>
       <AppLayout>{children}</AppLayout>
@@ -56,6 +63,7 @@ export default function App() {
       />
       <Route path="/daily-export" element={<LayoutRoute><DailyExportView /></LayoutRoute>} />
       <Route path="/cleanup" element={<LayoutRoute><CleanupView /></LayoutRoute>} />
+      <Route path="/users" element={<LayoutRoute requireAdmin><UsersView /></LayoutRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
