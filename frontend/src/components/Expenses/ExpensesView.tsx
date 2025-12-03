@@ -627,6 +627,7 @@ export default function ExpensesView() {
                   columns={columns}
                   loading={isFetching}
                   getRowId={(row) => row.id}
+                  columnResizeMode="onChange"
                   disableColumnResize={false}
                   disableRowSelectionOnClick
                   initialState={{
