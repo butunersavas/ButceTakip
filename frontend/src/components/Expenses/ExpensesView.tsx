@@ -308,6 +308,33 @@ export default function ExpensesView() {
     );
   }, []);
 
+  const findBudgetItem = useCallback(
+    (row: unknown) => {
+      if (!row || typeof row !== "object") {
+        return undefined;
+      }
+
+      const budgetItemId = (row as { budget_item_id?: number | null }).budget_item_id;
+      if (budgetItemId == null || !Array.isArray(budgetItems)) {
+        return undefined;
+      }
+
+      return budgetItems.find(
+        (budget) =>
+          budget?.id === budgetItemId ||
+          ("budget_item_id" in budget && (budget as { budget_item_id?: number | null }).budget_item_id === budgetItemId)
+      );
+    },
+    [budgetItems]
+  );
+
+  const rows = useMemo(() => {
+    return expenses?.map((expense) => ({
+      ...expense,
+      budget_item_id: expense?.budget_item_id ?? null
+    })) ?? [];
+  }, [expenses]);
+
   const baseColumns = useMemo<GridColDef[]>(() => {
     return [
       {
@@ -321,8 +348,15 @@ export default function ExpensesView() {
         headerName: "Bütçe Kalemi",
         width: 240,
         valueGetter: (params) => {
-          const item = budgetItems?.find((budget) => budget.id === params.row.budget_item_id);
-          return item ? `${item.code} — ${item.name}` : "-";
+          const item = findBudgetItem(params.row);
+          if (!item) {
+            return "";
+          }
+
+          const code = item.code ?? "";
+          const name = item.name ?? "";
+
+          return `${code} — ${name}`.trim();
         }
       },
       {
@@ -330,8 +364,8 @@ export default function ExpensesView() {
         headerName: "Map Capex/Opex",
         width: 180,
         valueGetter: (params) => {
-          const item = budgetItems?.find((budget) => budget.id === params.row.budget_item_id);
-          return item?.map_category ?? "-";
+          const item = findBudgetItem(params.row);
+          return item?.map_category ?? "";
         }
       },
       {
@@ -339,8 +373,8 @@ export default function ExpensesView() {
         headerName: "Map Nitelik",
         width: 180,
         valueGetter: (params) => {
-          const item = budgetItems?.find((budget) => budget.id === params.row.budget_item_id);
-          return item?.map_attribute ?? "-";
+          const item = findBudgetItem(params.row);
+          return item?.map_attribute ?? "";
         }
       },
       {
@@ -424,7 +458,7 @@ export default function ExpensesView() {
         )
       }
     ];
-  }, [budgetItems, handleDelete, handleEdit, scenarios, renderTextWithTooltip]);
+  }, [findBudgetItem, handleDelete, handleEdit, scenarios, renderTextWithTooltip]);
 
   const columns = useMemo<GridColDef[]>(
     () =>
@@ -622,7 +656,7 @@ export default function ExpensesView() {
               </Typography>
               <Box sx={{ flexGrow: 1, minWidth: 0, width: "100%", overflowX: "auto" }}>
                 <DataGrid
-                  rows={expenses ?? []}
+                  rows={rows}
                   columns={columns}
                   autoHeight
                   disableRowSelectionOnClick
