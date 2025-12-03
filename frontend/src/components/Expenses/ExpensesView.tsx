@@ -347,24 +347,24 @@ export default function ExpensesView() {
         field: "budget_item_id",
         headerName: "Bütçe Kalemi",
         width: 240,
-        valueGetter: (params) => {
-          const item = findBudgetItem(params.row);
+        valueGetter: (value, row) => {
+          const item = findBudgetItem(row);
           if (!item) {
             return "";
           }
 
-          const code = item.code ?? "";
-          const name = item.name ?? "";
+          const code = item.code ?? item.budget_code ?? "";
+          const name = item.name ?? item.budget_name ?? "";
 
-          return `${code} — ${name}`.trim();
+          return `${code} ${name}`.trim();
         }
       },
       {
         field: "map_category",
         headerName: "Map Capex/Opex",
         width: 180,
-        valueGetter: (params) => {
-          const item = findBudgetItem(params.row);
+        valueGetter: (value, row) => {
+          const item = findBudgetItem(row);
           return item?.map_category ?? "";
         }
       },
@@ -372,8 +372,8 @@ export default function ExpensesView() {
         field: "map_attribute",
         headerName: "Map Nitelik",
         width: 180,
-        valueGetter: (params) => {
-          const item = findBudgetItem(params.row);
+        valueGetter: (value, row) => {
+          const item = findBudgetItem(row);
           return item?.map_attribute ?? "";
         }
       },
@@ -381,8 +381,29 @@ export default function ExpensesView() {
         field: "scenario_id",
         headerName: "Senaryo",
         width: 150,
-        valueGetter: (params) =>
-          scenarios?.find((scenario) => scenario.id === params.row.scenario_id)?.name ?? "-"
+        valueGetter: (value, row) => {
+          if (!row || row.scenario_id == null) {
+            return "";
+          }
+
+          if (!Array.isArray(scenarios)) {
+            return "";
+          }
+
+          const scenario = scenarios.find(
+            (item) => item && (item.scenario_id === row.scenario_id || item.id === row.scenario_id)
+          );
+
+          if (!scenario) {
+            return "";
+          }
+
+          return (
+            scenario.name ??
+            scenario.scenario_name ??
+            `${scenario.code ?? ""} ${scenario.description ?? ""}`.trim()
+          );
+        }
       },
       {
         field: "amount",
@@ -656,7 +677,7 @@ export default function ExpensesView() {
               </Typography>
               <Box sx={{ flexGrow: 1, minWidth: 0, width: "100%", overflowX: "auto" }}>
                 <DataGrid
-                  rows={rows}
+                  rows={rows ?? []}
                   columns={columns}
                   autoHeight
                   disableRowSelectionOnClick

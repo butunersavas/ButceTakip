@@ -233,31 +233,52 @@ export default function PlansView() {
         field: "scenario",
         headerName: "Senaryo",
         flex: 1,
-        valueGetter: (params) =>
-          scenarios?.find((scenario) => scenario.id === params.row.scenario_id)?.name ?? ""
+        valueGetter: (value, row) => {
+          if (!row || row.scenario_id == null) {
+            return "";
+          }
+
+          if (!Array.isArray(scenarios)) {
+            return "";
+          }
+
+          const scenario = scenarios.find(
+            (item) => item && (item.scenario_id === row.scenario_id || item.id === row.scenario_id)
+          );
+
+          if (!scenario) {
+            return "";
+          }
+
+          return (
+            scenario.name ??
+            scenario.scenario_name ??
+            `${scenario.code ?? ""} ${scenario.description ?? ""}`.trim()
+          );
+        }
       },
       {
         field: "budget",
         headerName: "Bütçe Kalemi",
         flex: 1,
-        valueGetter: (params) => {
-          const item = findBudgetItem(params.row);
+        valueGetter: (value, row) => {
+          const item = findBudgetItem(row);
           if (!item) {
             return "";
           }
 
-          const code = item.code ?? "";
-          const name = item.name ?? "";
+          const code = item.code ?? item.budget_code ?? "";
+          const name = item.name ?? item.budget_name ?? "";
 
-          return `${code} — ${name}`.trim();
+          return `${code} ${name}`.trim();
         }
       },
       {
         field: "map_category",
         headerName: "Map Capex/Opex",
         flex: 1,
-        valueGetter: (params) => {
-          const item = findBudgetItem(params.row);
+        valueGetter: (value, row) => {
+          const item = findBudgetItem(row);
           return item?.map_category ?? "";
         }
       },
@@ -265,8 +286,8 @@ export default function PlansView() {
         field: "map_attribute",
         headerName: "Map Nitelik",
         flex: 1,
-        valueGetter: (params) => {
-          const item = findBudgetItem(params.row);
+        valueGetter: (value, row) => {
+          const item = findBudgetItem(row);
           return item?.map_attribute ?? "";
         }
       },
@@ -424,7 +445,7 @@ export default function PlansView() {
               <Box sx={{ width: "100%", overflowX: "auto" }}>
                 <DataGrid
                   autoHeight
-                  rows={rows}
+                  rows={rows ?? []}
                   columns={columns}
                   loading={isFetching}
                   getRowId={(row) => row.id}
