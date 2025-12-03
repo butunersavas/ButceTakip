@@ -23,7 +23,7 @@ import {
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/DeleteOutline";
-import { DataGrid, GridColDef } from "@mui/x-data-grid";
+import { DataGrid, type GridColDef } from "@mui/x-data-grid";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import dayjs from "dayjs";
 
@@ -622,35 +622,13 @@ export default function ExpensesView() {
               </Typography>
               <Box sx={{ flexGrow: 1, minWidth: 0, width: "100%", overflowX: "auto" }}>
                 <DataGrid
-                  autoHeight
                   rows={expenses ?? []}
                   columns={columns}
-                  loading={isFetching}
-                  getRowId={(row) => row.id}
-                  columnResizeMode="onChange"
-                  disableColumnResize={false}
+                  autoHeight
                   disableRowSelectionOnClick
+                  pageSizeOptions={[15, 25, 50]}
                   initialState={{
-                    pagination: { paginationModel: { pageSize: 15, page: 0 } }
-                  }}
-                  pageSizeOptions={[15, 30, 50]}
-                  sx={{
-                    border: "none",
-                    "& .MuiDataGrid-columnHeader": {
-                      cursor: "grab"
-                    },
-                    "& .MuiDataGrid-columnSeparator--resizable": {
-                      cursor: "col-resize"
-                    },
-                    "& .MuiDataGrid-main": {
-                      overflowX: "auto"
-                    },
-                    "& .MuiDataGrid-virtualScroller": {
-                      overflowX: "visible"
-                    },
-                    "& .MuiDataGrid-virtualScrollerContent": {
-                      overflowX: "visible"
-                    }
+                    pagination: { paginationModel: { pageSize: 15 } }
                   }}
                 />
               </Box>
