@@ -16,12 +16,12 @@ import { useAuth } from "../context/AuthContext";
 
 export default function LoginPage() {
   const { login, loading, error } = useAuth();
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    await login(email, password);
+    await login(username, password);
   };
 
   return (
@@ -41,12 +41,13 @@ export default function LoginPage() {
             <form onSubmit={handleSubmit}>
               <Stack spacing={2.5}>
                 <TextField
-                  label="E-posta"
-                  type="email"
-                  value={email}
+                  label="Kullanıcı adı (isim.soyisim)"
+                  type="text"
+                  value={username}
                   required
-                  onChange={(event) => setEmail(event.target.value)}
+                  onChange={(event) => setUsername(event.target.value)}
                   fullWidth
+                  helperText="Admin için kullanıcı adı: admin"
                 />
                 <TextField
                   label="Şifre"

@@ -34,32 +34,30 @@ def get_session() -> Iterator[Session]:
 
 
 def ensure_default_admin(session: Session) -> None:
-    """Geliştirme/test ortamı için varsayılan admin kullanıcısını garanti eder."""
+    """Ensure the singleton admin user exists and is active."""
 
-    if not settings.default_admin_email or not settings.default_admin_password:
+    if not settings.admin_password:
         return
 
-    normalized_email = settings.default_admin_email.strip().lower()
-    normalized_role = (settings.default_admin_role or "admin").strip().lower() or "admin"
+    admin_username = "admin"
 
-    user = session.exec(select(User).where(User.email == normalized_email)).first()
+    user = session.exec(select(User).where(User.username == admin_username)).first()
 
     if user is not None:
-        # Admin hesabı yanlış veya büyük/küçük harf hassasiyeti farklı bir rol ile
-        # oluşturulmuşsa düzeltelim.
-        stored_normalized_role = (user.role or "").strip().lower()
-        if stored_normalized_role != normalized_role or user.role != normalized_role:
-            user.role = normalized_role
-            session.add(user)
-            session.commit()
-            session.refresh(user)
+        user.is_admin = True
+        user.is_active = True
+        user.username = admin_username
+        session.add(user)
+        session.commit()
+        session.refresh(user)
         return
 
     user = User(
-        email=normalized_email,
-        full_name=settings.default_admin_full_name,
-        hashed_password=get_password_hash(settings.default_admin_password),
-        role=normalized_role,
+        username=admin_username,
+        full_name=settings.admin_full_name,
+        hashed_password=get_password_hash(settings.admin_password),
+        is_admin=True,
+        is_active=True,
     )
     session.add(user)
     session.commit()
@@ -83,3 +81,18 @@ def _apply_schema_upgrades() -> None:
     if "kaydi_giren_kullanici" not in expense_columns:
         with engine.begin() as connection:
             connection.execute(text("ALTER TABLE expenses ADD COLUMN kaydi_giren_kullanici TEXT"))
+
+    user_columns = {column["name"] for column in inspector.get_columns("users")}
+    if "username" not in user_columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE users ADD COLUMN username TEXT"))
+            connection.execute(
+                text(
+                    "UPDATE users SET username = CASE "
+                    "WHEN username IS NULL OR username = '' THEN COALESCE(email, '') "
+                    "ELSE username END"
+                )
+            )
+    if "is_admin" not in user_columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE users ADD COLUMN is_admin BOOLEAN DEFAULT 0"))

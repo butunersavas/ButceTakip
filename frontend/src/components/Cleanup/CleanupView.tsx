@@ -57,13 +57,9 @@ function CleaningToolsSection() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
 
-  const normalizedEmail = (user?.email || "").trim().toLowerCase();
-  const normalizedRole = (user?.role || "").trim().toLowerCase();
+  const normalizedUsername = (user?.username || "").trim().toLowerCase();
 
-  // admin@example.com is treated as the super admin, and users explicitly marked as
-  // super_admin can also perform cleanup and deletion tasks.
-  const isPrimaryAdmin =
-    normalizedEmail === "admin@example.com" || normalizedRole === "super_admin";
+  const isPrimaryAdmin = user?.is_admin && normalizedUsername === "admin";
 
   const [scenarioId, setScenarioId] = useState<number | "">("");
   const [budgetItemId, setBudgetItemId] = useState<number | "">("");
@@ -204,7 +200,7 @@ function CleaningToolsSection() {
     event.preventDefault();
 
     if (!isPrimaryAdmin) {
-      setError("Bu işlemi yalnızca admin@example.com kullanıcısı gerçekleştirebilir.");
+      setError("Bu işlemi yalnızca ana admin kullanıcısı gerçekleştirebilir.");
       return;
     }
 
@@ -249,8 +245,7 @@ function CleaningToolsSection() {
           <Stack spacing={3}>
             {!isPrimaryAdmin && (
               <Alert severity="warning">
-                Bu işlemi yalnızca <strong>admin@example.com</strong> adresine sahip yönetici
-                kullanıcı gerçekleştirebilir.
+                Bu işlemi yalnızca <strong>admin</strong> kullanıcısı gerçekleştirebilir.
               </Alert>
             )}
             {error && <Alert severity="error">{error}</Alert>}

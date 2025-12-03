@@ -106,7 +106,7 @@ def create_expense(
         **expense_data,
         created_by_id=current_user.id,
         client_hostname=client_hostname,
-        kaydi_giren_kullanici=current_user.email,
+        kaydi_giren_kullanici=current_user.username,
     )
     session.add(expense)
     session.commit()
@@ -124,7 +124,7 @@ def update_expense(
     expense = session.get(Expense, expense_id)
     if not expense:
         raise HTTPException(status_code=404, detail="Expense not found")
-    if expense.created_by_id not in (None, current_user.id) and current_user.role != "admin":
+    if expense.created_by_id not in (None, current_user.id) and not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Not allowed")
     for field, value in expense_in.dict(exclude_unset=True).items():
         if field == "kaydi_giren_kullanici":
@@ -146,7 +146,7 @@ def delete_expense(
     expense = session.get(Expense, expense_id)
     if not expense:
         raise HTTPException(status_code=404, detail="Expense not found")
-    if expense.created_by_id not in (None, current_user.id) and current_user.role != "admin":
+    if expense.created_by_id not in (None, current_user.id) and not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Not allowed")
     session.delete(expense)
     session.commit()

@@ -191,14 +191,14 @@ export default function PlansView() {
   };
 
   const handleDelete = useCallback((planId: number) => {
-    if (user?.role !== "admin") return;
+    if (!user?.is_admin) return;
     const confirmed = window.confirm(
       "Plan kaydını silmek istediğinize emin misiniz? Bu işlem geri alınamaz."
     );
     if (confirmed) {
       deleteMutation.mutate(planId);
     }
-  }, [deleteMutation, user?.role]);
+  }, [deleteMutation, user?.is_admin]);
 
   const findBudgetItem = useCallback(
     (row: unknown) => {
@@ -316,7 +316,7 @@ export default function PlansView() {
                 <IconButton
                   size="small"
                   onClick={() => handleEdit(row)}
-                  disabled={user?.role !== "admin"}
+                  disabled={!user?.is_admin}
                 >
                   <EditIcon fontSize="small" />
                 </IconButton>
@@ -328,7 +328,7 @@ export default function PlansView() {
                   size="small"
                   color="error"
                   onClick={() => handleDelete(row.id)}
-                  disabled={user?.role !== "admin"}
+                  disabled={!user?.is_admin}
                 >
                   <DeleteIcon fontSize="small" />
                 </IconButton>
@@ -338,7 +338,7 @@ export default function PlansView() {
         )
       }
     ];
-  }, [findBudgetItem, handleDelete, handleEdit, scenarios, user?.role]);
+  }, [findBudgetItem, handleDelete, handleEdit, scenarios, user?.is_admin]);
 
   const monthlyTotals = useMemo(() => {
     const totals = Array(12).fill(0);

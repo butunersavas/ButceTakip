@@ -12,15 +12,16 @@ import { apiClient } from "../api/client";
 
 export interface AuthUser {
   id: number;
-  email: string;
-  full_name: string;
-  role: string;
+  username: string;
+  full_name: string | null;
+  is_admin: boolean;
+  is_active: boolean;
 }
 
 interface AuthContextValue {
   user: AuthUser | null;
   token: string | null;
-  login: (email: string, password: string) => Promise<void>;
+  login: (username: string, password: string) => Promise<void>;
   logout: () => void;
   loading: boolean;
   error: string | null;
@@ -64,12 +65,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [token, fetchCurrentUser]);
 
-  const login = useCallback(async (email: string, password: string) => {
+  const login = useCallback(async (username: string, password: string) => {
     setLoading(true);
     setError(null);
     try {
+      const normalizedUsername = username.trim().toLowerCase();
       const params = new URLSearchParams();
-      params.append("username", email);
+      params.append("username", normalizedUsername);
       params.append("password", password);
       params.append("grant_type", "password");
       const response = await apiClient.post<{ access_token: string }>(

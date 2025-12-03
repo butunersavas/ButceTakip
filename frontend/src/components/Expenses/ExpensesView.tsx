@@ -257,7 +257,7 @@ export default function ExpensesView() {
       is_out_of_budget: formData.get("is_out_of_budget") === "on",
       client_hostname: editingExpense?.client_hostname ?? undefined,
       kaydi_giren_kullanici:
-        editingExpense?.kaydi_giren_kullanici ?? user?.email ?? user?.full_name ?? undefined
+        editingExpense?.kaydi_giren_kullanici ?? user?.username ?? user?.full_name ?? undefined
     };
 
     mutation.mutate(payload);
