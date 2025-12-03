@@ -402,7 +402,7 @@ export default function ImportExportView() {
                       disabled={exporting}
                       fullWidth
                     >
-                      XLSX Olarak Dışa Aktar
+                      Bütçe Yedek Al
                     </Button>
                   </Grid>
                   <Grid item xs={12} sm={6}>

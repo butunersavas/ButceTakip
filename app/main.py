@@ -2,7 +2,16 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import init_db
-from app.routers import auth, budget_items, dashboard, expenses, import_export, plans, scenarios
+from app.routers import (
+    auth,
+    budget_items,
+    dashboard,
+    expenses,
+    import_export,
+    plans,
+    purchase_reminders,
+    scenarios,
+)
 
 app = FastAPI()
 
@@ -33,6 +42,7 @@ app.include_router(plans.router)
 app.include_router(expenses.router)
 app.include_router(dashboard.router)
 app.include_router(import_export.router)
+app.include_router(purchase_reminders.router)
 
 
 @app.get("/")

@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from "react";
 import {
+  Alert,
   Box,
   Card,
   CardContent,
@@ -63,6 +64,13 @@ interface BudgetItem {
   map_attribute?: string | null;
 }
 
+interface PurchaseReminder {
+  budget_code: string;
+  budget_name: string;
+  year: number;
+  month: number;
+}
+
 const monthLabels = [
   "Ocak",
   "Şubat",
@@ -88,6 +96,7 @@ function formatCurrency(value: number) {
 export default function DashboardView() {
   const client = useAuthorizedClient();
   const currentYear = new Date().getFullYear();
+  const currentMonth = new Date().getMonth() + 1;
   const [year, setYear] = usePersistentState<number>("dashboard:year", currentYear);
   const [scenarioId, setScenarioId] = usePersistentState<number | null>("dashboard:scenarioId", null);
   const [budgetItemId, setBudgetItemId] = usePersistentState<number | null>("dashboard:budgetItemId", null);
@@ -129,6 +138,16 @@ export default function DashboardView() {
       if (scenarioId) params.scenario_id = scenarioId;
       if (budgetItemId) params.budget_item_id = budgetItemId;
       const { data } = await client.get<DashboardResponse>("/dashboard", { params });
+      return data;
+    }
+  });
+
+  const { data: purchaseReminders } = useQuery<PurchaseReminder[]>({
+    queryKey: ["purchase-reminders", currentYear, currentMonth],
+    queryFn: async () => {
+      const { data } = await client.get<PurchaseReminder[]>("/budget/purchase-reminders", {
+        params: { year: currentYear, month: currentMonth }
+      });
       return data;
     }
   });
@@ -199,6 +218,19 @@ export default function DashboardView() {
 
   return (
     <Stack spacing={4}>
+      {purchaseReminders?.length ? (
+        <Alert severity="warning">
+          <strong>Bu ay bütçede satın alma kalemleriniz var:</strong>
+          <Box component="ul" sx={{ mt: 1, pl: 3 }}>
+            {purchaseReminders.map((item) => (
+              <Box component="li" key={item.budget_code} sx={{ listStyleType: "disc" }}>
+                {item.budget_code} - {item.budget_name}
+              </Box>
+            ))}
+          </Box>
+          Satın alma formunu hazırlamayı unutmayın.
+        </Alert>
+      ) : null}
       <Card>
         <CardContent>
           <Grid container spacing={3}>
