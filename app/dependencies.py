@@ -30,8 +30,7 @@ def get_current_user(
 def get_admin_user(current_user: User = Depends(get_current_user)) -> User:
     """Ensure that the authenticated user has administrator privileges."""
 
-    normalized_role = (current_user.role or "").strip().lower()
-    if normalized_role != "admin":
+    if not current_user.is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
     return current_user
 
@@ -39,13 +38,10 @@ def get_admin_user(current_user: User = Depends(get_current_user)) -> User:
 def get_primary_admin_user(current_user: User = Depends(get_current_user)) -> User:
     """Restrict operations to the primary admin account."""
 
-    normalized_role = (current_user.role or "").strip().lower()
-    normalized_email = (current_user.email or "").strip().lower()
-
-    if normalized_role != "admin" or normalized_email != "admin@example.com":
+    if not current_user.is_admin or (current_user.username or "").strip().lower() != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Bu işlemi yalnızca admin@example.com hesabı gerçekleştirebilir.",
+            detail="Bu işlemi yalnızca ana admin hesabı gerçekleştirebilir.",
         )
 
     return current_user

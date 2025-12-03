@@ -19,11 +19,11 @@ class User(TimestampMixin, SQLModel, table=True):
     __tablename__ = "users"
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    email: str = Field(index=True, unique=True, nullable=False)
-    full_name: str = Field(nullable=False)
+    username: str = Field(index=True, unique=True, nullable=False)
+    full_name: Optional[str] = Field(default=None)
     hashed_password: str = Field(nullable=False)
     is_active: bool = Field(default=True, nullable=False)
-    role: str = Field(default="user", nullable=False)
+    is_admin: bool = Field(default=False, nullable=False)
 
     expenses: list["Expense"] = Relationship(back_populates="created_by")
 

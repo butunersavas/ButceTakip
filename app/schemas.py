@@ -17,12 +17,13 @@ class TokenPayload(BaseModel):
 
 
 class UserBase(BaseModel):
-    email: str
-    full_name: str
-    role: str = "user"
+    username: str
+    full_name: str | None = None
+    is_active: bool = True
+    is_admin: bool = False
 
-    @validator("email")
-    def normalize_email(cls, value: str) -> str:  # noqa: D417
+    @validator("username")
+    def normalize_username(cls, value: str) -> str:  # noqa: D417
         return value.strip().lower()
 
 
