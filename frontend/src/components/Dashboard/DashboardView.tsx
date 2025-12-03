@@ -1,11 +1,20 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
-  Alert,
   Box,
+  Button,
   Card,
   CardContent,
+  Checkbox,
   Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  FormControlLabel,
   Grid,
+  List,
+  ListItem,
+  ListItemText,
   MenuItem,
   Skeleton,
   Stack,
@@ -64,12 +73,11 @@ interface BudgetItem {
   map_attribute?: string | null;
 }
 
-interface PurchaseReminder {
+type PurchaseReminderItem = {
+  id?: number;
   budget_code: string;
   budget_name: string;
-  year: number;
-  month: number;
-}
+};
 
 const monthLabels = [
   "Ocak",
@@ -96,10 +104,17 @@ function formatCurrency(value: number) {
 export default function DashboardView() {
   const client = useAuthorizedClient();
   const currentYear = new Date().getFullYear();
-  const currentMonth = new Date().getMonth() + 1;
   const [year, setYear] = usePersistentState<number>("dashboard:year", currentYear);
   const [scenarioId, setScenarioId] = usePersistentState<number | null>("dashboard:scenarioId", null);
   const [budgetItemId, setBudgetItemId] = usePersistentState<number | null>("dashboard:budgetItemId", null);
+  const [purchaseItems, setPurchaseItems] = useState<PurchaseReminderItem[]>([]);
+  const [isPurchaseDialogOpen, setIsPurchaseDialogOpen] = useState(false);
+  const [dontShowAgainThisMonth, setDontShowAgainThisMonth] = useState(false);
+
+  const now = new Date();
+  const yearNow = now.getFullYear();
+  const month = now.getMonth() + 1;
+  const reminderKey = `purchase-reminder-${yearNow}-${month}`;
 
   const { data: scenarios } = useQuery<Scenario[]>({
     queryKey: ["scenarios"],
@@ -116,6 +131,29 @@ export default function DashboardView() {
       return data;
     }
   });
+
+  useEffect(() => {
+    const dismissed = localStorage.getItem(reminderKey);
+    if (dismissed === "dismissed") {
+      return;
+    }
+
+    client
+      .get<PurchaseReminderItem[]>(
+        `/budget/purchase-reminders?year=${yearNow}&month=${month}`
+      )
+      .then((res) => {
+        const items = res.data ?? [];
+        setPurchaseItems(items);
+
+        if (items.length > 0) {
+          setIsPurchaseDialogOpen(true);
+        }
+      })
+      .catch(() => {
+        // Hata durumunda sessiz geçilebilir veya loglanabilir
+      });
+  }, [client, month, reminderKey, yearNow]);
 
   useEffect(() => {
     if (!scenarios?.length) return;
@@ -138,16 +176,6 @@ export default function DashboardView() {
       if (scenarioId) params.scenario_id = scenarioId;
       if (budgetItemId) params.budget_item_id = budgetItemId;
       const { data } = await client.get<DashboardResponse>("/dashboard", { params });
-      return data;
-    }
-  });
-
-  const { data: purchaseReminders } = useQuery<PurchaseReminder[]>({
-    queryKey: ["purchase-reminders", currentYear, currentMonth],
-    queryFn: async () => {
-      const { data } = await client.get<PurchaseReminder[]>("/budget/purchase-reminders", {
-        params: { year: currentYear, month: currentMonth }
-      });
       return data;
     }
   });
@@ -218,19 +246,6 @@ export default function DashboardView() {
 
   return (
     <Stack spacing={4}>
-      {purchaseReminders?.length ? (
-        <Alert severity="warning">
-          <strong>Bu ay bütçede satın alma kalemleriniz var:</strong>
-          <Box component="ul" sx={{ mt: 1, pl: 3 }}>
-            {purchaseReminders.map((item) => (
-              <Box component="li" key={item.budget_code} sx={{ listStyleType: "disc" }}>
-                {item.budget_code} - {item.budget_name}
-              </Box>
-            ))}
-          </Box>
-          Satın alma formunu hazırlamayı unutmayın.
-        </Alert>
-      ) : null}
       <Card>
         <CardContent>
           <Grid container spacing={3}>
@@ -461,6 +476,60 @@ export default function DashboardView() {
           </Stack>
         </CardContent>
       </Card>
+
+      <Dialog
+        open={isPurchaseDialogOpen && purchaseItems.length > 0}
+        onClose={() => setIsPurchaseDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontSize: 18, fontWeight: 600 }}>
+          Bu ay bütçede satın alma kalemleriniz var
+        </DialogTitle>
+
+        <DialogContent dividers>
+          <Typography variant="body2" sx={{ mb: 1 }}>
+            Aşağıdaki kalemler için satın alma formunu hazırlamayı unutmayın:
+          </Typography>
+
+          <List dense>
+            {purchaseItems.map((item) => (
+              <ListItem key={item.id ?? item.budget_code}>
+                <ListItemText
+                  primary={`${item.budget_code} – ${item.budget_name}`}
+                  primaryTypographyProps={{ variant: "body2" }}
+                />
+              </ListItem>
+            ))}
+          </List>
+
+          <FormControlLabel
+            sx={{ mt: 1 }}
+            control={
+              <Checkbox
+                size="small"
+                checked={dontShowAgainThisMonth}
+                onChange={(e) => setDontShowAgainThisMonth(e.target.checked)}
+              />
+            }
+            label="Bu ay tekrar gösterme"
+          />
+        </DialogContent>
+
+        <DialogActions>
+          <Button
+            size="small"
+            onClick={() => {
+              if (dontShowAgainThisMonth) {
+                localStorage.setItem(reminderKey, "dismissed");
+              }
+              setIsPurchaseDialogOpen(false);
+            }}
+          >
+            Kapat
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Stack>
   );
 }
