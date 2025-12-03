@@ -24,7 +24,7 @@ def init_db() -> None:
     SQLModel.metadata.create_all(engine)
     _apply_schema_upgrades()
     with Session(engine) as session:
-        ensure_default_admin(session)
+        init_default_admin(session)
 
 
 @contextmanager
@@ -33,32 +33,33 @@ def get_session() -> Iterator[Session]:
         yield session
 
 
-def ensure_default_admin(session: Session) -> None:
-    """Ensure the singleton admin user exists and is active."""
+def init_default_admin(session: Session) -> None:
+    """Create or update the default admin user based on environment variables."""
 
-    if not settings.admin_password:
+    admin_username = settings.default_admin_email.strip().lower()
+    admin_full_name = settings.default_admin_full_name or "Admin Kullanıcı"
+    admin_password = settings.default_admin_password
+
+    if not admin_username:
         return
-
-    admin_username = "admin"
 
     user = session.exec(select(User).where(User.username == admin_username)).first()
+    hashed_password = get_password_hash(admin_password)
 
-    if user is not None:
+    if user is None:
+        user = User(
+            username=admin_username,
+            full_name=admin_full_name,
+            hashed_password=hashed_password,
+            is_admin=True,
+            is_active=True,
+        )
+    else:
+        user.full_name = admin_full_name
         user.is_admin = True
         user.is_active = True
-        user.username = admin_username
-        session.add(user)
-        session.commit()
-        session.refresh(user)
-        return
+        user.hashed_password = hashed_password
 
-    user = User(
-        username=admin_username,
-        full_name=settings.admin_full_name,
-        hashed_password=get_password_hash(settings.admin_password),
-        is_admin=True,
-        is_active=True,
-    )
     session.add(user)
     session.commit()
     session.refresh(user)
