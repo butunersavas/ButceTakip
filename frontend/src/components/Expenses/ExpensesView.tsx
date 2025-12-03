@@ -23,12 +23,7 @@ import {
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/DeleteOutline";
-import {
-  DataGridPro,
-  GridColDef,
-  GridColumnOrderChangeParams,
-  GridColumnResizeParams
-} from "@mui/x-data-grid-pro";
+import { DataGrid, GridColDef } from "@mui/x-data-grid";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import dayjs from "dayjs";
 
@@ -379,12 +374,6 @@ export default function ExpensesView() {
         renderCell: ({ row }) => renderTextWithTooltip(row.vendor)
       },
       {
-        field: "client_hostname",
-        headerName: "Bilgisayar",
-        width: 200,
-        renderCell: ({ row }) => renderTextWithTooltip(row.client_hostname, "Bilinmiyor")
-      },
-      {
         field: "kaydi_giren_kullanici",
         headerName: "Kaydı Giren",
         width: 220,
@@ -437,77 +426,9 @@ export default function ExpensesView() {
     ];
   }, [budgetItems, handleDelete, handleEdit, scenarios, renderTextWithTooltip]);
 
-  const defaultColumnOrder = useMemo(
-    () => baseColumns.map((column) => column.field),
+  const columns = useMemo<GridColDef[]>(
+    () => baseColumns.map((column) => ({ ...column, width: column.width ?? 160 })),
     [baseColumns]
-  );
-
-  const defaultColumnWidths = useMemo(
-    () =>
-      baseColumns.reduce<Record<string, number>>((acc, column) => {
-        if (column.width) {
-          acc[column.field] = column.width;
-        }
-        return acc;
-      }, {}),
-    [baseColumns]
-  );
-
-  const [columnOrder, setColumnOrder] = usePersistentState<string[]>(
-    "expenses:columnOrder",
-    defaultColumnOrder
-  );
-  const [columnWidths, setColumnWidths] = usePersistentState<Record<string, number>>(
-    "expenses:columnWidths",
-    defaultColumnWidths
-  );
-
-  const columns = useMemo<GridColDef[]>(() => {
-    const orderedFields = columnOrder.length ? columnOrder : defaultColumnOrder;
-
-    const columnMap = baseColumns.map((column) => {
-      const savedWidth = columnWidths[column.field];
-      return {
-        ...column,
-        resizable: true,
-        width: savedWidth ?? column.width ?? 160,
-        minWidth: column.minWidth ?? 140
-      } as GridColDef;
-    });
-
-    const lookup = new Map(columnMap.map((column) => [column.field, column]));
-    const orderedColumns = orderedFields
-      .map((field) => lookup.get(field))
-      .filter(Boolean) as GridColDef[];
-
-    const missingColumns = columnMap.filter((column) => !orderedFields.includes(column.field));
-
-    return [...orderedColumns, ...missingColumns];
-  }, [baseColumns, columnOrder, columnWidths, defaultColumnOrder]);
-
-  const handleColumnOrderChange = useCallback(
-    (params: GridColumnOrderChangeParams) => {
-      const { column, targetIndex } = params;
-      setColumnOrder((previous) => {
-        const baseOrder = previous.length ? [...previous] : columns.map((col) => col.field);
-        const filtered = baseOrder.filter((field) => field !== column.field);
-        const clampedIndex = Math.min(Math.max(targetIndex, 0), filtered.length);
-        filtered.splice(clampedIndex, 0, column.field);
-        return filtered;
-      });
-    },
-    [columns, setColumnOrder]
-  );
-
-  const handleColumnResize = useCallback(
-    (params: GridColumnResizeParams) => {
-      if (!params.width) return;
-      setColumnWidths((previous) => ({
-        ...previous,
-        [params.colDef.field]: params.width
-      }));
-    },
-    [setColumnWidths]
   );
 
   return (
@@ -695,18 +616,13 @@ export default function ExpensesView() {
                 Harcamalar
               </Typography>
               <Box sx={{ flexGrow: 1, minWidth: 0, width: "100%", overflowX: "auto" }}>
-                <DataGridPro
+                <DataGrid
                   autoHeight
                   rows={expenses ?? []}
                   columns={columns}
                   loading={isFetching}
                   getRowId={(row) => row.id}
                   disableRowSelectionOnClick
-                  columnResizeMode="onChange"
-                  disableColumnResize={false}
-                  disableColumnReorder={false}
-                  onColumnOrderChange={handleColumnOrderChange}
-                  onColumnResize={handleColumnResize}
                   initialState={{
                     pagination: { paginationModel: { pageSize: 15, page: 0 } }
                   }}

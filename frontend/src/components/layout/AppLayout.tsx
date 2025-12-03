@@ -28,7 +28,7 @@ import { useAuth } from "../../context/AuthContext";
 import brandLogo from "../../assets/brand-logo.svg";
 import { useThemeMode } from "../../context/ThemeModeContext";
 
-const drawerWidth = 260;
+const drawerWidth = 280;
 
 type NavItem = {
   label: string;
@@ -55,7 +55,7 @@ const navItems: NavItem[] = [
     path: "/expenses"
   },
   {
-    label: "Raporlama",
+    label: "Raporlama / İçeri Aktar",
     icon: <CloudUploadIcon />,
     path: "/import-export"
   },
@@ -121,6 +121,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 borderRadius: 2,
                 mb: 1,
                 color: selected ? "primary.main" : "text.primary",
+                gap: 1,
                 "&.Mui-selected": {
                   backgroundColor: "rgba(13, 71, 161, 0.12)",
                   color: "primary.main"
@@ -129,11 +130,11 @@ export default function AppLayout({ children }: AppLayoutProps) {
               onClick={() => setMobileOpen(false)}
             >
               <ListItemIcon
-                sx={{ color: selected ? "primary.main" : "text.secondary" }}
+                sx={{ color: selected ? "primary.main" : "text.secondary", minWidth: 48 }}
               >
                 {item.icon}
               </ListItemIcon>
-              <ListItemText primary={item.label} primaryTypographyProps={{ sx: { fontSize: "15px" } }} />
+              <ListItemText primary={item.label} primaryTypographyProps={{ sx: { fontSize: "16px" } }} />
             </ListItemButton>
           );
         })}
@@ -151,7 +152,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
               primary="Karanlık Mod"
               secondary={mode === "dark" ? "Aktif" : "Pasif"}
               secondaryTypographyProps={{ color: "text.secondary" }}
-              primaryTypographyProps={{ sx: { fontSize: "15px" } }}
+              primaryTypographyProps={{ sx: { fontSize: "16px" } }}
             />
             <Switch
               edge="end"
@@ -173,7 +174,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
             <ListItemIcon>
               <LogoutIcon />
             </ListItemIcon>
-            <ListItemText primary="Çıkış" primaryTypographyProps={{ sx: { fontSize: "15px" } }} />
+            <ListItemText primary="Çıkış" primaryTypographyProps={{ sx: { fontSize: "16px" } }} />
           </ListItemButton>
         </Tooltip>
       </Box>

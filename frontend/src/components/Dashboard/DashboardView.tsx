@@ -254,7 +254,7 @@ export default function DashboardView() {
         </CardContent>
       </Card>
 
-      <Grid container spacing={3}>
+      <Grid container spacing={3} justifyContent="center" alignItems="center">
         {(
           [
             {
@@ -279,7 +279,7 @@ export default function DashboardView() {
             }
           ] as const
         ).map((kpi) => (
-          <Grid item xs={12} sm={6} md={4} lg={2} key={kpi.title}>
+          <Grid item xs={12} sm={6} md={3} lg={2} key={kpi.title}>
             <Card
               sx={{
                 borderTop: 4,

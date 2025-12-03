@@ -7,11 +7,29 @@ from fastapi import Response
 from openpyxl import Workbook
 from sqlmodel import Session, select
 
-from app.models import BudgetItem, Expense, ExpenseStatus, PlanEntry
+from app.models import BudgetItem, Expense, ExpenseStatus, PlanEntry, Scenario
 from app.services.analytics import compute_quarterly_summary
 
 
 CURRENCY_SYMBOL = "$"
+
+EXPORT_HEADERS = [
+    "type",
+    "budget_code",
+    "budget_name",
+    "scenario",
+    "year",
+    "month",
+    "amount",
+    "date",
+    "quantity",
+    "unit_price",
+    "vendor",
+    "description",
+    "out_of_budget",
+    "capex_opex",
+    "asset_type",
+]
 
 
 def _format_currency(value: float) -> str:
@@ -38,6 +56,70 @@ def _get_expenses(
 
 def _get_budget_item_map(session: Session) -> dict[int, BudgetItem]:
     return {item.id: item for item in session.exec(select(BudgetItem)).all()}
+
+
+def _get_scenario_map(session: Session) -> dict[int, Scenario]:
+    return {scenario.id: scenario for scenario in session.exec(select(Scenario)).all()}
+
+
+def _append_plan_rows(
+    sheet,
+    plans: list[PlanEntry],
+    budget_items: dict[int, BudgetItem],
+    scenarios: dict[int, Scenario],
+):
+    for plan in plans:
+        budget_item = budget_items.get(plan.budget_item_id)
+        scenario = scenarios.get(plan.scenario_id) if plan.scenario_id else None
+        sheet.append(
+            [
+                "plan",
+                budget_item.code if budget_item else "",
+                budget_item.name if budget_item else "",
+                scenario.name if scenario else "",
+                plan.year,
+                plan.month,
+                plan.amount,
+                "",
+                "",
+                "",
+                "",
+                "",
+                "false",
+                budget_item.map_category if budget_item and budget_item.map_category else "",
+                budget_item.map_attribute if budget_item and budget_item.map_attribute else "",
+            ]
+        )
+
+
+def _append_expense_rows(
+    sheet,
+    expenses: list[Expense],
+    budget_items: dict[int, BudgetItem],
+    scenarios: dict[int, Scenario],
+):
+    for expense in expenses:
+        budget_item = budget_items.get(expense.budget_item_id)
+        scenario = scenarios.get(expense.scenario_id) if expense.scenario_id else None
+        sheet.append(
+            [
+                "expense",
+                budget_item.code if budget_item else "",
+                budget_item.name if budget_item else "",
+                scenario.name if scenario else "",
+                expense.expense_date.year,
+                expense.expense_date.month,
+                expense.amount,
+                expense.expense_date.isoformat(),
+                expense.quantity,
+                expense.unit_price,
+                expense.vendor or "",
+                expense.description or "",
+                "true" if expense.is_out_of_budget else "false",
+                budget_item.map_category if budget_item and budget_item.map_category else "",
+                budget_item.map_attribute if budget_item and budget_item.map_attribute else "",
+            ]
+        )
 
 
 def export_csv(
@@ -136,82 +218,20 @@ def export_xlsx(
 ) -> Response:
     wb = Workbook()
     plan_sheet = wb.active
-    plan_sheet.title = "Plans"
-    plan_sheet.append(
-        [
-            "Budget Item ID",
-            "Map Capex/Opex",
-            "Map Nitelik",
-            "Scenario ID",
-            "Year",
-            "Month",
-            "Amount (USD)",
-        ]
-    )
+    plan_sheet.title = "BudgetData"
+    plan_sheet.append(EXPORT_HEADERS)
     budget_items = _get_budget_item_map(session)
+    scenarios = _get_scenario_map(session)
     plan_query = select(PlanEntry).where(PlanEntry.year == year)
     if scenario_id is not None:
         plan_query = plan_query.where(PlanEntry.scenario_id == scenario_id)
     if budget_item_id is not None:
         plan_query = plan_query.where(PlanEntry.budget_item_id == budget_item_id)
-    for plan in session.exec(plan_query).all():
-        budget_item = budget_items.get(plan.budget_item_id)
-        map_attribute = budget_item.map_attribute if budget_item else ""
-        map_category = budget_item.map_category if budget_item else ""
-        plan_sheet.append(
-            [
-                plan.budget_item_id,
-                map_category or "",
-                map_attribute or "",
-                plan.scenario_id,
-                plan.year,
-                plan.month,
-                _format_currency(plan.amount),
-            ]
-        )
+    plans = session.exec(plan_query).all()
+    _append_plan_rows(plan_sheet, plans, budget_items, scenarios)
 
-    expense_sheet = wb.create_sheet("Expenses")
-    expense_sheet.append(
-        [
-            "Budget Item ID",
-            "Map Capex/Opex",
-            "Map Nitelik",
-            "Scenario ID",
-            "Date",
-            "Amount (USD)",
-            "Quantity",
-            "Unit Price",
-            "Vendor",
-            "Description",
-            "Status",
-            "Out of Budget",
-            "Client Hostname",
-            "Kaydı Giren",
-        ]
-    )
     expenses = _get_expenses(session, year, scenario_id, budget_item_id)
-    for expense in expenses:
-        budget_item = budget_items.get(expense.budget_item_id)
-        map_attribute = budget_item.map_attribute if budget_item else ""
-        map_category = budget_item.map_category if budget_item else ""
-        expense_sheet.append(
-            [
-                expense.budget_item_id,
-                map_category or "",
-                map_attribute or "",
-                expense.scenario_id,
-                expense.expense_date.isoformat(),
-                _format_currency(expense.amount),
-                expense.quantity,
-                expense.unit_price,
-                expense.vendor or "",
-                expense.description or "",
-                expense.status.value,
-                expense.is_out_of_budget,
-                expense.client_hostname or "",
-                expense.kaydi_giren_kullanici or "",
-            ]
-        )
+    _append_expense_rows(plan_sheet, expenses, budget_items, scenarios)
     output = io.BytesIO()
     wb.save(output)
     response = Response(
@@ -232,6 +252,7 @@ def export_filtered_expenses_xlsx(
 ) -> Response:
     expenses = _get_expenses(session, year, scenario_id, budget_item_id)
     budget_items = _get_budget_item_map(session)
+    scenarios = _get_scenario_map(session)
     if filter_type == "out_of_budget":
         filtered = [expense for expense in expenses if expense.is_out_of_budget]
         sheet_title = "OutOfBudgetExpenses"
@@ -244,46 +265,8 @@ def export_filtered_expenses_xlsx(
     wb = Workbook()
     sheet = wb.active
     sheet.title = sheet_title
-    sheet.append(
-        [
-            "Budget Item ID",
-            "Map Capex/Opex",
-            "Map Nitelik",
-            "Scenario ID",
-            "Date",
-            "Amount (USD)",
-            "Quantity",
-            "Unit Price",
-            "Vendor",
-            "Description",
-            "Status",
-            "Out of Budget",
-            "Client Hostname",
-            "Kaydı Giren",
-        ]
-    )
-    for expense in filtered:
-        budget_item = budget_items.get(expense.budget_item_id)
-        map_attribute = budget_item.map_attribute if budget_item else ""
-        map_category = budget_item.map_category if budget_item else ""
-        sheet.append(
-            [
-                expense.budget_item_id,
-                map_category or "",
-                map_attribute or "",
-                expense.scenario_id,
-                expense.expense_date.isoformat(),
-                _format_currency(expense.amount),
-                expense.quantity,
-            expense.unit_price,
-            expense.vendor or "",
-            expense.description or "",
-            expense.status.value,
-            expense.is_out_of_budget,
-            expense.client_hostname or "",
-            expense.kaydi_giren_kullanici or "",
-        ]
-    )
+    sheet.append(EXPORT_HEADERS)
+    _append_expense_rows(sheet, filtered, budget_items, scenarios)
 
     output = io.BytesIO()
     wb.save(output)
