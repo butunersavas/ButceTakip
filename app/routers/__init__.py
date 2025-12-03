@@ -1,4 +1,4 @@
-from . import auth, budget_items, dashboard, expenses, import_export, plans, scenarios
+from . import auth, budget_items, dashboard, expenses, import_export, plans, purchase_reminders, scenarios
 
 __all__ = [
     "auth",
@@ -7,5 +7,6 @@ __all__ = [
     "expenses",
     "import_export",
     "plans",
+    "purchase_reminders",
     "scenarios",
 ]

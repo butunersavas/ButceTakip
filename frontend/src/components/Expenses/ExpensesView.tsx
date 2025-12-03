@@ -427,7 +427,12 @@ export default function ExpensesView() {
   }, [budgetItems, handleDelete, handleEdit, scenarios, renderTextWithTooltip]);
 
   const columns = useMemo<GridColDef[]>(
-    () => baseColumns.map((column) => ({ ...column, width: column.width ?? 160 })),
+    () =>
+      baseColumns.map((column) => ({
+        ...column,
+        width: column.width ?? 160,
+        resizable: true
+      })),
     [baseColumns]
   );
 
@@ -622,6 +627,7 @@ export default function ExpensesView() {
                   columns={columns}
                   loading={isFetching}
                   getRowId={(row) => row.id}
+                  disableColumnResize={false}
                   disableRowSelectionOnClick
                   initialState={{
                     pagination: { paginationModel: { pageSize: 15, page: 0 } }

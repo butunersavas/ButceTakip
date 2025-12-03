@@ -126,6 +126,13 @@ class PlanAggregateRead(BaseModel):
     total_amount: float
 
 
+class PurchaseReminder(BaseModel):
+    budget_code: str
+    budget_name: str
+    year: int
+    month: int
+
+
 class ExpenseBase(BaseModel):
     budget_item_id: int
     scenario_id: Optional[int] = None
