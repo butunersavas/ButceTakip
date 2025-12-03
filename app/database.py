@@ -36,9 +36,9 @@ def get_session() -> Iterator[Session]:
 def init_default_admin(session: Session) -> None:
     """Create or update the default admin user based on environment variables."""
 
-    admin_username = settings.default_admin_email.strip().lower()
-    admin_full_name = settings.default_admin_full_name or "Admin Kullanıcı"
-    admin_password = settings.default_admin_password
+    admin_username = settings.DEFAULT_ADMIN_EMAIL.strip().lower()
+    admin_full_name = settings.DEFAULT_ADMIN_FULL_NAME or "Admin Kullanıcı"
+    admin_password = settings.DEFAULT_ADMIN_PASSWORD
 
     if not admin_username:
         return

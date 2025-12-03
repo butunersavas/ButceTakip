@@ -16,11 +16,12 @@ import ListAltIcon from "@mui/icons-material/ListAltOutlined";
 import ReceiptIcon from "@mui/icons-material/ReceiptLongOutlined";
 import CloudUploadIcon from "@mui/icons-material/CloudUploadOutlined";
 import CleaningServicesIcon from "@mui/icons-material/CleaningServicesOutlined";
+import PeopleIcon from "@mui/icons-material/PeopleAltOutlined";
 import LogoutIcon from "@mui/icons-material/Logout";
 import MenuIcon from "@mui/icons-material/Menu";
 import DarkModeIcon from "@mui/icons-material/DarkModeOutlined";
 import LightModeIcon from "@mui/icons-material/LightModeOutlined";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import type { Location, To } from "react-router-dom";
 
@@ -38,45 +39,60 @@ type NavItem = {
   isSelected?: (location: Location) => boolean;
 };
 
-const navItems: NavItem[] = [
-  {
-    label: "Dashboard",
-    icon: <DashboardIcon />,
-    path: "/"
-  },
-  {
-    label: "Plan Yönetimi",
-    icon: <ListAltIcon />,
-    path: "/plans"
-  },
-  {
-    label: "Harcama Yönetimi",
-    icon: <ReceiptIcon />,
-    path: "/expenses"
-  },
-  {
-    label: "Raporlama / İçeri Aktar",
-    icon: <CloudUploadIcon />,
-    path: "/import-export"
-  },
-  {
-    label: "Temizleme Araçları",
-    icon: <CleaningServicesIcon />,
-    path: "/cleanup",
-    isSelected: (location) => location.pathname === "/cleanup" && !location.hash,
-    to: "/cleanup"
-  }
-];
-
 interface AppLayoutProps {
   children: React.ReactNode;
 }
 
 export default function AppLayout({ children }: AppLayoutProps) {
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const { mode, toggleMode, setMode } = useThemeMode();
+
+  const navItems = useMemo<NavItem[]>(() => {
+    const items: NavItem[] = [
+      {
+        label: "Dashboard",
+        icon: <DashboardIcon />,
+        path: "/"
+      },
+      {
+        label: "Plan Yönetimi",
+        icon: <ListAltIcon />,
+        path: "/plans"
+      },
+      {
+        label: "Harcama Yönetimi",
+        icon: <ReceiptIcon />,
+        path: "/expenses"
+      },
+      {
+        label: "Raporlama / İçeri Aktar",
+        icon: <CloudUploadIcon />,
+        path: "/import-export"
+      }
+    ];
+
+    if (user?.is_admin) {
+      items.push(
+        {
+          label: "Temizleme Araçları",
+          icon: <CleaningServicesIcon />,
+          path: "/cleanup",
+          isSelected: (currentLocation) =>
+            currentLocation.pathname === "/cleanup" && !currentLocation.hash,
+          to: "/cleanup"
+        },
+        {
+          label: "Kullanıcı Yönetimi",
+          icon: <PeopleIcon />,
+          path: "/users"
+        }
+      );
+    }
+
+    return items;
+  }, [user?.is_admin]);
 
   const drawer = (
     <Box

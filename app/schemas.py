@@ -38,6 +38,17 @@ class UserRead(UserBase):
         orm_mode = True
 
 
+class CurrentUserResponse(BaseModel):
+    id: int
+    username: str
+    full_name: str | None = None
+    is_admin: bool
+    is_active: bool = True
+
+    class Config:
+        orm_mode = True
+
+
 class ScenarioBase(BaseModel):
     name: str
     year: int

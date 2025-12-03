@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, File, UploadFile, Query
 from sqlmodel import Session
 
-from app.dependencies import get_current_user, get_db_session
+from app.dependencies import get_admin_user, get_current_user, get_db_session
 from app.schemas import CleanupRequest, ImportSummary
 from app.services import cleanup as cleanup_service
 from app.services import exporter, importer
@@ -118,7 +118,7 @@ def export_cancelled_expenses(
 def cleanup(
     request: CleanupRequest,
     session: Session = Depends(get_db_session),
-    _= Depends(get_current_user),
+    _= Depends(get_admin_user),
 ):
     result = cleanup_service.perform_cleanup(session, request)
     return {"status": "ok", **result}
