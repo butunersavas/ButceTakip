@@ -18,8 +18,10 @@ router = APIRouter(prefix="/scenarios", tags=["Scenarios"])
 
 @router.get("/", response_model=list[ScenarioRead])
 def list_scenarios(
-    session: Session = Depends(get_db_session), current_user: User = Depends(get_current_user)
+    session: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
 ) -> list[Scenario]:
+    """Tüm senaryoları listele (sadece oturum açmış kullanıcılar)."""
     return session.exec(select(Scenario).where(Scenario.year >= 0)).all()
 
 
@@ -29,6 +31,7 @@ def create_scenario(
     session: Session = Depends(get_db_session),
     current_user: User = Depends(get_current_user),
 ) -> Scenario:
+    """Yeni senaryo oluştur (herhangi bir oturum açmış kullanıcı)."""
     scenario = Scenario(**scenario_in.dict())
     session.add(scenario)
     session.commit()
@@ -43,9 +46,11 @@ def update_scenario(
     session: Session = Depends(get_db_session),
     current_user: User = Depends(get_current_user),
 ) -> Scenario:
+    """Var olan senaryoyu güncelle (herhangi bir oturum açmış kullanıcı)."""
     scenario = session.get(Scenario, scenario_id)
     if not scenario:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
+
     for field, value in scenario_in.dict(exclude_unset=True).items():
         setattr(scenario, field, value)
     scenario.updated_at = datetime.utcnow()
@@ -61,21 +66,28 @@ def delete_scenario(
     force: bool = Query(False, description="İlişkili tüm verileri de silerek kaldır"),
     session: Session = Depends(get_db_session),
     current_user: User = Depends(get_current_user),
-) -> None:
-    # Artık sadece giriş yapmış kullanıcı kontrolü var (get_current_user),
-    # ek bir role/admin kontrolü yok.
+) -> Response:
+    """Senaryoyu sil.
+
+    - Kullanıcı giriş yapmış olmalı (get_current_user).
+    - Eğer senaryoya bağlı harcama/plan kayıtları varsa:
+        * force=False ise 409 döner ve silmez.
+        * force=True ise önce cleanup_service ile ilişkili kayıtları temizler, sonra senaryoyu siler.
+    """
     scenario = session.get(Scenario, scenario_id)
     if not scenario:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
 
+    # Bu senaryoya bağlı harcama ve plan var mı?
     expense_count = session.exec(
-        select(func.count()).select_from(Expense).where(Expense.scenario_id == scenario_id)
-    ).scalar_one()
+        select(func.count(Expense.id)).where(Expense.scenario_id == scenario_id)
+    ).one()
     plan_count = session.exec(
-        select(func.count()).select_from(PlanEntry).where(PlanEntry.scenario_id == scenario_id)
-    ).scalar_one()
+        select(func.count(PlanEntry.id)).where(PlanEntry.scenario_id == scenario_id)
+    ).one()
 
     if (expense_count or plan_count) and not force:
+        # İlişkili kayıtlar var ve force=False ise bilgilendirici 409 dön.
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
@@ -85,6 +97,7 @@ def delete_scenario(
         )
 
     if force:
+        # İlgili tüm kayıtları temizle
         cleanup_service.perform_cleanup(
             session,
             CleanupRequest(
@@ -105,7 +118,10 @@ def delete_scenario(
         )
     except SQLAlchemyError:
         session.rollback()
-        logger.exception("Beklenmedik bir hata nedeniyle senaryo silinemedi", extra={"scenario_id": scenario_id})
+        logger.exception(
+            "Beklenmedik bir hata nedeniyle senaryo silinemedi",
+            extra={"scenario_id": scenario_id},
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Senaryo silinirken beklenmedik bir hata oluştu.",
