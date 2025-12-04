@@ -7,7 +7,7 @@ from sqlmodel import Session, select
 from app.config import get_settings
 from app.dependencies import get_current_user, get_db_session
 from app.models import User
-from app.schemas import CurrentUserResponse, Token, UserCreate, UserRead
+from app.schemas import ChangePasswordRequest, CurrentUserResponse, Token, UserCreate, UserRead
 from app.utils.security import create_access_token, get_password_hash, verify_password
 from app.utils.validators import validate_username
 
@@ -80,6 +80,29 @@ def login_for_access_token(
         expires_delta=timedelta(minutes=settings.access_token_expire_minutes),
     )
     return Token(access_token=access_token)
+
+
+@router.post("/change-password")
+def change_password(
+    data: ChangePasswordRequest,
+    session: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+):
+    if not verify_password(data.current_password, current_user.hashed_password):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Mevcut şifre hatalı.")
+
+    if len(data.new_password) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Yeni şifre en az 8 karakter olmalıdır.",
+        )
+
+    current_user.hashed_password = get_password_hash(data.new_password)
+    session.add(current_user)
+    session.commit()
+    session.refresh(current_user)
+
+    return {"detail": "Şifreniz başarıyla güncellendi."}
 
 
 @router.get("/me", response_model=CurrentUserResponse)

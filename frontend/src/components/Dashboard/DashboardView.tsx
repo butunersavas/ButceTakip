@@ -41,7 +41,7 @@ import {
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import usePersistentState from "../../hooks/usePersistentState";
 import { formatBudgetItemLabel } from "../../utils/budgetItem";
-import PageHeader from "../layout/PageHeader";
+import { PageHeader } from "../layout/PageHeader";
 
 interface DashboardSummary {
   month: number;
@@ -399,7 +399,50 @@ export default function DashboardView() {
         ))}
       </Grid>
 
-      <Grid container spacing={2} sx={{ mt: 1 }}>
+      <Grid container spacing={3} sx={{ mt: 1 }}>
+        <Grid item xs={12}>
+          <Card>
+            <CardContent>
+              <Stack direction="row" justifyContent="space-between" alignItems="center" mb={3}>
+                <Typography variant="h6" fontWeight={600}>
+                  Aylık Trend Analizi
+                </Typography>
+                <Chip
+                  label={
+                    budgetItemId
+                      ? budgetItems?.find((item) => item.id === budgetItemId)?.name
+                      : "Tüm Kalemler"
+                  }
+                  color={budgetItemId ? "primary" : "default"}
+                  variant={budgetItemId ? "filled" : "outlined"}
+                />
+              </Stack>
+              <Box sx={{ height: 360 }}>
+                {isLoading ? (
+                  <Skeleton variant="rectangular" height="100%" />
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={monthlyData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="monthLabel" />
+                      <YAxis tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`} />
+                      <ReferenceLine y={0} stroke="#9e9e9e" strokeDasharray="3 3" />
+                      <RechartsTooltip
+                        formatter={(value: number) => formatCurrency(value)}
+                        labelFormatter={(label) => label}
+                      />
+                      <Legend />
+                      <Bar dataKey="planned" name="Planlanan" fill={pieColors.planned} radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="actual" name="Gerçekleşen" fill={pieColors.actual} radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="remaining" name="Kalan" fill={pieColors.remaining} radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="overrun" name="Aşım" fill={pieColors.overrun} radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
         <Grid item xs={12} md={6}>
           <Card>
             <CardHeader title="Riskteki Kalemler" subheader="Planın %80 ve üzeri harcananlar" />
@@ -424,7 +467,6 @@ export default function DashboardView() {
             </CardContent>
           </Card>
         </Grid>
-
         <Grid item xs={12} md={6}>
           <Card>
             <CardHeader
@@ -453,48 +495,6 @@ export default function DashboardView() {
           </Card>
         </Grid>
       </Grid>
-
-      <Card>
-        <CardContent>
-          <Stack direction="row" justifyContent="space-between" alignItems="center" mb={3}>
-            <Typography variant="h6" fontWeight={600}>
-              Aylık Trend Analizi
-            </Typography>
-            <Chip
-              label={
-                budgetItemId
-                  ? budgetItems?.find((item) => item.id === budgetItemId)?.name
-                  : "Tüm Kalemler"
-              }
-              color={budgetItemId ? "primary" : "default"}
-              variant={budgetItemId ? "filled" : "outlined"}
-            />
-          </Stack>
-          <Box sx={{ height: 360 }}>
-            {isLoading ? (
-              <Skeleton variant="rectangular" height="100%" />
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={monthlyData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="monthLabel" />
-                  <YAxis tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`} />
-                  <ReferenceLine y={0} stroke="#9e9e9e" strokeDasharray="3 3" />
-                  <RechartsTooltip
-                    formatter={(value: number) => formatCurrency(value)}
-                    labelFormatter={(label) => label}
-                  />
-                  <Legend />
-                  <Bar dataKey="planned" name="Planlanan" fill={pieColors.planned} radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="actual" name="Gerçekleşen" fill={pieColors.actual} radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="remaining" name="Kalan" fill={pieColors.remaining} radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="overrun" name="Aşım" fill={pieColors.overrun} radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </Box>
-        </CardContent>
-      </Card>
 
       <Card>
         <CardContent>

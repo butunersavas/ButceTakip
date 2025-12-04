@@ -5,15 +5,15 @@ interface PageHeaderProps {
   subtitle?: string;
 }
 
-const PageHeader = ({ title, subtitle }: PageHeaderProps) => (
-  <Box sx={{ mb: 2 }}>
-    <Typography variant="h5">{title}</Typography>
-    {subtitle && (
-      <Typography variant="body2" color="text.secondary">
-        {subtitle}
-      </Typography>
-    )}
-  </Box>
-);
-
-export default PageHeader;
+export function PageHeader({ title, subtitle }: PageHeaderProps) {
+  return (
+    <Box sx={{ mb: 2 }}>
+      <Typography variant="h5">{title}</Typography>
+      {subtitle && (
+        <Typography variant="body2" color="text.secondary">
+          {subtitle}
+        </Typography>
+      )}
+    </Box>
+  );
+}

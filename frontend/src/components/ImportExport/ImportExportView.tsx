@@ -19,7 +19,7 @@ import * as XLSX from "xlsx";
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import usePersistentState from "../../hooks/usePersistentState";
 import { formatBudgetItemLabel } from "../../utils/budgetItem";
-import PageHeader from "../layout/PageHeader";
+import { PageHeader } from "../layout/PageHeader";
 
 interface Scenario {
   id: number;
