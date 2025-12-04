@@ -25,12 +25,12 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material";
-import DashboardIcon from "@mui/icons-material/SpaceDashboardOutlined";
-import ListAltIcon from "@mui/icons-material/ListAltOutlined";
-import ReceiptIcon from "@mui/icons-material/ReceiptLongOutlined";
-import CloudUploadIcon from "@mui/icons-material/CloudUploadOutlined";
-import CleaningServicesIcon from "@mui/icons-material/CleaningServicesOutlined";
-import PeopleIcon from "@mui/icons-material/PeopleAltOutlined";
+import DashboardOutlinedIcon from "@mui/icons-material/DashboardOutlined";
+import TableChartOutlinedIcon from "@mui/icons-material/TableChartOutlined";
+import ReceiptLongOutlinedIcon from "@mui/icons-material/ReceiptLongOutlined";
+import CloudOutlinedIcon from "@mui/icons-material/CloudOutlined";
+import CleaningServicesOutlinedIcon from "@mui/icons-material/CleaningServicesOutlined";
+import PeopleOutlineOutlinedIcon from "@mui/icons-material/PeopleOutlineOutlined";
 import LogoutIcon from "@mui/icons-material/Logout";
 import MenuIcon from "@mui/icons-material/Menu";
 import DarkModeIcon from "@mui/icons-material/DarkModeOutlined";
@@ -79,23 +79,24 @@ export default function AppLayout({ children }: AppLayoutProps) {
     const items: NavItem[] = [
       {
         label: "Dashboard",
-        icon: <DashboardIcon />,
-        path: "/",
+        icon: <DashboardOutlinedIcon />,
+        path: "/dashboard",
+        isSelected: (currentLocation) => ["/", "/dashboard"].includes(currentLocation.pathname),
       },
       {
         label: "Plan Yönetimi",
-        icon: <ListAltIcon />,
+        icon: <TableChartOutlinedIcon />,
         path: "/plans",
       },
       {
         label: "Harcama Yönetimi",
-        icon: <ReceiptIcon />,
+        icon: <ReceiptLongOutlinedIcon />,
         path: "/expenses",
       },
       {
         label: "Raporlama",
-        icon: <CloudUploadIcon />,
-        path: "/import-export",
+        icon: <CloudOutlinedIcon />,
+        path: "/reports",
       },
     ];
 
@@ -103,14 +104,14 @@ export default function AppLayout({ children }: AppLayoutProps) {
       items.push(
         {
           label: "Temizleme Araçları",
-          icon: <CleaningServicesIcon />,
+          icon: <CleaningServicesOutlinedIcon />,
           path: "/cleanup",
           isSelected: (currentLocation) => currentLocation.pathname === "/cleanup" && !currentLocation.hash,
           to: "/cleanup",
         },
         {
           label: "Kullanıcı Yönetimi",
-          icon: <PeopleIcon />,
+          icon: <PeopleOutlineOutlinedIcon />,
           path: "/users",
         }
       );
@@ -169,20 +170,24 @@ export default function AppLayout({ children }: AppLayoutProps) {
       <Divider />
       <List sx={{ flexGrow: 1, py: 2 }}>
         {navItems.map((item) => {
-          const selected = item.isSelected ? item.isSelected(location) : location.pathname === item.path;
+          const isActive = item.isSelected ? item.isSelected(location) : location.pathname === item.path;
           return (
             <ListItemButton
               component={Link}
               to={item.to ?? item.path}
               key={item.label}
-              selected={selected}
+              selected={isActive}
               sx={{
                 mx: 2,
                 borderRadius: 2,
-                mb: 1,
-                color: selected ? "primary.main" : "text.primary",
-                borderLeft: selected ? "4px solid" : "4px solid transparent",
-                borderLeftColor: selected ? "primary.main" : "transparent",
+                mb: 0.5,
+                color: isActive ? "primary.main" : "text.primary",
+                "& .MuiListItemIcon-root": {
+                  color: isActive ? "primary.main" : "grey.600",
+                },
+                "& .MuiListItemText-primary": {
+                  fontWeight: isActive ? 600 : 500,
+                },
                 "&.Mui-selected": {
                   backgroundColor: (theme) => `${theme.palette.primary.main}0f`,
                   color: "primary.main",
@@ -193,7 +198,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
               }}
               onClick={() => setMobileOpen(false)}
             >
-              <ListItemIcon sx={{ color: selected ? "primary.main" : "text.secondary" }}>{item.icon}</ListItemIcon>
+              <ListItemIcon sx={{ minWidth: 32, color: "inherit" }}>{item.icon}</ListItemIcon>
               <ListItemText primary={item.label} />
               <ChevronRightIcon sx={{ color: "divider", fontSize: 18 }} />
             </ListItemButton>

@@ -230,10 +230,7 @@ function CleaningToolsSection() {
 
   return (
     <Stack spacing={3} component="form" onSubmit={handleCleanup}>
-      <PageHeader
-        title="Temizleme Araçları"
-        subtitle="İlgili senaryo veya bütçe kalemleri için plan ve harcama verilerini temizleyin."
-      />
+      <PageHeader title="Temizleme Araçları" />
 
       <Card>
         <CardContent>

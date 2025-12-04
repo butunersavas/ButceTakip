@@ -564,7 +564,7 @@ export default function ExpensesView() {
 
   return (
     <Stack spacing={4} sx={{ width: "100%", minWidth: 0, maxWidth: "100%", overflowX: "hidden" }}>
-      <PageHeader title="Harcama Yönetimi" subtitle="Harcamaları filtrele, görüntüle ve düzenle" />
+      <PageHeader title="Harcama Yönetimi" />
       <Card>
         <CardContent>
           <Grid container spacing={3} disableEqualOverflow>
