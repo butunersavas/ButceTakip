@@ -56,6 +56,11 @@ class CurrentUserResponse(BaseModel):
         orm_mode = True
 
 
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
 class ScenarioBase(BaseModel):
     name: str
     year: int

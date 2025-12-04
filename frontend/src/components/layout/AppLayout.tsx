@@ -1,12 +1,23 @@
 import {
+  Alert,
+  Avatar,
   Box,
+  Button,
   Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Drawer,
   IconButton,
   List,
   ListItemButton,
   ListItemIcon,
   ListItemText,
+  Menu,
+  MenuItem,
+  Snackbar,
+  TextField,
   Tooltip,
   Typography
 } from "@mui/material";
@@ -24,6 +35,7 @@ import type { Location, To } from "react-router-dom";
 
 import { useAuth } from "../../context/AuthContext";
 import brandLogo from "../../assets/brand-logo.svg";
+import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 
 const drawerWidth = 260;
 
@@ -41,8 +53,16 @@ interface AppLayoutProps {
 
 export default function AppLayout({ children }: AppLayoutProps) {
   const { logout, user } = useAuth();
+  const client = useAuthorizedClient();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [userMenuAnchor, setUserMenuAnchor] = useState<null | HTMLElement>(null);
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [newPasswordAgain, setNewPasswordAgain] = useState("");
+  const [isSavingPassword, setIsSavingPassword] = useState(false);
+  const [feedback, setFeedback] = useState<{ message: string; severity: "success" | "error" } | null>(null);
 
   const navItems = useMemo<NavItem[]>(() => {
     const items: NavItem[] = [
@@ -89,7 +109,41 @@ export default function AppLayout({ children }: AppLayoutProps) {
     return items;
   }, [user?.is_admin]);
 
+  const userDisplayName = user?.full_name?.trim() || user?.username || "Kullanıcı";
+  const userInitials = useMemo(() => {
+    const source = user?.full_name || user?.username || "";
+    if (!source) return "";
+    const parts = source.trim().split(/\s+/);
+    const initials = parts.slice(0, 2).map((part) => part.charAt(0).toUpperCase());
+    return initials.join("") || source.charAt(0).toUpperCase();
+  }, [user?.full_name, user?.username]);
+
   const envLabel = (import.meta.env.VITE_APP_ENV as string | undefined) ?? "TEST";
+
+  const handlePasswordChange = async () => {
+    if (newPassword !== newPasswordAgain) {
+      setFeedback({ message: "Yeni şifreler eşleşmiyor.", severity: "error" });
+      return;
+    }
+
+    try {
+      setIsSavingPassword(true);
+      await client.post("/auth/change-password", {
+        current_password: currentPassword,
+        new_password: newPassword,
+      });
+      setFeedback({ message: "Şifreniz güncellendi.", severity: "success" });
+      setCurrentPassword("");
+      setNewPassword("");
+      setNewPasswordAgain("");
+      setIsChangePasswordOpen(false);
+    } catch (error: any) {
+      const detail = error?.response?.data?.detail ?? "Şifre güncellenirken hata oluştu.";
+      setFeedback({ message: detail, severity: "error" });
+    } finally {
+      setIsSavingPassword(false);
+    }
+  };
 
   const drawer = (
     <Box
@@ -134,10 +188,11 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 mb: 0.5,
                 color: "inherit",
                 "&.Mui-selected": {
-                  bgcolor: "rgba(255,255,255,0.14)"
+                  bgcolor: "rgba(255,255,255,0.18)",
+                  "&:hover": { bgcolor: "rgba(255,255,255,0.24)" }
                 },
                 "&:hover": {
-                  bgcolor: "rgba(255,255,255,0.10)"
+                  bgcolor: "rgba(255,255,255,0.12)"
                 }
               }}
               onClick={() => setMobileOpen(false)}
@@ -159,7 +214,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
               borderRadius: 2,
               color: "inherit",
               mx: 1,
-              "&:hover": { bgcolor: "rgba(255,255,255,0.10)" }
+              "&:hover": { bgcolor: "rgba(255,255,255,0.12)" }
             }}
           >
             <ListItemIcon sx={{ color: "inherit", minWidth: 36 }}>
@@ -243,15 +298,136 @@ export default function AppLayout({ children }: AppLayoutProps) {
           p: { xs: 2, md: 3 }
         }}
       >
-        <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 2 }}>
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            mb: 3,
+            gap: 2
+          }}
+        >
           <Chip
             label={envLabel.toUpperCase()}
             size="small"
             color={envLabel.toUpperCase() === "PROD" ? "error" : "default"}
             variant="outlined"
           />
+
+          <Button
+            onClick={(event) => setUserMenuAnchor(event.currentTarget)}
+            startIcon={
+              <Avatar sx={{ width: 32, height: 32, bgcolor: "secondary.main" }}>
+                {userInitials}
+              </Avatar>
+            }
+            sx={{
+              textTransform: "none",
+              color: "text.primary",
+              backgroundColor: "background.paper",
+              borderRadius: 2,
+              border: "1px solid",
+              borderColor: "divider",
+              boxShadow: "0 6px 18px rgba(15, 23, 42, 0.06)",
+              px: 1.5,
+              py: 0.75,
+              minWidth: 0
+            }}
+          >
+            <Box sx={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
+              <Typography variant="body2" fontWeight={600} lineHeight={1.2}>
+                {userDisplayName}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                {user?.username}
+              </Typography>
+            </Box>
+          </Button>
+          <Menu
+            anchorEl={userMenuAnchor}
+            open={Boolean(userMenuAnchor)}
+            onClose={() => setUserMenuAnchor(null)}
+            anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+            transformOrigin={{ vertical: "top", horizontal: "right" }}
+          >
+            <MenuItem
+              onClick={() => {
+                setIsChangePasswordOpen(true);
+                setUserMenuAnchor(null);
+              }}
+            >
+              Şifremi Değiştir
+            </MenuItem>
+            <MenuItem
+              onClick={() => {
+                logout();
+                setUserMenuAnchor(null);
+              }}
+            >
+              Çıkış Yap
+            </MenuItem>
+          </Menu>
         </Box>
         {children}
+        <Dialog
+          open={isChangePasswordOpen}
+          onClose={() => {
+            if (!isSavingPassword) setIsChangePasswordOpen(false);
+          }}
+          maxWidth="xs"
+          fullWidth
+        >
+          <DialogTitle>Şifremi Değiştir</DialogTitle>
+          <DialogContent dividers>
+            <TextField
+              fullWidth
+              margin="normal"
+              label="Mevcut şifre"
+              type="password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+            />
+            <TextField
+              fullWidth
+              margin="normal"
+              label="Yeni şifre"
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+            />
+            <TextField
+              fullWidth
+              margin="normal"
+              label="Yeni şifre (tekrar)"
+              type="password"
+              value={newPasswordAgain}
+              onChange={(e) => setNewPasswordAgain(e.target.value)}
+            />
+          </DialogContent>
+          <DialogActions>
+            <Button
+              onClick={() => !isSavingPassword && setIsChangePasswordOpen(false)}
+              disabled={isSavingPassword}
+            >
+              İptal
+            </Button>
+            <Button variant="contained" disabled={isSavingPassword} onClick={handlePasswordChange}>
+              Kaydet
+            </Button>
+          </DialogActions>
+        </Dialog>
+        <Snackbar
+          open={Boolean(feedback)}
+          autoHideDuration={4000}
+          onClose={() => setFeedback(null)}
+          anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        >
+          {feedback && (
+            <Alert severity={feedback.severity} onClose={() => setFeedback(null)} sx={{ width: "100%" }}>
+              {feedback.message}
+            </Alert>
+          )}
+        </Snackbar>
       </Box>
     </Box>
   );

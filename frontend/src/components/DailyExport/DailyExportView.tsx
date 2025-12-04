@@ -19,7 +19,7 @@ import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/DeleteOutline";
 import EditIcon from "@mui/icons-material/EditOutlined";
 import { Link as RouterLink } from "react-router-dom";
-import PageHeader from "../layout/PageHeader";
+import { PageHeader } from "../layout/PageHeader";
 
 interface LabelHistoryEntry {
   labelIdentifier: string;
