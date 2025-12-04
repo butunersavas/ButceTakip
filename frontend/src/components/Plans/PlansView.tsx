@@ -351,7 +351,7 @@ export default function PlansView() {
 
   return (
     <Stack spacing={4}>
-      <PageHeader title="Plan Yönetimi" subtitle="Plan kayıtlarını görüntüle ve düzenle" />
+      <PageHeader title="Plan Yönetimi" />
       <Card>
         <CardContent>
           <Grid container spacing={3} alignItems="center">

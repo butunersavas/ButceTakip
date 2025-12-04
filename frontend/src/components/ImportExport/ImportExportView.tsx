@@ -283,7 +283,7 @@ export default function ImportExportView() {
 
   return (
     <Stack spacing={4}>
-      <PageHeader title="Raporlama / İçeri Aktar" subtitle="Verileri içe ve dışa aktar" />
+      <PageHeader title="Raporlama / İçeri Aktar" />
       <Grid container spacing={3}>
         <Grid item xs={12} md={6}>
           <Card sx={{ height: "100%" }}>

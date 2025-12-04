@@ -52,15 +52,14 @@ export default function App() {
     <Routes>
       <Route
         path="/login"
-        element={token ? <Navigate to="/" replace /> : <LoginPage />}
+        element={token ? <Navigate to="/dashboard" replace /> : <LoginPage />}
       />
-      <Route path="/" element={<LayoutRoute><DashboardView /></LayoutRoute>} />
+      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+      <Route path="/dashboard" element={<LayoutRoute><DashboardView /></LayoutRoute>} />
       <Route path="/plans" element={<LayoutRoute><PlansView /></LayoutRoute>} />
       <Route path="/expenses" element={<LayoutRoute><ExpensesView /></LayoutRoute>} />
-      <Route
-        path="/import-export"
-        element={<LayoutRoute><ImportExportView /></LayoutRoute>}
-      />
+      <Route path="/reports" element={<LayoutRoute><ImportExportView /></LayoutRoute>} />
+      <Route path="/import-export" element={<Navigate to="/reports" replace />} />
       <Route path="/daily-export" element={<LayoutRoute><DailyExportView /></LayoutRoute>} />
       <Route path="/cleanup" element={<LayoutRoute><CleanupView /></LayoutRoute>} />
       <Route path="/users" element={<LayoutRoute requireAdmin><UsersView /></LayoutRoute>} />

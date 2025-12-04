@@ -238,7 +238,7 @@ export default function UsersView() {
 
   return (
     <Stack spacing={3}>
-      <PageHeader title="Kullanıcı Yönetimi" subtitle="Mevcut kullanıcıları görüntüleyin ve yeni kullanıcılar ekleyin." />
+      <PageHeader title="Kullanıcı Yönetimi" />
 
       {error && <Alert severity="error">{error}</Alert>}
       {success && <Alert severity="success">{success}</Alert>}

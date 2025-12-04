@@ -335,12 +335,9 @@ export default function DailyExportView() {
         flexWrap="wrap"
       >
         <Box sx={{ flex: 1 }}>
-          <PageHeader
-            title="Günlük Çıkış"
-            subtitle="Not hariç tüm alanlar zorunludur. Sol tarafta yeni günlük çıkış kayıtlarını oluşturun, sağ tarafta kayıtları yazdırın."
-          />
+          <PageHeader title="Günlük Çıkış" />
         </Box>
-        <Button component={RouterLink} to="/import-export" variant="outlined" startIcon={<CheckIcon />}>
+        <Button component={RouterLink} to="/reports" variant="outlined" startIcon={<CheckIcon />}>
           Raporlama sekmesine git
         </Button>
       </Stack>

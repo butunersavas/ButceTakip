@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
-  Avatar,
   Box,
   Button,
   Card,
@@ -46,10 +45,11 @@ import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import usePersistentState from "../../hooks/usePersistentState";
 import { formatBudgetItemLabel } from "../../utils/budgetItem";
 import { PageHeader } from "../layout/PageHeader";
-import TrendingUpIcon from "@mui/icons-material/TrendingUp";
-import CheckCircleIcon from "@mui/icons-material/CheckCircleOutline";
-import AccountBalanceWalletIcon from "@mui/icons-material/AccountBalanceWalletOutlined";
-import WarningAmberIcon from "@mui/icons-material/WarningAmberOutlined";
+import AccountBalanceWalletOutlinedIcon from "@mui/icons-material/AccountBalanceWalletOutlined";
+import CheckCircleOutlineOutlinedIcon from "@mui/icons-material/CheckCircleOutlineOutlined";
+import TrendingUpOutlinedIcon from "@mui/icons-material/TrendingUpOutlined";
+import WarningAmberOutlinedIcon from "@mui/icons-material/WarningAmberOutlined";
+import { SummaryCard } from "./SummaryCard";
 
 interface DashboardSummary {
   month: number;
@@ -302,9 +302,14 @@ export default function DashboardView() {
     } satisfies DashboardKPI;
   }, [dashboard]);
 
+  const formattedTotalPlan = formatCurrency(normalizedKpi.total_plan);
+  const formattedActual = formatCurrency(normalizedKpi.total_actual);
+  const formattedRemaining = formatCurrency(normalizedKpi.total_remaining);
+  const formattedOver = formatCurrency(normalizedKpi.total_overrun);
+
   return (
     <Stack spacing={4}>
-      <PageHeader title="Dashboard" subtitle="Bütçe özetleri ve kritik göstergeler" />
+      <PageHeader title="Dashboard" />
 
       <Paper sx={{ p: { xs: 2.5, md: 3 }, borderRadius: 3 }}>
         <Stack direction={{ xs: "column", md: "row" }} spacing={2} justifyContent="space-between" alignItems={{ xs: "flex-start", md: "center" }} mb={2}>
@@ -362,64 +367,40 @@ export default function DashboardView() {
       </Paper>
 
       <Grid container spacing={3} justifyContent="center" alignItems="stretch">
-        {(
-          [
-            {
-              title: "Toplam Plan",
-              value: normalizedKpi.total_plan,
-              color: "primary",
-              icon: <AccountBalanceWalletIcon />,
-              subtitle: "Planlanan bütçe"
-            },
-            {
-              title: "Gerçekleşen",
-              value: normalizedKpi.total_actual,
-              color: "secondary",
-              icon: <CheckCircleIcon />,
-              subtitle: "Harcanan toplam"
-            },
-            {
-              title: "Kalan",
-              value: normalizedKpi.total_remaining,
-              color: "warning",
-              icon: <TrendingUpIcon />,
-              subtitle: "Bütçede kalan"
-            },
-            {
-              title: "Aşım",
-              value: normalizedKpi.total_overrun,
-              color: "error",
-              icon: <WarningAmberIcon />,
-              subtitle: "Limit aşımı"
-            }
-          ] as const
-        ).map((kpi) => (
-          <Grid item xs={12} sm={6} md={3} key={kpi.title}>
-            <Card sx={{ height: "100%", p: 1.5 }}>
-              <CardContent sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
-                <Stack direction="row" justifyContent="space-between" alignItems="center">
-                  <Typography variant="subtitle2" color="text.secondary">
-                    {kpi.title}
-                  </Typography>
-                  <Avatar
-                    variant="rounded"
-                    sx={{ bgcolor: `${kpi.color}.main`, color: "common.white", width: 38, height: 38 }}
-                  >
-                    {kpi.icon}
-                  </Avatar>
-                </Stack>
-                {isLoading ? (
-                  <Skeleton variant="text" height={40} width="60%" />
-                ) : (
-                  <Typography variant="h5" fontWeight={700} color={kpi.color === "error" ? "error.main" : "text.primary"}>
-                    {formatCurrency(kpi.value)}
-                  </Typography>
-                )}
-                <Typography variant="body2" color="text.secondary">
-                  {kpi.subtitle}
-                </Typography>
-              </CardContent>
-            </Card>
+        {[
+          {
+            title: "Toplam Plan",
+            value: formattedTotalPlan,
+            subtitle: "Planlanan bütçe",
+            icon: (
+              <AccountBalanceWalletOutlinedIcon sx={{ fontSize: 18, color: "common.white" }} />
+            ),
+            iconColor: "primary.main"
+          },
+          {
+            title: "Gerçekleşen",
+            value: formattedActual,
+            subtitle: "Harcanan toplam",
+            icon: <CheckCircleOutlineOutlinedIcon sx={{ fontSize: 18, color: "common.white" }} />,
+            iconColor: "primary.main"
+          },
+          {
+            title: "Kalan",
+            value: formattedRemaining,
+            subtitle: "Bütçede kalan",
+            icon: <TrendingUpOutlinedIcon sx={{ fontSize: 18, color: "common.white" }} />,
+            iconColor: "warning.main"
+          },
+          {
+            title: "Aşım",
+            value: formattedOver,
+            subtitle: "Limit aşımı",
+            icon: <WarningAmberOutlinedIcon sx={{ fontSize: 18, color: "common.white" }} />,
+            iconColor: "error.main"
+          }
+        ].map((card) => (
+          <Grid item xs={12} sm={6} md={3} key={card.title}>
+            <SummaryCard {...card} isLoading={isLoading} />
           </Grid>
         ))}
       </Grid>
