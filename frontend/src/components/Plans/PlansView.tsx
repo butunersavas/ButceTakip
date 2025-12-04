@@ -26,6 +26,7 @@ import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import usePersistentState from "../../hooks/usePersistentState";
 import { useAuth } from "../../context/AuthContext";
 import { formatBudgetItemLabel } from "../../utils/budgetItem";
+import PageHeader from "../layout/PageHeader";
 
 interface Scenario {
   id: number;
@@ -350,6 +351,7 @@ export default function PlansView() {
 
   return (
     <Stack spacing={4}>
+      <PageHeader title="Plan Yönetimi" subtitle="Plan kayıtlarını görüntüle ve düzenle" />
       <Card>
         <CardContent>
           <Grid container spacing={3} alignItems="center">

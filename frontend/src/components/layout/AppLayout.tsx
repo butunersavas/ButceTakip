@@ -1,13 +1,12 @@
 import {
   Box,
-  Divider,
+  Chip,
   Drawer,
   IconButton,
   List,
   ListItemButton,
   ListItemIcon,
   ListItemText,
-  Switch,
   Tooltip,
   Typography
 } from "@mui/material";
@@ -19,17 +18,14 @@ import CleaningServicesIcon from "@mui/icons-material/CleaningServicesOutlined";
 import PeopleIcon from "@mui/icons-material/PeopleAltOutlined";
 import LogoutIcon from "@mui/icons-material/Logout";
 import MenuIcon from "@mui/icons-material/Menu";
-import DarkModeIcon from "@mui/icons-material/DarkModeOutlined";
-import LightModeIcon from "@mui/icons-material/LightModeOutlined";
 import { useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import type { Location, To } from "react-router-dom";
 
 import { useAuth } from "../../context/AuthContext";
 import brandLogo from "../../assets/brand-logo.svg";
-import { useThemeMode } from "../../context/ThemeModeContext";
 
-const drawerWidth = 280;
+const drawerWidth = 260;
 
 type NavItem = {
   label: string;
@@ -47,7 +43,6 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const { logout, user } = useAuth();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { mode, toggleMode, setMode } = useThemeMode();
 
   const navItems = useMemo<NavItem[]>(() => {
     const items: NavItem[] = [
@@ -94,13 +89,17 @@ export default function AppLayout({ children }: AppLayoutProps) {
     return items;
   }, [user?.is_admin]);
 
+  const envLabel = (import.meta.env.VITE_APP_ENV as string | undefined) ?? "TEST";
+
   const drawer = (
     <Box
       sx={{
         display: "flex",
         flexDirection: "column",
         height: "100%",
-        bgcolor: "background.paper"
+        bgcolor: "primary.main",
+        color: "common.white",
+        minHeight: "100vh"
       }}
     >
       <Box sx={{ p: 3, display: "flex", alignItems: "center", gap: 2 }}>
@@ -111,86 +110,62 @@ export default function AppLayout({ children }: AppLayoutProps) {
           sx={{ width: 48, height: 48, flexShrink: 0 }}
         />
         <Box>
-          <Typography variant="h6" fontWeight={700} color="primary">
+          <Typography variant="h6" fontWeight={700}>
             Bütçe Takip
           </Typography>
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="body2" sx={{ opacity: 0.8 }}>
             Yönetim Platformu
           </Typography>
         </Box>
       </Box>
-      <Divider />
       <List sx={{ flexGrow: 1, py: 2 }}>
         {navItems.map((item) => {
-          const resolvedTo = item.to ?? item.path;
-          const selected = item.isSelected
-            ? item.isSelected(location)
-            : location.pathname === item.path;
+          const selected = item.isSelected ? item.isSelected(location) : location.pathname === item.path;
+
           return (
             <ListItemButton
               component={Link}
-              to={resolvedTo}
-              key={item.label}
+              to={item.to ?? item.path}
+              key={item.path}
               selected={selected}
               sx={{
-                mx: 2,
                 borderRadius: 2,
-                mb: 1,
-                color: selected ? "primary.main" : "text.primary",
-                gap: 1,
+                mx: 1,
+                mb: 0.5,
+                color: "inherit",
                 "&.Mui-selected": {
-                  backgroundColor: "rgba(13, 71, 161, 0.12)",
-                  color: "primary.main"
+                  bgcolor: "rgba(255,255,255,0.14)"
+                },
+                "&:hover": {
+                  bgcolor: "rgba(255,255,255,0.10)"
                 }
               }}
               onClick={() => setMobileOpen(false)}
             >
-              <ListItemIcon
-                sx={{ color: selected ? "primary.main" : "text.secondary", minWidth: 48 }}
-              >
-                {item.icon}
-              </ListItemIcon>
-              <ListItemText primary={item.label} primaryTypographyProps={{ sx: { fontSize: "16px" } }} />
+              <ListItemIcon sx={{ color: "inherit", minWidth: 36 }}>{item.icon}</ListItemIcon>
+              <ListItemText
+                primary={item.label}
+                primaryTypographyProps={{ fontSize: 14, fontWeight: selected ? 600 : 500 }}
+              />
             </ListItemButton>
           );
         })}
       </List>
-      <Box sx={{ p: 2, display: "flex", flexDirection: "column", gap: 1.5 }}>
-        <Tooltip title={mode === "dark" ? "Açık moda geç" : "Karanlık moda geç"} placement="top">
-          <ListItemButton
-            onClick={toggleMode}
-            sx={{ borderRadius: 2, color: "text.secondary" }}
-          >
-            <ListItemIcon sx={{ color: "text.secondary" }}>
-              {mode === "dark" ? <DarkModeIcon /> : <LightModeIcon />}
-            </ListItemIcon>
-            <ListItemText
-              primary="Karanlık Mod"
-              secondary={mode === "dark" ? "Aktif" : "Pasif"}
-              secondaryTypographyProps={{ color: "text.secondary" }}
-              primaryTypographyProps={{ sx: { fontSize: "16px" } }}
-            />
-            <Switch
-              edge="end"
-              checked={mode === "dark"}
-              onChange={(event) => {
-                event.stopPropagation();
-                setMode(event.target.checked ? "dark" : "light");
-              }}
-              onClick={(event) => event.stopPropagation()}
-              inputProps={{ "aria-label": "Karanlık mod anahtarı" }}
-            />
-          </ListItemButton>
-        </Tooltip>
+      <Box sx={{ p: 2 }}>
         <Tooltip title="Çıkış Yap">
           <ListItemButton
             onClick={logout}
-            sx={{ borderRadius: 2, color: "text.secondary" }}
+            sx={{
+              borderRadius: 2,
+              color: "inherit",
+              mx: 1,
+              "&:hover": { bgcolor: "rgba(255,255,255,0.10)" }
+            }}
           >
-            <ListItemIcon>
+            <ListItemIcon sx={{ color: "inherit", minWidth: 36 }}>
               <LogoutIcon />
             </ListItemIcon>
-            <ListItemText primary="Çıkış" primaryTypographyProps={{ sx: { fontSize: "16px" } }} />
+            <ListItemText primary="Çıkış" primaryTypographyProps={{ fontSize: 14, fontWeight: 600 }} />
           </ListItemButton>
         </Tooltip>
       </Box>
@@ -232,7 +207,12 @@ export default function AppLayout({ children }: AppLayoutProps) {
           ModalProps={{ keepMounted: true }}
           sx={{
             display: { xs: "block", md: "none" },
-            "& .MuiDrawer-paper": { boxSizing: "border-box", width: drawerWidth }
+            "& .MuiDrawer-paper": {
+              boxSizing: "border-box",
+              width: drawerWidth,
+              bgcolor: "primary.main",
+              color: "common.white"
+            }
           }}
         >
           {drawer}
@@ -245,8 +225,9 @@ export default function AppLayout({ children }: AppLayoutProps) {
             "& .MuiDrawer-paper": {
               boxSizing: "border-box",
               width: drawerWidth,
-              borderRight: "1px solid",
-              borderColor: "divider"
+              bgcolor: "primary.main",
+              color: "common.white",
+              borderRight: "none"
             }
           }}
         >
@@ -256,14 +237,20 @@ export default function AppLayout({ children }: AppLayoutProps) {
       <Box
         component="main"
         sx={{
-          flexGrow: 1,
-          minWidth: 0,
-          width: "100%",
-          maxWidth: "100vw",
-          p: { xs: 3, md: 5 },
-          mt: 0
+          flex: 1,
+          backgroundColor: "background.default",
+          minHeight: "100vh",
+          p: { xs: 2, md: 3 }
         }}
       >
+        <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 2 }}>
+          <Chip
+            label={envLabel.toUpperCase()}
+            size="small"
+            color={envLabel.toUpperCase() === "PROD" ? "error" : "default"}
+            variant="outlined"
+          />
+        </Box>
         {children}
       </Box>
     </Box>

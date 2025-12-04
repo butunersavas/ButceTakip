@@ -19,7 +19,6 @@ import {
   Typography
 } from "@mui/material";
 import PersonAddIcon from "@mui/icons-material/PersonAddAlt1";
-import GroupsIcon from "@mui/icons-material/Groups";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/DeleteOutline";
 import { DataGrid, type GridColDef } from "@mui/x-data-grid";
@@ -27,6 +26,7 @@ import axios from "axios";
 
 import { useAuth } from "../../context/AuthContext";
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
+import PageHeader from "../layout/PageHeader";
 
 type UserRead = {
   id: number;
@@ -238,17 +238,7 @@ export default function UsersView() {
 
   return (
     <Stack spacing={3}>
-      <Box display="flex" alignItems="center" gap={2}>
-        <GroupsIcon color="primary" fontSize="large" />
-        <Box>
-          <Typography variant="h5" fontWeight={700}>
-            Kullanıcı Yönetimi
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Mevcut kullanıcıları görüntüleyin ve yeni kullanıcılar ekleyin.
-          </Typography>
-        </Box>
-      </Box>
+      <PageHeader title="Kullanıcı Yönetimi" subtitle="Mevcut kullanıcıları görüntüleyin ve yeni kullanıcılar ekleyin." />
 
       {error && <Alert severity="error">{error}</Alert>}
       {success && <Alert severity="success">{success}</Alert>}

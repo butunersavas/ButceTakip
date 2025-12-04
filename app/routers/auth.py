@@ -20,6 +20,8 @@ def authenticate_user(session: Session, username: str, password: str) -> User | 
     user = session.exec(select(User).where(User.username == normalized_username)).first()
     if not user:
         return None
+    if not user.is_active:
+        return None
     if not verify_password(password, user.hashed_password):
         return None
     return user
@@ -38,7 +40,7 @@ def _create_user(session: Session, user_in: UserCreate) -> User:
         full_name=user_in.full_name,
         hashed_password=get_password_hash(user_in.password),
         is_admin=user_in.is_admin,
-        is_active=user_in.is_active,
+        is_active=user_in.is_active if user_in.is_active is not None else True,
     )
     session.add(user)
     session.commit()

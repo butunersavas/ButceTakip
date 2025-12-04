@@ -23,6 +23,7 @@ import axios from "axios";
 
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import { useAuth } from "../../context/AuthContext";
+import PageHeader from "../layout/PageHeader";
 
 interface Scenario {
   id: number;
@@ -229,14 +230,10 @@ function CleaningToolsSection() {
 
   return (
     <Stack spacing={3} component="form" onSubmit={handleCleanup}>
-      <Stack spacing={0.5}>
-        <Typography variant="h5" fontWeight={700}>
-          Temizleme Araçları
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          İlgili senaryo veya bütçe kalemleri için plan ve harcama verilerini temizleyin.
-        </Typography>
-      </Stack>
+      <PageHeader
+        title="Temizleme Araçları"
+        subtitle="İlgili senaryo veya bütçe kalemleri için plan ve harcama verilerini temizleyin."
+      />
 
       <Card>
         <CardContent>
