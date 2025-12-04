@@ -38,6 +38,13 @@ class UserRead(UserBase):
         orm_mode = True
 
 
+class UserUpdate(BaseModel):
+    full_name: str | None = None
+    is_active: bool | None = None
+    is_admin: bool | None = None
+    password: str | None = None
+
+
 class CurrentUserResponse(BaseModel):
     id: int
     username: str
@@ -213,6 +220,22 @@ class DashboardKPI(BaseModel):
 class DashboardResponse(BaseModel):
     kpi: DashboardKPI
     monthly: list[DashboardSummary]
+
+
+class RiskyItem(BaseModel):
+    budget_item_id: int
+    budget_code: str
+    budget_name: str
+    plan: float
+    actual: float
+    ratio: float
+
+
+class NoSpendItem(BaseModel):
+    budget_item_id: int
+    budget_code: str
+    budget_name: str
+    plan: float
 
 
 class ImportSummary(BaseModel):
