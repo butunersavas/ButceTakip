@@ -7,19 +7,22 @@ import {
   CardContent,
   Checkbox,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   FormControlLabel,
   Grid,
+  IconButton,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
   TextField,
   Typography
 } from "@mui/material";
 import PersonAddIcon from "@mui/icons-material/PersonAddAlt1";
 import GroupsIcon from "@mui/icons-material/Groups";
+import EditIcon from "@mui/icons-material/Edit";
+import DeleteIcon from "@mui/icons-material/DeleteOutline";
+import { DataGrid, type GridColDef } from "@mui/x-data-grid";
 import axios from "axios";
 
 import { useAuth } from "../../context/AuthContext";
@@ -41,6 +44,13 @@ type UserCreate = {
   is_active: boolean;
 };
 
+type UserUpdate = {
+  full_name?: string | null;
+  is_admin?: boolean;
+  is_active?: boolean;
+  password?: string;
+};
+
 export default function UsersView() {
   const { user } = useAuth();
   const client = useAuthorizedClient();
@@ -49,6 +59,9 @@ export default function UsersView() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [editingUser, setEditingUser] = useState<UserRead | null>(null);
+  const [userToDelete, setUserToDelete] = useState<UserRead | null>(null);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [form, setForm] = useState<UserCreate>({
     username: "",
     full_name: "",
@@ -122,6 +135,99 @@ export default function UsersView() {
     }
   };
 
+  const handleEditClick = (selectedUser: UserRead) => {
+    setEditingUser(selectedUser);
+  };
+
+  const handleUpdateUser = async () => {
+    if (!editingUser) return;
+
+    setSubmitting(true);
+    setError(null);
+    setSuccess(null);
+
+    const payload: UserUpdate = {
+      full_name: editingUser.full_name,
+      is_active: editingUser.is_active,
+      is_admin: editingUser.is_admin
+    };
+
+    try {
+      await client.put(`/users/${editingUser.id}`, payload);
+      await loadUsers();
+      setEditingUser(null);
+      setSuccess("Kullanıcı güncellendi.");
+    } catch (err) {
+      console.error(err);
+      if (axios.isAxiosError(err)) {
+        const detail = (err.response?.data as { detail?: string } | undefined)?.detail;
+        setError(detail || "Kullanıcı güncellenemedi.");
+      } else {
+        setError("Kullanıcı güncellenemedi.");
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDeleteClick = (selectedUser: UserRead) => {
+    setUserToDelete(selectedUser);
+    setIsDeleteConfirmOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!userToDelete) return;
+    setSubmitting(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      await client.delete(`/users/${userToDelete.id}`);
+      await loadUsers();
+      setSuccess("Kullanıcı silindi.");
+    } catch (err) {
+      console.error(err);
+      if (axios.isAxiosError(err)) {
+        const detail = (err.response?.data as { detail?: string } | undefined)?.detail;
+        setError(detail || "Kullanıcı silinemedi.");
+      } else {
+        setError("Kullanıcı silinemedi.");
+      }
+    } finally {
+      setSubmitting(false);
+      setIsDeleteConfirmOpen(false);
+      setUserToDelete(null);
+    }
+  };
+
+  const columns: GridColDef[] = [
+    { field: "username", headerName: "Kullanıcı Adı", flex: 1 },
+    { field: "full_name", headerName: "Ad Soyad", flex: 1 },
+    { field: "is_admin", headerName: "Admin", width: 120, type: "boolean" },
+    { field: "is_active", headerName: "Aktif", width: 120, type: "boolean" },
+    {
+      field: "actions",
+      headerName: "İşlemler",
+      width: 140,
+      sortable: false,
+      filterable: false,
+      renderCell: (params) => (
+        <Box sx={{ display: "flex", gap: 1 }}>
+          <IconButton size="small" onClick={() => handleEditClick(params.row as UserRead)}>
+            <EditIcon fontSize="small" />
+          </IconButton>
+          <IconButton
+            size="small"
+            color="error"
+            onClick={() => handleDeleteClick(params.row as UserRead)}
+          >
+            <DeleteIcon fontSize="small" />
+          </IconButton>
+        </Box>
+      )
+    }
+  ];
+
   if (!user?.is_admin) {
     return (
       <Box>
@@ -159,33 +265,14 @@ export default function UsersView() {
                   <CircularProgress />
                 </Box>
               ) : (
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Kullanıcı Adı</TableCell>
-                      <TableCell>Ad Soyad</TableCell>
-                      <TableCell>Admin</TableCell>
-                      <TableCell>Durum</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {users.map((item) => (
-                      <TableRow key={item.id}>
-                        <TableCell>{item.username}</TableCell>
-                        <TableCell>{item.full_name || "-"}</TableCell>
-                        <TableCell>{item.is_admin ? "Evet" : "Hayır"}</TableCell>
-                        <TableCell>{item.is_active ? "Aktif" : "Pasif"}</TableCell>
-                      </TableRow>
-                    ))}
-                    {!users.length && (
-                      <TableRow>
-                        <TableCell colSpan={4} align="center">
-                          Henüz kullanıcı bulunmuyor.
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
+                <DataGrid
+                  rows={users}
+                  columns={columns}
+                  autoHeight
+                  disableRowSelectionOnClick
+                  pageSizeOptions={[10, 25, 50]}
+                  initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
+                />
               )}
             </CardContent>
           </Card>
@@ -252,6 +339,81 @@ export default function UsersView() {
           </Card>
         </Grid>
       </Grid>
+
+      <Dialog open={!!editingUser} onClose={() => setEditingUser(null)} maxWidth="sm" fullWidth>
+        <DialogTitle>Kullanıcıyı Düzenle</DialogTitle>
+        <DialogContent dividers>
+          <TextField
+            label="Kullanıcı Adı"
+            value={editingUser?.username ?? ""}
+            fullWidth
+            margin="normal"
+            disabled
+          />
+          <TextField
+            label="Ad Soyad"
+            value={editingUser?.full_name ?? ""}
+            onChange={(e) =>
+              setEditingUser((prev) => (prev ? { ...prev, full_name: e.target.value } : prev))
+            }
+            fullWidth
+            margin="normal"
+          />
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={!!editingUser?.is_admin}
+                onChange={(e) =>
+                  setEditingUser((prev) => (prev ? { ...prev, is_admin: e.target.checked } : prev))
+                }
+              />
+            }
+            label="Admin yetkisi"
+          />
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={!!editingUser?.is_active}
+                onChange={(e) =>
+                  setEditingUser((prev) => (prev ? { ...prev, is_active: e.target.checked } : prev))
+                }
+              />
+            }
+            label="Aktif"
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setEditingUser(null)}>İptal</Button>
+          <Button variant="contained" onClick={handleUpdateUser} disabled={submitting}>
+            Kaydet
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={isDeleteConfirmOpen}
+        onClose={() => {
+          setIsDeleteConfirmOpen(false);
+          setUserToDelete(null);
+        }}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Kullanıcıyı sil</DialogTitle>
+        <DialogContent dividers>
+          <Typography variant="body2">
+            {userToDelete
+              ? `"${userToDelete.username}" kullanıcısını silmek istediğinize emin misiniz?`
+              : "Bu kullanıcıyı silmek istediğinize emin misiniz?"}
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setIsDeleteConfirmOpen(false)}>İptal</Button>
+          <Button color="error" variant="contained" onClick={handleConfirmDelete} disabled={submitting}>
+            Sil
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Stack>
   );
 }

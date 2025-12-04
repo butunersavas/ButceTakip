@@ -4,6 +4,7 @@ import {
   Button,
   Card,
   CardContent,
+  CardHeader,
   Checkbox,
   Chip,
   Dialog,
@@ -79,6 +80,22 @@ type PurchaseReminderItem = {
   budget_name: string;
 };
 
+type RiskyItem = {
+  budget_item_id: number;
+  budget_code: string;
+  budget_name: string;
+  plan: number;
+  actual: number;
+  ratio: number;
+};
+
+type NoSpendItem = {
+  budget_item_id: number;
+  budget_code: string;
+  budget_name: string;
+  plan: number;
+};
+
 const monthLabels = [
   "Ocak",
   "Şubat",
@@ -110,6 +127,8 @@ export default function DashboardView() {
   const [purchaseItems, setPurchaseItems] = useState<PurchaseReminderItem[]>([]);
   const [isPurchaseDialogOpen, setIsPurchaseDialogOpen] = useState(false);
   const [dontShowAgainThisMonth, setDontShowAgainThisMonth] = useState(false);
+  const [riskyItems, setRiskyItems] = useState<RiskyItem[]>([]);
+  const [noSpendItems, setNoSpendItems] = useState<NoSpendItem[]>([]);
 
   const now = new Date();
   const yearNow = now.getFullYear();
@@ -154,6 +173,22 @@ export default function DashboardView() {
         // Hata durumunda sessiz geçilebilir veya loglanabilir
       });
   }, [client, month, reminderKey, yearNow]);
+
+  useEffect(() => {
+    const now = new Date();
+    const requestYear = now.getFullYear();
+    const requestMonth = now.getMonth() + 1;
+
+    client
+      .get<RiskyItem[]>(`/dashboard/risky-items?year=${requestYear}&month=${requestMonth}`)
+      .then((res) => setRiskyItems(res.data ?? []))
+      .catch(() => setRiskyItems([]));
+
+    client
+      .get<NoSpendItem[]>(`/dashboard/no-spend-items?year=${requestYear}&month=${requestMonth}`)
+      .then((res) => setNoSpendItems(res.data ?? []))
+      .catch(() => setNoSpendItems([]));
+  }, [client]);
 
   useEffect(() => {
     if (!scenarios?.length) return;
@@ -360,6 +395,61 @@ export default function DashboardView() {
             </Card>
           </Grid>
         ))}
+      </Grid>
+
+      <Grid container spacing={2} sx={{ mt: 1 }}>
+        <Grid item xs={12} md={6}>
+          <Card>
+            <CardHeader title="Riskteki Kalemler" subheader="Planın %80 ve üzeri harcananlar" />
+            <CardContent>
+              {riskyItems.length === 0 ? (
+                <Typography variant="body2" color="text.secondary">
+                  Bu ay için kritik seviyede kalem bulunmuyor.
+                </Typography>
+              ) : (
+                <List dense>
+                  {riskyItems.map((item) => (
+                    <ListItem key={item.budget_item_id}>
+                      <ListItemText
+                        primary={`${item.budget_code} – ${item.budget_name}`}
+                        secondary={`Plan: ${item.plan.toLocaleString()} | Gerçekleşen: ${item.actual.toLocaleString()} | %${Math.round(item.ratio * 100)}`}
+                        primaryTypographyProps={{ variant: "body2" }}
+                      />
+                    </ListItem>
+                  ))}
+                </List>
+              )}
+            </CardContent>
+          </Card>
+        </Grid>
+
+        <Grid item xs={12} md={6}>
+          <Card>
+            <CardHeader
+              title="Hareketsiz Kalemler"
+              subheader="Planı olup hiç harcama yapılmayanlar"
+            />
+            <CardContent>
+              {noSpendItems.length === 0 ? (
+                <Typography variant="body2" color="text.secondary">
+                  Şu ana kadar hareketsiz bütçe kalemi bulunmuyor.
+                </Typography>
+              ) : (
+                <List dense>
+                  {noSpendItems.map((item) => (
+                    <ListItem key={item.budget_item_id}>
+                      <ListItemText
+                        primary={`${item.budget_code} – ${item.budget_name}`}
+                        secondary={`Plan: ${item.plan.toLocaleString()}`}
+                        primaryTypographyProps={{ variant: "body2" }}
+                      />
+                    </ListItem>
+                  ))}
+                </List>
+              )}
+            </CardContent>
+          </Card>
+        </Grid>
       </Grid>
 
       <Card>

@@ -10,10 +10,13 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControl,
   FormControlLabel,
   Grid,
   IconButton,
   MenuItem,
+  InputLabel,
+  Select,
   Stack,
   Switch,
   TextField,
@@ -23,7 +26,13 @@ import {
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/DeleteOutline";
-import { DataGrid, type GridColDef } from "@mui/x-data-grid";
+import {
+  DataGrid,
+  type GridColDef,
+  type GridColumnVisibilityModel,
+  type GridFilterModel,
+  type GridSortModel
+} from "@mui/x-data-grid";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import dayjs from "dayjs";
 
@@ -81,6 +90,13 @@ interface ExpensePayload {
   kaydi_giren_kullanici?: string | null;
 }
 
+type SavedGridView = {
+  name: string;
+  filterModel: GridFilterModel;
+  sortModel: GridSortModel;
+  columnVisibilityModel: GridColumnVisibilityModel;
+};
+
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("tr-TR", {
     style: "currency",
@@ -98,6 +114,9 @@ export default function ExpensesView() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
 
+  const currentUserId = user?.id ?? "anon";
+  const GRID_VIEWS_KEY = `expenses-grid-views-${currentUserId}`;
+
   const currentYear = new Date().getFullYear();
   const [year, setYear] = usePersistentState<number | "">("expenses:year", currentYear);
   const [scenarioId, setScenarioId] = usePersistentState<number | null>("expenses:scenarioId", null);
@@ -113,6 +132,13 @@ export default function ExpensesView() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [formQuantity, setFormQuantity] = useState<string>("1");
   const [formUnitPrice, setFormUnitPrice] = useState<string>("0");
+  const [filterModel, setFilterModel] = useState<GridFilterModel>({ items: [] });
+  const [sortModel, setSortModel] = useState<GridSortModel>([]);
+  const [columnVisibilityModel, setColumnVisibilityModel] =
+    useState<GridColumnVisibilityModel>({});
+  const [savedViews, setSavedViews] = useState<SavedGridView[]>([]);
+  const [selectedViewName, setSelectedViewName] = useState<string>("");
+  const [newViewName, setNewViewName] = useState<string>("");
 
   const { data: scenarios } = useQuery<Scenario[]>({
     queryKey: ["scenarios"],
@@ -143,6 +169,17 @@ export default function ExpensesView() {
       return matchingScenario ? matchingScenario.id : null;
     });
   }, [scenarios, year]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(GRID_VIEWS_KEY);
+      if (!raw) return;
+      const parsed: SavedGridView[] = JSON.parse(raw);
+      setSavedViews(parsed);
+    } catch {
+      // bozuk veri varsa sessiz geç
+    }
+  }, [GRID_VIEWS_KEY]);
 
   const { data: expenses, isFetching } = useQuery<Expense[]>({
     queryKey: [
@@ -231,6 +268,44 @@ export default function ExpensesView() {
     },
     [deleteMutation]
   );
+
+  const handleSaveCurrentView = () => {
+    const name = newViewName.trim();
+    if (!name) return;
+
+    const newView: SavedGridView = {
+      name,
+      filterModel,
+      sortModel,
+      columnVisibilityModel
+    };
+
+    const updated = [...savedViews.filter((v) => v.name !== name), newView];
+
+    setSavedViews(updated);
+    localStorage.setItem(GRID_VIEWS_KEY, JSON.stringify(updated));
+    setSelectedViewName(name);
+  };
+
+  const handleSelectView = (name: string) => {
+    setSelectedViewName(name);
+    const view = savedViews.find((v) => v.name === name);
+    if (!view) return;
+
+    setFilterModel(view.filterModel);
+    setSortModel(view.sortModel);
+    setColumnVisibilityModel(view.columnVisibilityModel);
+  };
+
+  const handleDeleteView = (name: string) => {
+    const updated = savedViews.filter((v) => v.name !== name);
+    setSavedViews(updated);
+    localStorage.setItem(GRID_VIEWS_KEY, JSON.stringify(updated));
+
+    if (selectedViewName === name) {
+      setSelectedViewName("");
+    }
+  };
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -675,6 +750,43 @@ export default function ExpensesView() {
               <Typography variant="subtitle1" fontWeight={600} gutterBottom>
                 Harcamalar
               </Typography>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 1 }}>
+                <FormControl size="small" sx={{ minWidth: 200 }}>
+                  <InputLabel>Görünümler</InputLabel>
+                  <Select
+                    label="Görünümler"
+                    value={selectedViewName}
+                    onChange={(e) => handleSelectView(e.target.value)}
+                  >
+                    <MenuItem value="">
+                      <em>Varsayılan</em>
+                    </MenuItem>
+                    {savedViews.map((view) => (
+                      <MenuItem key={view.name} value={view.name}>
+                        {view.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+
+                {selectedViewName && (
+                  <IconButton size="small" onClick={() => handleDeleteView(selectedViewName)}>
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
+                )}
+
+                <Box sx={{ ml: "auto", display: "flex", alignItems: "center", gap: 1 }}>
+                  <TextField
+                    size="small"
+                    label="Yeni görünüm adı"
+                    value={newViewName}
+                    onChange={(e) => setNewViewName(e.target.value)}
+                  />
+                  <Button variant="outlined" size="small" onClick={handleSaveCurrentView}>
+                    Kaydet
+                  </Button>
+                </Box>
+              </Box>
               <Box sx={{ flexGrow: 1, minWidth: 0, width: "100%", overflowX: "auto" }}>
                 <DataGrid
                   rows={rows ?? []}
@@ -682,6 +794,12 @@ export default function ExpensesView() {
                   autoHeight
                   disableRowSelectionOnClick
                   pageSizeOptions={[15, 25, 50]}
+                  filterModel={filterModel}
+                  onFilterModelChange={(model) => setFilterModel(model)}
+                  sortModel={sortModel}
+                  onSortModelChange={(model) => setSortModel(model)}
+                  columnVisibilityModel={columnVisibilityModel}
+                  onColumnVisibilityModelChange={(model) => setColumnVisibilityModel(model)}
                   initialState={{
                     pagination: { paginationModel: { pageSize: 15 } }
                   }}
