@@ -349,7 +349,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
             </Stack>
           </Stack>
         </Box>
-        <Box sx={{ p: { xs: 3, md: 4 }, maxWidth: 1400, mx: "auto" }}>
+        <Box sx={{ p: { xs: 3, md: 5 }, maxWidth: 1600, mx: "auto" }}>
           {children}
         </Box>
         <Menu

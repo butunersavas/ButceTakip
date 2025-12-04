@@ -12,8 +12,8 @@ export type SummaryCardProps = {
 
 export function SummaryCard({ title, value, subtitle, icon, iconColor, isLoading }: SummaryCardProps) {
   return (
-    <Card sx={{ position: "relative", borderRadius: 3, height: "100%" }}>
-      <Box sx={{ p: 2.5 }}>
+    <Card sx={{ position: "relative", borderRadius: 3, height: "100%", minHeight: 120 }}>
+      <Box sx={{ p: 3 }}>
         <Typography variant="subtitle2" color="text.secondary">
           {title}
         </Typography>
@@ -38,9 +38,9 @@ export function SummaryCard({ title, value, subtitle, icon, iconColor, isLoading
           }}
         >
           <Avatar
-            sx={{
-              width: 32,
-              height: 32,
+          sx={{
+              width: 40,
+              height: 40,
               bgcolor: iconColor ?? "primary.main",
             }}
           >
