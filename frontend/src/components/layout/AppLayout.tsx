@@ -3,6 +3,7 @@ import {
   Avatar,
   Box,
   Button,
+  Chip,
   Dialog,
   DialogActions,
   DialogContent,
@@ -16,7 +17,9 @@ import {
   ListItemText,
   Menu,
   MenuItem,
+  Paper,
   Snackbar,
+  Stack,
   Switch,
   TextField,
   Tooltip,
@@ -32,6 +35,8 @@ import LogoutIcon from "@mui/icons-material/Logout";
 import MenuIcon from "@mui/icons-material/Menu";
 import DarkModeIcon from "@mui/icons-material/DarkModeOutlined";
 import LightModeIcon from "@mui/icons-material/LightModeOutlined";
+import ChevronRightIcon from "@mui/icons-material/ChevronRight";
+import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
 import { useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import type { Location, To } from "react-router-dom";
@@ -176,35 +181,50 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 borderRadius: 2,
                 mb: 1,
                 color: selected ? "primary.main" : "text.primary",
+                borderLeft: selected ? "4px solid" : "4px solid transparent",
+                borderLeftColor: selected ? "primary.main" : "transparent",
                 "&.Mui-selected": {
-                  backgroundColor: "rgba(13, 71, 161, 0.12)",
+                  backgroundColor: (theme) => `${theme.palette.primary.main}0f`,
                   color: "primary.main",
+                },
+                "&:hover": {
+                  backgroundColor: (theme) => `${theme.palette.primary.main}0a`,
                 },
               }}
               onClick={() => setMobileOpen(false)}
             >
               <ListItemIcon sx={{ color: selected ? "primary.main" : "text.secondary" }}>{item.icon}</ListItemIcon>
               <ListItemText primary={item.label} />
+              <ChevronRightIcon sx={{ color: "divider", fontSize: 18 }} />
             </ListItemButton>
           );
         })}
       </List>
       <Box sx={{ p: 2, display: "flex", flexDirection: "column", gap: 1.5 }}>
-        <ListItemButton
-          onClick={(event) => setUserMenuAnchor(event.currentTarget)}
-          sx={{ borderRadius: 2, color: "text.primary" }}
+        <Paper
+          variant="outlined"
+          sx={{
+            p: 1.5,
+            borderRadius: 3,
+            backgroundColor: (theme) => `${theme.palette.primary.main}0a`,
+            borderColor: (theme) => `${theme.palette.primary.main}1f`,
+          }}
         >
-          <ListItemIcon>
-            <Avatar sx={{ bgcolor: "primary.main", width: 32, height: 32 }}>
-              {userInitials}
-            </Avatar>
-          </ListItemIcon>
-          <ListItemText
-            primary={userDisplayName}
-            secondary={user?.is_admin ? "Yönetici" : "Kullanıcı"}
-            secondaryTypographyProps={{ color: "text.secondary" }}
-          />
-        </ListItemButton>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <Avatar sx={{ bgcolor: "primary.main", width: 36, height: 36 }}>{userInitials}</Avatar>
+            <Box flexGrow={1}>
+              <Typography variant="body1" fontWeight={700}>
+                {userDisplayName}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {user?.is_admin ? "Yönetici" : "Kullanıcı"}
+              </Typography>
+            </Box>
+            <Button variant="outlined" color="primary" size="small" onClick={(event) => setUserMenuAnchor(event.currentTarget)}>
+              Profil
+            </Button>
+          </Stack>
+        </Paper>
         <Tooltip title={mode === "dark" ? "Açık moda geç" : "Karanlık moda geç"} placement="top">
           <ListItemButton onClick={toggleMode} sx={{ borderRadius: 2, color: "text.secondary" }}>
             <ListItemIcon sx={{ color: "text.secondary" }}>
@@ -239,6 +259,12 @@ export default function AppLayout({ children }: AppLayoutProps) {
     </Box>
   );
 
+  const currentNavItem = useMemo(
+    () => navItems.find((item) => (item.isSelected ? item.isSelected(location) : location.pathname === item.path)),
+    [location.pathname, navItems]
+  );
+  const currentYear = new Date().getFullYear();
+
   return (
     <Box
       sx={{
@@ -249,65 +275,6 @@ export default function AppLayout({ children }: AppLayoutProps) {
         overflowX: "hidden",
       }}
     >
-      <Box
-        sx={{
-          position: "fixed",
-          top: 16,
-          left: 16,
-          zIndex: (theme) => theme.zIndex.drawer + 1,
-          display: { xs: "inline-flex", md: "none" },
-          backgroundColor: "background.paper",
-          borderRadius: 2,
-          boxShadow: 3,
-          p: 0.5,
-        }}
-      >
-        <IconButton color="inherit" edge="start" onClick={() => setMobileOpen(true)}>
-          <MenuIcon />
-        </IconButton>
-      </Box>
-      <Box
-        sx={{
-          position: "fixed",
-          top: 16,
-          right: 16,
-          zIndex: (theme) => theme.zIndex.drawer + 1,
-          display: { xs: "inline-flex", md: "none" },
-          backgroundColor: "background.paper",
-          borderRadius: 2,
-          boxShadow: 3,
-          p: 0.5,
-          alignItems: "center",
-        }}
-      >
-        <IconButton onClick={(event) => setUserMenuAnchor(event.currentTarget)}>
-          <Avatar sx={{ bgcolor: "primary.main", width: 32, height: 32 }}>{userInitials}</Avatar>
-        </IconButton>
-      </Box>
-      <Menu
-        anchorEl={userMenuAnchor}
-        open={Boolean(userMenuAnchor)}
-        onClose={() => setUserMenuAnchor(null)}
-        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-        transformOrigin={{ vertical: "top", horizontal: "right" }}
-      >
-        <MenuItem
-          onClick={() => {
-            setIsChangePasswordOpen(true);
-            setUserMenuAnchor(null);
-          }}
-        >
-          Şifremi Değiştir
-        </MenuItem>
-        <MenuItem
-          onClick={() => {
-            logout();
-            setUserMenuAnchor(null);
-          }}
-        >
-          Çıkış Yap
-        </MenuItem>
-      </Menu>
       <Box component="nav" sx={{ width: { md: drawerWidth }, flexShrink: { md: 0 } }}>
         <Drawer
           variant="temporary"
@@ -321,7 +288,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
         <Drawer
           variant="permanent"
           open
-          sx={{ display: { xs: "none", md: "block" }, "& .MuiDrawer-paper": { boxSizing: "border-box", width: drawerWidth } }}
+          sx={{ display: { xs: "none", md: "block" }, "& .MuiDrawer-paper": { boxSizing: "border-box", width: drawerWidth, borderRight: "1px solid", borderColor: "divider" } }}
         >
           {drawer}
         </Drawer>
@@ -333,11 +300,77 @@ export default function AppLayout({ children }: AppLayoutProps) {
           minWidth: 0,
           width: "100%",
           maxWidth: "100vw",
-          p: { xs: 3, md: 5 },
-          mt: { xs: 3, md: 4 },
+          bgcolor: "background.default",
         }}
       >
-        {children}
+        <Box
+          sx={{
+            position: "sticky",
+            top: 0,
+            zIndex: (theme) => theme.zIndex.appBar,
+            borderBottom: 1,
+            borderColor: "divider",
+            backgroundColor: "background.paper",
+            px: { xs: 2, md: 4 },
+            py: { xs: 1.5, md: 2.5 },
+            boxShadow: "0 4px 20px rgba(41, 82, 227, 0.05)",
+          }}
+        >
+          <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={2}>
+            <Stack direction="row" spacing={2} alignItems="center">
+              <IconButton color="inherit" edge="start" onClick={() => setMobileOpen(true)} sx={{ display: { xs: "inline-flex", md: "none" } }}>
+                <MenuIcon />
+              </IconButton>
+              <Box>
+                <Typography variant="h4" color="text.primary">
+                  {currentNavItem?.label ?? "Bütçe Takip"}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Kurumsal finansal gösterge paneli
+                </Typography>
+              </Box>
+            </Stack>
+            <Stack direction="row" spacing={1.5} alignItems="center">
+              <Chip icon={<CalendarMonthIcon sx={{ fontSize: 18 }} />} label={`${currentYear} Bütçe Yılı`} variant="outlined" color="primary" sx={{ fontWeight: 600 }} />
+              <Chip label={user?.is_admin ? "Yönetici" : "Kullanıcı"} variant="outlined" />
+              <Tooltip title={mode === "dark" ? "Açık moda geç" : "Karanlık moda geç"}>
+                <IconButton color="primary" onClick={toggleMode}>
+                  {mode === "dark" ? <DarkModeIcon /> : <LightModeIcon />}
+                </IconButton>
+              </Tooltip>
+              <IconButton onClick={(event) => setUserMenuAnchor(event.currentTarget)} sx={{ p: 0 }}>
+                <Avatar sx={{ bgcolor: "primary.main", width: 40, height: 40 }}>{userInitials}</Avatar>
+              </IconButton>
+            </Stack>
+          </Stack>
+        </Box>
+        <Box sx={{ p: { xs: 3, md: 4 }, maxWidth: 1400, mx: "auto" }}>
+          {children}
+        </Box>
+        <Menu
+          anchorEl={userMenuAnchor}
+          open={Boolean(userMenuAnchor)}
+          onClose={() => setUserMenuAnchor(null)}
+          anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+          transformOrigin={{ vertical: "top", horizontal: "right" }}
+        >
+          <MenuItem
+            onClick={() => {
+              setIsChangePasswordOpen(true);
+              setUserMenuAnchor(null);
+            }}
+          >
+            Şifremi Değiştir
+          </MenuItem>
+          <MenuItem
+            onClick={() => {
+              logout();
+              setUserMenuAnchor(null);
+            }}
+          >
+            Çıkış Yap
+          </MenuItem>
+        </Menu>
         <Dialog
           open={isChangePasswordOpen}
           onClose={() => {
