@@ -151,10 +151,19 @@ class PlanAggregateRead(BaseModel):
 
 
 class PurchaseReminder(BaseModel):
+    budget_item_id: int
     budget_code: str
     budget_name: str
     year: int
     month: int
+    is_form_prepared: bool = False
+
+
+class PurchaseReminderUpdate(BaseModel):
+    budget_item_id: int
+    year: int
+    month: int
+    is_form_prepared: bool
 
 
 class ExpenseBase(BaseModel):

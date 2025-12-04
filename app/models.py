@@ -2,6 +2,7 @@ import enum
 from datetime import date, datetime
 from typing import Optional
 
+from sqlalchemy import UniqueConstraint
 from sqlmodel import Field, Relationship, SQLModel
 
 
@@ -66,6 +67,20 @@ class PlanEntry(TimestampMixin, SQLModel, table=True):
 
     scenario: Scenario = Relationship(back_populates="plans")
     budget_item: BudgetItem = Relationship(back_populates="plans")
+
+
+class PurchaseFormStatus(SQLModel, table=True):
+    __tablename__ = "purchase_form_status"
+    __table_args__ = (
+        UniqueConstraint("budget_item_id", "year", "month", name="uq_form_status_item_month"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    budget_item_id: int = Field(index=True)
+    year: int
+    month: int
+    is_prepared: bool = Field(default=True)
+    prepared_at: datetime | None = Field(default_factory=datetime.utcnow)
 
 
 class Expense(TimestampMixin, SQLModel, table=True):
