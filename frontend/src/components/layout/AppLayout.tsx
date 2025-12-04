@@ -3,7 +3,6 @@ import {
   Avatar,
   Box,
   Button,
-  Chip,
   Dialog,
   DialogActions,
   DialogContent,
@@ -117,8 +116,6 @@ export default function AppLayout({ children }: AppLayoutProps) {
     const initials = parts.slice(0, 2).map((part) => part.charAt(0).toUpperCase());
     return initials.join("") || source.charAt(0).toUpperCase();
   }, [user?.full_name, user?.username]);
-
-  const envLabel = (import.meta.env.VITE_APP_ENV as string | undefined) ?? "TEST";
 
   const handlePasswordChange = async () => {
     if (newPassword !== newPasswordAgain) {
@@ -301,19 +298,12 @@ export default function AppLayout({ children }: AppLayoutProps) {
         <Box
           sx={{
             display: "flex",
-            justifyContent: "space-between",
+            justifyContent: "flex-end",
             alignItems: "center",
             mb: 3,
             gap: 2
           }}
         >
-          <Chip
-            label={envLabel.toUpperCase()}
-            size="small"
-            color={envLabel.toUpperCase() === "PROD" ? "error" : "default"}
-            variant="outlined"
-          />
-
           <Button
             onClick={(event) => setUserMenuAnchor(event.currentTarget)}
             startIcon={

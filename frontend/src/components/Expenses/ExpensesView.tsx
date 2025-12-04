@@ -789,7 +789,7 @@ export default function ExpensesView() {
                   </Button>
                 </Box>
               </Box>
-              <Box sx={{ flexGrow: 1, minWidth: 0, width: "100%", overflowX: "auto" }}>
+              <Box sx={{ width: "100%" }}>
                 <DataGrid
                   rows={rows ?? []}
                   columns={columns}

@@ -443,57 +443,6 @@ export default function DashboardView() {
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={12} md={6}>
-          <Card>
-            <CardHeader title="Riskteki Kalemler" subheader="Planın %80 ve üzeri harcananlar" />
-            <CardContent>
-              {riskyItems.length === 0 ? (
-                <Typography variant="body2" color="text.secondary">
-                  Bu ay için kritik seviyede kalem bulunmuyor.
-                </Typography>
-              ) : (
-                <List dense>
-                  {riskyItems.map((item) => (
-                    <ListItem key={item.budget_item_id}>
-                      <ListItemText
-                        primary={`${item.budget_code} – ${item.budget_name}`}
-                        secondary={`Plan: ${item.plan.toLocaleString()} | Gerçekleşen: ${item.actual.toLocaleString()} | %${Math.round(item.ratio * 100)}`}
-                        primaryTypographyProps={{ variant: "body2" }}
-                      />
-                    </ListItem>
-                  ))}
-                </List>
-              )}
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} md={6}>
-          <Card>
-            <CardHeader
-              title="Hareketsiz Kalemler"
-              subheader="Planı olup hiç harcama yapılmayanlar"
-            />
-            <CardContent>
-              {noSpendItems.length === 0 ? (
-                <Typography variant="body2" color="text.secondary">
-                  Şu ana kadar hareketsiz bütçe kalemi bulunmuyor.
-                </Typography>
-              ) : (
-                <List dense>
-                  {noSpendItems.map((item) => (
-                    <ListItem key={item.budget_item_id}>
-                      <ListItemText
-                        primary={`${item.budget_code} – ${item.budget_name}`}
-                        secondary={`Plan: ${item.plan.toLocaleString()}`}
-                        primaryTypographyProps={{ variant: "body2" }}
-                      />
-                    </ListItem>
-                  ))}
-                </List>
-              )}
-            </CardContent>
-          </Card>
-        </Grid>
       </Grid>
 
       <Card>
@@ -568,6 +517,67 @@ export default function DashboardView() {
           </Stack>
         </CardContent>
       </Card>
+
+      <Grid container spacing={3} sx={{ mt: 1 }}>
+        <Grid item xs={12} md={6}>
+          <Card>
+            <CardHeader title="Riskteki Kalemler" subheader="Planın %80 ve üzeri harcananlar" />
+            <CardContent>
+              {riskyItems.length === 0 ? (
+                <Typography variant="body2" color="text.secondary">
+                  Bu ay için kritik seviyede kalem bulunmuyor.
+                </Typography>
+              ) : (
+                <List dense>
+                  {riskyItems.map((item) => (
+                    <ListItem key={item.budget_item_id}>
+                      <ListItemText
+                        primary={`${item.budget_code} – ${item.budget_name}`}
+                        secondary={`Plan: ${item.plan.toLocaleString()} | Gerçekleşen: ${item.actual.toLocaleString()} | %${Math.round(item.ratio * 100)}`}
+                        primaryTypographyProps={{ variant: "body2" }}
+                      />
+                    </ListItem>
+                  ))}
+                </List>
+              )}
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} md={6}>
+          <Card>
+            <CardHeader
+              title="Hareketsiz Kalemler"
+              subheader="Planı olup hiç harcama yapılmayanlar"
+            />
+            <CardContent>
+              {noSpendItems.length === 0 ? (
+                <Typography variant="body2" color="text.secondary">
+                  Şu ana kadar hareketsiz bütçe kalemi bulunmuyor.
+                </Typography>
+              ) : (
+                <List dense>
+                  {noSpendItems.map((item) => {
+                    const formattedPlan = item.plan.toLocaleString("tr-TR", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2
+                    });
+
+                    return (
+                      <ListItem key={item.budget_item_id}>
+                        <ListItemText
+                          primary={`${item.budget_code} – ${item.budget_name}`}
+                          secondary={`Plan: $${formattedPlan}`}
+                          primaryTypographyProps={{ variant: "body2" }}
+                        />
+                      </ListItem>
+                    );
+                  })}
+                </List>
+              )}
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
 
       <Dialog
         open={isPurchaseDialogOpen && purchaseItems.length > 0}
