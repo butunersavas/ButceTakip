@@ -49,6 +49,8 @@ def list_expenses(
     end_date: date | None = Query(default=None),
     status_filter: str | None = Query(default=None),
     include_out_of_budget: bool = Query(default=True),
+    show_cancelled: bool = Query(default=False),
+    show_out_of_budget: bool = Query(default=False),
     mine_only: bool = Query(default=False),
     today_only: bool = Query(default=False),
     session: Session = Depends(get_db_session),
@@ -81,7 +83,9 @@ def list_expenses(
                 continue
         if statuses:
             query = query.where(Expense.status.in_(statuses))
-    if not include_out_of_budget:
+    if not show_cancelled:
+        query = query.where(Expense.status != ExpenseStatus.CANCELLED)
+    if not (include_out_of_budget and show_out_of_budget):
         query = query.where(Expense.is_out_of_budget.is_(False))
     if mine_only:
         query = query.where(Expense.created_by_id == current_user.id)
