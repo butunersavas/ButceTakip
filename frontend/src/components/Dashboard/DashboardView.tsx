@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  Alert,
   Box,
   Button,
   Card,
@@ -17,6 +18,7 @@ import {
   ListItem,
   ListItemText,
   MenuItem,
+  Snackbar,
   Skeleton,
   Stack,
   TextField,
@@ -76,9 +78,12 @@ interface BudgetItem {
 }
 
 type PurchaseReminderItem = {
-  id?: number;
+  budget_item_id: number;
   budget_code: string;
   budget_name: string;
+  year: number;
+  month: number;
+  is_form_prepared: boolean;
 };
 
 type RiskyItem = {
@@ -130,6 +135,10 @@ export default function DashboardView() {
   const [dontShowAgainThisMonth, setDontShowAgainThisMonth] = useState(false);
   const [riskyItems, setRiskyItems] = useState<RiskyItem[]>([]);
   const [noSpendItems, setNoSpendItems] = useState<NoSpendItem[]>([]);
+  const [savingPurchaseStatus, setSavingPurchaseStatus] = useState(false);
+  const [purchaseStatusFeedback, setPurchaseStatusFeedback] = useState<
+    { message: string; severity: "success" | "error" } | null
+  >(null);
 
   const now = new Date();
   const yearNow = now.getFullYear();
@@ -172,8 +181,15 @@ export default function DashboardView() {
       })
       .catch(() => {
         // Hata durumunda sessiz geçilebilir veya loglanabilir
-      });
+    });
   }, [client, month, reminderKey, yearNow]);
+
+  const handleClosePurchaseDialog = () => {
+    if (dontShowAgainThisMonth) {
+      localStorage.setItem(reminderKey, "dismissed");
+    }
+    setIsPurchaseDialogOpen(false);
+  };
 
   useEffect(() => {
     const now = new Date();
@@ -581,7 +597,7 @@ export default function DashboardView() {
 
       <Dialog
         open={isPurchaseDialogOpen && purchaseItems.length > 0}
-        onClose={() => setIsPurchaseDialogOpen(false)}
+        onClose={handleClosePurchaseDialog}
         maxWidth="sm"
         fullWidth
       >
@@ -594,12 +610,32 @@ export default function DashboardView() {
             Aşağıdaki kalemler için satın alma formunu hazırlamayı unutmayın:
           </Typography>
 
-          <List dense>
-            {purchaseItems.map((item) => (
-              <ListItem key={item.id ?? item.budget_code}>
+          <List dense sx={{ maxHeight: 500, overflowY: "auto" }}>
+            {purchaseItems.map((item, index) => (
+              <ListItem
+                key={`${item.budget_item_id}-${item.year}-${item.month}`}
+                secondaryAction={
+                  <Checkbox
+                    edge="end"
+                    checked={item.is_form_prepared}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setPurchaseItems((prev) =>
+                        prev.map((x, i) => (i === index ? { ...x, is_form_prepared: checked } : x))
+                      );
+                    }}
+                  />
+                }
+              >
                 <ListItemText
                   primary={`${item.budget_code} – ${item.budget_name}`}
+                  secondary={
+                    item.is_form_prepared
+                      ? "Satın Alma Formu hazırlandı"
+                      : "Satın alma formunu hazırlamayı unutmayın"
+                  }
                   primaryTypographyProps={{ variant: "body2" }}
+                  secondaryTypographyProps={{ variant: "caption" }}
                 />
               </ListItem>
             ))}
@@ -621,17 +657,63 @@ export default function DashboardView() {
         <DialogActions>
           <Button
             size="small"
-            onClick={() => {
-              if (dontShowAgainThisMonth) {
-                localStorage.setItem(reminderKey, "dismissed");
-              }
-              setIsPurchaseDialogOpen(false);
-            }}
+            onClick={handleClosePurchaseDialog}
+            disabled={savingPurchaseStatus}
           >
             Kapat
           </Button>
+          <Button
+            variant="contained"
+            size="small"
+            disabled={savingPurchaseStatus}
+            onClick={async () => {
+              try {
+                setSavingPurchaseStatus(true);
+                await client.post(
+                  "/budget/purchase-reminders/mark-prepared",
+                  purchaseItems.map((item) => ({
+                    budget_item_id: item.budget_item_id,
+                    year: item.year,
+                    month: item.month,
+                    is_form_prepared: item.is_form_prepared
+                  }))
+                );
+                setPurchaseStatusFeedback({
+                  message: "Satın alma formu durumları güncellendi.",
+                  severity: "success"
+                });
+                handleClosePurchaseDialog();
+              } catch (error) {
+                console.error(error);
+                setPurchaseStatusFeedback({
+                  message: "Durumlar kaydedilirken hata oluştu.",
+                  severity: "error"
+                });
+              } finally {
+                setSavingPurchaseStatus(false);
+              }
+            }}
+          >
+            Kaydet
+          </Button>
         </DialogActions>
       </Dialog>
+      <Snackbar
+        open={Boolean(purchaseStatusFeedback)}
+        autoHideDuration={4000}
+        onClose={() => setPurchaseStatusFeedback(null)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+      >
+        {purchaseStatusFeedback && (
+          <Alert
+            severity={purchaseStatusFeedback.severity}
+            onClose={() => setPurchaseStatusFeedback(null)}
+            sx={{ width: "100%" }}
+          >
+            {purchaseStatusFeedback.message}
+          </Alert>
+        )}
+      </Snackbar>
     </Stack>
   );
 }

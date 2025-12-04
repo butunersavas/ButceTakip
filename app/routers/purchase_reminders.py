@@ -3,8 +3,8 @@ from sqlalchemy import exists, func
 from sqlmodel import Session, select
 
 from app.dependencies import get_current_user, get_db_session
-from app.models import BudgetItem, Expense, ExpenseStatus, PlanEntry, User
-from app.schemas import PurchaseReminder
+from app.models import BudgetItem, Expense, ExpenseStatus, PlanEntry, PurchaseFormStatus, User
+from app.schemas import PurchaseReminder, PurchaseReminderUpdate
 
 router = APIRouter(prefix="/budget", tags=["Budget"])
 
@@ -17,9 +17,24 @@ def list_purchase_reminders(
     session: Session = Depends(get_db_session),
     _: User = Depends(get_current_user),
 ) -> list[PurchaseReminder]:
+    status_subq = (
+        select(PurchaseFormStatus)
+        .where(PurchaseFormStatus.year == year)
+        .where(PurchaseFormStatus.month == month)
+        .subquery()
+    )
+
     plan_query = (
-        select(BudgetItem.code, BudgetItem.name, PlanEntry.year, PlanEntry.month)
+        select(
+            PlanEntry.budget_item_id,
+            BudgetItem.code,
+            BudgetItem.name,
+            PlanEntry.year,
+            PlanEntry.month,
+            func.coalesce(status_subq.c.is_prepared, False).label("is_form_prepared"),
+        )
         .join(BudgetItem, BudgetItem.id == PlanEntry.budget_item_id)
+        .join(status_subq, status_subq.c.budget_item_id == PlanEntry.budget_item_id, isouter=True)
         .where(PlanEntry.year == year)
         .where(PlanEntry.month == month)
         .where(PlanEntry.amount > 0)
@@ -44,6 +59,48 @@ def list_purchase_reminders(
 
     rows = session.exec(plan_query).all()
     return [
-        PurchaseReminder(budget_code=code, budget_name=name, year=plan_year, month=plan_month)
-        for code, name, plan_year, plan_month in rows
+        PurchaseReminder(
+            budget_item_id=budget_item_id,
+            budget_code=code,
+            budget_name=name,
+            year=plan_year,
+            month=plan_month,
+            is_form_prepared=is_form_prepared,
+        )
+        for budget_item_id, code, name, plan_year, plan_month, is_form_prepared in rows
     ]
+
+
+@router.post("/purchase-reminders/mark-prepared")
+def mark_purchase_forms_prepared(
+    items: list[PurchaseReminderUpdate],
+    session: Session = Depends(get_db_session),
+    _: User = Depends(get_current_user),
+):
+    for item in items:
+        status = (
+            session.exec(
+                select(PurchaseFormStatus)
+                .where(PurchaseFormStatus.budget_item_id == item.budget_item_id)
+                .where(PurchaseFormStatus.year == item.year)
+                .where(PurchaseFormStatus.month == item.month)
+            ).first()
+        )
+
+        if item.is_form_prepared:
+            if not status:
+                status = PurchaseFormStatus(
+                    budget_item_id=item.budget_item_id,
+                    year=item.year,
+                    month=item.month,
+                    is_prepared=True,
+                )
+                session.add(status)
+            else:
+                status.is_prepared = True
+        else:
+            if status:
+                status.is_prepared = False
+
+    session.commit()
+    return {"detail": "Satın alma formu durumları güncellendi."}

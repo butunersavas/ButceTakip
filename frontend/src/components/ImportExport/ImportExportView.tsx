@@ -399,6 +399,7 @@ export default function ImportExportView() {
                   <Grid item xs={12} sm={6}>
                     <Button
                       variant="contained"
+                      color="primary"
                       startIcon={<DownloadIcon />}
                       onClick={() => void handleExportXlsx()}
                       disabled={exporting}
@@ -409,7 +410,8 @@ export default function ImportExportView() {
                   </Grid>
                   <Grid item xs={12} sm={6}>
                     <Button
-                      variant="outlined"
+                      variant="contained"
+                      color="primary"
                       startIcon={<DownloadIcon />}
                       onClick={() => void handleQuarterlyExportXlsx()}
                       disabled={exporting}
@@ -421,7 +423,7 @@ export default function ImportExportView() {
                   <Grid item xs={12} sm={6}>
                     <Button
                       variant="contained"
-                      color="warning"
+                      color="primary"
                       startIcon={<DownloadIcon />}
                       onClick={() => void handleFilteredExpenseExport("out-of-budget")}
                       disabled={exporting}
@@ -432,8 +434,8 @@ export default function ImportExportView() {
                   </Grid>
                   <Grid item xs={12} sm={6}>
                     <Button
-                      variant="outlined"
-                      color="error"
+                      variant="contained"
+                      color="primary"
                       startIcon={<DownloadIcon />}
                       onClick={() => void handleFilteredExpenseExport("cancelled")}
                       disabled={exporting}

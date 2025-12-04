@@ -766,14 +766,22 @@ export default function ExpensesView() {
                 Harcamalar
               </Typography>
               <Box
-                sx={{ display: "flex", alignItems: "center", gap: 2, mb: 1, minHeight: 48 }}
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 1,
+                  justifyContent: "space-between",
+                  mb: 1,
+                }}
               >
-                <FormControl size="small" sx={{ minWidth: 200 }}>
-                  <InputLabel>Görünümler</InputLabel>
-                  <Select
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                  <TextField
+                    select
+                    size="small"
                     label="Görünümler"
                     value={selectedViewName}
                     onChange={(e) => handleSelectView(e.target.value)}
+                    sx={{ minWidth: 180 }}
                   >
                     <MenuItem value="">
                       <em>Varsayılan</em>
@@ -783,26 +791,25 @@ export default function ExpensesView() {
                         {view.name}
                       </MenuItem>
                     ))}
-                  </Select>
-                </FormControl>
-
-                {selectedViewName && (
-                  <IconButton size="small" onClick={() => handleDeleteView(selectedViewName)}>
-                    <DeleteIcon fontSize="small" />
-                  </IconButton>
-                )}
-
-                <Box sx={{ ml: "auto", display: "flex", alignItems: "center", gap: 1 }}>
+                  </TextField>
+                  {selectedViewName && (
+                    <IconButton size="small" onClick={() => handleDeleteView(selectedViewName)}>
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  )}
                   <TextField
                     size="small"
-                    label="Yeni görünüm adı"
+                    placeholder="Yeni görünüm adı"
                     value={newViewName}
                     onChange={(e) => setNewViewName(e.target.value)}
+                    sx={{ minWidth: 180 }}
                   />
-                  <Button variant="outlined" size="small" onClick={handleSaveCurrentView}>
+                  <Button size="small" variant="outlined" onClick={handleSaveCurrentView}>
                     Kaydet
                   </Button>
                 </Box>
+
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}></Box>
               </Box>
               <Box sx={{ width: "100%" }}>
                 <DataGrid
