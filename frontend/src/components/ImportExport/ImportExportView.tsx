@@ -19,6 +19,7 @@ import * as XLSX from "xlsx";
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import usePersistentState from "../../hooks/usePersistentState";
 import { formatBudgetItemLabel } from "../../utils/budgetItem";
+import PageHeader from "../layout/PageHeader";
 
 interface Scenario {
   id: number;
@@ -282,6 +283,7 @@ export default function ImportExportView() {
 
   return (
     <Stack spacing={4}>
+      <PageHeader title="Raporlama / İçeri Aktar" subtitle="Verileri içe ve dışa aktar" />
       <Grid container spacing={3}>
         <Grid item xs={12} md={6}>
           <Card sx={{ height: "100%" }}>

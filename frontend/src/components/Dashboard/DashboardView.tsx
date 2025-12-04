@@ -41,6 +41,7 @@ import {
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import usePersistentState from "../../hooks/usePersistentState";
 import { formatBudgetItemLabel } from "../../utils/budgetItem";
+import PageHeader from "../layout/PageHeader";
 
 interface DashboardSummary {
   month: number;
@@ -281,6 +282,7 @@ export default function DashboardView() {
 
   return (
     <Stack spacing={4}>
+      <PageHeader title="Dashboard" subtitle="Bütçe özetleri ve kritik göstergeler" />
       <Card>
         <CardContent>
           <Grid container spacing={3}>

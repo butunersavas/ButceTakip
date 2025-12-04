@@ -40,6 +40,7 @@ import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import usePersistentState from "../../hooks/usePersistentState";
 import { useAuth } from "../../context/AuthContext";
 import { formatBudgetItemLabel } from "../../utils/budgetItem";
+import PageHeader from "../layout/PageHeader";
 
 interface Scenario {
   id: number;
@@ -568,6 +569,7 @@ export default function ExpensesView() {
 
   return (
     <Stack spacing={4} sx={{ width: "100%", minWidth: 0, maxWidth: "100%", overflowX: "hidden" }}>
+      <PageHeader title="Harcama Yönetimi" subtitle="Harcamaları filtrele, görüntüle ve düzenle" />
       <Card>
         <CardContent>
           <Grid container spacing={3} disableEqualOverflow>

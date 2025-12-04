@@ -13,13 +13,13 @@ import {
   TextField,
   Typography
 } from "@mui/material";
-import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
 import PrintIcon from "@mui/icons-material/Print";
 import CheckIcon from "@mui/icons-material/CheckCircle";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/DeleteOutline";
 import EditIcon from "@mui/icons-material/EditOutlined";
 import { Link as RouterLink } from "react-router-dom";
+import PageHeader from "../layout/PageHeader";
 
 interface LabelHistoryEntry {
   labelIdentifier: string;
@@ -334,19 +334,16 @@ export default function DailyExportView() {
         justifyContent="space-between"
         flexWrap="wrap"
       >
-        <Stack direction="row" spacing={1} alignItems="center">
-          <CalendarMonthIcon color="primary" />
-          <Typography variant="h5" fontWeight={700} component="h1">
-            Günlük Çıkış
-          </Typography>
-        </Stack>
+        <Box sx={{ flex: 1 }}>
+          <PageHeader
+            title="Günlük Çıkış"
+            subtitle="Not hariç tüm alanlar zorunludur. Sol tarafta yeni günlük çıkış kayıtlarını oluşturun, sağ tarafta kayıtları yazdırın."
+          />
+        </Box>
         <Button component={RouterLink} to="/import-export" variant="outlined" startIcon={<CheckIcon />}>
           Raporlama sekmesine git
         </Button>
       </Stack>
-      <Typography variant="body1" color="text.secondary">
-        Not hariç tüm alanlar zorunludur. Sol tarafta yeni günlük çıkış kayıtlarını oluşturun, sağ tarafta kayıtları yazdırın.
-      </Typography>
       {exportStatus && <Alert severity={exportStatus.type}>{exportStatus.message}</Alert>}
 
       <Grid container spacing={3} alignItems="stretch">
