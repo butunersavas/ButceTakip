@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
+  Avatar,
   Box,
   Button,
   Card,
@@ -18,6 +19,7 @@ import {
   ListItem,
   ListItemText,
   MenuItem,
+  Paper,
   Snackbar,
   Skeleton,
   Stack,
@@ -44,6 +46,10 @@ import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import usePersistentState from "../../hooks/usePersistentState";
 import { formatBudgetItemLabel } from "../../utils/budgetItem";
 import { PageHeader } from "../layout/PageHeader";
+import TrendingUpIcon from "@mui/icons-material/TrendingUp";
+import CheckCircleIcon from "@mui/icons-material/CheckCircleOutline";
+import AccountBalanceWalletIcon from "@mui/icons-material/AccountBalanceWalletOutlined";
+import WarningAmberIcon from "@mui/icons-material/WarningAmberOutlined";
 
 interface DashboardSummary {
   month: number;
@@ -299,116 +305,119 @@ export default function DashboardView() {
   return (
     <Stack spacing={4}>
       <PageHeader title="Dashboard" subtitle="Bütçe özetleri ve kritik göstergeler" />
-      <Card>
-        <CardContent>
-          <Grid container spacing={3}>
-            <Grid item xs={12} md={4}>
-              <TextField
-                label="Yıl"
-                type="number"
-                value={year}
-                onChange={(event) => {
-                  const value = event.target.value;
-                  setYear(value ? Number(value) : currentYear);
-                }}
-                fullWidth
-              />
-            </Grid>
-            <Grid item xs={12} md={4}>
-              <TextField
-                select
-                label="Senaryo"
-                value={scenarioId ?? ""}
-                onChange={(event) =>
-                  setScenarioId(event.target.value ? Number(event.target.value) : null)
-                }
-                fullWidth
-              >
-                <MenuItem value="">Tümü</MenuItem>
-                {scenarios?.map((scenario) => (
-                  <MenuItem key={scenario.id} value={scenario.id}>
-                    {scenario.name} ({scenario.year})
-                  </MenuItem>
-                ))}
-              </TextField>
-            </Grid>
-            <Grid item xs={12} md={4}>
-              <TextField
-                select
-                label="Bütçe Kalemi"
-                value={budgetItemId ?? ""}
-                onChange={(event) =>
-                  setBudgetItemId(event.target.value ? Number(event.target.value) : null)
-                }
-                fullWidth
-              >
-                <MenuItem value="">Tümü</MenuItem>
-                {budgetItems?.map((item) => (
-                  <MenuItem key={item.id} value={item.id}>
-                    {formatBudgetItemLabel(item)}
-                  </MenuItem>
-                ))}
-              </TextField>
-            </Grid>
-          </Grid>
-        </CardContent>
-      </Card>
 
-      <Grid container spacing={3} justifyContent="center" alignItems="center">
+      <Paper sx={{ p: { xs: 2.5, md: 3 }, borderRadius: 3 }}>
+        <Stack direction={{ xs: "column", md: "row" }} spacing={2} justifyContent="space-between" alignItems={{ xs: "flex-start", md: "center" }} mb={2}>
+          <Typography variant="h6" fontWeight={700}>
+            Filtreler
+          </Typography>
+          <Chip label="Güncel" color="primary" variant="outlined" size="small" />
+        </Stack>
+        <Grid container spacing={2.5}>
+          <Grid item xs={12} md={4}>
+            <TextField
+              label="Yıl"
+              type="number"
+              value={year}
+              onChange={(event) => {
+                const value = event.target.value;
+                setYear(value ? Number(value) : currentYear);
+              }}
+              fullWidth
+            />
+          </Grid>
+          <Grid item xs={12} md={4}>
+            <TextField
+              select
+              label="Senaryo"
+              value={scenarioId ?? ""}
+              onChange={(event) => setScenarioId(event.target.value ? Number(event.target.value) : null)}
+              fullWidth
+            >
+              <MenuItem value="">Tümü</MenuItem>
+              {scenarios?.map((scenario) => (
+                <MenuItem key={scenario.id} value={scenario.id}>
+                  {scenario.name} ({scenario.year})
+                </MenuItem>
+              ))}
+            </TextField>
+          </Grid>
+          <Grid item xs={12} md={4}>
+            <TextField
+              select
+              label="Bütçe Kalemi"
+              value={budgetItemId ?? ""}
+              onChange={(event) => setBudgetItemId(event.target.value ? Number(event.target.value) : null)}
+              fullWidth
+            >
+              <MenuItem value="">Tümü</MenuItem>
+              {budgetItems?.map((item) => (
+                <MenuItem key={item.id} value={item.id}>
+                  {formatBudgetItemLabel(item)}
+                </MenuItem>
+              ))}
+            </TextField>
+          </Grid>
+        </Grid>
+      </Paper>
+
+      <Grid container spacing={3} justifyContent="center" alignItems="stretch">
         {(
           [
             {
               title: "Toplam Plan",
               value: normalizedKpi.total_plan,
-              color: "primary"
+              color: "primary",
+              icon: <AccountBalanceWalletIcon />,
+              subtitle: "Planlanan bütçe"
             },
             {
               title: "Gerçekleşen",
               value: normalizedKpi.total_actual,
-              color: "secondary"
+              color: "secondary",
+              icon: <CheckCircleIcon />,
+              subtitle: "Harcanan toplam"
             },
             {
               title: "Kalan",
               value: normalizedKpi.total_remaining,
-              color: "warning"
+              color: "warning",
+              icon: <TrendingUpIcon />,
+              subtitle: "Bütçede kalan"
             },
             {
               title: "Aşım",
               value: normalizedKpi.total_overrun,
-              color: "error"
+              color: "error",
+              icon: <WarningAmberIcon />,
+              subtitle: "Limit aşımı"
             }
           ] as const
         ).map((kpi) => (
-          <Grid item xs={12} sm={6} md={3} lg={2} key={kpi.title}>
-            <Card
-              sx={{
-                borderTop: 4,
-                borderColor:
-                  kpi.color === "default"
-                    ? "divider"
-                    : kpi.color === "success"
-                    ? "success.main"
-                    : kpi.color === "error"
-                    ? "error.main"
-                    : `${kpi.color}.main`
-              }}
-            >
-              <CardContent>
-                <Typography variant="subtitle2" color="text.secondary">
-                  {kpi.title}
-                </Typography>
+          <Grid item xs={12} sm={6} md={3} key={kpi.title}>
+            <Card sx={{ height: "100%", p: 1.5 }}>
+              <CardContent sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+                <Stack direction="row" justifyContent="space-between" alignItems="center">
+                  <Typography variant="subtitle2" color="text.secondary">
+                    {kpi.title}
+                  </Typography>
+                  <Avatar
+                    variant="rounded"
+                    sx={{ bgcolor: `${kpi.color}.main`, color: "common.white", width: 38, height: 38 }}
+                  >
+                    {kpi.icon}
+                  </Avatar>
+                </Stack>
                 {isLoading ? (
                   <Skeleton variant="text" height={40} width="60%" />
                 ) : (
-                  <Typography
-                    variant="h5"
-                    fontWeight={700}
-                    sx={{ mt: 1 }}
-                    color={kpi.title === "Aşım" ? "error" : undefined}
-                  >
+                  <Typography variant="h5" fontWeight={700} color={kpi.color === "error" ? "error.main" : "text.primary"}>
                     {formatCurrency(kpi.value)}
                   </Typography>
                 )}
+                <Typography variant="body2" color="text.secondary">
+                  {kpi.subtitle}
+                </Typography>
               </CardContent>
             </Card>
           </Grid>
@@ -416,7 +425,7 @@ export default function DashboardView() {
       </Grid>
 
       <Grid container spacing={3} sx={{ mt: 1 }}>
-        <Grid item xs={12}>
+        <Grid item xs={12} md={8}>
           <Card>
             <CardContent>
               <Stack direction="row" justifyContent="space-between" alignItems="center" mb={3}>
@@ -433,25 +442,25 @@ export default function DashboardView() {
                   variant={budgetItemId ? "filled" : "outlined"}
                 />
               </Stack>
-              <Box sx={{ height: 360 }}>
+              <Box sx={{ height: 380 }}>
                 {isLoading ? (
                   <Skeleton variant="rectangular" height="100%" />
                 ) : (
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={monthlyData}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="monthLabel" />
-                      <YAxis tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                      <XAxis dataKey="monthLabel" tick={{ fill: "#475569" }} />
+                      <YAxis tick={{ fill: "#475569" }} tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`} />
                       <ReferenceLine y={0} stroke="#9e9e9e" strokeDasharray="3 3" />
                       <RechartsTooltip
                         formatter={(value: number) => formatCurrency(value)}
                         labelFormatter={(label) => label}
                       />
                       <Legend />
-                      <Bar dataKey="planned" name="Planlanan" fill={pieColors.planned} radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="actual" name="Gerçekleşen" fill={pieColors.actual} radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="remaining" name="Kalan" fill={pieColors.remaining} radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="overrun" name="Aşım" fill={pieColors.overrun} radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="planned" name="Planlanan" fill={pieColors.planned} radius={[6, 6, 0, 0]} />
+                      <Bar dataKey="actual" name="Gerçekleşen" fill={pieColors.actual} radius={[6, 6, 0, 0]} />
+                      <Bar dataKey="remaining" name="Kalan" fill={pieColors.remaining} radius={[6, 6, 0, 0]} />
+                      <Bar dataKey="overrun" name="Aşım" fill={pieColors.overrun} radius={[6, 6, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 )}
@@ -459,139 +468,126 @@ export default function DashboardView() {
             </CardContent>
           </Card>
         </Grid>
-      </Grid>
-
-      <Card>
-        <CardContent>
+        <Grid item xs={12} md={4}>
           <Stack spacing={3}>
-            <Box>
-              <Typography variant="h6" fontWeight={600} gutterBottom>
-                3 Aylık Harcama Dağılımı
-              </Typography>
-              <Stack direction="row" spacing={2} flexWrap="wrap" alignItems="center">
-                <Stack direction="row" spacing={1} alignItems="center">
-                  <Box sx={{ width: 12, height: 12, borderRadius: "50%", backgroundColor: pieColors.planned }} />
-                  <Typography variant="body2">Planlanan</Typography>
+            <Card>
+              <CardContent>
+                <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
+                  <Typography variant="h6" fontWeight={600}>
+                    3 Aylık Harcama Dağılımı
+                  </Typography>
+                  <Chip size="small" label="Son 4 Çeyrek" variant="outlined" />
                 </Stack>
-                <Stack direction="row" spacing={1} alignItems="center">
-                  <Box sx={{ width: 12, height: 12, borderRadius: "50%", backgroundColor: pieColors.actual }} />
-                  <Typography variant="body2">Gerçekleşen</Typography>
-                </Stack>
-                <Stack direction="row" spacing={1} alignItems="center">
-                  <Box sx={{ width: 12, height: 12, borderRadius: "50%", backgroundColor: pieColors.remaining }} />
-                  <Typography variant="body2">Kalan</Typography>
-                </Stack>
-                <Stack direction="row" spacing={1} alignItems="center">
-                  <Box sx={{ width: 12, height: 12, borderRadius: "50%", backgroundColor: pieColors.overrun }} />
-                  <Typography variant="body2">Aşım</Typography>
-                </Stack>
-              </Stack>
-            </Box>
-            <Grid container spacing={3}>
-              {quarterlyData.map((quarter) => (
-                <Grid item xs={12} md={6} lg={3} key={quarter.label}>
-                  <Stack spacing={1} alignItems="center">
-                    <Typography variant="subtitle1" fontWeight={600}>
-                      {quarter.label}
-                    </Typography>
-                    <Box sx={{ width: "100%", height: 220 }}>
-                      {isLoading ? (
-                        <Skeleton
-                          variant="circular"
-                          width={220}
-                          height={220}
-                          sx={{ mx: "auto" }}
-                        />
-                      ) : (
-                        <ResponsiveContainer width="100%" height="100%">
-                          <PieChart>
-                            <Pie
-                              data={[
-                                { name: "Planlanan", value: quarter.planned, key: "planned" },
-                                { name: "Gerçekleşen", value: quarter.actual, key: "actual" },
-                                { name: "Kalan", value: Math.max(quarter.remaining, 0), key: "remaining" },
-                                { name: "Aşım", value: Math.max(quarter.overrun, 0), key: "overrun" }
-                              ]}
-                              dataKey="value"
-                              nameKey="name"
-                              innerRadius={50}
-                              outerRadius={80}
-                              paddingAngle={2}
-                            >
-                              {pieKeys.map((key) => (
-                                <Cell key={key} fill={pieColors[key]} />
-                              ))}
-                            </Pie>
-                          </PieChart>
-                        </ResponsiveContainer>
-                      )}
-                    </Box>
+                <Stack direction="row" spacing={2} flexWrap="wrap" alignItems="center" mb={2}>
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <Box sx={{ width: 12, height: 12, borderRadius: "50%", backgroundColor: pieColors.planned }} />
+                    <Typography variant="body2">Planlanan</Typography>
                   </Stack>
-                </Grid>
-              ))}
-            </Grid>
-          </Stack>
-        </CardContent>
-      </Card>
-
-      <Grid container spacing={3} sx={{ mt: 1 }}>
-        <Grid item xs={12} md={6}>
-          <Card>
-            <CardHeader title="Riskteki Kalemler" subheader="Planın %80 ve üzeri harcananlar" />
-            <CardContent>
-              {riskyItems.length === 0 ? (
-                <Typography variant="body2" color="text.secondary">
-                  Bu ay için kritik seviyede kalem bulunmuyor.
-                </Typography>
-              ) : (
-                <List dense>
-                  {riskyItems.map((item) => (
-                    <ListItem key={item.budget_item_id}>
-                      <ListItemText
-                        primary={`${item.budget_code} – ${item.budget_name}`}
-                        secondary={`Plan: ${item.plan.toLocaleString()} | Gerçekleşen: ${item.actual.toLocaleString()} | %${Math.round(item.ratio * 100)}`}
-                        primaryTypographyProps={{ variant: "body2" }}
-                      />
-                    </ListItem>
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <Box sx={{ width: 12, height: 12, borderRadius: "50%", backgroundColor: pieColors.actual }} />
+                    <Typography variant="body2">Gerçekleşen</Typography>
+                  </Stack>
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <Box sx={{ width: 12, height: 12, borderRadius: "50%", backgroundColor: pieColors.remaining }} />
+                    <Typography variant="body2">Kalan</Typography>
+                  </Stack>
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <Box sx={{ width: 12, height: 12, borderRadius: "50%", backgroundColor: pieColors.overrun }} />
+                    <Typography variant="body2">Aşım</Typography>
+                  </Stack>
+                </Stack>
+                <Grid container spacing={2}>
+                  {quarterlyData.map((quarter) => (
+                    <Grid item xs={12} sm={6} key={quarter.label}>
+                      <Stack spacing={1} alignItems="center">
+                        <Typography variant="subtitle2" fontWeight={600}>
+                          {quarter.label}
+                        </Typography>
+                        <Box sx={{ width: "100%", height: 180 }}>
+                          {isLoading ? (
+                            <Skeleton variant="circular" width={160} height={160} sx={{ mx: "auto" }} />
+                          ) : (
+                            <ResponsiveContainer width="100%" height="100%">
+                              <PieChart>
+                                <Pie
+                                  data={[
+                                    { name: "Planlanan", value: quarter.planned, key: "planned" },
+                                    { name: "Gerçekleşen", value: quarter.actual, key: "actual" },
+                                    { name: "Kalan", value: Math.max(quarter.remaining, 0), key: "remaining" },
+                                    { name: "Aşım", value: Math.max(quarter.overrun, 0), key: "overrun" }
+                                  ]}
+                                  dataKey="value"
+                                  nameKey="name"
+                                  innerRadius={38}
+                                  outerRadius={58}
+                                  paddingAngle={2}
+                                >
+                                  {pieKeys.map((key) => (
+                                    <Cell key={key} fill={pieColors[key]} />
+                                  ))}
+                                </Pie>
+                              </PieChart>
+                            </ResponsiveContainer>
+                          )}
+                        </Box>
+                      </Stack>
+                    </Grid>
                   ))}
-                </List>
-              )}
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} md={6}>
-          <Card>
-            <CardHeader
-              title="Hareketsiz Kalemler"
-              subheader="Planı olup hiç harcama yapılmayanlar"
-            />
-            <CardContent>
-              {noSpendItems.length === 0 ? (
-                <Typography variant="body2" color="text.secondary">
-                  Şu ana kadar hareketsiz bütçe kalemi bulunmuyor.
-                </Typography>
-              ) : (
-                <List dense>
-                  {noSpendItems.map((item) => {
-                    const formattedPlan = item.plan.toLocaleString("tr-TR", {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2
-                    });
-
-                    return (
+                </Grid>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader title="Riskteki Kalemler" subheader="Planın %80 ve üzeri harcananlar" />
+              <CardContent>
+                {riskyItems.length === 0 ? (
+                  <Typography variant="body2" color="text.secondary">
+                    Bu ay için kritik seviyede kalem bulunmuyor.
+                  </Typography>
+                ) : (
+                  <List dense>
+                    {riskyItems.map((item) => (
                       <ListItem key={item.budget_item_id}>
                         <ListItemText
                           primary={`${item.budget_code} – ${item.budget_name}`}
-                          secondary={`Plan: $${formattedPlan}`}
+                          secondary={`Plan: ${item.plan.toLocaleString()} | Gerçekleşen: ${item.actual.toLocaleString()} | %${Math.round(item.ratio * 100)}`}
                           primaryTypographyProps={{ variant: "body2" }}
                         />
                       </ListItem>
-                    );
-                  })}
-                </List>
-              )}
-            </CardContent>
-          </Card>
+                    ))}
+                  </List>
+                )}
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader title="Hareketsiz Kalemler" subheader="Planı olup hiç harcama yapılmayanlar" />
+              <CardContent>
+                {noSpendItems.length === 0 ? (
+                  <Typography variant="body2" color="text.secondary">
+                    Şu ana kadar hareketsiz bütçe kalemi bulunmuyor.
+                  </Typography>
+                ) : (
+                  <List dense>
+                    {noSpendItems.map((item) => {
+                      const formattedPlan = item.plan.toLocaleString("tr-TR", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                      });
+
+                      return (
+                        <ListItem key={item.budget_item_id}>
+                          <ListItemText
+                            primary={`${item.budget_code} – ${item.budget_name}`}
+                            secondary={`Plan: $${formattedPlan}`}
+                            primaryTypographyProps={{ variant: "body2" }}
+                          />
+                        </ListItem>
+                      );
+                    })}
+                  </List>
+                )}
+              </CardContent>
+            </Card>
+          </Stack>
         </Grid>
       </Grid>
 
