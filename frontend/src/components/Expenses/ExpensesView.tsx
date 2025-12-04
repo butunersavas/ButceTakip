@@ -6,6 +6,7 @@ import {
   Card,
   CardContent,
   Chip,
+  Checkbox,
   Dialog,
   DialogActions,
   DialogContent,
@@ -126,6 +127,8 @@ export default function ExpensesView() {
   const [startDate, setStartDate] = usePersistentState<string>("expenses:startDate", "");
   const [endDate, setEndDate] = usePersistentState<string>("expenses:endDate", "");
   const [includeOutOfBudget, setIncludeOutOfBudget] = usePersistentState<boolean>("expenses:includeOutOfBudget", true);
+  const [showCancelled, setShowCancelled] = usePersistentState<boolean>("expenses:showCancelled", false);
+  const [showOutOfBudget, setShowOutOfBudget] = usePersistentState<boolean>("expenses:showOutOfBudget", false);
   const [mineOnly, setMineOnly] = usePersistentState<boolean>("expenses:mineOnly", false);
   const [todayOnly, setTodayOnly] = usePersistentState<boolean>("expenses:todayOnly", false);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -192,6 +195,8 @@ export default function ExpensesView() {
       startDate,
       endDate,
       includeOutOfBudget,
+      showCancelled,
+      showOutOfBudget,
       mineOnly,
       todayOnly
     ],
@@ -204,6 +209,8 @@ export default function ExpensesView() {
       if (startDate) params.start_date = startDate;
       if (endDate) params.end_date = endDate;
       params.include_out_of_budget = includeOutOfBudget;
+      params.show_cancelled = showCancelled;
+      params.show_out_of_budget = showOutOfBudget;
       params.mine_only = mineOnly;
       params.today_only = todayOnly;
       const { data } = await client.get<Expense[]>("/expenses", { params });
@@ -455,14 +462,10 @@ export default function ExpensesView() {
       },
       {
         field: "scenario_id",
-        headerName: "Senaryo",
+        headerName: "Bütçe Yılı",
         width: 150,
         valueGetter: (value, row) => {
-          if (!row || row.scenario_id == null) {
-            return "";
-          }
-
-          if (!Array.isArray(scenarios)) {
+          if (!row || row.scenario_id == null || !Array.isArray(scenarios)) {
             return "";
           }
 
@@ -470,15 +473,7 @@ export default function ExpensesView() {
             (item) => item && (item.scenario_id === row.scenario_id || item.id === row.scenario_id)
           );
 
-          if (!scenario) {
-            return "";
-          }
-
-          return (
-            scenario.name ??
-            scenario.scenario_name ??
-            `${scenario.code ?? ""} ${scenario.description ?? ""}`.trim()
-          );
+          return scenario?.year ?? "";
         }
       },
       {
@@ -595,7 +590,7 @@ export default function ExpensesView() {
                 <MenuItem value="">Tümü</MenuItem>
                 {scenarios?.map((scenario) => (
                   <MenuItem key={scenario.id} value={scenario.id}>
-                    {scenario.name} ({scenario.year})
+                    {scenario.year}
                   </MenuItem>
                 ))}
               </TextField>
@@ -664,6 +659,24 @@ export default function ExpensesView() {
                   }
                 }}
               >
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={showCancelled}
+                      onChange={(event) => setShowCancelled(event.target.checked)}
+                    />
+                  }
+                  label="İptal Edilenleri Göster"
+                />
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={showOutOfBudget}
+                      onChange={(event) => setShowOutOfBudget(event.target.checked)}
+                    />
+                  }
+                  label="Bütçe Dışı Alımları Göster"
+                />
                 <FormControlLabel
                   control={
                     <Switch
@@ -746,13 +759,15 @@ export default function ExpensesView() {
                 display: "flex",
                 flexDirection: "column",
                 minWidth: 0,
-                overflow: "hidden"
+                overflow: "visible"
               }}
             >
               <Typography variant="subtitle1" fontWeight={600} gutterBottom>
                 Harcamalar
               </Typography>
-              <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 1 }}>
+              <Box
+                sx={{ display: "flex", alignItems: "center", gap: 2, mb: 1, minHeight: 48 }}
+              >
                 <FormControl size="small" sx={{ minWidth: 200 }}>
                   <InputLabel>Görünümler</InputLabel>
                   <Select
@@ -846,7 +861,7 @@ export default function ExpensesView() {
                     <MenuItem value="">Seçili Değil</MenuItem>
                     {scenarios?.map((scenario) => (
                       <MenuItem key={scenario.id} value={scenario.id}>
-                        {scenario.name} ({scenario.year})
+                        {scenario.year}
                       </MenuItem>
                     ))}
                   </TextField>
