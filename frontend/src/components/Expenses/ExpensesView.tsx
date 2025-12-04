@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
+  Avatar,
   Box,
   Button,
   Card,
@@ -26,6 +27,9 @@ import {
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/DeleteOutline";
+import PaidRoundedIcon from "@mui/icons-material/PaidRounded";
+import ReceiptLongRoundedIcon from "@mui/icons-material/ReceiptLongRounded";
+import CancelPresentationRoundedIcon from "@mui/icons-material/CancelPresentationRounded";
 import {
   DataGrid,
   type GridColDef,
@@ -696,9 +700,17 @@ export default function ExpensesView() {
         <Grid item xs={12} md={4}>
           <Card>
             <CardContent>
-              <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-                Toplam Gerçekleşen
-              </Typography>
+              <Stack direction="row" alignItems="center" justifyContent="space-between">
+                <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+                  Toplam Gerçekleşen
+                </Typography>
+                <Avatar
+                  variant="rounded"
+                  sx={{ bgcolor: "primary.light", color: "primary.main", width: 38, height: 38, boxShadow: 1 }}
+                >
+                  <PaidRoundedIcon fontSize="small" />
+                </Avatar>
+              </Stack>
               <Typography variant="h4" fontWeight={700} color="primary">
                 {formatCurrency(totalActual)}
               </Typography>
@@ -711,9 +723,17 @@ export default function ExpensesView() {
         <Grid item xs={12} md={4}>
           <Card>
             <CardContent>
-              <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-                Bütçe Dışı Harcamalar
-              </Typography>
+              <Stack direction="row" alignItems="center" justifyContent="space-between">
+                <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+                  Bütçe Dışı Harcamalar
+                </Typography>
+                <Avatar
+                  variant="rounded"
+                  sx={{ bgcolor: "warning.light", color: "warning.main", width: 38, height: 38, boxShadow: 1 }}
+                >
+                  <ReceiptLongRoundedIcon fontSize="small" />
+                </Avatar>
+              </Stack>
               <Typography variant="h5" fontWeight={700} color="warning.main">
                 {formatCurrency(outOfBudgetTotal)}
               </Typography>
@@ -726,9 +746,17 @@ export default function ExpensesView() {
         <Grid item xs={12} md={4}>
           <Card>
             <CardContent>
-              <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-                İptal Edildi
-              </Typography>
+              <Stack direction="row" alignItems="center" justifyContent="space-between">
+                <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+                  İptal Edildi
+                </Typography>
+                <Avatar
+                  variant="rounded"
+                  sx={{ bgcolor: "error.light", color: "error.main", width: 38, height: 38, boxShadow: 1 }}
+                >
+                  <CancelPresentationRoundedIcon fontSize="small" />
+                </Avatar>
+              </Stack>
               <Typography variant="h5" fontWeight={700} color="text.secondary">
                 {formatCurrency(cancelledTotal)}
               </Typography>

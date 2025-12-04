@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  Avatar,
   Box,
   Button,
   Card,
@@ -37,6 +38,10 @@ import {
   YAxis,
   Cell
 } from "recharts";
+import AssignmentTurnedInRoundedIcon from "@mui/icons-material/AssignmentTurnedInRounded";
+import PaidRoundedIcon from "@mui/icons-material/PaidRounded";
+import SavingsRoundedIcon from "@mui/icons-material/SavingsRounded";
+import ReportGmailerrorredRoundedIcon from "@mui/icons-material/ReportGmailerrorredRounded";
 
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import usePersistentState from "../../hooks/usePersistentState";
@@ -344,29 +349,36 @@ export default function DashboardView() {
             {
               title: "Toplam Plan",
               value: normalizedKpi.total_plan,
-              color: "primary"
+              color: "primary",
+              icon: AssignmentTurnedInRoundedIcon
             },
             {
               title: "Gerçekleşen",
               value: normalizedKpi.total_actual,
-              color: "secondary"
+              color: "secondary",
+              icon: PaidRoundedIcon
             },
             {
               title: "Kalan",
               value: normalizedKpi.total_remaining,
-              color: "warning"
+              color: "warning",
+              icon: SavingsRoundedIcon
             },
             {
               title: "Aşım",
               value: normalizedKpi.total_overrun,
-              color: "error"
+              color: "error",
+              icon: ReportGmailerrorredRoundedIcon
             }
           ] as const
-        ).map((kpi) => (
-          <Grid item xs={12} sm={6} md={3} lg={2} key={kpi.title}>
-            <Card
-              sx={{
-                borderTop: 4,
+        ).map((kpi) => {
+          const Icon = kpi.icon;
+
+          return (
+            <Grid item xs={12} sm={6} md={3} lg={2} key={kpi.title}>
+              <Card
+                sx={{
+                  borderTop: 4,
                 borderColor:
                   kpi.color === "default"
                     ? "divider"
@@ -378,9 +390,23 @@ export default function DashboardView() {
               }}
             >
               <CardContent>
-                <Typography variant="subtitle2" color="text.secondary">
-                  {kpi.title}
-                </Typography>
+                <Stack direction="row" alignItems="center" justifyContent="space-between">
+                  <Typography variant="subtitle2" color="text.secondary">
+                    {kpi.title}
+                  </Typography>
+                  <Avatar
+                    variant="rounded"
+                    sx={{
+                      bgcolor: `${kpi.color}.light`,
+                      color: `${kpi.color}.main`,
+                      width: 38,
+                      height: 38,
+                      boxShadow: 1
+                    }}
+                  >
+                    <Icon fontSize="small" />
+                  </Avatar>
+                </Stack>
                 {isLoading ? (
                   <Skeleton variant="text" height={40} width="60%" />
                 ) : (
@@ -396,7 +422,8 @@ export default function DashboardView() {
               </CardContent>
             </Card>
           </Grid>
-        ))}
+          );
+        })}
       </Grid>
 
       <Grid container spacing={3} sx={{ mt: 1 }}>
