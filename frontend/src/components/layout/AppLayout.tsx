@@ -3,7 +3,6 @@ import {
   Avatar,
   Box,
   Button,
-  Chip,
   Dialog,
   DialogActions,
   DialogContent,
@@ -35,7 +34,6 @@ import MenuIcon from "@mui/icons-material/Menu";
 import DarkModeIcon from "@mui/icons-material/DarkModeOutlined";
 import LightModeIcon from "@mui/icons-material/LightModeOutlined";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
-import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
 import { useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import type { Location, To } from "react-router-dom";
@@ -255,12 +253,6 @@ export default function AppLayout({ children }: AppLayoutProps) {
     </Box>
   );
 
-  const currentNavItem = useMemo(
-    () => navItems.find((item) => (item.isSelected ? item.isSelected(location) : location.pathname === item.path)),
-    [location.pathname, navItems]
-  );
-  const currentYear = new Date().getFullYear();
-
   return (
     <Box
       sx={{
@@ -299,46 +291,16 @@ export default function AppLayout({ children }: AppLayoutProps) {
           bgcolor: "background.default",
         }}
       >
-        <Box
-          sx={{
-            position: "sticky",
-            top: 0,
-            zIndex: (theme) => theme.zIndex.appBar,
-            borderBottom: 1,
-            borderColor: "divider",
-            backgroundColor: "background.paper",
-            px: { xs: 2, md: 4 },
-            py: { xs: 1.5, md: 2.5 },
-            boxShadow: "0 4px 20px rgba(41, 82, 227, 0.05)",
-          }}
-        >
-          <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={2}>
-            <Stack direction="row" spacing={2} alignItems="center">
-              <IconButton color="inherit" edge="start" onClick={() => setMobileOpen(true)} sx={{ display: { xs: "inline-flex", md: "none" } }}>
-                <MenuIcon />
-              </IconButton>
-              <Box>
-                <Typography variant="h4" color="text.primary">
-                  {currentNavItem?.label ?? "Bütçe Takip"}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Kurumsal finansal gösterge paneli
-                </Typography>
-              </Box>
-            </Stack>
-            <Stack direction="row" spacing={1.5} alignItems="center">
-              <Chip icon={<CalendarMonthIcon sx={{ fontSize: 18 }} />} label={`${currentYear} Bütçe Yılı`} variant="outlined" color="primary" sx={{ fontWeight: 600 }} />
-              <Chip label={user?.is_admin ? "Yönetici" : "Kullanıcı"} variant="outlined" />
-              <Tooltip title={mode === "dark" ? "Açık moda geç" : "Karanlık moda geç"}>
-                <IconButton color="primary" onClick={toggleMode}>
-                  {mode === "dark" ? <DarkModeIcon /> : <LightModeIcon />}
-                </IconButton>
-              </Tooltip>
-              <IconButton onClick={(event) => setUserMenuAnchor(event.currentTarget)} sx={{ p: 0 }}>
-                <Avatar sx={{ bgcolor: "primary.main", width: 40, height: 40 }}>{userInitials}</Avatar>
-              </IconButton>
-            </Stack>
-          </Stack>
+        <Box sx={{ px: { xs: 3, md: 5 }, pt: { xs: 3, md: 5 } }}>
+          <IconButton
+            color="inherit"
+            edge="start"
+            onClick={() => setMobileOpen(true)}
+            sx={{ display: { xs: "inline-flex", md: "none" }, mb: 2 }}
+            aria-label="Menü"
+          >
+            <MenuIcon />
+          </IconButton>
         </Box>
         <Box sx={{ p: { xs: 3, md: 5 }, maxWidth: 1600, mx: "auto" }}>
           {children}

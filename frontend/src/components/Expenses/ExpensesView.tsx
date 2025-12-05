@@ -604,141 +604,14 @@ export default function ExpensesView() {
 
         <Card>
           <CardContent>
-            <Grid container spacing={3} disableEqualOverflow>
-              <Grid item xs={12} md={3}>
-                <TextField
-                  label="Yıl"
-                  type="number"
-                  value={year}
-                  onChange={(event) => setYear(event.target.value ? Number(event.target.value) : "")}
-                  fullWidth
-                />
-              </Grid>
-              <Grid item xs={12} md={3}>
-                <TextField
-                  select
-                  label="Senaryo"
-                  value={scenarioId ?? ""}
-                  onChange={(event) =>
-                    setScenarioId(event.target.value ? Number(event.target.value) : null)
-                  }
-                  fullWidth
-                >
-                  <MenuItem value="">Tümü</MenuItem>
-                  {scenarios?.map((scenario) => (
-                    <MenuItem key={scenario.id} value={scenario.id}>
-                      {scenario.year}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              </Grid>
-              <Grid item xs={12} md={3}>
-                <TextField
-                  select
-                  label="Bütçe Kalemi"
-                  value={budgetItemId ?? ""}
-                  onChange={(event) =>
-                    setBudgetItemId(event.target.value ? Number(event.target.value) : null)
-                  }
-                  fullWidth
-                >
-                  <MenuItem value="">Tümü</MenuItem>
-                  {budgetItems?.map((item) => (
-                    <MenuItem key={item.id} value={item.id}>
-                      {formatBudgetItemLabel(item)}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              </Grid>
-              <Grid item xs={12} md={3}>
-                <TextField
-                  select
-                  label="Durum"
-                  value={statusFilter}
-                  onChange={(event) => setStatusFilter(event.target.value as Expense["status"] | "")}
-                  fullWidth
-                >
-                  <MenuItem value="">Tümü</MenuItem>
-                  <MenuItem value="recorded">Kaydedildi</MenuItem>
-                  <MenuItem value="cancelled">İptal Edildi</MenuItem>
-                </TextField>
-              </Grid>
-              <Grid item xs={12} md={3}>
-                <TextField
-                  label="Başlangıç Tarihi"
-                  type="date"
-                  value={startDate}
-                  onChange={(event) => setStartDate(event.target.value)}
-                  fullWidth
-                  InputLabelProps={{ shrink: true }}
-                />
-              </Grid>
-              <Grid item xs={12} md={3}>
-                <TextField
-                  label="Bitiş Tarihi"
-                  type="date"
-                  value={endDate}
-                  onChange={(event) => setEndDate(event.target.value)}
-                  fullWidth
-                  InputLabelProps={{ shrink: true }}
-                />
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <Stack
-                  direction={{ xs: "column", sm: "row" }}
-                  spacing={2}
-                  flexWrap={{ sm: "wrap" }}
-                  sx={{
-                    rowGap: { sm: 1.5 },
-                    columnGap: { sm: 2 },
-                    "& .MuiFormControlLabel-root": {
-                      flex: { sm: "1 1 220px" }
-                    }
-                  }}
-                >
-                  <FormControlLabel
-                    control={
-                      <Checkbox
-                        checked={showCancelled}
-                        onChange={(event) => setShowCancelled(event.target.checked)}
-                      />
-                    }
-                    label="İptal Edilenleri Göster"
-                  />
-                  <FormControlLabel
-                    control={
-                      <Checkbox
-                        checked={showOutOfBudget}
-                        onChange={(event) => setShowOutOfBudget(event.target.checked)}
-                      />
-                    }
-                    label="Bütçe Dışı Alımları Göster"
-                  />
-                  <FormControlLabel
-                    control={
-                      <Switch
-                        checked={includeOutOfBudget}
-                        onChange={(event) => setIncludeOutOfBudget(event.target.checked)}
-                      />
-                    }
-                    label="Bütçe dışı kayıtları dahil et"
-                  />
-                  <FormControlLabel
-                    control={<Switch checked={mineOnly} onChange={(event) => setMineOnly(event.target.checked)} />}
-                    label="Sadece benim kayıtlarım"
-                  />
-                  <FormControlLabel
-                    control={<Switch checked={todayOnly} onChange={(event) => setTodayOnly(event.target.checked)} />}
-                    label="Bugüne ait"
-                  />
-                </Stack>
-              </Grid>
-              <Grid item xs={12} md={6} textAlign="right">
-                <Button variant="contained" startIcon={<AddIcon />} onClick={handleCreate}>
-                  Harcama Ekle
-                </Button>
-              </Grid>
-            </Grid>
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems="center" justifyContent="space-between">
+              <Typography variant="h6" fontWeight={700}>
+                Harcama Ekle
+              </Typography>
+              <Button variant="contained" startIcon={<AddIcon />} onClick={handleCreate}>
+                Harcama Ekle
+              </Button>
+            </Stack>
           </CardContent>
         </Card>
 
@@ -752,6 +625,142 @@ export default function ExpensesView() {
               overflow: "visible"
             }}
           >
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+                Harcama Filtreleri
+              </Typography>
+              <Grid container spacing={3} disableEqualOverflow>
+                <Grid item xs={12} md={3}>
+                  <TextField
+                    label="Yıl"
+                    type="number"
+                    value={year}
+                    onChange={(event) => setYear(event.target.value ? Number(event.target.value) : "")}
+                    fullWidth
+                  />
+                </Grid>
+                <Grid item xs={12} md={3}>
+                  <TextField
+                    select
+                    label="Senaryo"
+                    value={scenarioId ?? ""}
+                    onChange={(event) =>
+                      setScenarioId(event.target.value ? Number(event.target.value) : null)
+                    }
+                    fullWidth
+                  >
+                    <MenuItem value="">Tümü</MenuItem>
+                    {scenarios?.map((scenario) => (
+                      <MenuItem key={scenario.id} value={scenario.id}>
+                        {scenario.year}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                </Grid>
+                <Grid item xs={12} md={3}>
+                  <TextField
+                    select
+                    label="Bütçe Kalemi"
+                    value={budgetItemId ?? ""}
+                    onChange={(event) =>
+                      setBudgetItemId(event.target.value ? Number(event.target.value) : null)
+                    }
+                    fullWidth
+                  >
+                    <MenuItem value="">Tümü</MenuItem>
+                    {budgetItems?.map((item) => (
+                      <MenuItem key={item.id} value={item.id}>
+                        {formatBudgetItemLabel(item)}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                </Grid>
+                <Grid item xs={12} md={3}>
+                  <TextField
+                    select
+                    label="Durum"
+                    value={statusFilter}
+                    onChange={(event) => setStatusFilter(event.target.value as Expense["status"] | "")}
+                    fullWidth
+                  >
+                    <MenuItem value="">Tümü</MenuItem>
+                    <MenuItem value="recorded">Kaydedildi</MenuItem>
+                    <MenuItem value="cancelled">İptal Edildi</MenuItem>
+                  </TextField>
+                </Grid>
+                <Grid item xs={12} md={3}>
+                  <TextField
+                    label="Başlangıç Tarihi"
+                    type="date"
+                    value={startDate}
+                    onChange={(event) => setStartDate(event.target.value)}
+                    fullWidth
+                    InputLabelProps={{ shrink: true }}
+                  />
+                </Grid>
+                <Grid item xs={12} md={3}>
+                  <TextField
+                    label="Bitiş Tarihi"
+                    type="date"
+                    value={endDate}
+                    onChange={(event) => setEndDate(event.target.value)}
+                    fullWidth
+                    InputLabelProps={{ shrink: true }}
+                  />
+                </Grid>
+                <Grid item xs={12} md={6}>
+                  <Stack
+                    direction={{ xs: "column", sm: "row" }}
+                    spacing={2}
+                    flexWrap={{ sm: "wrap" }}
+                    sx={{
+                      rowGap: { sm: 1.5 },
+                      columnGap: { sm: 2 },
+                      "& .MuiFormControlLabel-root": {
+                        flex: { sm: "1 1 220px" }
+                      }
+                    }}
+                  >
+                    <FormControlLabel
+                      control={
+                        <Checkbox
+                          checked={showCancelled}
+                          onChange={(event) => setShowCancelled(event.target.checked)}
+                        />
+                      }
+                      label="İptal Edilenleri Göster"
+                    />
+                    <FormControlLabel
+                      control={
+                        <Checkbox
+                          checked={showOutOfBudget}
+                          onChange={(event) => setShowOutOfBudget(event.target.checked)}
+                        />
+                      }
+                      label="Bütçe Dışı Alımları Göster"
+                    />
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={includeOutOfBudget}
+                          onChange={(event) => setIncludeOutOfBudget(event.target.checked)}
+                        />
+                      }
+                      label="Bütçe dışı kayıtları dahil et"
+                    />
+                    <FormControlLabel
+                      control={<Switch checked={mineOnly} onChange={(event) => setMineOnly(event.target.checked)} />}
+                      label="Sadece benim kayıtlarım"
+                    />
+                    <FormControlLabel
+                      control={<Switch checked={todayOnly} onChange={(event) => setTodayOnly(event.target.checked)} />}
+                      label="Bugüne ait"
+                    />
+                  </Stack>
+                </Grid>
+              </Grid>
+            </Box>
+
             <Typography variant="subtitle1" fontWeight={600} gutterBottom>
               Harcamalar
             </Typography>
