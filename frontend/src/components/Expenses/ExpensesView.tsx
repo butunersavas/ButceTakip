@@ -130,6 +130,7 @@ export default function ExpensesView() {
   const [startDate, setStartDate] = usePersistentState<string>("expenses:startDate", "");
   const [endDate, setEndDate] = usePersistentState<string>("expenses:endDate", "");
   const [includeOutOfBudget, setIncludeOutOfBudget] = usePersistentState<boolean>("expenses:includeOutOfBudget", true);
+  const [includeCancelled, setIncludeCancelled] = useState(false);
   const [showCancelled, setShowCancelled] = usePersistentState<boolean>("expenses:showCancelled", false);
   const [showOutOfBudget, setShowOutOfBudget] = usePersistentState<boolean>("expenses:showOutOfBudget", false);
   const [mineOnly, setMineOnly] = usePersistentState<boolean>("expenses:mineOnly", false);
