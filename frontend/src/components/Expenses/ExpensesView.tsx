@@ -570,8 +570,8 @@ export default function ExpensesView() {
   const formattedCanceled = formatCurrency(cancelledTotal);
 
   return (
-    <Stack spacing={3} sx={{ width: "100%", minWidth: 0, maxWidth: "100%", overflowX: "hidden" }}>
-      <Grid container spacing={2} sx={{ mb: 3 }}>
+    <Stack spacing={4} sx={{ width: "100%", minWidth: 0, maxWidth: "100%", overflowX: "hidden" }}>
+      <Grid container spacing={3}>
         <Grid item xs={12} md={4}>
           <SummaryCard
             title="Toplam Gerçekleşen"
@@ -741,130 +741,128 @@ export default function ExpensesView() {
         </CardContent>
       </Card>
 
-      <Box sx={{ mt: 3 }}>
-        <Card>
-          <CardContent
+      <Card>
+        <CardContent
+          sx={{
+            flexGrow: 1,
+            display: "flex",
+            flexDirection: "column",
+            minWidth: 0,
+            overflow: "visible"
+          }}
+        >
+          <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+            Harcamalar
+          </Typography>
+          <Box
             sx={{
-              flexGrow: 1,
               display: "flex",
-              flexDirection: "column",
-              minWidth: 0,
-              overflow: "visible"
+              alignItems: "center",
+              gap: 1,
+              justifyContent: "space-between",
+              mb: 1,
             }}
           >
-            <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-              Harcamalar
-            </Typography>
-            <Box
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                gap: 1,
-                justifyContent: "space-between",
-                mb: 1,
-              }}
-            >
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                <TextField
-                  select
-                  size="small"
-                  label="Kayıtları Göster"
-                  value={includeCancelled ? "all" : "active"}
-                  onChange={(event) =>
-                    setIncludeCancelled(event.target.value === "all")
-                  }
-                >
-                  <MenuItem value="active">Aktif Kayıtlar</MenuItem>
-                  <MenuItem value="all">Tüm Kayıtlar</MenuItem>
-                </TextField>
-                <Button
-                  color="inherit"
-                  onClick={() => setRenderVersion((prev) => prev + 1)}
-                >
-                  Listeyi Yenile
-                </Button>
-              </Box>
-              <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems="center">
-                <Select
-                  value={selectedView}
-                  size="small"
-                  displayEmpty
-                  onChange={(event) => setSelectedView(event.target.value)}
-                  sx={{ minWidth: 220 }}
-                >
-                  <MenuItem value="" disabled>
-                    Kayıtlı Görünümler
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              <TextField
+                select
+                size="small"
+                label="Kayıtları Göster"
+                value={includeCancelled ? "all" : "active"}
+                onChange={(event) =>
+                  setIncludeCancelled(event.target.value === "all")
+                }
+              >
+                <MenuItem value="active">Aktif Kayıtlar</MenuItem>
+                <MenuItem value="all">Tüm Kayıtlar</MenuItem>
+              </TextField>
+              <Button
+                color="inherit"
+                onClick={() => setRenderVersion((prev) => prev + 1)}
+              >
+                Listeyi Yenile
+              </Button>
+            </Box>
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems="center">
+              <Select
+                value={selectedView}
+                size="small"
+                displayEmpty
+                onChange={(event) => setSelectedView(event.target.value)}
+                sx={{ minWidth: 220 }}
+              >
+                <MenuItem value="" disabled>
+                  Kayıtlı Görünümler
+                </MenuItem>
+                {savedGridViews.map((view) => (
+                  <MenuItem key={view.name} value={view.name}>
+                    {view.name}
                   </MenuItem>
-                  {savedGridViews.map((view) => (
-                    <MenuItem key={view.name} value={view.name}>
-                      {view.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-                <Stack direction="row" spacing={1}>
-                  <Button variant="outlined" color="inherit" size="small" onClick={() => setGridViewName("")}>Kaydet</Button>
-                  <Button
-                    variant="text"
-                    color="inherit"
-                    size="small"
-                    onClick={() => setSavedGridViews([])}
-                  >
-                    Sıfırla
-                  </Button>
-                </Stack>
+                ))}
+              </Select>
+              <Stack direction="row" spacing={1}>
+                <Button variant="outlined" color="inherit" size="small" onClick={() => setGridViewName("")}>Kaydet</Button>
+                <Button
+                  variant="text"
+                  color="inherit"
+                  size="small"
+                  onClick={() => setSavedGridViews([])}
+                >
+                  Sıfırla
+                </Button>
               </Stack>
-            </Box>
-            <Box sx={{ height: 520, width: "100%" }}>
-              <DataGrid
-                key={renderVersion}
-                rows={rows}
-                columns={columns}
-                getRowId={(row) => row.id ?? `${row.budget_item_id}-${row.expense_date}-${row.amount}`}
-                paginationModel={paginationModel}
-                onPaginationModelChange={setPaginationModel}
-                filterModel={filterModel}
-                onFilterModelChange={setFilterModel}
-                sortingMode="client"
-                sortModel={sortModel}
-                onSortModelChange={setSortModel}
-                checkboxSelection
-                disableRowSelectionOnClick
-                initialState={{
-                  pagination: {
-                    paginationModel: { pageSize: 10 }
-                  },
-                  columns: {
-                    columnVisibilityModel,
-                  },
-                }}
-                slots={{ toolbar: GridToolbar }}
-                slotProps={{
-                  toolbar: {
-                    showQuickFilter: true,
-                    quickFilterProps: { debounceMs: 500 },
-                  },
-                }}
-                onRowSelectionModelChange={(newSelection) =>
-                  setSelectionModel(newSelection as number[])
-                }
-                processRowUpdate={(updatedRow, originalRow) =>
-                  handleRowUpdate(updatedRow, originalRow)
-                }
-                getRowHeight={() => "auto"}
-                getEstimatedRowHeight={() => 64}
-                sx={{
-                  "& .MuiDataGrid-cell": {
-                    py: 1.5,
-                  },
-                  "& .MuiDataGrid-columnHeaders": {
-                    bgcolor: (theme) => `${theme.palette.background.paper}`,
-                  },
-                }}
-              />
-            </Box>
-          </CardContent>
-        </Card>
-      </Box>
+            </Stack>
+          </Box>
+          <Box sx={{ height: 520, width: "100%" }}>
+            <DataGrid
+              key={renderVersion}
+              rows={rows}
+              columns={columns}
+              getRowId={(row) => row.id ?? `${row.budget_item_id}-${row.expense_date}-${row.amount}`}
+              paginationModel={paginationModel}
+              onPaginationModelChange={setPaginationModel}
+              filterModel={filterModel}
+              onFilterModelChange={setFilterModel}
+              sortingMode="client"
+              sortModel={sortModel}
+              onSortModelChange={setSortModel}
+              checkboxSelection
+              disableRowSelectionOnClick
+              initialState={{
+                pagination: {
+                  paginationModel: { pageSize: 10 }
+                },
+                columns: {
+                  columnVisibilityModel,
+                },
+              }}
+              slots={{ toolbar: GridToolbar }}
+              slotProps={{
+                toolbar: {
+                  showQuickFilter: true,
+                  quickFilterProps: { debounceMs: 500 },
+                },
+              }}
+              onRowSelectionModelChange={(newSelection) =>
+                setSelectionModel(newSelection as number[])
+              }
+              processRowUpdate={(updatedRow, originalRow) =>
+                handleRowUpdate(updatedRow, originalRow)
+              }
+              getRowHeight={() => "auto"}
+              getEstimatedRowHeight={() => 64}
+              sx={{
+                "& .MuiDataGrid-cell": {
+                  py: 1.5,
+                },
+                "& .MuiDataGrid-columnHeaders": {
+                  bgcolor: (theme) => `${theme.palette.background.paper}`,
+                },
+              }}
+            />
+          </Box>
+        </CardContent>
+      </Card>
 
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} fullWidth maxWidth="md">
         <DialogTitle>{editingExpense ? "Harcamayı Güncelle" : "Yeni Harcama"}</DialogTitle>
