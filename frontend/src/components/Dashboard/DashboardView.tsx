@@ -405,8 +405,8 @@ export default function DashboardView() {
         ))}
       </Grid>
 
-      <Grid container spacing={3} sx={{ mt: 1 }}>
-        <Grid item xs={12} md={8}>
+      <Grid container spacing={3} sx={{ mt: 3 }}>
+        <Grid item xs={12}>
           <Card>
             <CardContent>
               <Stack direction="row" justifyContent="space-between" alignItems="center" mb={3}>
@@ -449,7 +449,7 @@ export default function DashboardView() {
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={12} md={4}>
+        <Grid item xs={12}>
           <Stack spacing={3}>
             <Card>
               <CardContent>
