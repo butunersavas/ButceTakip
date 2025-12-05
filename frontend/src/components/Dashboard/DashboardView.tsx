@@ -423,12 +423,16 @@ export default function DashboardView() {
                   variant={budgetItemId ? "filled" : "outlined"}
                 />
               </Stack>
-              <Box sx={{ height: 380 }}>
+              <Box sx={{ height: 360 }}>
                 {isLoading ? (
                   <Skeleton variant="rectangular" height="100%" />
                 ) : (
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={monthlyData}>
+                    <BarChart
+                      data={monthlyData}
+                      margin={{ top: 16, right: 8, left: 0, bottom: 8 }}
+                      barCategoryGap={12}
+                    >
                       <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
                       <XAxis dataKey="monthLabel" tick={{ fill: "#475569" }} />
                       <YAxis tick={{ fill: "#475569" }} tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`} />
@@ -438,10 +442,34 @@ export default function DashboardView() {
                         labelFormatter={(label) => label}
                       />
                       <Legend />
-                      <Bar dataKey="planned" name="Planlanan" fill={pieColors.planned} radius={[6, 6, 0, 0]} />
-                      <Bar dataKey="actual" name="Gerçekleşen" fill={pieColors.actual} radius={[6, 6, 0, 0]} />
-                      <Bar dataKey="remaining" name="Kalan" fill={pieColors.remaining} radius={[6, 6, 0, 0]} />
-                      <Bar dataKey="overrun" name="Aşım" fill={pieColors.overrun} radius={[6, 6, 0, 0]} />
+                      <Bar
+                        dataKey="planned"
+                        name="Planlanan"
+                        fill={pieColors.planned}
+                        radius={[6, 6, 0, 0]}
+                        barSize={24}
+                      />
+                      <Bar
+                        dataKey="actual"
+                        name="Gerçekleşen"
+                        fill={pieColors.actual}
+                        radius={[6, 6, 0, 0]}
+                        barSize={24}
+                      />
+                      <Bar
+                        dataKey="remaining"
+                        name="Kalan"
+                        fill={pieColors.remaining}
+                        radius={[6, 6, 0, 0]}
+                        barSize={24}
+                      />
+                      <Bar
+                        dataKey="overrun"
+                        name="Aşım"
+                        fill={pieColors.overrun}
+                        radius={[6, 6, 0, 0]}
+                        barSize={24}
+                      />
                     </BarChart>
                   </ResponsiveContainer>
                 )}
@@ -484,9 +512,9 @@ export default function DashboardView() {
                         <Typography variant="subtitle2" fontWeight={600}>
                           {quarter.label}
                         </Typography>
-                        <Box sx={{ width: "100%", height: 180 }}>
+                        <Box sx={{ width: "100%", height: 220 }}>
                           {isLoading ? (
-                            <Skeleton variant="circular" width={160} height={160} sx={{ mx: "auto" }} />
+                            <Skeleton variant="circular" width={200} height={200} sx={{ mx: "auto" }} />
                           ) : (
                             <ResponsiveContainer width="100%" height="100%">
                               <PieChart>
@@ -499,9 +527,9 @@ export default function DashboardView() {
                                   ]}
                                   dataKey="value"
                                   nameKey="name"
-                                  innerRadius={38}
-                                  outerRadius={58}
-                                  paddingAngle={2}
+                                  innerRadius={55}
+                                  outerRadius={80}
+                                  paddingAngle={3}
                                 >
                                   {pieKeys.map((key) => (
                                     <Cell key={key} fill={pieColors[key]} />
