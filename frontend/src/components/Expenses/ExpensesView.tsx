@@ -27,6 +27,9 @@ import {
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/DeleteOutline";
+import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
+import CheckCircleOutlineOutlinedIcon from "@mui/icons-material/CheckCircleOutlineOutlined";
+import ReportGmailerrorredOutlinedIcon from "@mui/icons-material/ReportGmailerrorredOutlined";
 import {
   DataGrid,
   type GridColDef,
@@ -41,7 +44,7 @@ import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import usePersistentState from "../../hooks/usePersistentState";
 import { useAuth } from "../../context/AuthContext";
 import { formatBudgetItemLabel } from "../../utils/budgetItem";
-import { PageHeader } from "../layout/PageHeader";
+import { SummaryCard } from "../Dashboard/SummaryCard";
 
 interface Scenario {
   id: number;
@@ -562,9 +565,42 @@ export default function ExpensesView() {
     [baseColumns]
   );
 
+  const formattedTotalActual = formatCurrency(totalActual);
+  const formattedOutOfBudget = formatCurrency(outOfBudgetTotal);
+  const formattedCanceled = formatCurrency(cancelledTotal);
+
   return (
-    <Stack spacing={4} sx={{ width: "100%", minWidth: 0, maxWidth: "100%", overflowX: "hidden" }}>
-      <PageHeader title="Harcama Yönetimi" />
+    <Stack spacing={3} sx={{ width: "100%", minWidth: 0, maxWidth: "100%", overflowX: "hidden" }}>
+      <Grid container spacing={2} sx={{ mb: 3 }}>
+        <Grid item xs={12} md={4}>
+          <SummaryCard
+            title="Toplam Gerçekleşen"
+            value={formattedTotalActual}
+            subtitle="Seçilen filtrelere göre gerçekleşen harcamalar"
+            icon={<CheckCircleOutlineOutlinedIcon sx={{ fontSize: 18, color: "common.white" }} />}
+            iconColor="primary.main"
+          />
+        </Grid>
+        <Grid item xs={12} md={4}>
+          <SummaryCard
+            title="Bütçe Dışı Harcamalar"
+            value={formattedOutOfBudget}
+            subtitle="Bütçe dışında kalan harcamalar"
+            icon={<ReportGmailerrorredOutlinedIcon sx={{ fontSize: 18, color: "common.white" }} />}
+            iconColor="warning.main"
+          />
+        </Grid>
+        <Grid item xs={12} md={4}>
+          <SummaryCard
+            title="İptal Edilen Harcamalar"
+            value={formattedCanceled}
+            subtitle="İptal edilen harcama toplamı"
+            icon={<CancelOutlinedIcon sx={{ fontSize: 18, color: "common.white" }} />}
+            iconColor="error.main"
+          />
+        </Grid>
+      </Grid>
+
       <Card>
         <CardContent>
           <Grid container spacing={3} disableEqualOverflow>
@@ -705,134 +741,130 @@ export default function ExpensesView() {
         </CardContent>
       </Card>
 
-      <Grid container spacing={3} disableEqualOverflow>
-        <Grid item xs={12} md={4}>
-          <Card>
-            <CardContent>
-              <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-                Toplam Gerçekleşen
-              </Typography>
-              <Typography variant="h4" fontWeight={700} color="primary">
-                {formatCurrency(totalActual)}
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                Bu listeye dahil edilen kayıtların toplam tutarı.
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} md={4}>
-          <Card>
-            <CardContent>
-              <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-                Bütçe Dışı Harcamalar
-              </Typography>
-              <Typography variant="h5" fontWeight={700} color="warning.main">
-                {formatCurrency(outOfBudgetTotal)}
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                Plan dışı olarak işaretlenen harcamaların toplamı.
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} md={4}>
-          <Card>
-            <CardContent>
-              <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-                İptal Edildi
-              </Typography>
-              <Typography variant="h5" fontWeight={700} color="text.secondary">
-                {formatCurrency(cancelledTotal)}
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                İptal edilen kayıtların toplam tutarı.
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12}>
-          <Card>
-            <CardContent
+      <Box sx={{ mt: 3 }}>
+        <Card>
+          <CardContent
+            sx={{
+              flexGrow: 1,
+              display: "flex",
+              flexDirection: "column",
+              minWidth: 0,
+              overflow: "visible"
+            }}
+          >
+            <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+              Harcamalar
+            </Typography>
+            <Box
               sx={{
-                flexGrow: 1,
                 display: "flex",
-                flexDirection: "column",
-                minWidth: 0,
-                overflow: "visible"
+                alignItems: "center",
+                gap: 1,
+                justifyContent: "space-between",
+                mb: 1,
               }}
             >
-              <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-                Harcamalar
-              </Typography>
-              <Box
-                sx={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 1,
-                  justifyContent: "space-between",
-                  mb: 1,
-                }}
-              >
-                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                  <TextField
-                    select
-                    size="small"
-                    label="Görünümler"
-                    value={selectedViewName}
-                    onChange={(e) => handleSelectView(e.target.value)}
-                    sx={{ minWidth: 180 }}
-                  >
-                    <MenuItem value="">
-                      <em>Varsayılan</em>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                <TextField
+                  select
+                  size="small"
+                  label="Kayıtları Göster"
+                  value={includeCancelled ? "all" : "active"}
+                  onChange={(event) =>
+                    setIncludeCancelled(event.target.value === "all")
+                  }
+                >
+                  <MenuItem value="active">Aktif Kayıtlar</MenuItem>
+                  <MenuItem value="all">Tüm Kayıtlar</MenuItem>
+                </TextField>
+                <Button
+                  color="inherit"
+                  onClick={() => setRenderVersion((prev) => prev + 1)}
+                >
+                  Listeyi Yenile
+                </Button>
+              </Box>
+              <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems="center">
+                <Select
+                  value={selectedView}
+                  size="small"
+                  displayEmpty
+                  onChange={(event) => setSelectedView(event.target.value)}
+                  sx={{ minWidth: 220 }}
+                >
+                  <MenuItem value="" disabled>
+                    Kayıtlı Görünümler
+                  </MenuItem>
+                  {savedGridViews.map((view) => (
+                    <MenuItem key={view.name} value={view.name}>
+                      {view.name}
                     </MenuItem>
-                    {savedViews.map((view) => (
-                      <MenuItem key={view.name} value={view.name}>
-                        {view.name}
-                      </MenuItem>
-                    ))}
-                  </TextField>
-                  {selectedViewName && (
-                    <IconButton size="small" onClick={() => handleDeleteView(selectedViewName)}>
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
-                  )}
-                  <TextField
+                  ))}
+                </Select>
+                <Stack direction="row" spacing={1}>
+                  <Button variant="outlined" color="inherit" size="small" onClick={() => setGridViewName("")}>Kaydet</Button>
+                  <Button
+                    variant="text"
+                    color="inherit"
                     size="small"
-                    placeholder="Yeni görünüm adı"
-                    value={newViewName}
-                    onChange={(e) => setNewViewName(e.target.value)}
-                    sx={{ minWidth: 180 }}
-                  />
-                  <Button size="small" variant="outlined" onClick={handleSaveCurrentView}>
-                    Kaydet
+                    onClick={() => setSavedGridViews([])}
+                  >
+                    Sıfırla
                   </Button>
-                </Box>
-
-                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}></Box>
-              </Box>
-              <Box sx={{ width: "100%" }}>
-                <DataGrid
-                  rows={rows ?? []}
-                  columns={columns}
-                  autoHeight
-                  disableRowSelectionOnClick
-                  pageSizeOptions={[15, 25, 50]}
-                  filterModel={filterModel}
-                  onFilterModelChange={(model) => setFilterModel(model)}
-                  sortModel={sortModel}
-                  onSortModelChange={(model) => setSortModel(model)}
-                  columnVisibilityModel={columnVisibilityModel}
-                  onColumnVisibilityModelChange={(model) => setColumnVisibilityModel(model)}
-                  initialState={{
-                    pagination: { paginationModel: { pageSize: 15 } }
-                  }}
-                />
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
+                </Stack>
+              </Stack>
+            </Box>
+            <Box sx={{ height: 520, width: "100%" }}>
+              <DataGrid
+                key={renderVersion}
+                rows={rows}
+                columns={columns}
+                getRowId={(row) => row.id ?? `${row.budget_item_id}-${row.expense_date}-${row.amount}`}
+                paginationModel={paginationModel}
+                onPaginationModelChange={setPaginationModel}
+                filterModel={filterModel}
+                onFilterModelChange={setFilterModel}
+                sortingMode="client"
+                sortModel={sortModel}
+                onSortModelChange={setSortModel}
+                checkboxSelection
+                disableRowSelectionOnClick
+                initialState={{
+                  pagination: {
+                    paginationModel: { pageSize: 10 }
+                  },
+                  columns: {
+                    columnVisibilityModel,
+                  },
+                }}
+                slots={{ toolbar: GridToolbar }}
+                slotProps={{
+                  toolbar: {
+                    showQuickFilter: true,
+                    quickFilterProps: { debounceMs: 500 },
+                  },
+                }}
+                onRowSelectionModelChange={(newSelection) =>
+                  setSelectionModel(newSelection as number[])
+                }
+                processRowUpdate={(updatedRow, originalRow) =>
+                  handleRowUpdate(updatedRow, originalRow)
+                }
+                getRowHeight={() => "auto"}
+                getEstimatedRowHeight={() => 64}
+                sx={{
+                  "& .MuiDataGrid-cell": {
+                    py: 1.5,
+                  },
+                  "& .MuiDataGrid-columnHeaders": {
+                    bgcolor: (theme) => `${theme.palette.background.paper}`,
+                  },
+                }}
+              />
+            </Box>
+          </CardContent>
+        </Card>
+      </Box>
 
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} fullWidth maxWidth="md">
         <DialogTitle>{editingExpense ? "Harcamayı Güncelle" : "Yeni Harcama"}</DialogTitle>

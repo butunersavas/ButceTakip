@@ -19,7 +19,6 @@ import * as XLSX from "xlsx";
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import usePersistentState from "../../hooks/usePersistentState";
 import { formatBudgetItemLabel } from "../../utils/budgetItem";
-import { PageHeader } from "../layout/PageHeader";
 
 interface Scenario {
   id: number;
@@ -263,6 +262,23 @@ export default function ImportExportView() {
     }
   };
 
+  const handleDownloadPreparedPurchaseForms = async () => {
+    setExporting(true);
+    setExportError(null);
+    try {
+      const response = await client.get("/reports/purchase-forms-prepared/xlsx", {
+        params: { year, scenario_id: scenarioId ?? undefined },
+        responseType: "blob",
+      });
+      downloadBlob(response.data, `satinalma_formu_hazirlanan_butceler_${year}.xlsx`);
+    } catch (err) {
+      console.error(err);
+      setExportError("Rapor indirilirken hata oluştu. Lütfen filtreleri kontrol edin.");
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const downloadSampleCsv = () => {
     downloadBlob(sampleCsv, "butce-ornek.csv", { type: "text/csv;charset=utf-8;" });
   };
@@ -283,7 +299,6 @@ export default function ImportExportView() {
 
   return (
     <Stack spacing={4}>
-      <PageHeader title="Raporlama / İçeri Aktar" />
       <Grid container spacing={3}>
         <Grid item xs={12} md={6}>
           <Card sx={{ height: "100%" }}>
@@ -442,6 +457,18 @@ export default function ImportExportView() {
                       fullWidth
                     >
                       İptal Edilen Harcamalar XLSX
+                    </Button>
+                  </Grid>
+                  <Grid item xs={12}>
+                    <Button
+                      fullWidth
+                      variant="contained"
+                      color="primary"
+                      startIcon={<DownloadIcon />}
+                      onClick={() => void handleDownloadPreparedPurchaseForms()}
+                      disabled={exporting}
+                    >
+                      Satın alma formu hazırlanan bütçeler XLSX
                     </Button>
                   </Grid>
                 </Grid>

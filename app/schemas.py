@@ -166,6 +166,15 @@ class PurchaseReminderUpdate(BaseModel):
     is_form_prepared: bool
 
 
+class PurchaseFormPreparedReportItem(BaseModel):
+    budget_item_id: int
+    budget_code: str
+    budget_name: str
+    year: int
+    month: int
+    scenario_id: int | None = None
+
+
 class ExpenseBase(BaseModel):
     budget_item_id: int
     scenario_id: Optional[int] = None
