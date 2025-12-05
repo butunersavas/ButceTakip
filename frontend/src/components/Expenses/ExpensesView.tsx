@@ -570,299 +570,301 @@ export default function ExpensesView() {
   const formattedCanceled = formatCurrency(cancelledTotal);
 
   return (
-    <Stack spacing={4} sx={{ width: "100%", minWidth: 0, maxWidth: "100%", overflowX: "hidden" }}>
-      <Grid container spacing={3}>
-        <Grid item xs={12} md={4}>
-          <SummaryCard
-            title="Toplam Gerçekleşen"
-            value={formattedTotalActual}
-            subtitle="Seçilen filtrelere göre gerçekleşen harcamalar"
-            icon={<CheckCircleOutlineOutlinedIcon sx={{ fontSize: 18, color: "common.white" }} />}
-            iconColor="primary.main"
-          />
-        </Grid>
-        <Grid item xs={12} md={4}>
-          <SummaryCard
-            title="Bütçe Dışı Harcamalar"
-            value={formattedOutOfBudget}
-            subtitle="Bütçe dışında kalan harcamalar"
-            icon={<ReportGmailerrorredOutlinedIcon sx={{ fontSize: 18, color: "common.white" }} />}
-            iconColor="warning.main"
-          />
-        </Grid>
-        <Grid item xs={12} md={4}>
-          <SummaryCard
-            title="İptal Edilen Harcamalar"
-            value={formattedCanceled}
-            subtitle="İptal edilen harcama toplamı"
-            icon={<CancelOutlinedIcon sx={{ fontSize: 18, color: "common.white" }} />}
-            iconColor="error.main"
-          />
-        </Grid>
-      </Grid>
-
-      <Card>
-        <CardContent>
-          <Grid container spacing={3} disableEqualOverflow>
-            <Grid item xs={12} md={3}>
-              <TextField
-                label="Yıl"
-                type="number"
-                value={year}
-                onChange={(event) => setYear(event.target.value ? Number(event.target.value) : "")}
-                fullWidth
-              />
-            </Grid>
-            <Grid item xs={12} md={3}>
-              <TextField
-                select
-                label="Senaryo"
-                value={scenarioId ?? ""}
-                onChange={(event) =>
-                  setScenarioId(event.target.value ? Number(event.target.value) : null)
-                }
-                fullWidth
-              >
-                <MenuItem value="">Tümü</MenuItem>
-                {scenarios?.map((scenario) => (
-                  <MenuItem key={scenario.id} value={scenario.id}>
-                    {scenario.year}
-                  </MenuItem>
-                ))}
-              </TextField>
-            </Grid>
-            <Grid item xs={12} md={3}>
-              <TextField
-                select
-                label="Bütçe Kalemi"
-                value={budgetItemId ?? ""}
-                onChange={(event) =>
-                  setBudgetItemId(event.target.value ? Number(event.target.value) : null)
-                }
-                fullWidth
-              >
-                <MenuItem value="">Tümü</MenuItem>
-                {budgetItems?.map((item) => (
-                  <MenuItem key={item.id} value={item.id}>
-                    {formatBudgetItemLabel(item)}
-                  </MenuItem>
-                ))}
-              </TextField>
-            </Grid>
-            <Grid item xs={12} md={3}>
-              <TextField
-                select
-                label="Durum"
-                value={statusFilter}
-                onChange={(event) => setStatusFilter(event.target.value as Expense["status"] | "")}
-                fullWidth
-              >
-                <MenuItem value="">Tümü</MenuItem>
-                <MenuItem value="recorded">Kaydedildi</MenuItem>
-                <MenuItem value="cancelled">İptal Edildi</MenuItem>
-              </TextField>
-            </Grid>
-            <Grid item xs={12} md={3}>
-              <TextField
-                label="Başlangıç Tarihi"
-                type="date"
-                value={startDate}
-                onChange={(event) => setStartDate(event.target.value)}
-                fullWidth
-                InputLabelProps={{ shrink: true }}
-              />
-            </Grid>
-            <Grid item xs={12} md={3}>
-              <TextField
-                label="Bitiş Tarihi"
-                type="date"
-                value={endDate}
-                onChange={(event) => setEndDate(event.target.value)}
-                fullWidth
-                InputLabelProps={{ shrink: true }}
-              />
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <Stack
-                direction={{ xs: "column", sm: "row" }}
-                spacing={2}
-                flexWrap={{ sm: "wrap" }}
-                sx={{
-                  rowGap: { sm: 1.5 },
-                  columnGap: { sm: 2 },
-                  "& .MuiFormControlLabel-root": {
-                    flex: { sm: "1 1 220px" }
-                  }
-                }}
-              >
-                <FormControlLabel
-                  control={
-                    <Checkbox
-                      checked={showCancelled}
-                      onChange={(event) => setShowCancelled(event.target.checked)}
-                    />
-                  }
-                  label="İptal Edilenleri Göster"
-                />
-                <FormControlLabel
-                  control={
-                    <Checkbox
-                      checked={showOutOfBudget}
-                      onChange={(event) => setShowOutOfBudget(event.target.checked)}
-                    />
-                  }
-                  label="Bütçe Dışı Alımları Göster"
-                />
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={includeOutOfBudget}
-                      onChange={(event) => setIncludeOutOfBudget(event.target.checked)}
-                    />
-                  }
-                  label="Bütçe dışı kayıtları dahil et"
-                />
-                <FormControlLabel
-                  control={<Switch checked={mineOnly} onChange={(event) => setMineOnly(event.target.checked)} />}
-                  label="Sadece benim kayıtlarım"
-                />
-                <FormControlLabel
-                  control={<Switch checked={todayOnly} onChange={(event) => setTodayOnly(event.target.checked)} />}
-                  label="Bugüne ait"
-                />
-              </Stack>
-            </Grid>
-            <Grid item xs={12} md={6} textAlign="right">
-              <Button variant="contained" startIcon={<AddIcon />} onClick={handleCreate}>
-                Harcama Ekle
-              </Button>
-            </Grid>
+    <>
+      <Stack spacing={3} sx={{ width: "100%", minWidth: 0, maxWidth: "100%", overflowX: "hidden" }}>
+        <Grid container spacing={2}>
+          <Grid item xs={12} md={4}>
+            <SummaryCard
+              title="Toplam Gerçekleşen"
+              value={formattedTotalActual}
+              subtitle="Seçilen filtrelere göre gerçekleşen harcamalar"
+              icon={<CheckCircleOutlineOutlinedIcon sx={{ fontSize: 18, color: "common.white" }} />}
+              iconColor="primary.main"
+            />
           </Grid>
-        </CardContent>
-      </Card>
+          <Grid item xs={12} md={4}>
+            <SummaryCard
+              title="Bütçe Dışı Harcamalar"
+              value={formattedOutOfBudget}
+              subtitle="Bütçe dışında kalan harcamalar"
+              icon={<ReportGmailerrorredOutlinedIcon sx={{ fontSize: 18, color: "common.white" }} />}
+              iconColor="warning.main"
+            />
+          </Grid>
+          <Grid item xs={12} md={4}>
+            <SummaryCard
+              title="İptal Edilen Harcamalar"
+              value={formattedCanceled}
+              subtitle="İptal edilen harcama toplamı"
+              icon={<CancelOutlinedIcon sx={{ fontSize: 18, color: "common.white" }} />}
+              iconColor="error.main"
+            />
+          </Grid>
+        </Grid>
 
-      <Card>
-        <CardContent
-          sx={{
-            flexGrow: 1,
-            display: "flex",
-            flexDirection: "column",
-            minWidth: 0,
-            overflow: "visible"
-          }}
-        >
-          <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-            Harcamalar
-          </Typography>
-          <Box
+        <Card>
+          <CardContent>
+            <Grid container spacing={3} disableEqualOverflow>
+              <Grid item xs={12} md={3}>
+                <TextField
+                  label="Yıl"
+                  type="number"
+                  value={year}
+                  onChange={(event) => setYear(event.target.value ? Number(event.target.value) : "")}
+                  fullWidth
+                />
+              </Grid>
+              <Grid item xs={12} md={3}>
+                <TextField
+                  select
+                  label="Senaryo"
+                  value={scenarioId ?? ""}
+                  onChange={(event) =>
+                    setScenarioId(event.target.value ? Number(event.target.value) : null)
+                  }
+                  fullWidth
+                >
+                  <MenuItem value="">Tümü</MenuItem>
+                  {scenarios?.map((scenario) => (
+                    <MenuItem key={scenario.id} value={scenario.id}>
+                      {scenario.year}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Grid>
+              <Grid item xs={12} md={3}>
+                <TextField
+                  select
+                  label="Bütçe Kalemi"
+                  value={budgetItemId ?? ""}
+                  onChange={(event) =>
+                    setBudgetItemId(event.target.value ? Number(event.target.value) : null)
+                  }
+                  fullWidth
+                >
+                  <MenuItem value="">Tümü</MenuItem>
+                  {budgetItems?.map((item) => (
+                    <MenuItem key={item.id} value={item.id}>
+                      {formatBudgetItemLabel(item)}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Grid>
+              <Grid item xs={12} md={3}>
+                <TextField
+                  select
+                  label="Durum"
+                  value={statusFilter}
+                  onChange={(event) => setStatusFilter(event.target.value as Expense["status"] | "")}
+                  fullWidth
+                >
+                  <MenuItem value="">Tümü</MenuItem>
+                  <MenuItem value="recorded">Kaydedildi</MenuItem>
+                  <MenuItem value="cancelled">İptal Edildi</MenuItem>
+                </TextField>
+              </Grid>
+              <Grid item xs={12} md={3}>
+                <TextField
+                  label="Başlangıç Tarihi"
+                  type="date"
+                  value={startDate}
+                  onChange={(event) => setStartDate(event.target.value)}
+                  fullWidth
+                  InputLabelProps={{ shrink: true }}
+                />
+              </Grid>
+              <Grid item xs={12} md={3}>
+                <TextField
+                  label="Bitiş Tarihi"
+                  type="date"
+                  value={endDate}
+                  onChange={(event) => setEndDate(event.target.value)}
+                  fullWidth
+                  InputLabelProps={{ shrink: true }}
+                />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <Stack
+                  direction={{ xs: "column", sm: "row" }}
+                  spacing={2}
+                  flexWrap={{ sm: "wrap" }}
+                  sx={{
+                    rowGap: { sm: 1.5 },
+                    columnGap: { sm: 2 },
+                    "& .MuiFormControlLabel-root": {
+                      flex: { sm: "1 1 220px" }
+                    }
+                  }}
+                >
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={showCancelled}
+                        onChange={(event) => setShowCancelled(event.target.checked)}
+                      />
+                    }
+                    label="İptal Edilenleri Göster"
+                  />
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={showOutOfBudget}
+                        onChange={(event) => setShowOutOfBudget(event.target.checked)}
+                      />
+                    }
+                    label="Bütçe Dışı Alımları Göster"
+                  />
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={includeOutOfBudget}
+                        onChange={(event) => setIncludeOutOfBudget(event.target.checked)}
+                      />
+                    }
+                    label="Bütçe dışı kayıtları dahil et"
+                  />
+                  <FormControlLabel
+                    control={<Switch checked={mineOnly} onChange={(event) => setMineOnly(event.target.checked)} />}
+                    label="Sadece benim kayıtlarım"
+                  />
+                  <FormControlLabel
+                    control={<Switch checked={todayOnly} onChange={(event) => setTodayOnly(event.target.checked)} />}
+                    label="Bugüne ait"
+                  />
+                </Stack>
+              </Grid>
+              <Grid item xs={12} md={6} textAlign="right">
+                <Button variant="contained" startIcon={<AddIcon />} onClick={handleCreate}>
+                  Harcama Ekle
+                </Button>
+              </Grid>
+            </Grid>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent
             sx={{
+              flexGrow: 1,
               display: "flex",
-              alignItems: "center",
-              gap: 1,
-              justifyContent: "space-between",
-              mb: 1,
+              flexDirection: "column",
+              minWidth: 0,
+              overflow: "visible"
             }}
           >
-            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-              <TextField
-                select
-                size="small"
-                label="Kayıtları Göster"
-                value={includeCancelled ? "all" : "active"}
-                onChange={(event) =>
-                  setIncludeCancelled(event.target.value === "all")
-                }
-              >
-                <MenuItem value="active">Aktif Kayıtlar</MenuItem>
-                <MenuItem value="all">Tüm Kayıtlar</MenuItem>
-              </TextField>
-              <Button
-                color="inherit"
-                onClick={() => setRenderVersion((prev) => prev + 1)}
-              >
-                Listeyi Yenile
-              </Button>
-            </Box>
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems="center">
-              <Select
-                value={selectedView}
-                size="small"
-                displayEmpty
-                onChange={(event) => setSelectedView(event.target.value)}
-                sx={{ minWidth: 220 }}
-              >
-                <MenuItem value="" disabled>
-                  Kayıtlı Görünümler
-                </MenuItem>
-                {savedGridViews.map((view) => (
-                  <MenuItem key={view.name} value={view.name}>
-                    {view.name}
-                  </MenuItem>
-                ))}
-              </Select>
-              <Stack direction="row" spacing={1}>
-                <Button variant="outlined" color="inherit" size="small" onClick={() => setGridViewName("")}>Kaydet</Button>
-                <Button
-                  variant="text"
-                  color="inherit"
-                  size="small"
-                  onClick={() => setSavedGridViews([])}
-                >
-                  Sıfırla
-                </Button>
-              </Stack>
-            </Stack>
-          </Box>
-          <Box sx={{ height: 520, width: "100%" }}>
-            <DataGrid
-              key={renderVersion}
-              rows={rows}
-              columns={columns}
-              getRowId={(row) => row.id ?? `${row.budget_item_id}-${row.expense_date}-${row.amount}`}
-              paginationModel={paginationModel}
-              onPaginationModelChange={setPaginationModel}
-              filterModel={filterModel}
-              onFilterModelChange={setFilterModel}
-              sortingMode="client"
-              sortModel={sortModel}
-              onSortModelChange={setSortModel}
-              checkboxSelection
-              disableRowSelectionOnClick
-              initialState={{
-                pagination: {
-                  paginationModel: { pageSize: 10 }
-                },
-                columns: {
-                  columnVisibilityModel,
-                },
-              }}
-              slots={{ toolbar: GridToolbar }}
-              slotProps={{
-                toolbar: {
-                  showQuickFilter: true,
-                  quickFilterProps: { debounceMs: 500 },
-                },
-              }}
-              onRowSelectionModelChange={(newSelection) =>
-                setSelectionModel(newSelection as number[])
-              }
-              processRowUpdate={(updatedRow, originalRow) =>
-                handleRowUpdate(updatedRow, originalRow)
-              }
-              getRowHeight={() => "auto"}
-              getEstimatedRowHeight={() => 64}
+            <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+              Harcamalar
+            </Typography>
+            <Box
               sx={{
-                "& .MuiDataGrid-cell": {
-                  py: 1.5,
-                },
-                "& .MuiDataGrid-columnHeaders": {
-                  bgcolor: (theme) => `${theme.palette.background.paper}`,
-                },
+                display: "flex",
+                alignItems: "center",
+                gap: 1,
+                justifyContent: "space-between",
+                mb: 1,
               }}
-            />
-          </Box>
-        </CardContent>
-      </Card>
+            >
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                <TextField
+                  select
+                  size="small"
+                  label="Kayıtları Göster"
+                  value={includeCancelled ? "all" : "active"}
+                  onChange={(event) =>
+                    setIncludeCancelled(event.target.value === "all")
+                  }
+                >
+                  <MenuItem value="active">Aktif Kayıtlar</MenuItem>
+                  <MenuItem value="all">Tüm Kayıtlar</MenuItem>
+                </TextField>
+                <Button
+                  color="inherit"
+                  onClick={() => setRenderVersion((prev) => prev + 1)}
+                >
+                  Listeyi Yenile
+                </Button>
+              </Box>
+              <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems="center">
+                <Select
+                  value={selectedView}
+                  size="small"
+                  displayEmpty
+                  onChange={(event) => setSelectedView(event.target.value)}
+                  sx={{ minWidth: 220 }}
+                >
+                  <MenuItem value="" disabled>
+                    Kayıtlı Görünümler
+                  </MenuItem>
+                  {savedGridViews.map((view) => (
+                    <MenuItem key={view.name} value={view.name}>
+                      {view.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+                <Stack direction="row" spacing={1}>
+                  <Button variant="outlined" color="inherit" size="small" onClick={() => setGridViewName("")}>Kaydet</Button>
+                  <Button
+                    variant="text"
+                    color="inherit"
+                    size="small"
+                    onClick={() => setSavedGridViews([])}
+                  >
+                    Sıfırla
+                  </Button>
+                </Stack>
+              </Stack>
+            </Box>
+            <Box sx={{ height: 520, width: "100%" }}>
+              <DataGrid
+                key={renderVersion}
+                rows={rows}
+                columns={columns}
+                getRowId={(row) => row.id ?? `${row.budget_item_id}-${row.expense_date}-${row.amount}`}
+                paginationModel={paginationModel}
+                onPaginationModelChange={setPaginationModel}
+                filterModel={filterModel}
+                onFilterModelChange={setFilterModel}
+                sortingMode="client"
+                sortModel={sortModel}
+                onSortModelChange={setSortModel}
+                checkboxSelection
+                disableRowSelectionOnClick
+                initialState={{
+                  pagination: {
+                    paginationModel: { pageSize: 10 }
+                  },
+                  columns: {
+                    columnVisibilityModel,
+                  },
+                }}
+                slots={{ toolbar: GridToolbar }}
+                slotProps={{
+                  toolbar: {
+                    showQuickFilter: true,
+                    quickFilterProps: { debounceMs: 500 },
+                  },
+                }}
+                onRowSelectionModelChange={(newSelection) =>
+                  setSelectionModel(newSelection as number[])
+                }
+                processRowUpdate={(updatedRow, originalRow) =>
+                  handleRowUpdate(updatedRow, originalRow)
+                }
+                getRowHeight={() => "auto"}
+                getEstimatedRowHeight={() => 64}
+                sx={{
+                  "& .MuiDataGrid-cell": {
+                    py: 1.5,
+                  },
+                  "& .MuiDataGrid-columnHeaders": {
+                    bgcolor: (theme) => `${theme.palette.background.paper}`,
+                  },
+                }}
+              />
+            </Box>
+          </CardContent>
+        </Card>
+      </Stack>
 
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} fullWidth maxWidth="md">
         <DialogTitle>{editingExpense ? "Harcamayı Güncelle" : "Yeni Harcama"}</DialogTitle>
