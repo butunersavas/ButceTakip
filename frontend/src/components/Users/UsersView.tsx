@@ -26,7 +26,6 @@ import axios from "axios";
 
 import { useAuth } from "../../context/AuthContext";
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
-import { PageHeader } from "../layout/PageHeader";
 
 type UserRead = {
   id: number;
@@ -238,7 +237,6 @@ export default function UsersView() {
 
   return (
     <Stack spacing={3}>
-      <PageHeader title="Kullanıcı Yönetimi" />
 
       {error && <Alert severity="error">{error}</Alert>}
       {success && <Alert severity="success">{success}</Alert>}

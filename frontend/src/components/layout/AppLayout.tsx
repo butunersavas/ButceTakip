@@ -31,7 +31,6 @@ import ReceiptLongOutlinedIcon from "@mui/icons-material/ReceiptLongOutlined";
 import CloudOutlinedIcon from "@mui/icons-material/CloudOutlined";
 import CleaningServicesOutlinedIcon from "@mui/icons-material/CleaningServicesOutlined";
 import PeopleOutlineOutlinedIcon from "@mui/icons-material/PeopleOutlineOutlined";
-import LogoutIcon from "@mui/icons-material/Logout";
 import MenuIcon from "@mui/icons-material/Menu";
 import DarkModeIcon from "@mui/icons-material/DarkModeOutlined";
 import LightModeIcon from "@mui/icons-material/LightModeOutlined";
@@ -250,14 +249,6 @@ export default function AppLayout({ children }: AppLayoutProps) {
               onClick={(event) => event.stopPropagation()}
               inputProps={{ "aria-label": "Karanlık mod anahtarı" }}
             />
-          </ListItemButton>
-        </Tooltip>
-        <Tooltip title="Çıkış Yap">
-          <ListItemButton onClick={logout} sx={{ borderRadius: 2, color: "text.secondary" }}>
-            <ListItemIcon>
-              <LogoutIcon />
-            </ListItemIcon>
-            <ListItemText primary="Çıkış" />
           </ListItemButton>
         </Tooltip>
       </Box>

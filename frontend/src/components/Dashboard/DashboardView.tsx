@@ -44,7 +44,6 @@ import {
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import usePersistentState from "../../hooks/usePersistentState";
 import { formatBudgetItemLabel } from "../../utils/budgetItem";
-import { PageHeader } from "../layout/PageHeader";
 import AccountBalanceWalletOutlinedIcon from "@mui/icons-material/AccountBalanceWalletOutlined";
 import CheckCircleOutlineOutlinedIcon from "@mui/icons-material/CheckCircleOutlineOutlined";
 import TrendingUpOutlinedIcon from "@mui/icons-material/TrendingUpOutlined";
@@ -309,8 +308,6 @@ export default function DashboardView() {
 
   return (
     <Stack spacing={4}>
-      <PageHeader title="Dashboard" />
-
       <Paper sx={{ p: { xs: 2.5, md: 3 }, borderRadius: 3 }}>
         <Stack direction={{ xs: "column", md: "row" }} spacing={2} justifyContent="space-between" alignItems={{ xs: "flex-start", md: "center" }} mb={2}>
           <Typography variant="h6" fontWeight={700}>
@@ -608,7 +605,7 @@ export default function DashboardView() {
                   primary={`${item.budget_code} – ${item.budget_name}`}
                   secondary={
                     item.is_form_prepared
-                      ? "Satın Alma Formu hazırlandı"
+                      ? "Satın alma formu hazırlandı"
                       : "Satın alma formunu hazırlamayı unutmayın"
                   }
                   primaryTypographyProps={{ variant: "body2" }}
@@ -632,11 +629,7 @@ export default function DashboardView() {
         </DialogContent>
 
         <DialogActions>
-          <Button
-            size="small"
-            onClick={handleClosePurchaseDialog}
-            disabled={savingPurchaseStatus}
-          >
+          <Button size="small" onClick={handleClosePurchaseDialog} disabled={savingPurchaseStatus}>
             Kapat
           </Button>
           <Button
@@ -646,24 +639,25 @@ export default function DashboardView() {
             onClick={async () => {
               try {
                 setSavingPurchaseStatus(true);
-                await client.post(
-                  "/budget/purchase-reminders/mark-prepared",
-                  purchaseItems.map((item) => ({
+                const payload = purchaseItems
+                  .filter((item) => item.is_form_prepared)
+                  .map((item) => ({
                     budget_item_id: item.budget_item_id,
                     year: item.year,
                     month: item.month,
-                    is_form_prepared: item.is_form_prepared
-                  }))
-                );
+                    is_form_prepared: true
+                  }));
+
+                await client.post("/budget/purchase-reminders/mark-prepared", payload);
                 setPurchaseStatusFeedback({
-                  message: "Satın alma formu durumları güncellendi.",
+                  message: "Seçili kalemler için satın alma formu hazırlandı olarak kaydedildi.",
                   severity: "success"
                 });
                 handleClosePurchaseDialog();
               } catch (error) {
                 console.error(error);
                 setPurchaseStatusFeedback({
-                  message: "Durumlar kaydedilirken hata oluştu.",
+                  message: "Kayıt sırasında bir hata oluştu.",
                   severity: "error"
                 });
               } finally {
@@ -671,7 +665,7 @@ export default function DashboardView() {
               }
             }}
           >
-            Kaydet
+            Satın alma formu hazırlandı olarak kaydet
           </Button>
         </DialogActions>
       </Dialog>

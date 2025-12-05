@@ -19,7 +19,6 @@ import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/DeleteOutline";
 import EditIcon from "@mui/icons-material/EditOutlined";
 import { Link as RouterLink } from "react-router-dom";
-import { PageHeader } from "../layout/PageHeader";
 
 interface LabelHistoryEntry {
   labelIdentifier: string;
@@ -327,20 +326,17 @@ export default function DailyExportView() {
 
   return (
     <Stack spacing={3} data-section="gunluk-cikis">
-      <Stack
-        direction={{ xs: "column", sm: "row" }}
-        spacing={1.5}
-        alignItems={{ xs: "flex-start", sm: "center" }}
-        justifyContent="space-between"
-        flexWrap="wrap"
-      >
-        <Box sx={{ flex: 1 }}>
-          <PageHeader title="Günlük Çıkış" />
-        </Box>
-        <Button component={RouterLink} to="/reports" variant="outlined" startIcon={<CheckIcon />}>
-          Raporlama sekmesine git
-        </Button>
-      </Stack>
+    <Stack
+      direction={{ xs: "column", sm: "row" }}
+      spacing={1.5}
+      alignItems={{ xs: "flex-start", sm: "center" }}
+      justifyContent="flex-end"
+      flexWrap="wrap"
+    >
+      <Button component={RouterLink} to="/reports" variant="outlined" startIcon={<CheckIcon />}>
+        Raporlama sekmesine git
+      </Button>
+    </Stack>
       {exportStatus && <Alert severity={exportStatus.type}>{exportStatus.message}</Alert>}
 
       <Grid container spacing={3} alignItems="stretch">

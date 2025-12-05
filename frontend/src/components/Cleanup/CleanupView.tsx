@@ -23,7 +23,6 @@ import axios from "axios";
 
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import { useAuth } from "../../context/AuthContext";
-import { PageHeader } from "../layout/PageHeader";
 
 interface Scenario {
   id: number;
@@ -230,8 +229,6 @@ function CleaningToolsSection() {
 
   return (
     <Stack spacing={3} component="form" onSubmit={handleCleanup}>
-      <PageHeader title="Temizleme Araçları" />
-
       <Card>
         <CardContent>
           <Stack spacing={3}>

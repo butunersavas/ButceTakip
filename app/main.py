@@ -10,6 +10,7 @@ from app.routers import (
     import_export,
     plans,
     purchase_reminders,
+    reports,
     scenarios,
     users,
 )
@@ -44,6 +45,7 @@ app.include_router(expenses.router)
 app.include_router(dashboard.router)
 app.include_router(import_export.router)
 app.include_router(purchase_reminders.router)
+app.include_router(reports.router)
 app.include_router(users.router)
 
 

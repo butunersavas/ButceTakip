@@ -5,10 +5,11 @@ from typing import Literal
 
 from fastapi import Response
 from openpyxl import Workbook
-from sqlmodel import Session, select
+from sqlmodel import Session, exists, select
 
-from app.models import BudgetItem, Expense, ExpenseStatus, PlanEntry, Scenario
+from app.models import BudgetItem, Expense, ExpenseStatus, PlanEntry, PurchaseFormStatus, Scenario
 from app.services.analytics import compute_quarterly_summary
+from app.schemas import PurchaseFormPreparedReportItem
 
 
 CURRENCY_SYMBOL = "$"
@@ -120,6 +121,48 @@ def _append_expense_rows(
                 budget_item.map_attribute if budget_item and budget_item.map_attribute else "",
             ]
         )
+
+
+def get_purchase_forms_prepared(
+    session: Session,
+    year: int,
+    scenario_id: int | None = None,
+) -> list[PurchaseFormPreparedReportItem]:
+    query = (
+        select(
+            PurchaseFormStatus.budget_item_id,
+            BudgetItem.code,
+            BudgetItem.name,
+            PurchaseFormStatus.year,
+            PurchaseFormStatus.month,
+        )
+        .join(BudgetItem, BudgetItem.id == PurchaseFormStatus.budget_item_id)
+        .where(PurchaseFormStatus.year == year)
+        .where(PurchaseFormStatus.is_prepared.is_(True))
+    )
+
+    if scenario_id is not None:
+        query = query.where(
+            exists(
+                select(PlanEntry.id)
+                .where(PlanEntry.budget_item_id == PurchaseFormStatus.budget_item_id)
+                .where(PlanEntry.year == year)
+                .where(PlanEntry.scenario_id == scenario_id)
+            )
+        )
+
+    rows = session.exec(query.order_by(PurchaseFormStatus.month, BudgetItem.code)).all()
+    return [
+        PurchaseFormPreparedReportItem(
+            budget_item_id=budget_item_id,
+            budget_code=code,
+            budget_name=name,
+            year=form_year,
+            month=month,
+            scenario_id=scenario_id if scenario_id is not None else None,
+        )
+        for budget_item_id, code, name, form_year, month in rows
+    ]
 
 
 def export_csv(
@@ -275,6 +318,46 @@ def export_filtered_expenses_xlsx(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
     response.headers["Content-Disposition"] = f"attachment; filename={filename}"
+    return response
+
+
+def export_purchase_forms_prepared_xlsx(
+    session: Session,
+    year: int,
+    scenario_id: int | None = None,
+) -> Response:
+    items = get_purchase_forms_prepared(session, year, scenario_id)
+    wb = Workbook()
+    sheet = wb.active
+    sheet.title = "PreparedPurchaseForms"
+    sheet.append([
+        "Budget Code",
+        "Budget Name",
+        "Year",
+        "Month",
+        "Scenario ID",
+    ])
+
+    for item in items:
+        sheet.append(
+            [
+                item.budget_code,
+                item.budget_name,
+                item.year,
+                item.month,
+                item.scenario_id or "",
+            ]
+        )
+
+    output = io.BytesIO()
+    wb.save(output)
+    response = Response(
+        content=output.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response.headers["Content-Disposition"] = (
+        f"attachment; filename=purchase_forms_prepared_{year}.xlsx"
+    )
     return response
 
 
