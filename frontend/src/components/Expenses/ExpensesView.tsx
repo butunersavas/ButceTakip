@@ -585,7 +585,14 @@ export default function ExpensesView() {
   const formattedCanceled = formatCurrency(cancelledTotal);
 
   return (
-    <Stack spacing={3} sx={{ width: "100%", minWidth: 0, maxWidth: "100%", overflowX: "hidden" }}>
+    <Stack
+      spacing={3}
+      sx={{
+        width: "100%",
+        minWidth: 0,
+        maxWidth: "100%"
+      }}
+    >
       <Grid container spacing={2}>
         <Grid item xs={12} md={4}>
           <SummaryCard
