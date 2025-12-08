@@ -314,8 +314,20 @@ export default function PlansView() {
         headerName: "Ay",
         width: 120,
         valueFormatter: ({ value }) => {
-          const index = Number(value) || 0;
-          return MONTH_NAMES_TR[index] ?? "";
+          if (value == null) {
+            return "";
+          }
+
+          const numValue =
+            typeof value === "number" ? value : Number(value);
+
+          // Değer 1–12 arasında sayıya dönüşüyorsa, ay ismini göster
+          if (!Number.isNaN(numValue) && numValue >= 1 && numValue <= 12) {
+            return MONTH_NAMES_TR[numValue] ?? "";
+          }
+
+          // Sayıya çevrilemiyorsa (veya 1–12 dışında ise) gelen değeri olduğu gibi göster
+          return String(value);
         }
       },
       {
