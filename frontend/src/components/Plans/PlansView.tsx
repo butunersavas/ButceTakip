@@ -245,27 +245,6 @@ export default function PlansView() {
     "Aralık"
   ];
 
-  function normalizeAmountToNumber(value: unknown): number {
-    if (typeof value === "number") {
-      return value;
-    }
-
-    if (typeof value !== "string") {
-      return 0;
-    }
-
-    // Örnek string formatlar:
-    // "152750"
-    // "152.750,00"
-    const cleaned = value
-      .replace(/\s/g, "")
-      .replace(/\./g, "")
-      .replace(",", ".");
-
-    const parsed = Number(cleaned);
-    return Number.isFinite(parsed) ? parsed : 0;
-  }
-
   const columns = useMemo<GridColDef[]>(() => {
     return [
       {
@@ -335,30 +314,39 @@ export default function PlansView() {
         field: "month",
         headerName: "Ay",
         width: 120,
-        valueFormatter: ({ value }) => {
-          if (value == null) {
+        valueGetter: (value, row) => {
+          const raw = row?.month;
+
+          // month zaten sayıysa
+          if (typeof raw === "number") {
+            if (raw >= 1 && raw <= 12) {
+              return MONTH_NAMES_TR[raw];
+            }
             return "";
           }
 
-          const numValue =
-            typeof value === "number" ? value : Number(value);
-
-          // Değer 1–12 arasında sayıya dönüşüyorsa, ay ismini göster
-          if (!Number.isNaN(numValue) && numValue >= 1 && numValue <= 12) {
-            return MONTH_NAMES_TR[numValue] ?? "";
+          // string geldiyse sayıya dönüştürmeyi dene
+          const num = Number(raw);
+          if (Number.isFinite(num) && num >= 1 && num <= 12) {
+            return MONTH_NAMES_TR[num];
           }
 
-          // Sayıya çevrilemiyorsa (veya 1–12 dışında ise) gelen değeri olduğu gibi göster
-          return String(value);
-        }
+          // Hiçbiri değilse boş bırak
+          return "";
+        },
       },
       {
         field: "amount",
         headerName: "Tutar",
         width: 140,
+        valueGetter: (value, row) => row?.amount ?? 0,
         valueFormatter: ({ value }) => {
-          const numeric = normalizeAmountToNumber(value);
-          return formatCurrency(numeric);
+          const num =
+            typeof value === "number"
+              ? value
+              : Number(String(value).replace(/\./g, "").replace(",", "."));
+
+          return formatCurrency(Number.isFinite(num) ? num : 0);
         },
       },
       {
@@ -560,7 +548,7 @@ export default function PlansView() {
                 label="Tutar"
                 name="amount"
                 type="number"
-                inputProps={{ min: 0, step: 10 }}
+                inputProps={{ min: 0, step: 1 }}
                 fullWidth
                 defaultValue={editingPlan?.amount ?? 0}
                 required
