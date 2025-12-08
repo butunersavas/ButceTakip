@@ -223,9 +223,26 @@ export default function PlansView() {
   const rows = useMemo(() => {
     return plans?.map((plan) => ({
       ...plan,
+      amount: Number(plan.amount) || 0,
       budget_item_id: plan?.budget_item_id ?? null
     })) ?? [];
   }, [plans]);
+
+  const MONTH_NAMES_TR = [
+    "",
+    "Ocak",
+    "Şubat",
+    "Mart",
+    "Nisan",
+    "Mayıs",
+    "Haziran",
+    "Temmuz",
+    "Ağustos",
+    "Eylül",
+    "Ekim",
+    "Kasım",
+    "Aralık"
+  ];
 
   const columns = useMemo<GridColDef[]>(() => {
     return [
@@ -296,13 +313,16 @@ export default function PlansView() {
         field: "month",
         headerName: "Ay",
         width: 120,
-        valueFormatter: ({ value }) => monthOptions[(value as number) - 1]
+        valueFormatter: ({ value }) => {
+          const index = Number(value) || 0;
+          return MONTH_NAMES_TR[index] ?? "";
+        }
       },
       {
         field: "amount",
         headerName: "Tutar",
-        flex: 1,
-        valueFormatter: ({ value }) => formatCurrency(value as number)
+        width: 140,
+        valueFormatter: ({ value }) => formatCurrency(Number(value) || 0)
       },
       {
         field: "actions",
