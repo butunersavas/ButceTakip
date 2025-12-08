@@ -105,6 +105,12 @@ def create_expense(
         raise HTTPException(status_code=400, detail="Scenario not found")
     client_hostname = expense_in.client_hostname or _extract_client_identifier(request)
 
+    quantity = expense_in.quantity or 1
+    unit_price = expense_in.unit_price or 0
+
+    if not expense_in.amount and quantity and unit_price:
+        expense_in.amount = round(quantity * unit_price, 2)
+
     expense_data = expense_in.dict(exclude={"client_hostname", "kaydi_giren_kullanici"})
     expense = Expense(
         **expense_data,
@@ -134,6 +140,12 @@ def update_expense(
         if field == "kaydi_giren_kullanici":
             continue
         setattr(expense, field, value)
+
+    quantity = expense.quantity or 1
+    unit_price = expense.unit_price or 0
+    if not expense.amount and quantity and unit_price:
+        expense.amount = round(quantity * unit_price, 2)
+
     expense.updated_at = datetime.utcnow()
     session.add(expense)
     session.commit()
