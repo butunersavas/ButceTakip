@@ -340,16 +340,20 @@ export default function PlansView() {
         headerName: "Tutar",
         width: 140,
         renderCell: ({ row }) => {
-          console.log("PLAN ROW AMOUNT", row.id, row.amount, row);
+          console.log("PLAN ROW AMOUNT", row.id, row.amount, row); // debug için
 
           const raw = row.amount;
-
           let num: number;
+
           if (typeof raw === "number") {
             num = raw;
           } else if (typeof raw === "string") {
-            // Nokta/virgül dönüşümü
-            const parsed = Number(raw.replace(/\./g, "").replace(",", "."));
+            const parsed = Number(
+              raw
+                .toString()
+                .replace(/\./g, "") // binlik noktaları sil
+                .replace(",", ".") // virgülü noktaya çevir
+            );
             num = Number.isFinite(parsed) ? parsed : 0;
           } else {
             num = 0;

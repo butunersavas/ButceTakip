@@ -236,6 +236,8 @@ export default function ExpensesView() {
     }
   });
 
+  console.log("EXPENSES QUERY RESULT", expenses);
+
   const mutation = useMutation({
     mutationFn: async (payload: ExpensePayload) => {
       if (payload.id) {
@@ -347,7 +349,7 @@ export default function ExpensesView() {
       budget_item_id: Number(formData.get("budget_item_id")),
       scenario_id: formData.get("scenario_id")
         ? Number(formData.get("scenario_id"))
-        : null,
+        : scenarioId,
       expense_date: String(formData.get("expense_date")),
       amount,
       quantity,
