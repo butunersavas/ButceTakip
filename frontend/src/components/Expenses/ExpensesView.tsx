@@ -500,7 +500,30 @@ export default function ExpensesView() {
         field: "amount",
         headerName: "Tutar",
         width: 140,
-        valueFormatter: ({ value }) => formatCurrency(value as number)
+        renderCell: ({ row }) => {
+          // Debug için:
+          console.log("EXPENSE ROW AMOUNT", row.id, row.amount, row.quantity, row.unit_price);
+
+          const raw = row.amount;
+
+          let num: number;
+
+          if (typeof raw === "number") {
+            num = raw;
+          } else if (typeof raw === "string") {
+            const parsed = Number(
+              raw
+                .toString()
+                .replace(/\./g, "")
+                .replace(",", ".")
+            );
+            num = Number.isFinite(parsed) ? parsed : 0;
+          } else {
+            num = 0;
+          }
+
+          return formatCurrency(num);
+        }
       },
       {
         field: "quantity",
@@ -511,7 +534,29 @@ export default function ExpensesView() {
         field: "unit_price",
         headerName: "Birim Fiyat",
         width: 140,
-        valueFormatter: ({ value }) => formatCurrency(value as number)
+        renderCell: ({ row }) => {
+          // Debug için:
+          console.log("EXPENSE ROW UNIT_PRICE", row.id, row.unit_price);
+
+          const raw = row.unit_price;
+          let num: number;
+
+          if (typeof raw === "number") {
+            num = raw;
+          } else if (typeof raw === "string") {
+            const parsed = Number(
+              raw
+                .toString()
+                .replace(/\./g, "")
+                .replace(",", ".")
+            );
+            num = Number.isFinite(parsed) ? parsed : 0;
+          } else {
+            num = 0;
+          }
+
+          return formatCurrency(num);
+        }
       },
       {
         field: "vendor",
