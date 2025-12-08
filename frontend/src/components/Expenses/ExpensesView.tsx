@@ -32,9 +32,12 @@ import CheckCircleOutlineOutlinedIcon from "@mui/icons-material/CheckCircleOutli
 import ReportGmailerrorredOutlinedIcon from "@mui/icons-material/ReportGmailerrorredOutlined";
 import {
   DataGrid,
+  GridToolbar,
   type GridColDef,
   type GridColumnVisibilityModel,
   type GridFilterModel,
+  type GridPaginationModel,
+  type GridRowSelectionModel,
   type GridSortModel
 } from "@mui/x-data-grid";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -147,6 +150,17 @@ export default function ExpensesView() {
   const [savedViews, setSavedViews] = useState<SavedGridView[]>([]);
   const [selectedViewName, setSelectedViewName] = useState<string>("");
   const [newViewName, setNewViewName] = useState<string>("");
+  const [renderVersion, setRenderVersion] = useState(0);
+  const [paginationModel, setPaginationModel] = useState<GridPaginationModel>({
+    page: 0,
+    pageSize: 10
+  });
+  const [, setSelectionModel] = useState<GridRowSelectionModel>([]);
+
+  const handleRowUpdate = useCallback(
+    (updatedRow: Expense, originalRow: Expense) => ({ ...originalRow, ...updatedRow }),
+    []
+  );
 
   const { data: scenarios } = useQuery<Scenario[]>({
     queryKey: ["scenarios"],
