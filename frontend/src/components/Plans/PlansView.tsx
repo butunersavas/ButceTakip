@@ -222,30 +222,10 @@ export default function PlansView() {
 
   const rows = useMemo(() => {
     return (
-      plans?.map((plan) => {
-        const rawAmount = plan.amount as unknown;
-
-        // amount sayısal ise direkt kullan
-        if (typeof rawAmount === "number") {
-          return {
-            ...plan,
-            amount: rawAmount,
-            budget_item_id: plan?.budget_item_id ?? null,
-          };
-        }
-
-        // string ise, önce virgülü noktaya çevirip sayıya dönüştür
-        const parsed =
-          typeof rawAmount === "string"
-            ? Number(rawAmount.replace(",", "."))
-            : Number(rawAmount);
-
-        return {
-          ...plan,
-          amount: Number.isFinite(parsed) ? parsed : 0,
-          budget_item_id: plan?.budget_item_id ?? null,
-        };
-      }) ?? []
+      plans?.map((plan) => ({
+        ...plan,
+        budget_item_id: plan?.budget_item_id ?? null,
+      })) ?? []
     );
   }, [plans]);
 
@@ -264,6 +244,27 @@ export default function PlansView() {
     "Kasım",
     "Aralık"
   ];
+
+  function normalizeAmountToNumber(value: unknown): number {
+    if (typeof value === "number") {
+      return value;
+    }
+
+    if (typeof value !== "string") {
+      return 0;
+    }
+
+    // Örnek string formatlar:
+    // "152750"
+    // "152.750,00"
+    const cleaned = value
+      .replace(/\s/g, "")
+      .replace(/\./g, "")
+      .replace(",", ".");
+
+    const parsed = Number(cleaned);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
 
   const columns = useMemo<GridColDef[]>(() => {
     return [
@@ -356,16 +357,8 @@ export default function PlansView() {
         headerName: "Tutar",
         width: 140,
         valueFormatter: ({ value }) => {
-          if (value == null) {
-            return formatCurrency(0);
-          }
-
-          if (typeof value === "number") {
-            return formatCurrency(value);
-          }
-
-          const parsed = Number(String(value).replace(",", "."));
-          return formatCurrency(Number.isFinite(parsed) ? parsed : 0);
+          const numeric = normalizeAmountToNumber(value);
+          return formatCurrency(numeric);
         },
       },
       {
@@ -567,7 +560,8 @@ export default function PlansView() {
                 label="Tutar"
                 name="amount"
                 type="number"
-                inputProps={{ min: 0, step: 100 }}
+                inputProps={{ min: 0, step: 10 }}
+                fullWidth
                 defaultValue={editingPlan?.amount ?? 0}
                 required
               />
