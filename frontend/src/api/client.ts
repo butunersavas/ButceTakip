@@ -1,5 +1,7 @@
 import axios from "axios";
 
+const FALLBACK_API_URL = "http://localhost:8001";
+
 const envApiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim();
 const legacyApiUrl = import.meta.env.VITE_API_URL?.trim();
 
@@ -35,14 +37,14 @@ function resolveApiUrl() {
     ["5173", "4173", "4174"].includes(window.location?.port ?? "");
 
   if (import.meta.env.DEV || isViteClient) {
-    return "http://localhost:8000";
+    return FALLBACK_API_URL;
   }
 
   if (typeof window !== "undefined") {
     return `${window.location.protocol}//${window.location.host}`;
   }
 
-  return "http://localhost:8000";
+  return FALLBACK_API_URL;
 }
 
 const API_URL = resolveApiUrl();
