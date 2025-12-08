@@ -339,34 +339,23 @@ export default function PlansView() {
         field: "amount",
         headerName: "Tutar",
         width: 140,
-        // Ham değeri satırdan al
-        valueGetter: (value, row) => {
-          const raw = row?.amount;
+        renderCell: ({ row }) => {
+          console.log("PLAN ROW AMOUNT", row.id, row.amount, row);
 
+          const raw = row.amount;
+
+          let num: number;
           if (typeof raw === "number") {
-            return raw;
-          }
-
-          if (typeof raw === "string") {
-            // Nokta/virgül fark etmesin diye basit parse
+            num = raw;
+          } else if (typeof raw === "string") {
+            // Nokta/virgül dönüşümü
             const parsed = Number(raw.replace(/\./g, "").replace(",", "."));
-            return Number.isFinite(parsed) ? parsed : 0;
+            num = Number.isFinite(parsed) ? parsed : 0;
+          } else {
+            num = 0;
           }
 
-          return 0;
-        },
-        // Gösterirken para formatına çevir
-        valueFormatter: ({ value }) => {
-          const num =
-            typeof value === "number"
-              ? value
-              : Number(
-                  String(value ?? "0")
-                    .replace(/\./g, "")
-                    .replace(",", "."),
-                );
-
-          return formatCurrency(Number.isFinite(num) ? num : 0);
+          return formatCurrency(num);
         },
       },
       {
