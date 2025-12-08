@@ -794,29 +794,56 @@ export default function ExpensesView() {
               </Button>
             </Box>
             <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems="center">
+              <TextField
+                size="small"
+                label="Görünüm Adı"
+                value={newViewName}
+                onChange={(event) => setNewViewName(event.target.value)}
+                sx={{ minWidth: 160 }}
+              />
               <Select
-                value={selectedView}
+                value={selectedViewName}
                 size="small"
                 displayEmpty
-                onChange={(event) => setSelectedView(event.target.value)}
+                onChange={(event) => handleSelectView(event.target.value)}
                 sx={{ minWidth: 220 }}
               >
                 <MenuItem value="" disabled>
                   Kayıtlı Görünümler
                 </MenuItem>
-                {savedGridViews.map((view) => (
+                {savedViews.map((view) => (
                   <MenuItem key={view.name} value={view.name}>
                     {view.name}
                   </MenuItem>
                 ))}
               </Select>
               <Stack direction="row" spacing={1}>
-                <Button variant="outlined" color="inherit" size="small" onClick={() => setGridViewName("")}>Kaydet</Button>
+                <Button
+                  variant="outlined"
+                  color="inherit"
+                  size="small"
+                  onClick={handleSaveCurrentView}
+                >
+                  Kaydet
+                </Button>
                 <Button
                   variant="text"
                   color="inherit"
                   size="small"
-                  onClick={() => setSavedGridViews([])}
+                  disabled={!selectedViewName}
+                  onClick={() => handleDeleteView(selectedViewName)}
+                >
+                  Sil
+                </Button>
+                <Button
+                  variant="text"
+                  color="inherit"
+                  size="small"
+                  onClick={() => {
+                    setSavedViews([]);
+                    setSelectedViewName("");
+                    localStorage.removeItem(GRID_VIEWS_KEY);
+                  }}
                 >
                   Sıfırla
                 </Button>
