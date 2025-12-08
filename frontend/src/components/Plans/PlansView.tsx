@@ -221,11 +221,32 @@ export default function PlansView() {
   );
 
   const rows = useMemo(() => {
-    return plans?.map((plan) => ({
-      ...plan,
-      amount: Number(plan.amount) || 0,
-      budget_item_id: plan?.budget_item_id ?? null
-    })) ?? [];
+    return (
+      plans?.map((plan) => {
+        const rawAmount = plan.amount as unknown;
+
+        // amount sayısal ise direkt kullan
+        if (typeof rawAmount === "number") {
+          return {
+            ...plan,
+            amount: rawAmount,
+            budget_item_id: plan?.budget_item_id ?? null,
+          };
+        }
+
+        // string ise, önce virgülü noktaya çevirip sayıya dönüştür
+        const parsed =
+          typeof rawAmount === "string"
+            ? Number(rawAmount.replace(",", "."))
+            : Number(rawAmount);
+
+        return {
+          ...plan,
+          amount: Number.isFinite(parsed) ? parsed : 0,
+          budget_item_id: plan?.budget_item_id ?? null,
+        };
+      }) ?? []
+    );
   }, [plans]);
 
   const MONTH_NAMES_TR = [
@@ -334,7 +355,18 @@ export default function PlansView() {
         field: "amount",
         headerName: "Tutar",
         width: 140,
-        valueFormatter: ({ value }) => formatCurrency(Number(value) || 0)
+        valueFormatter: ({ value }) => {
+          if (value == null) {
+            return formatCurrency(0);
+          }
+
+          if (typeof value === "number") {
+            return formatCurrency(value);
+          }
+
+          const parsed = Number(String(value).replace(",", "."));
+          return formatCurrency(Number.isFinite(parsed) ? parsed : 0);
+        },
       },
       {
         field: "actions",
