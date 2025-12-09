@@ -100,13 +100,6 @@ type RiskyItem = {
   ratio: number;
 };
 
-type NoSpendItem = {
-  budget_item_id: number;
-  budget_code: string;
-  budget_name: string;
-  plan: number;
-};
-
 const monthLabels = [
   "Ocak",
   "Şubat",
@@ -139,7 +132,6 @@ export default function DashboardView() {
   const [isPurchaseDialogOpen, setIsPurchaseDialogOpen] = useState(false);
   const [dontShowAgainThisMonth, setDontShowAgainThisMonth] = useState(false);
   const [riskyItems, setRiskyItems] = useState<RiskyItem[]>([]);
-  const [noSpendItems, setNoSpendItems] = useState<NoSpendItem[]>([]);
   const [savingPurchaseStatus, setSavingPurchaseStatus] = useState(false);
   const [purchaseStatusFeedback, setPurchaseStatusFeedback] = useState<
     { message: string; severity: "success" | "error" } | null
@@ -205,11 +197,6 @@ export default function DashboardView() {
       .get<RiskyItem[]>(`/dashboard/risky-items?year=${requestYear}&month=${requestMonth}`)
       .then((res) => setRiskyItems(res.data ?? []))
       .catch(() => setRiskyItems([]));
-
-    client
-      .get<NoSpendItem[]>(`/dashboard/no-spend-items?year=${requestYear}&month=${requestMonth}`)
-      .then((res) => setNoSpendItems(res.data ?? []))
-      .catch(() => setNoSpendItems([]));
   }, [client]);
 
   useEffect(() => {
@@ -532,35 +519,6 @@ export default function DashboardView() {
                         />
                       </ListItem>
                     ))}
-                  </List>
-                )}
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader title="Hareketsiz Kalemler" subheader="Planı olup hiç harcama yapılmayanlar" />
-              <CardContent>
-                {noSpendItems.length === 0 ? (
-                  <Typography variant="body2" color="text.secondary">
-                    Şu ana kadar hareketsiz bütçe kalemi bulunmuyor.
-                  </Typography>
-                ) : (
-                  <List dense>
-                    {noSpendItems.map((item) => {
-                      const formattedPlan = item.plan.toLocaleString("tr-TR", {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2
-                      });
-
-                      return (
-                        <ListItem key={item.budget_item_id}>
-                          <ListItemText
-                            primary={`${item.budget_code} – ${item.budget_name}`}
-                            secondary={`Plan: $${formattedPlan}`}
-                            primaryTypographyProps={{ variant: "body2" }}
-                          />
-                        </ListItem>
-                      );
-                    })}
                   </List>
                 )}
               </CardContent>
