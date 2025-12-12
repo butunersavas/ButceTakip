@@ -36,25 +36,34 @@ def get_session() -> Iterator[Session]:
 def init_default_admin(session: Session) -> None:
     """Create or update the default admin user based on environment variables."""
 
-    admin_username = settings.DEFAULT_ADMIN_EMAIL.strip().lower()
+    admin_username = "admin"
+    admin_email = settings.DEFAULT_ADMIN_EMAIL.strip().lower()
     admin_full_name = settings.DEFAULT_ADMIN_FULL_NAME or "Admin Kullanıcı"
     admin_password = settings.DEFAULT_ADMIN_PASSWORD
 
-    if not admin_username:
+    if not admin_email:
         return
 
-    user = session.exec(select(User).where(User.username == admin_username)).first()
+    user = session.exec(
+        select(User).where(
+            (User.username == admin_username)
+            | (User.username == admin_email)
+            | (User.email == admin_email)
+        )
+    ).first()
     hashed_password = get_password_hash(admin_password)
 
     if user is None:
         user = User(
             username=admin_username,
+            email=admin_email,
             full_name=admin_full_name,
             hashed_password=hashed_password,
             is_admin=True,
             is_active=True,
         )
     else:
+        user.email = admin_email
         user.full_name = admin_full_name
         user.is_admin = True
         user.is_active = True
@@ -84,6 +93,9 @@ def _apply_schema_upgrades() -> None:
             connection.execute(text("ALTER TABLE expenses ADD COLUMN kaydi_giren_kullanici TEXT"))
 
     user_columns = {column["name"] for column in inspector.get_columns("users")}
+    if "email" not in user_columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE users ADD COLUMN email TEXT"))
     if "username" not in user_columns:
         with engine.begin() as connection:
             connection.execute(text("ALTER TABLE users ADD COLUMN username TEXT"))

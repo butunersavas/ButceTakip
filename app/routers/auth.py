@@ -17,7 +17,9 @@ settings = get_settings()
 
 def authenticate_user(session: Session, username: str, password: str) -> User | None:
     normalized_username = username.strip().lower()
-    user = session.exec(select(User).where(User.username == normalized_username)).first()
+    user = session.exec(select(User).where(User.email == normalized_username)).first()
+    if not user:
+        user = session.exec(select(User).where(User.username == normalized_username)).first()
     if not user:
         return None
     if not user.is_active:
