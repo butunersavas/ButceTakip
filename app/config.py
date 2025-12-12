@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = Field(default=60 * 24, env="ACCESS_TOKEN_EXPIRE_MINUTES")
     cors_origins: str = Field(default="*", env="CORS_ORIGINS")
 
-    DEFAULT_ADMIN_EMAIL: str = Field(default="admin@local", env="DEFAULT_ADMIN_EMAIL")
+    DEFAULT_ADMIN_EMAIL: str = Field(default="admin@example.com", env="DEFAULT_ADMIN_EMAIL")
     DEFAULT_ADMIN_PASSWORD: str = Field(default="GucluBirSifre123!", env="DEFAULT_ADMIN_PASSWORD")
     DEFAULT_ADMIN_FULL_NAME: str = Field(default="Admin Kullanıcı", env="DEFAULT_ADMIN_FULL_NAME")
     DEFAULT_ADMIN_ROLE: str = Field(default="admin", env="DEFAULT_ADMIN_ROLE")

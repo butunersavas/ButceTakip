@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Box,
@@ -36,7 +36,6 @@ import {
   ReferenceLine,
   ResponsiveContainer,
   Tooltip as RechartsTooltip,
-  TooltipProps,
   XAxis,
   YAxis,
   Cell
@@ -273,58 +272,6 @@ export default function DashboardView() {
   );
   const pieKeys = useMemo(() => ["planned", "actual", "remaining", "overrun"] as const, []);
 
-  const renderQuarterTooltip = useCallback(
-    ({ active, payload, label }: TooltipProps<number, string>) => {
-      if (!active || !payload?.length) return null;
-
-      const values = pieKeys.map((key) => {
-        const match = payload.find((item) => item?.payload?.key === key);
-        return {
-          key,
-          name: match?.name ?? key,
-          value: match?.value ?? 0,
-          color: pieColors[key]
-        };
-      });
-
-      return (
-        <Box
-          sx={{
-            bgcolor: "background.paper",
-            borderRadius: 1.5,
-            boxShadow: 4,
-            p: 1.5,
-            minWidth: 200
-          }}
-        >
-          <Typography variant="subtitle2" fontWeight={700} mb={1}>
-            {label}
-          </Typography>
-          <Stack spacing={0.75}>
-            {values.map((item) => (
-              <Stack
-                key={item.key}
-                direction="row"
-                spacing={1}
-                alignItems="center"
-                justifyContent="space-between"
-              >
-                <Stack direction="row" spacing={1} alignItems="center">
-                  <Box sx={{ width: 10, height: 10, borderRadius: "50%", bgcolor: item.color }} />
-                  <Typography variant="body2">{item.name}</Typography>
-                </Stack>
-                <Typography variant="body2" fontWeight={600} color="text.primary">
-                  {formatCurrency(item.value)}
-                </Typography>
-              </Stack>
-            ))}
-          </Stack>
-        </Box>
-      );
-    },
-    [pieColors, pieKeys]
-  );
-
   const normalizedKpi = useMemo(() => {
     const totalPlan = dashboard?.kpi.total_plan ?? 0;
     const totalActual = dashboard?.kpi.total_actual ?? 0;
@@ -544,7 +491,6 @@ export default function DashboardView() {
                                     <Cell key={key} fill={pieColors[key]} />
                                   ))}
                                 </Pie>
-                                <RechartsTooltip content={renderQuarterTooltip} />
                               </PieChart>
                             </ResponsiveContainer>
                           )}

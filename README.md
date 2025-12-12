@@ -65,7 +65,7 @@ oluşturur. PostgreSQL kullanmak isterseniz `DATABASE_URL` ortam değişkeni ile
 hesabın otomatik olarak var olduğundan emin olabilirsiniz:
 
 ```env
-DEFAULT_ADMIN_EMAIL=admin@local
+DEFAULT_ADMIN_EMAIL=admin@example.com
 DEFAULT_ADMIN_PASSWORD=GucluBirSifre123!
 # İsteğe bağlı
 DEFAULT_ADMIN_FULL_NAME=Admin Kullanıcı
@@ -100,13 +100,13 @@ Varsayılan olarak arayüz `http://localhost:5173` portundan yayına alınır. A
 >   Invoke-RestMethod -Method Post `
 >       -Uri "http://localhost:8000/auth/register" `
 >       -ContentType "application/json" `
->       -Body '{"email":"yeni.admin@local","full_name":"Yeni Admin","password":"DahaGucluSifre456!"}'
+>       -Body '{"email":"yeni.admin@example.com","full_name":"Yeni Admin","password":"DahaGucluSifre456!"}'
 >   ```
 >
 >   Alternatif olarak Windows’ta yer alan klasik `curl.exe` uygulamasını tek satırda çalıştırabilirsiniz:
 >
 >   ```powershell
->   curl.exe -X POST "http://localhost:8000/auth/register" -H "Content-Type: application/json" -d '{"email":"yeni.admin@local","full_name":"Yeni Admin","password":"DahaGucluSifre456!"}'
+>   curl.exe -X POST "http://localhost:8000/auth/register" -H "Content-Type: application/json" -d '{"email":"yeni.admin@example.com","full_name":"Yeni Admin","password":"DahaGucluSifre456!"}'
 >   ```
 
 ## Örnek CSV Şablonu
