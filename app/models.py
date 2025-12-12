@@ -21,6 +21,7 @@ class User(TimestampMixin, SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     username: str = Field(index=True, unique=True, nullable=False)
+    email: Optional[str] = Field(default=None, index=True, unique=True)
     full_name: Optional[str] = Field(default=None)
     hashed_password: str = Field(nullable=False)
     is_active: bool = Field(default=True, nullable=False)
