@@ -41,6 +41,25 @@ interface ImportSummary {
   message?: string;
 }
 
+type BudgetImportRow = {
+  type: string;
+  budget_code: string;
+  budget_name: string;
+  scenario: string;
+  year: string;
+  month: string;
+  amount: string;
+  date?: string;
+  quantity?: string;
+  unit_price?: string;
+  vendor?: string;
+  description?: string;
+  department?: string | null;
+  out_of_budget?: string;
+  capex_opex?: string;
+  asset_type?: string;
+};
+
 const sampleHeaders = [
   "type",
   "budget_code",
@@ -54,7 +73,7 @@ const sampleHeaders = [
   "unit_price",
   "vendor",
   "description",
-  "Departman",
+  "department",
   "out_of_budget",
   "capex_opex",
   "asset_type"
@@ -62,9 +81,7 @@ const sampleHeaders = [
 
 type SampleHeader = (typeof sampleHeaders)[number];
 
-type SampleRow = Record<SampleHeader, string>;
-
-const sampleRows: SampleRow[] = [
+const sampleRows: BudgetImportRow[] = [
   {
     type: "plan",
     budget_code: "SK01",
@@ -78,7 +95,7 @@ const sampleRows: SampleRow[] = [
     unit_price: "50000",
     vendor: "",
     description: "ŞAN Cep Telefonu + Çakmaklık Şarj + Kılıf + Koruyucu  (500 Adet)",
-    Departman: "Operasyon",
+    department: "Operasyon",
     out_of_budget: "YANLIŞ",
     capex_opex: "Capex",
     asset_type: "Donanım"
@@ -96,7 +113,7 @@ const sampleRows: SampleRow[] = [
     unit_price: "50000",
     vendor: "",
     description: "ŞAN Cep Telefonu + Çakmaklık Şarj + Kılıf + Koruyucu  (500 Adet)",
-    Departman: "Operasyon",
+    department: "Operasyon",
     out_of_budget: "YANLIŞ",
     capex_opex: "Capex",
     asset_type: "Donanım"
@@ -105,7 +122,9 @@ const sampleRows: SampleRow[] = [
 
 const sampleCsv = [
   sampleHeaders.join(","),
-  ...sampleRows.map((row) => sampleHeaders.map((header) => row[header]).join(","))
+  ...sampleRows.map((row) =>
+    sampleHeaders.map((header) => row[header as keyof BudgetImportRow] ?? "").join(",")
+  )
 ].join("\n");
 
 export default function ImportExportView() {
@@ -289,7 +308,9 @@ export default function ImportExportView() {
   const downloadSampleXlsx = () => {
     const worksheetData = [
       sampleHeaders,
-      ...sampleRows.map((row) => sampleHeaders.map((header) => row[header]))
+      ...sampleRows.map((row) =>
+        sampleHeaders.map((header) => row[header as keyof BudgetImportRow] ?? "")
+      )
     ];
     const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
     const workbook = XLSX.utils.book_new();
@@ -311,11 +332,21 @@ export default function ImportExportView() {
                   İçe Aktarım
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Plan ve harcama verilerini JSON, CSV veya Excel (XLSX) formatında sisteme aktarabilirsiniz. Lütfen dosyalarınıza
-                  Map Nitelik sütununu da ekleyin. Qlik’ten alınan pivot tablo çıktıları gibi “Row Labels” ve ay bazlı sütunlar içeren
-                  Departman sütunu opsiyoneldir; boş bırakılabilir.
-                  Excel dosyaları da otomatik olarak parçalanıp plana dönüştürülür.
+                  Plan ve harcama verilerini JSON, CSV veya Excel (XLSX) formatında sisteme aktarabilirsiniz.
                 </Typography>
+                <Stack component="ul" spacing={0.5} sx={{ pl: 3, m: 0 }}>
+                  <Typography component="li" variant="body2" color="text.secondary">
+                    Dosyalarınızda kod, ad, senaryo, yıl, ay ve tutar sütunlarının bulunduğundan emin olun; Map Nitelik
+                    (map_attribute) ve Map Capex/Opex (map_category) sütunları da desteklenir.
+                  </Typography>
+                  <Typography component="li" variant="body2" color="text.secondary">
+                    Departman (opsiyonel): Bu plan kaydının bağlı olduğu departman. Örnek: "Operasyon", "Bilgi İşlem", "Pazarlama".
+                  </Typography>
+                  <Typography component="li" variant="body2" color="text.secondary">
+                    Qlik’ten alınan pivot tablo çıktıları gibi “Row Labels” ve ay bazlı sütunlar içeren Excel dosyaları da otomatik
+                    olarak parçalanıp plana dönüştürülür.
+                  </Typography>
+                </Stack>
                 {error && <Alert severity="error">{error}</Alert>}
                 {importSummary && (
                   <Alert severity="success">

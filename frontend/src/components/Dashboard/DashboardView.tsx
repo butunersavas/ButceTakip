@@ -49,6 +49,12 @@ import CheckCircleOutlineOutlinedIcon from "@mui/icons-material/CheckCircleOutli
 import TrendingUpOutlinedIcon from "@mui/icons-material/TrendingUpOutlined";
 import WarningAmberOutlinedIcon from "@mui/icons-material/WarningAmberOutlined";
 import { SummaryCard } from "./SummaryCard";
+import {
+  COLOR_ACTUAL,
+  COLOR_OVER,
+  COLOR_PLANNED,
+  COLOR_REMAINING
+} from "../../theme/chartColors";
 
 interface DashboardSummary {
   month: number;
@@ -127,10 +133,10 @@ const monthLabels = [
 const pieKeys: Array<keyof QuarterlySummary> = ["planned", "actual", "remaining", "overrun"];
 
 const pieColors: Record<keyof QuarterlySummary, string> = {
-  planned: "#1E5EFF",
-  actual: "#00A76F",
-  remaining: "#e65100",
-  overrun: "#FF5630"
+  planned: COLOR_PLANNED,
+  actual: COLOR_ACTUAL,
+  remaining: COLOR_REMAINING,
+  overrun: COLOR_OVER
 };
 
 const pieLabelMap = {
@@ -372,7 +378,7 @@ export default function DashboardView() {
             </CardContent>
           </Card>
 
-          <Grid container spacing={3} justifyContent="center" alignItems="stretch">
+          <Grid container spacing={2} sx={{ mb: 3 }}>
             {[
               {
                 title: "Toplam Plan",
@@ -549,8 +555,9 @@ export default function DashboardView() {
                         : "Q4";
 
                     const chartData = pieKeys.map((key) => ({
-                      name: key,
-                      value: quarterSummary[key] ?? 0
+                      label: pieLabelMap[key],
+                      value: quarterSummary[key] ?? 0,
+                      color: pieColors[key]
                     }));
 
                     return (
@@ -561,16 +568,14 @@ export default function DashboardView() {
                             <Pie
                               data={chartData}
                               dataKey="value"
+                              nameKey="label"
                               innerRadius={55}
                               outerRadius={75}
                               paddingAngle={3}
                               strokeWidth={1}
                             >
-                              {pieKeys.map((key) => (
-                                <Cell
-                                  key={key}
-                                  fill={pieColors[key]}
-                                />
+                              {chartData.map((entry) => (
+                                <Cell key={entry.label} fill={entry.color} />
                               ))}
                             </Pie>
 
@@ -578,7 +583,7 @@ export default function DashboardView() {
                             <RechartsTooltip
                               formatter={(value: number, name: string) => [
                                 formatCurrency(Number(value) || 0),
-                                pieLabelMap[name as keyof typeof pieLabelMap] ?? name
+                                name
                               ]}
                             />
                           </PieChart>

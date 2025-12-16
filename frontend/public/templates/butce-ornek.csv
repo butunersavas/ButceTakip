@@ -1,0 +1,3 @@
+type,budget_code,budget_name,scenario,year,month,amount,date,quantity,unit_price,vendor,description,department,out_of_budget,capex_opex,asset_type
+plan,SK01,"ŞAN Cep Telefonu + Çakmaklık Şarj + Kılıf + Koruyucu  (500 Adet)",Temel,2026,6,50000,,1,50000,,"ŞAN Cep Telefonu + Çakmaklık Şarj + Kılıf + Koruyucu  (500 Adet)",Operasyon,YANLIŞ,Capex,Donanım
+plan,SK01,"ŞAN Cep Telefonu + Çakmaklık Şarj + Kılıf + Koruyucu  (500 Adet)",Temel,2026,10,50000,,1,50000,,"ŞAN Cep Telefonu + Çakmaklık Şarj + Kılıf + Koruyucu  (500 Adet)",Bilgi İşlem,YANLIŞ,Capex,Donanım

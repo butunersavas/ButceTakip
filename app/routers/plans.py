@@ -15,6 +15,8 @@ def list_plans(
     year: int | None = None,
     scenario_id: int | None = None,
     budget_item_id: int | None = None,
+    month: int | None = Query(default=None),
+    department: str | None = Query(default=None),
     session: Session = Depends(get_db_session),
     _: User = Depends(get_current_user),
 ) -> list[PlanEntry]:
@@ -25,6 +27,10 @@ def list_plans(
         query = query.where(PlanEntry.scenario_id == scenario_id)
     if budget_item_id is not None:
         query = query.where(PlanEntry.budget_item_id == budget_item_id)
+    if month is not None:
+        query = query.where(PlanEntry.month == month)
+    if department is not None:
+        query = query.where(PlanEntry.department == department)
     return session.exec(query).all()
 
 

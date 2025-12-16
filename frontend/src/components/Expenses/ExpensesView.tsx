@@ -640,7 +640,7 @@ export default function ExpensesView() {
         maxWidth: "100%"
       }}
     >
-      <Grid container spacing={2}>
+      <Grid container spacing={2} sx={{ mb: 2 }}>
         <Grid item xs={12} md={4}>
           <SummaryCard
             title="Toplam Gerçekleşen"
