@@ -36,12 +36,15 @@ def compute_monthly_summary(
     year: int,
     scenario_id: int | None = None,
     budget_item_id: int | None = None,
+    month: int | None = None,
 ) -> list[MonthlyAggregate]:
     plan_query = select(PlanEntry.month, func.sum(PlanEntry.amount)).where(PlanEntry.year == year)
     if scenario_id is not None:
         plan_query = plan_query.where(PlanEntry.scenario_id == scenario_id)
     if budget_item_id is not None:
         plan_query = plan_query.where(PlanEntry.budget_item_id == budget_item_id)
+    if month is not None:
+        plan_query = plan_query.where(PlanEntry.month == month)
     plan_query = plan_query.group_by(PlanEntry.month)
     plan_rows = session.exec(plan_query).all()
     plan_map = defaultdict(float, {month: amount or 0.0 for month, amount in plan_rows})
@@ -56,12 +59,14 @@ def compute_monthly_summary(
         expense_query = expense_query.where(Expense.scenario_id == scenario_id)
     if budget_item_id is not None:
         expense_query = expense_query.where(Expense.budget_item_id == budget_item_id)
+    if month is not None:
+        expense_query = expense_query.where(func.extract("month", Expense.expense_date) == month)
     expense_query = expense_query.group_by(func.extract("month", Expense.expense_date))
     expense_rows = session.exec(expense_query).all()
 
     expense_map = defaultdict(float, {int(month): amount or 0.0 for month, amount in expense_rows})
 
-    months = set(plan_map.keys()) | set(expense_map.keys()) | set(range(1, 13))
+    months = {month} if month is not None else set(plan_map.keys()) | set(expense_map.keys()) | set(range(1, 13))
     return [
         MonthlyAggregate(month=m, planned=float(plan_map[m]), actual=float(expense_map[m]))
         for m in sorted(months)

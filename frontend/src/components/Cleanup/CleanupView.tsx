@@ -158,7 +158,9 @@ function CleaningToolsSection() {
 
   const deleteScenarioMutation = useMutation({
     mutationFn: async (scenarioToDelete: number) => {
-      await client.delete(`/scenarios/${scenarioToDelete}?force=true`);
+      await client.delete(`/scenarios/${scenarioToDelete}`, {
+        params: { force: true }
+      });
       return scenarioToDelete;
     },
     onSuccess: (deletedId) => {
@@ -173,14 +175,16 @@ function CleaningToolsSection() {
       queryClient.invalidateQueries({ queryKey: ["plans"] });
     },
     onError: (err) => {
-      console.error(err);
+      console.error("SCENARIO DELETE FAILED", err);
       setResult(null);
       setOperationMessage(null);
 
       if (axios.isAxiosError(err)) {
+        console.error("DELETE RESPONSE", err.response?.status, err.response?.data);
+
         const detail =
           (err.response?.data as { detail?: string; message?: string } | undefined)?.detail ||
-          err.response?.data?.message;
+          (err.response?.data as { detail?: string; message?: string } | undefined)?.message;
 
         if (detail) {
           setError(detail);
@@ -191,6 +195,8 @@ function CleaningToolsSection() {
       setError(
         "Senaryo silme işlemi sırasında beklenmedik bir hata oluştu. Lütfen yetkilerinizi ve bağlantınızı kontrol edin."
       );
+      setResult(null);
+      setOperationMessage(null);
     }
   });
 

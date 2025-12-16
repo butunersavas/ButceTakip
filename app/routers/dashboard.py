@@ -19,13 +19,14 @@ router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 def get_dashboard(
     year: int = Query(..., description="Year to summarize"),
     scenario_id: int | None = Query(default=None),
+    month: int | None = Query(default=None),
     budget_item_id: int | None = Query(default=None),
     session: Session = Depends(get_db_session),
     _ = Depends(get_current_user),
 ) -> DashboardResponse:
     if year is None:
         raise HTTPException(status_code=400, detail="Year is required")
-    monthly = compute_monthly_summary(session, year, scenario_id, budget_item_id)
+    monthly = compute_monthly_summary(session, year, scenario_id, budget_item_id, month)
     total_plan, total_actual = totalize(monthly)
     # Remaining budget should never go below zero – once there is an overrun we
     # already report that separately via ``total_overrun``.
