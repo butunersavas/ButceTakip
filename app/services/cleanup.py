@@ -3,7 +3,7 @@ from datetime import datetime
 from sqlalchemy import exists, select
 from sqlmodel import Session, delete
 
-from app.models import BudgetItem, Expense, PlanEntry
+from app.models import BudgetItem, Expense, PlanEntry, PurchaseFormStatus
 from app.schemas import CleanupRequest
 
 
@@ -27,7 +27,26 @@ def perform_cleanup(session: Session, request: CleanupRequest) -> dict[str, int]
     deleted_plans = 0
     deleted_budget_items = 0
     resequenced_budget_items = 0
+    deleted_purchase_statuses = 0
     if request.reset_plans:
+        purchase_status_query = delete(PurchaseFormStatus)
+        if request.budget_item_id is not None:
+            purchase_status_query = purchase_status_query.where(
+                PurchaseFormStatus.budget_item_id == request.budget_item_id
+            )
+        elif request.scenario_id is not None:
+            purchase_status_query = purchase_status_query.where(
+                PurchaseFormStatus.budget_item_id.in_(
+                    select(PlanEntry.budget_item_id).where(
+                        PlanEntry.scenario_id == request.scenario_id
+                    )
+                )
+            )
+        purchase_status_result = session.exec(purchase_status_query)
+        deleted_purchase_statuses = (
+            purchase_status_result.rowcount if purchase_status_result else 0
+        )
+
         plan_query = delete(PlanEntry)
         if request.budget_item_id is not None:
             plan_query = plan_query.where(PlanEntry.budget_item_id == request.budget_item_id)
@@ -51,6 +70,7 @@ def perform_cleanup(session: Session, request: CleanupRequest) -> dict[str, int]
         "cleared_plans": deleted_plans,
         "cleared_budget_items": deleted_budget_items,
         "reindexed_budget_items": resequenced_budget_items,
+        "cleared_purchase_statuses": deleted_purchase_statuses,
     }
 
 

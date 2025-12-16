@@ -37,12 +37,15 @@ def compute_monthly_summary(
     scenario_id: int | None = None,
     budget_item_id: int | None = None,
     month: int | None = None,
+    department: str | None = None,
 ) -> list[MonthlyAggregate]:
     plan_query = select(PlanEntry.month, func.sum(PlanEntry.amount)).where(PlanEntry.year == year)
     if scenario_id is not None:
         plan_query = plan_query.where(PlanEntry.scenario_id == scenario_id)
     if budget_item_id is not None:
         plan_query = plan_query.where(PlanEntry.budget_item_id == budget_item_id)
+    if department is not None:
+        plan_query = plan_query.where(PlanEntry.department == department)
     if month is not None:
         plan_query = plan_query.where(PlanEntry.month == month)
     plan_query = plan_query.group_by(PlanEntry.month)
@@ -59,6 +62,12 @@ def compute_monthly_summary(
         expense_query = expense_query.where(Expense.scenario_id == scenario_id)
     if budget_item_id is not None:
         expense_query = expense_query.where(Expense.budget_item_id == budget_item_id)
+    if department is not None:
+        department_budget_items_query = select(PlanEntry.budget_item_id).where(PlanEntry.year == year)
+        if scenario_id is not None:
+            department_budget_items_query = department_budget_items_query.where(PlanEntry.scenario_id == scenario_id)
+        department_budget_items_query = department_budget_items_query.where(PlanEntry.department == department)
+        expense_query = expense_query.where(Expense.budget_item_id.in_(department_budget_items_query))
     if month is not None:
         expense_query = expense_query.where(func.extract("month", Expense.expense_date) == month)
     expense_query = expense_query.group_by(func.extract("month", Expense.expense_date))
@@ -84,8 +93,9 @@ def compute_quarterly_summary(
     year: int,
     scenario_id: int | None = None,
     budget_item_id: int | None = None,
+    department: str | None = None,
 ) -> list[QuarterlyAggregate]:
-    monthly = compute_monthly_summary(session, year, scenario_id, budget_item_id)
+    monthly = compute_monthly_summary(session, year, scenario_id, budget_item_id, None, department)
     planned_map = defaultdict(float, {item.month: item.planned for item in monthly})
     actual_map = defaultdict(float, {item.month: item.actual for item in monthly})
 
@@ -99,6 +109,14 @@ def compute_quarterly_summary(
         out_of_budget_query = out_of_budget_query.where(Expense.scenario_id == scenario_id)
     if budget_item_id is not None:
         out_of_budget_query = out_of_budget_query.where(Expense.budget_item_id == budget_item_id)
+    if department is not None:
+        department_budget_items_query = select(PlanEntry.budget_item_id).where(PlanEntry.year == year)
+        if scenario_id is not None:
+            department_budget_items_query = department_budget_items_query.where(PlanEntry.scenario_id == scenario_id)
+        department_budget_items_query = department_budget_items_query.where(PlanEntry.department == department)
+        out_of_budget_query = out_of_budget_query.where(
+            Expense.budget_item_id.in_(department_budget_items_query)
+        )
     out_of_budget_rows = session.exec(out_of_budget_query.group_by(func.extract("month", Expense.expense_date))).all()
     out_of_budget_map = defaultdict(
         float, {int(month): float(amount or 0.0) for month, amount in out_of_budget_rows}
@@ -113,6 +131,12 @@ def compute_quarterly_summary(
         cancelled_query = cancelled_query.where(Expense.scenario_id == scenario_id)
     if budget_item_id is not None:
         cancelled_query = cancelled_query.where(Expense.budget_item_id == budget_item_id)
+    if department is not None:
+        department_budget_items_query = select(PlanEntry.budget_item_id).where(PlanEntry.year == year)
+        if scenario_id is not None:
+            department_budget_items_query = department_budget_items_query.where(PlanEntry.scenario_id == scenario_id)
+        department_budget_items_query = department_budget_items_query.where(PlanEntry.department == department)
+        cancelled_query = cancelled_query.where(Expense.budget_item_id.in_(department_budget_items_query))
     cancelled_rows = session.exec(cancelled_query.group_by(func.extract("month", Expense.expense_date))).all()
     cancelled_map = defaultdict(float, {int(month): float(amount or 0.0) for month, amount in cancelled_rows})
 

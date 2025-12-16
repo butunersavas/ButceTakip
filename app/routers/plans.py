@@ -56,6 +56,23 @@ def aggregate_plans(
     ]
 
 
+@router.get("/departments", response_model=list[str])
+def list_departments(
+    year: int | None = None,
+    scenario_id: int | None = None,
+    session: Session = Depends(get_db_session),
+    _: User = Depends(get_current_user),
+) -> list[str]:
+    query = select(PlanEntry.department).where(PlanEntry.department.is_not(None))
+    if year is not None:
+        query = query.where(PlanEntry.year == year)
+    if scenario_id is not None:
+        query = query.where(PlanEntry.scenario_id == scenario_id)
+
+    departments = session.exec(query.distinct()).all()
+    return sorted({dept for dept in departments if dept})
+
+
 @router.post("/", response_model=PlanEntryRead, status_code=status.HTTP_201_CREATED)
 def create_plan_entry(
     plan_in: PlanEntryCreate,
