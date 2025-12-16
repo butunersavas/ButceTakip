@@ -48,6 +48,7 @@ interface PlanEntry {
   amount: number;
   scenario_id: number;
   budget_item_id: number;
+  department?: string | null;
 }
 
 type PlanMutationPayload = {
@@ -57,6 +58,7 @@ type PlanMutationPayload = {
   amount: number;
   scenario_id: number;
   budget_item_id: number;
+  department?: string | null;
 };
 
 interface PlanAggregate {
@@ -320,6 +322,12 @@ export default function PlansView() {
           const item = findBudgetItem(row);
           return item?.map_attribute ?? "";
         }
+      },
+      {
+        field: "department",
+        headerName: "Departman",
+        flex: 1,
+        valueGetter: (value, row) => row.department ?? "",
       },
       { field: "year", headerName: "Yıl", width: 110 },
       {

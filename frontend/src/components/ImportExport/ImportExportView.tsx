@@ -54,6 +54,7 @@ const sampleHeaders = [
   "unit_price",
   "vendor",
   "description",
+  "Departman",
   "out_of_budget",
   "capex_opex",
   "asset_type"
@@ -77,6 +78,7 @@ const sampleRows: SampleRow[] = [
     unit_price: "50000",
     vendor: "",
     description: "ŞAN Cep Telefonu + Çakmaklık Şarj + Kılıf + Koruyucu  (500 Adet)",
+    Departman: "Operasyon",
     out_of_budget: "YANLIŞ",
     capex_opex: "Capex",
     asset_type: "Donanım"
@@ -94,6 +96,7 @@ const sampleRows: SampleRow[] = [
     unit_price: "50000",
     vendor: "",
     description: "ŞAN Cep Telefonu + Çakmaklık Şarj + Kılıf + Koruyucu  (500 Adet)",
+    Departman: "Operasyon",
     out_of_budget: "YANLIŞ",
     capex_opex: "Capex",
     asset_type: "Donanım"
@@ -310,6 +313,7 @@ export default function ImportExportView() {
                 <Typography variant="body2" color="text.secondary">
                   Plan ve harcama verilerini JSON, CSV veya Excel (XLSX) formatında sisteme aktarabilirsiniz. Lütfen dosyalarınıza
                   Map Nitelik sütununu da ekleyin. Qlik’ten alınan pivot tablo çıktıları gibi “Row Labels” ve ay bazlı sütunlar içeren
+                  Departman sütunu opsiyoneldir; boş bırakılabilir.
                   Excel dosyaları da otomatik olarak parçalanıp plana dönüştürülür.
                 </Typography>
                 {error && <Alert severity="error">{error}</Alert>}

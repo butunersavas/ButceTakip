@@ -117,6 +117,7 @@ class PlanEntryBase(BaseModel):
     amount: float
     scenario_id: int
     budget_item_id: int
+    department: str | None = Field(default=None, max_length=100)
 
     @validator("month")
     def validate_month(cls, value: int) -> int:
@@ -135,6 +136,7 @@ class PlanEntryUpdate(BaseModel):
     amount: Optional[float] = None
     scenario_id: Optional[int] = None
     budget_item_id: Optional[int] = None
+    department: str | None = Field(default=None, max_length=100)
 
 
 class PlanEntryRead(PlanEntryBase):
