@@ -21,12 +21,13 @@ def get_dashboard(
     scenario_id: int | None = Query(default=None),
     month: int | None = Query(default=None),
     budget_item_id: int | None = Query(default=None),
+    department: str | None = Query(default=None),
     session: Session = Depends(get_db_session),
     _ = Depends(get_current_user),
 ) -> DashboardResponse:
     if year is None:
         raise HTTPException(status_code=400, detail="Year is required")
-    monthly = compute_monthly_summary(session, year, scenario_id, budget_item_id, month)
+    monthly = compute_monthly_summary(session, year, scenario_id, budget_item_id, month, department)
     total_plan, total_actual = totalize(monthly)
     # Remaining budget should never go below zero – once there is an overrun we
     # already report that separately via ``total_overrun``.
@@ -52,11 +53,19 @@ def get_dashboard(
     )
 
 
-def _budget_item_aggregates(session: Session, year: int, month: int | None = None):
+def _budget_item_aggregates(
+    session: Session,
+    year: int,
+    month: int | None = None,
+    department: str | None = None,
+):
     plan_query = select(
         PlanEntry.budget_item_id,
         func.sum(PlanEntry.amount).label("plan_total"),
     ).where(PlanEntry.year == year)
+
+    if department is not None:
+        plan_query = plan_query.where(PlanEntry.department == department)
 
     if month is not None:
         plan_query = plan_query.where(PlanEntry.month <= month)
@@ -72,6 +81,16 @@ def _budget_item_aggregates(session: Session, year: int, month: int | None = Non
         .where(Expense.status == ExpenseStatus.RECORDED)
         .where(Expense.is_out_of_budget.is_(False))
     )
+
+    if department is not None:
+        department_budget_items_query = (
+            select(PlanEntry.budget_item_id)
+            .where(PlanEntry.year == year)
+            .where(PlanEntry.department == department)
+        )
+        expense_query = expense_query.where(
+            Expense.budget_item_id.in_(department_budget_items_query)
+        )
 
     if month is not None:
         expense_query = expense_query.where(func.extract("month", Expense.expense_date) <= month)
@@ -97,10 +116,11 @@ def _budget_item_aggregates(session: Session, year: int, month: int | None = Non
 def get_risky_budget_items(
     year: int,
     month: int | None = None,
+    department: str | None = Query(default=None),
     session: Session = Depends(get_db_session),
     _ = Depends(get_current_user),
 ) -> list[RiskyItem]:
-    rows = _budget_item_aggregates(session, year, month)
+    rows = _budget_item_aggregates(session, year, month, department)
     items: list[RiskyItem] = []
 
     for row in rows:
@@ -130,10 +150,11 @@ def get_risky_budget_items(
 def get_no_spend_items(
     year: int,
     month: int | None = None,
+    department: str | None = Query(default=None),
     session: Session = Depends(get_db_session),
     _ = Depends(get_current_user),
 ) -> list[NoSpendItem]:
-    rows = _budget_item_aggregates(session, year, month)
+    rows = _budget_item_aggregates(session, year, month, department)
     items: list[NoSpendItem] = []
 
     for row in rows:

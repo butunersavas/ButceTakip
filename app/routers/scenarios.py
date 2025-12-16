@@ -7,7 +7,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlmodel import Session, select
 
 from app.dependencies import get_current_user, get_db_session
-from app.models import BudgetItem, Expense, PlanEntry, Scenario, User
+from app.models import BudgetItem, Expense, PlanEntry, PurchaseFormStatus, Scenario, User
 from app.schemas import ScenarioCreate, ScenarioRead, ScenarioUpdate
 
 logger = logging.getLogger(__name__)
@@ -114,6 +114,13 @@ def delete_scenario(
             if force:
                 session.exec(delete(Expense).where(Expense.scenario_id == scenario_id))
                 session.exec(delete(PlanEntry).where(PlanEntry.scenario_id == scenario_id))
+
+                if candidate_budget_item_ids:
+                    session.exec(
+                        delete(PurchaseFormStatus).where(
+                            PurchaseFormStatus.budget_item_id.in_(candidate_budget_item_ids)
+                        )
+                    )
 
                 for budget_item_id in candidate_budget_item_ids:
                     remaining_plans = session.exec(

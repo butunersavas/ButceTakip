@@ -160,6 +160,7 @@ export default function DashboardView() {
   const [scenarioId, setScenarioId] = usePersistentState<number | null>("dashboard:scenarioId", null);
   const [month, setMonth] = usePersistentState<number | null>("dashboard:month", null);
   const [budgetItemId, setBudgetItemId] = usePersistentState<number | null>("dashboard:budgetItemId", null);
+  const [department, setDepartment] = useState<string>("");
   const [purchaseItems, setPurchaseItems] = useState<PurchaseReminderItem[]>([]);
   const [isPurchaseDialogOpen, setIsPurchaseDialogOpen] = useState(false);
   const [dontShowAgainThisMonth, setDontShowAgainThisMonth] = useState(false);
@@ -204,6 +205,19 @@ export default function DashboardView() {
     }
   });
 
+  const { data: departments = [] } = useQuery<string[]>({
+    queryKey: ["departments", year, scenarioId],
+    queryFn: async () => {
+      const { data } = await client.get<string[]>("/plans/departments", {
+        params: {
+          year,
+          scenario_id: scenarioId || undefined
+        }
+      });
+      return data ?? [];
+    }
+  });
+
   useEffect(() => {
     const dismissed = localStorage.getItem(reminderKey);
     if (dismissed === "dismissed") {
@@ -235,12 +249,16 @@ export default function DashboardView() {
   };
 
   const { data: riskyItems = [] } = useQuery<RiskyItem[]>({
-    queryKey: ["dashboard", "risky-items", year, month],
+    queryKey: ["dashboard", "risky-items", year, month, department],
     queryFn: async () => {
-      const params: Record<string, number> = { year };
+      const params: Record<string, number | string> = { year };
 
       if (month) {
         params.month = month;
+      }
+
+      if (department) {
+        params.department = department;
       }
 
       const { data } = await client.get<RiskyItem[]>("/dashboard/risky-items", {
@@ -266,12 +284,13 @@ export default function DashboardView() {
   }, [scenarios, year]);
 
   const { data: dashboard, isLoading } = useQuery<DashboardResponse>({
-    queryKey: ["dashboard", year, scenarioId, month, budgetItemId],
+    queryKey: ["dashboard", year, scenarioId, month, budgetItemId, department],
     queryFn: async () => {
-      const params: Record<string, number> = { year };
+      const params: Record<string, number | string> = { year };
       if (scenarioId) params.scenario_id = scenarioId;
       if (month) params.month = month;
       if (budgetItemId) params.budget_item_id = budgetItemId;
+      if (department) params.department = department;
       const { data } = await client.get<DashboardResponse>("/dashboard", { params });
       return data;
     }
@@ -348,7 +367,7 @@ export default function DashboardView() {
                   <Chip label="Güncel" color="primary" variant="outlined" size="small" />
                 </Stack>
                 <Grid container spacing={2} alignItems="center">
-                  <Grid item xs={12} md={3}>
+                  <Grid item xs={12} md={2}>
                     <TextField
                       size="small"
                       label="Yıl"
@@ -380,6 +399,23 @@ export default function DashboardView() {
                   </Grid>
                   <Grid item xs={12} md={3}>
                     <TextField
+                      size="small"
+                      select
+                      label="Departman"
+                      value={department}
+                      onChange={(event) => setDepartment(event.target.value || "")}
+                      fullWidth
+                    >
+                      <MenuItem value="">Tümü</MenuItem>
+                      {departments.map((name) => (
+                        <MenuItem key={name} value={name}>
+                          {name}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                  </Grid>
+                  <Grid item xs={12} md={2}>
+                    <TextField
                       select
                       fullWidth
                       size="small"
@@ -398,7 +434,7 @@ export default function DashboardView() {
                       ))}
                     </TextField>
                   </Grid>
-                  <Grid item xs={12} md={3}>
+                  <Grid item xs={12} md={2}>
                     <TextField
                       size="small"
                       select
