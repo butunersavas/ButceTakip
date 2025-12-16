@@ -129,7 +129,7 @@ const pieKeys: Array<keyof QuarterlySummary> = ["planned", "actual", "remaining"
 const pieColors: Record<keyof QuarterlySummary, string> = {
   planned: "#1E5EFF",
   actual: "#00A76F",
-  remaining: "#FFB547",
+  remaining: "#e65100",
   overrun: "#FF5630"
 };
 
