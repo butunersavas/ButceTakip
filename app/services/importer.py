@@ -155,6 +155,14 @@ def _extract_map_category(data: dict[str, Any]) -> str | None:
     )
 
 
+def _extract_department(data: dict[str, Any]) -> str | None:
+    dept_raw = _extract_column_value(data, "departman", "department", "Departman")
+    if dept_raw is None:
+        return None
+    department = str(dept_raw).strip()
+    return department or None
+
+
 def _normalize_code(value: str) -> str:
     normalized = unicodedata.normalize("NFKD", value)
     ascii_text = normalized.encode("ascii", "ignore").decode("ascii")
@@ -286,6 +294,7 @@ def _import_plan_list(data: list[dict], session: Session) -> int:
         try:
             map_attribute = _extract_map_attribute(entry)
             map_category = _extract_map_category(entry)
+            department = _extract_department(entry)
             item = _ensure_budget_item(
                 session,
                 entry["budget_code"],
@@ -302,6 +311,7 @@ def _import_plan_list(data: list[dict], session: Session) -> int:
                 amount=float(entry["amount"]),
                 scenario_id=scenario.id,
                 budget_item_id=item.id,
+                department=department,
             )
             session.add(plan)
             session.commit()
@@ -315,6 +325,7 @@ def _import_year_month_structure(data: dict, session: Session) -> int:
     imported = 0
     year = int(data["year"])
     scenario = _get_or_create_scenario(session, data.get("scenario"), year)
+    department = _extract_department(data)
     for item_code, months in data.get("items", {}).items():
         item = _ensure_budget_item(
             session,
@@ -330,6 +341,7 @@ def _import_year_month_structure(data: dict, session: Session) -> int:
                 amount=float(amount),
                 scenario_id=scenario.id,
                 budget_item_id=item.id,
+                department=department,
             )
             session.add(plan)
             session.commit()
@@ -493,6 +505,7 @@ def import_csv(file: UploadFile, session: Session) -> ImportSummary:
             entry_type = row.get("type", "plan").lower()
             map_attribute = _extract_map_attribute(row)
             map_category = _extract_map_category(row)
+            department = _extract_department(row)
             if entry_type == "plan":
                 item = _ensure_budget_item(
                     session,
@@ -508,6 +521,7 @@ def import_csv(file: UploadFile, session: Session) -> ImportSummary:
                     amount=float(row["amount"]),
                     scenario_id=scenario.id,
                     budget_item_id=item.id,
+                    department=department,
                 )
                 session.add(plan)
                 session.commit()
@@ -589,6 +603,7 @@ def import_xlsx(file: UploadFile, session: Session) -> ImportSummary:
         entry_type = str(row.get("type") or "plan").lower()
         map_attribute = _extract_map_attribute(row)
         map_category = _extract_map_category(row)
+        department = _extract_department(row)
         try:
             budget_code = _coerce_str(
                 _get_value(row, "budget_code", "budget code", "kod"),
@@ -611,6 +626,7 @@ def import_xlsx(file: UploadFile, session: Session) -> ImportSummary:
                     amount=amount_value,
                     scenario_id=scenario.id,
                     budget_item_id=item.id,
+                    department=department,
                 )
                 session.add(plan)
                 session.commit()

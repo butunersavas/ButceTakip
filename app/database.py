@@ -92,6 +92,11 @@ def _apply_schema_upgrades() -> None:
         with engine.begin() as connection:
             connection.execute(text("ALTER TABLE expenses ADD COLUMN kaydi_giren_kullanici TEXT"))
 
+    plan_columns = {column["name"] for column in inspector.get_columns("plan_entries")}
+    if "department" not in plan_columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE plan_entries ADD COLUMN department VARCHAR(100)"))
+
     user_columns = {column["name"] for column in inspector.get_columns("users")}
     if "email" not in user_columns:
         with engine.begin() as connection:
