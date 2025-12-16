@@ -158,20 +158,35 @@ export default function DashboardView() {
   const currentYear = new Date().getFullYear();
   const [year, setYear] = usePersistentState<number>("dashboard:year", currentYear);
   const [scenarioId, setScenarioId] = usePersistentState<number | null>("dashboard:scenarioId", null);
+  const [month, setMonth] = usePersistentState<number | null>("dashboard:month", null);
   const [budgetItemId, setBudgetItemId] = usePersistentState<number | null>("dashboard:budgetItemId", null);
   const [purchaseItems, setPurchaseItems] = useState<PurchaseReminderItem[]>([]);
   const [isPurchaseDialogOpen, setIsPurchaseDialogOpen] = useState(false);
   const [dontShowAgainThisMonth, setDontShowAgainThisMonth] = useState(false);
-  const [riskyItems, setRiskyItems] = useState<RiskyItem[]>([]);
   const [savingPurchaseStatus, setSavingPurchaseStatus] = useState(false);
   const [purchaseStatusFeedback, setPurchaseStatusFeedback] = useState<
     { message: string; severity: "success" | "error" } | null
   >(null);
 
+  const monthOptions = [
+    { value: 1, label: "Ocak" },
+    { value: 2, label: "Şubat" },
+    { value: 3, label: "Mart" },
+    { value: 4, label: "Nisan" },
+    { value: 5, label: "Mayıs" },
+    { value: 6, label: "Haziran" },
+    { value: 7, label: "Temmuz" },
+    { value: 8, label: "Ağustos" },
+    { value: 9, label: "Eylül" },
+    { value: 10, label: "Ekim" },
+    { value: 11, label: "Kasım" },
+    { value: 12, label: "Aralık" }
+  ];
+
   const now = new Date();
   const yearNow = now.getFullYear();
-  const month = now.getMonth() + 1;
-  const reminderKey = `purchase-reminder-${yearNow}-${month}`;
+  const currentMonth = now.getMonth() + 1;
+  const reminderKey = `purchase-reminder-${yearNow}-${currentMonth}`;
 
   const { data: scenarios } = useQuery<Scenario[]>({
     queryKey: ["scenarios"],
@@ -197,7 +212,7 @@ export default function DashboardView() {
 
     client
       .get<PurchaseReminderItem[]>(
-        `/budget/purchase-reminders?year=${yearNow}&month=${month}`
+        `/budget/purchase-reminders?year=${yearNow}&month=${currentMonth}`
       )
       .then((res) => {
         const items = res.data ?? [];
@@ -209,8 +224,8 @@ export default function DashboardView() {
       })
       .catch(() => {
         // Hata durumunda sessiz geçilebilir veya loglanabilir
-    });
-  }, [client, month, reminderKey, yearNow]);
+      });
+  }, [client, currentMonth, reminderKey, yearNow]);
 
   const handleClosePurchaseDialog = () => {
     if (dontShowAgainThisMonth) {
@@ -219,16 +234,22 @@ export default function DashboardView() {
     setIsPurchaseDialogOpen(false);
   };
 
-  useEffect(() => {
-    const now = new Date();
-    const requestYear = now.getFullYear();
-    const requestMonth = now.getMonth() + 1;
+  const { data: riskyItems = [] } = useQuery<RiskyItem[]>({
+    queryKey: ["dashboard", "risky-items", year, month],
+    queryFn: async () => {
+      const params: Record<string, number> = { year };
 
-    client
-      .get<RiskyItem[]>(`/dashboard/risky-items?year=${requestYear}&month=${requestMonth}`)
-      .then((res) => setRiskyItems(res.data ?? []))
-      .catch(() => setRiskyItems([]));
-  }, [client]);
+      if (month) {
+        params.month = month;
+      }
+
+      const { data } = await client.get<RiskyItem[]>("/dashboard/risky-items", {
+        params
+      });
+
+      return data ?? [];
+    }
+  });
 
   useEffect(() => {
     if (!scenarios?.length) return;
@@ -245,10 +266,11 @@ export default function DashboardView() {
   }, [scenarios, year]);
 
   const { data: dashboard, isLoading } = useQuery<DashboardResponse>({
-    queryKey: ["dashboard", year, scenarioId, budgetItemId],
+    queryKey: ["dashboard", year, scenarioId, month, budgetItemId],
     queryFn: async () => {
       const params: Record<string, number> = { year };
       if (scenarioId) params.scenario_id = scenarioId;
+      if (month) params.month = month;
       if (budgetItemId) params.budget_item_id = budgetItemId;
       const { data } = await client.get<DashboardResponse>("/dashboard", { params });
       return data;
@@ -326,7 +348,7 @@ export default function DashboardView() {
                   <Chip label="Güncel" color="primary" variant="outlined" size="small" />
                 </Stack>
                 <Grid container spacing={2} alignItems="center">
-                  <Grid item xs={12} md={4}>
+                  <Grid item xs={12} md={3}>
                     <TextField
                       size="small"
                       label="Yıl"
@@ -339,7 +361,7 @@ export default function DashboardView() {
                       fullWidth
                     />
                   </Grid>
-                  <Grid item xs={12} md={4}>
+                  <Grid item xs={12} md={3}>
                     <TextField
                       size="small"
                       select
@@ -356,7 +378,27 @@ export default function DashboardView() {
                       ))}
                     </TextField>
                   </Grid>
-                  <Grid item xs={12} md={4}>
+                  <Grid item xs={12} md={3}>
+                    <TextField
+                      select
+                      fullWidth
+                      size="small"
+                      label="Ay"
+                      value={month ?? ""}
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        setMonth(value === "" ? null : Number(value));
+                      }}
+                    >
+                      <MenuItem value="">Tüm Aylar</MenuItem>
+                      {monthOptions.map((m) => (
+                        <MenuItem key={m.value} value={m.value}>
+                          {m.label}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                  </Grid>
+                  <Grid item xs={12} md={3}>
                     <TextField
                       size="small"
                       select
