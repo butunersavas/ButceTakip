@@ -5,6 +5,7 @@ import {
   Card,
   CardContent,
   CardHeader,
+  Box,
   Checkbox,
   Chip,
   Container,
@@ -99,6 +100,15 @@ type RiskyItem = {
   ratio: number;
 };
 
+type QuarterlySummary = {
+  planned: number;
+  actual: number;
+  remaining: number;
+  overrun: number;
+};
+
+type QuarterlyDataItem = QuarterlySummary & { quarter: string };
+
 const monthLabels = [
   "Ocak",
   "Şubat",
@@ -113,6 +123,22 @@ const monthLabels = [
   "Kasım",
   "Aralık"
 ];
+
+const pieKeys: Array<keyof QuarterlySummary> = ["planned", "actual", "remaining", "overrun"];
+
+const pieColors: Record<keyof QuarterlySummary, string> = {
+  planned: "#1E5EFF",
+  actual: "#00A76F",
+  remaining: "#FFB547",
+  overrun: "#FF5630"
+};
+
+const pieLabelMap = {
+  planned: "Planlanan",
+  actual: "Gerçekleşen",
+  remaining: "Kalan",
+  overrun: "Aşım"
+} as const;
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("tr-TR", {
@@ -242,7 +268,7 @@ export default function DashboardView() {
     });
   }, [dashboard]);
 
-  const quarterlyData = useMemo(() => {
+  const quarterlyData = useMemo<QuarterlyDataItem[]>(() => {
     if (!dashboard?.monthly?.length) return [];
     const quarters = [
       { label: "Q1", months: [1, 2, 3] },
@@ -250,36 +276,15 @@ export default function DashboardView() {
       { label: "Q3", months: [7, 8, 9] },
       { label: "Q4", months: [10, 11, 12] }
     ];
-  return quarters.map(({ label, months }) => {
+    return quarters.map(({ label, months }) => {
       const entries = dashboard.monthly.filter((item) => months.includes(item.month));
       const planned = entries.reduce((sum, item) => sum + (item.planned ?? 0), 0);
       const actual = entries.reduce((sum, item) => sum + (item.actual ?? 0), 0);
       const remaining = Math.max(planned - actual, 0);
       const overrun = Math.max(actual - planned, 0);
-      return { label, planned, actual, remaining, overrun };
+      return { quarter: label, planned, actual, remaining, overrun } satisfies QuarterlyDataItem;
     });
   }, [dashboard]);
-
-  const pieData = useMemo(
-    () =>
-      quarterlyData?.map((item) => ({
-        name: item.label,
-        value: item.actual ?? 0
-      })) ?? [],
-    [quarterlyData]
-  );
-
-  const PIE_COLORS = ["#3366FF", "#00B894", "#F39C12", "#E74C3C"];
-
-  const pieColors = useMemo(
-    () => ({
-      planned: "#0d47a1",
-      actual: "#26a69a",
-      remaining: "#f57c00",
-      overrun: "#d32f2f"
-    }),
-    []
-  );
   const normalizedKpi = useMemo(() => {
     const totalPlan = dashboard?.kpi.total_plan ?? 0;
     const totalActual = dashboard?.kpi.total_actual ?? 0;
@@ -450,35 +455,138 @@ export default function DashboardView() {
             </Card>
 
             <Card>
-              <CardHeader
-                title="3 Aylık Harcama Dağılımı"
-                action={<Chip size="small" label="Son 4 Çeyrek" variant="outlined" />}
-              />
-              <CardContent sx={{ height: 260 }}>
-                {isLoading ? (
-                  <Skeleton variant="rectangular" height="100%" />
-                ) : (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <RechartsTooltip
-                        formatter={(value: number) => formatCurrency(Number(value) || 0)}
-                      />
-                      <Legend />
-                      <Pie
-                        data={pieData}
-                        dataKey="value"
-                        nameKey="name"
-                        innerRadius={60}
-                        outerRadius={90}
-                        paddingAngle={3}
-                      >
-                        {pieData.map((entry, index) => (
-                          <Cell key={entry.name} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                        ))}
-                      </Pie>
-                    </PieChart>
-                  </ResponsiveContainer>
-                )}
+              <CardContent>
+                <Stack
+                  direction="row"
+                  alignItems="center"
+                  justifyContent="space-between"
+                  mb={2}
+                >
+                  <Typography variant="h6" fontWeight={700}>
+                    3 Aylık Harcama Dağılımı
+                  </Typography>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    sx={{ borderRadius: 999, textTransform: "none" }}
+                  >
+                    Son 4 Çeyrek
+                  </Button>
+                </Stack>
+
+                {/* LEJAND – Planlanan / Gerçekleşen / Kalan / Aşım (renkler korunuyor) */}
+                <Stack
+                  direction="row"
+                  spacing={3}
+                  alignItems="center"
+                  mb={2}
+                >
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <Box
+                      sx={{
+                        width: 12,
+                        height: 12,
+                        borderRadius: "50%",
+                        bgcolor: pieColors.planned
+                      }}
+                    />
+                    <Typography variant="caption">Planlanan</Typography>
+                  </Stack>
+
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <Box
+                      sx={{
+                        width: 12,
+                        height: 12,
+                        borderRadius: "50%",
+                        bgcolor: pieColors.actual
+                      }}
+                    />
+                    <Typography variant="caption">Gerçekleşen</Typography>
+                  </Stack>
+
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <Box
+                      sx={{
+                        width: 12,
+                        height: 12,
+                        borderRadius: "50%",
+                        bgcolor: pieColors.remaining
+                      }}
+                    />
+                    <Typography variant="caption">Kalan</Typography>
+                  </Stack>
+
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <Box
+                      sx={{
+                        width: 12,
+                        height: 12,
+                        borderRadius: "50%",
+                        bgcolor: pieColors.overrun
+                      }}
+                    />
+                    <Typography variant="caption">Aşım</Typography>
+                  </Stack>
+                </Stack>
+
+                {/* 4 ÇEYREK İÇİN YAN YANA DONUT GRAFİKLER */}
+                <Grid container spacing={3}>
+                  {["Q1", "Q2", "Q3", "Q4"].map((quarterKey) => {
+                    const quarterSummary = quarterlyData.find(
+                      (item) => item.quarter === quarterKey
+                    );
+
+                    if (!quarterSummary) return null;
+
+                    const quarterLabel =
+                      quarterKey === "Q1"
+                        ? "Q1"
+                        : quarterKey === "Q2"
+                        ? "Q2"
+                        : quarterKey === "Q3"
+                        ? "Q3"
+                        : "Q4";
+
+                    const chartData = pieKeys.map((key) => ({
+                      name: key,
+                      value: quarterSummary[key] ?? 0
+                    }));
+
+                    return (
+                      <Grid item xs={12} sm={6} md={3} key={quarterKey}>
+                        <Stack alignItems="center" spacing={1}>
+                          <Typography variant="subtitle2">{quarterLabel}</Typography>
+                          <PieChart width={180} height={180}>
+                            <Pie
+                              data={chartData}
+                              dataKey="value"
+                              innerRadius={55}
+                              outerRadius={75}
+                              paddingAngle={3}
+                              strokeWidth={1}
+                            >
+                              {pieKeys.map((key) => (
+                                <Cell
+                                  key={key}
+                                  fill={pieColors[key]}
+                                />
+                              ))}
+                            </Pie>
+
+                            {/* HOVER’DA TUTAR GÖSTEREN TOOLTIP */}
+                            <RechartsTooltip
+                              formatter={(value: number, name: string) => [
+                                formatCurrency(Number(value) || 0),
+                                pieLabelMap[name as keyof typeof pieLabelMap] ?? name
+                              ]}
+                            />
+                          </PieChart>
+                        </Stack>
+                      </Grid>
+                    );
+                  })}
+                </Grid>
               </CardContent>
             </Card>
 
