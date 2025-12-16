@@ -95,6 +95,10 @@ export default function PlansView() {
   const currentYear = new Date().getFullYear();
   const [year, setYear] = usePersistentState<number>("plans:year", currentYear);
   const [scenarioId, setScenarioId] = usePersistentState<number | null>("plans:scenarioId", null);
+  const [monthFilter, setMonthFilter] = usePersistentState<number | null>(
+    "plans:month",
+    null
+  );
   const [budgetItemId, setBudgetItemId] = usePersistentState<number | null>("plans:budgetItemId", null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState<PlanEntry | null>(null);
@@ -221,13 +225,21 @@ export default function PlansView() {
   );
 
   const rows = useMemo(() => {
-    return (
+    const mapped =
       plans?.map((plan) => ({
         ...plan,
-        budget_item_id: plan?.budget_item_id ?? null,
-      })) ?? []
-    );
-  }, [plans]);
+        amount: Number(plan.amount) || 0,
+        budget_item_id: plan?.budget_item_id ?? null
+      })) ?? [];
+
+    if (!monthFilter) {
+      // Ay seçili değilken tüm plan satırlarını göster
+      return mapped;
+    }
+
+    // Sadece seçilen aya ait plan satırlarını göster
+    return mapped.filter((row) => row.month === monthFilter);
+  }, [plans, monthFilter]);
 
   const MONTH_NAMES_TR = [
     "",
@@ -411,7 +423,7 @@ export default function PlansView() {
       <Card>
         <CardContent>
           <Grid container spacing={3} alignItems="center">
-            <Grid item xs={12} md={4}>
+            <Grid item xs={12} md={3}>
               <TextField
                 label="Yıl"
                 type="number"
@@ -423,7 +435,7 @@ export default function PlansView() {
                 fullWidth
               />
             </Grid>
-            <Grid item xs={12} md={4}>
+            <Grid item xs={12} md={3}>
               <TextField
                 select
                 label="Senaryo"
@@ -441,7 +453,27 @@ export default function PlansView() {
                 ))}
               </TextField>
             </Grid>
-            <Grid item xs={12} md={4}>
+            <Grid item xs={12} md={3}>
+              <TextField
+                select
+                fullWidth
+                label="Ay"
+                value={monthFilter ?? ""}
+                onChange={(event) =>
+                  setMonthFilter(
+                    event.target.value ? Number(event.target.value) : null
+                  )
+                }
+              >
+                <MenuItem value="">Tümü</MenuItem>
+                {monthOptions.map((label, index) => (
+                  <MenuItem key={index + 1} value={index + 1}>
+                    {label}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Grid>
+            <Grid item xs={12} md={3}>
               <TextField
                 select
                 label="Bütçe Kalemi"
