@@ -97,10 +97,8 @@ export default function PlansView() {
   const currentYear = new Date().getFullYear();
   const [year, setYear] = usePersistentState<number>("plans:year", currentYear);
   const [scenarioId, setScenarioId] = usePersistentState<number | null>("plans:scenarioId", null);
-  const [monthFilter, setMonthFilter] = usePersistentState<number | null>(
-    "plans:month",
-    null
-  );
+  const [monthFilter, setMonthFilter] = useState<number | "">("");
+  const [departmentFilter, setDepartmentFilter] = useState<string>("");
   const [budgetItemId, setBudgetItemId] = usePersistentState<number | null>("plans:budgetItemId", null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState<PlanEntry | null>(null);
@@ -123,11 +121,13 @@ export default function PlansView() {
   });
 
   const { data: plans, isFetching } = useQuery<PlanEntry[]>({
-    queryKey: ["plans", year, scenarioId, budgetItemId],
+    queryKey: ["plans", year, scenarioId, budgetItemId, monthFilter || "", departmentFilter || ""],
     queryFn: async () => {
-      const params: Record<string, number> = { year };
+      const params: Record<string, number | string> = { year };
       if (scenarioId) params.scenario_id = scenarioId;
       if (budgetItemId) params.budget_item_id = budgetItemId;
+      if (monthFilter !== "") params.month = Number(monthFilter);
+      if (departmentFilter) params.department = departmentFilter;
       const { data } = await client.get<PlanEntry[]>("/plans", { params });
       return data;
     }
@@ -189,6 +189,11 @@ export default function PlansView() {
       budget_item_id: Number(formData.get("budget_item_id"))
     };
 
+    const departmentValue = (formData.get("department") || "").toString().trim();
+    if (departmentValue) {
+      payload.department = departmentValue;
+    }
+
     mutation.mutate(payload, {
       onError: () => {
         setFormError("Plan kaydı kaydedilirken bir sorun oluştu. Yetkinizi ve alanları kontrol edin.");
@@ -234,14 +239,26 @@ export default function PlansView() {
         budget_item_id: plan?.budget_item_id ?? null
       })) ?? [];
 
-    if (!monthFilter) {
-      // Ay seçili değilken tüm plan satırlarını göster
+    if (monthFilter === "" && !departmentFilter) {
       return mapped;
     }
 
-    // Sadece seçilen aya ait plan satırlarını göster
-    return mapped.filter((row) => row.month === monthFilter);
-  }, [plans, monthFilter]);
+    return mapped.filter((row) => {
+      const matchesMonth = monthFilter === "" || row.month === monthFilter;
+      const matchesDepartment = !departmentFilter || row.department === departmentFilter;
+      return matchesMonth && matchesDepartment;
+    });
+  }, [plans, monthFilter, departmentFilter]);
+
+  const departmentOptions = useMemo(() => {
+    const options = new Set<string>();
+    plans?.forEach((plan) => {
+      if (plan.department) {
+        options.add(plan.department);
+      }
+    });
+    return Array.from(options).sort((a, b) => a.localeCompare(b, "tr"));
+  }, [plans]);
 
   const MONTH_NAMES_TR = [
     "",
@@ -426,12 +443,18 @@ export default function PlansView() {
     return totals;
   }, [aggregates]);
 
+  const filteredTotal = useMemo(() => {
+    return rows.reduce((sum, plan) => sum + (Number(plan.amount) || 0), 0);
+  }, [rows]);
+
+  const formattedFilteredTotal = formatCurrency(filteredTotal);
+
   return (
     <Stack spacing={4}>
       <Card>
         <CardContent>
           <Grid container spacing={3} alignItems="center">
-            <Grid item xs={12} md={3}>
+            <Grid item xs={12} md={2}>
               <TextField
                 label="Yıl"
                 type="number"
@@ -461,15 +484,15 @@ export default function PlansView() {
                 ))}
               </TextField>
             </Grid>
-            <Grid item xs={12} md={3}>
+            <Grid item xs={12} md={2}>
               <TextField
                 select
                 fullWidth
                 label="Ay"
-                value={monthFilter ?? ""}
+                value={monthFilter}
                 onChange={(event) =>
                   setMonthFilter(
-                    event.target.value ? Number(event.target.value) : null
+                    event.target.value ? Number(event.target.value) : ""
                   )
                 }
               >
@@ -495,6 +518,22 @@ export default function PlansView() {
                 {budgetItems?.map((item) => (
                   <MenuItem key={item.id} value={item.id}>
                     {formatBudgetItemLabel(item)}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Grid>
+            <Grid item xs={12} md={2}>
+              <TextField
+                select
+                label="Departman"
+                value={departmentFilter}
+                onChange={(event) => setDepartmentFilter(event.target.value)}
+                fullWidth
+              >
+                <MenuItem value="">Tümü</MenuItem>
+                {departmentOptions.map((name) => (
+                  <MenuItem key={name} value={name}>
+                    {name}
                   </MenuItem>
                 ))}
               </TextField>
@@ -537,9 +576,23 @@ export default function PlansView() {
         <Grid item xs={12} md={8}>
           <Card>
             <CardContent sx={{ height: "100%" }}>
-              <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-                Plan Kayıtları
-              </Typography>
+              <Stack
+                direction={{ xs: "column", sm: "row" }}
+                justifyContent="space-between"
+                alignItems={{ xs: "flex-start", sm: "center" }}
+                spacing={1}
+                mb={1}
+              >
+                <Typography variant="subtitle1" fontWeight={600}>
+                  Plan Kayıtları
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Seçili filtrelere göre plan toplamı:{" "}
+                  <Box component="span" fontWeight={700} color="text.primary">
+                    {formattedFilteredTotal}
+                  </Box>
+                </Typography>
+              </Stack>
               <Box sx={{ width: "100%", overflowX: "auto" }}>
                 <DataGrid
                   autoHeight
@@ -632,6 +685,12 @@ export default function PlansView() {
                   </MenuItem>
                 ))}
               </TextField>
+              <TextField
+                label="Departman"
+                name="department"
+                defaultValue={editingPlan?.department ?? ""}
+                placeholder="Opsiyonel"
+              />
             </Stack>
           </DialogContent>
           <DialogActions>

@@ -2,14 +2,13 @@ from datetime import datetime
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
-from sqlalchemy import func
+from sqlalchemy import delete, func
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlmodel import Session, select
 
 from app.dependencies import get_current_user, get_db_session
-from app.models import Expense, PlanEntry, Scenario, User
-from app.schemas import CleanupRequest, ScenarioCreate, ScenarioRead, ScenarioUpdate
-from app.services import cleanup as cleanup_service
+from app.models import BudgetItem, Expense, PlanEntry, Scenario, User
+from app.schemas import ScenarioCreate, ScenarioRead, ScenarioUpdate
 
 logger = logging.getLogger(__name__)
 
@@ -69,16 +68,20 @@ def delete_scenario(
 ) -> Response:
     """Senaryoyu sil.
 
-    - Kullanıcı giriş yapmış olmalı (get_current_user).
-    - Eğer senaryoya bağlı harcama/plan kayıtları varsa:
-        * force=False ise 409 döner ve silmez.
-        * force=True ise önce cleanup_service ile ilişkili kayıtları temizler, sonra senaryoyu siler.
+    - Sadece admin kullanıcılar silebilir.
+    - force=True ve kullanıcı admin ise bağlı plan/harcama kayıtları da kaldırılır.
     """
+
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bu işlem için yetkiniz yok",
+        )
+
     scenario = session.get(Scenario, scenario_id)
     if not scenario:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
 
-    # Bu senaryoya bağlı harcama ve plan var mı?
     expense_count = session.exec(
         select(func.count(Expense.id)).where(Expense.scenario_id == scenario_id)
     ).one()
@@ -87,7 +90,6 @@ def delete_scenario(
     ).one()
 
     if (expense_count or plan_count) and not force:
-        # İlişkili kayıtlar var ve force=False ise bilgilendirici 409 dön.
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
@@ -96,28 +98,42 @@ def delete_scenario(
             },
         )
 
-    if force:
-        # İlgili tüm kayıtları temizle
-        cleanup_service.perform_cleanup(
-            session,
-            CleanupRequest(
-                scenario_id=scenario_id,
-                clear_imported_only=False,
-                reset_plans=True,
-            ),
-        )
+    candidate_budget_item_ids: set[int] = set(
+        session.exec(
+            select(PlanEntry.budget_item_id).where(PlanEntry.scenario_id == scenario_id)
+        ).all()
+    )
+    candidate_budget_item_ids.update(
+        session.exec(
+            select(Expense.budget_item_id).where(Expense.scenario_id == scenario_id)
+        ).all()
+    )
 
     try:
-        session.delete(scenario)
-        session.commit()
+        with session.begin():
+            if force:
+                session.exec(delete(Expense).where(Expense.scenario_id == scenario_id))
+                session.exec(delete(PlanEntry).where(PlanEntry.scenario_id == scenario_id))
+
+                for budget_item_id in candidate_budget_item_ids:
+                    remaining_plans = session.exec(
+                        select(func.count()).where(PlanEntry.budget_item_id == budget_item_id)
+                    ).one()
+                    remaining_expenses = session.exec(
+                        select(func.count()).where(Expense.budget_item_id == budget_item_id)
+                    ).one()
+                    if not remaining_plans and not remaining_expenses:
+                        budget_item = session.get(BudgetItem, budget_item_id)
+                        if budget_item:
+                            session.delete(budget_item)
+
+            session.delete(scenario)
     except IntegrityError:
-        session.rollback()
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Bu senaryo mevcut kayıtlar tarafından kullanıldığı için silinemez.",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Senaryonun bağlı kayıtları olduğu için silinemedi",
         )
     except SQLAlchemyError:
-        session.rollback()
         logger.exception(
             "Beklenmedik bir hata nedeniyle senaryo silinemedi",
             extra={"scenario_id": scenario_id},
