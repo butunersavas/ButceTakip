@@ -8,7 +8,6 @@ import {
   Box,
   Checkbox,
   Chip,
-  Container,
   Dialog,
   DialogActions,
   DialogContent,
@@ -355,8 +354,17 @@ export default function DashboardView() {
 
   return (
     <>
-      <Container maxWidth="xl" sx={{ py: 3 }}>
-        <Stack spacing={2}>
+      <Box
+        sx={{
+          width: "100%",
+          maxWidth: 1400,
+          ml: 0,
+          mr: "auto",
+          px: { xs: 2, md: 3 },
+          py: { xs: 2, md: 3 }
+        }}
+      >
+        <Stack spacing={2} sx={{ width: "100%" }}>
           <Card>
             <CardContent sx={{ py: 1.5, px: 2.5 }}>
               <Stack spacing={1.5}>
@@ -697,7 +705,7 @@ export default function DashboardView() {
             </Card>
           </Stack>
         </Stack>
-      </Container>
+      </Box>
       <Dialog
         open={isPurchaseDialogOpen && purchaseItems.length > 0}
         onClose={handleClosePurchaseDialog}
