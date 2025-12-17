@@ -302,7 +302,16 @@ export default function AppLayout({ children }: AppLayoutProps) {
             <MenuIcon />
           </IconButton>
         </Box>
-        <Box sx={{ p: { xs: 3, md: 5 }, maxWidth: 1600, mx: "auto" }}>
+        <Box
+          sx={{
+            width: "100%",
+            maxWidth: 1400,
+            ml: 0,
+            mr: "auto",
+            px: { xs: 3, md: 4 },
+            pb: { xs: 4, md: 6 },
+          }}
+        >
           {children}
         </Box>
         <Menu
