@@ -305,9 +305,9 @@ export default function AppLayout({ children }: AppLayoutProps) {
         <Box
           sx={{
             width: "100%",
-            maxWidth: 1400,
+            maxWidth: "none",
             ml: 0,
-            mr: "auto",
+            mr: 0,
             px: { xs: 3, md: 4 },
             pb: { xs: 4, md: 6 },
           }}

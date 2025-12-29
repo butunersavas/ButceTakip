@@ -357,9 +357,9 @@ export default function DashboardView() {
       <Box
         sx={{
           width: "100%",
-          maxWidth: 1400,
+          maxWidth: "none",
           ml: 0,
-          mr: "auto",
+          mr: 0,
           px: { xs: 2, md: 3 },
           py: { xs: 2, md: 3 }
         }}
