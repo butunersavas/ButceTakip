@@ -32,7 +32,9 @@ if not cors_origins and not cors_origin_regex:
     cors_origins = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        "http://172.24.2.128:5173",
     ]
+    cors_origin_regex = r"^http://172\.24\.2\.\d{1,3}:5173$"
 
 app.add_middleware(
     CORSMiddleware,

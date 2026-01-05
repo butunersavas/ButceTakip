@@ -28,9 +28,8 @@ Kurumsal bütçe planlama ve gerçekleşen harcamaları takip etmeye yönelik AP
    ```
 3. API `http://localhost:8000` adresinden ulaşılabilir. Etkileşimli dokümantasyon için `http://localhost:8000/docs` adresini ziyaret edin.
 4. Web arayüzüne `http://localhost:5173` adresinden erişebilirsiniz. Tarayıcıdan yapılan API çağrılarında
-   öncelikle `.env` içindeki `VITE_API_URL` değeri kullanılır; eğer bu değer uzaktaki bir ortama dağıtım
-   yaparken `localhost` olarak kalırsa uygulama otomatik olarak çalıştığı alan adını API adresi olarak
-   kullanmaya geçer.
+   öncelikle `.env` içindeki `VITE_API_BASE_URL` değeri kullanılır; bu değer yoksa uygulama otomatik olarak
+   çalıştığı host adını/IP'sini kullanarak `http://<host>:8000` adresine istek gönderir.
 5. PgAdmin arayüzüne `http://localhost:8080` adresinden erişebilirsiniz.
 
 ### Docker Compose sorun giderme
@@ -53,7 +52,7 @@ Yerel geliştirmede aşağıdaki adımları takip edebilirsiniz:
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-uvicorn app.main:app --reload
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 Herhangi bir ortam değişkeni tanımlamazsanız API otomatik olarak kök dizinde `butce_takip.db` isimli SQLite veritabanı
@@ -84,8 +83,14 @@ npm install
 npm run dev
 ```
 
-Varsayılan olarak arayüz `http://localhost:5173` portundan yayına alınır. API adresi `.env` dosyasında `VITE_API_URL` değişkeni ile değiştirilebilir (varsayılan: `http://localhost:8000`).
+Varsayılan olarak arayüz `http://localhost:5173` portundan yayına alınır. API adresi `.env` dosyasında `VITE_API_BASE_URL` değişkeni ile değiştirilebilir (varsayılan: tarayıcının açıldığı host + `:8000`).
 Örnek değerler için `frontend/.env.example` dosyasını `.env` olarak kopyalayabilirsiniz.
+
+### LAN'dan erişim notu
+
+- Backend dokümantasyonu `http://<LAN_IP>:8000/docs` üzerinden erişilebilir olmalıdır.
+- Frontend `http://<LAN_IP>:5173` üzerinden erişilebilir olmalıdır.
+- Windows Firewall inbound kurallarında `TCP 5173` ve `TCP 8000` portlarını açmanız gerekebilir.
 
 > **PowerShell Kullanıcılarına Not**
 >
