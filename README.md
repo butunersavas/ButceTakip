@@ -27,9 +27,8 @@ Kurumsal bütçe planlama ve gerçekleşen harcamaları takip etmeye yönelik AP
    docker compose up --build
    ```
 3. API `http://localhost:8000` adresinden ulaşılabilir. Etkileşimli dokümantasyon için `http://localhost:8000/docs` adresini ziyaret edin.
-4. Web arayüzüne `http://localhost:5173` adresinden erişebilirsiniz. Tarayıcıdan yapılan API çağrılarında
-   öncelikle `.env` içindeki `VITE_API_BASE_URL` değeri kullanılır; bu değer yoksa uygulama otomatik olarak
-   çalıştığı host adını/IP'sini kullanarak `http://<host>:8000` adresine istek gönderir.
+4. Web arayüzüne `http://localhost:5173` adresinden erişebilirsiniz. Arayüz API isteklerini her zaman
+   `/api` yoluna yapar; geliştirme ortamında Vite proxy bu istekleri arka uç servisine yönlendirir.
 5. PgAdmin arayüzüne `http://localhost:8080` adresinden erişebilirsiniz.
 
 ### Docker Compose sorun giderme
@@ -83,8 +82,10 @@ npm install
 npm run dev
 ```
 
-Varsayılan olarak arayüz `http://localhost:5173` portundan yayına alınır. API adresi `.env` dosyasında `VITE_API_BASE_URL` değişkeni ile değiştirilebilir (varsayılan: tarayıcının açıldığı host + `:8000`).
-Örnek değerler için `frontend/.env.example` dosyasını `.env` olarak kopyalayabilirsiniz.
+Varsayılan olarak arayüz `http://localhost:5173` portundan yayına alınır. API çağrıları `/api` yoluna yapılır
+ve Vite geliştirme sunucusu bu istekleri backend'e proxy eder. Proxy hedefini değiştirmek isterseniz
+`VITE_PROXY_TARGET` değişkenini kullanabilirsiniz. Örnek değerler için `frontend/.env.example` dosyasını
+`.env` olarak kopyalayabilirsiniz.
 
 ### LAN'dan erişim notu
 
