@@ -14,6 +14,7 @@ from app.routers import (
     reports,
     scenarios,
     users,
+    warranty_items,
 )
 
 app = FastAPI()
@@ -61,6 +62,7 @@ app.include_router(import_export.router)
 app.include_router(purchase_reminders.router)
 app.include_router(reports.router)
 app.include_router(users.router)
+app.include_router(warranty_items.router)
 
 
 @app.get("/")

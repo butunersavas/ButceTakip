@@ -16,6 +16,11 @@ class ExpenseStatus(str, enum.Enum):
     CANCELLED = "cancelled"
 
 
+class WarrantyItemType(str, enum.Enum):
+    DEVICE = "DEVICE"
+    SERVICE = "SERVICE"
+
+
 class User(TimestampMixin, SQLModel, table=True):
     __tablename__ = "users"
 
@@ -106,3 +111,15 @@ class Expense(TimestampMixin, SQLModel, table=True):
     budget_item: BudgetItem = Relationship(back_populates="expenses")
     scenario: Optional[Scenario] = Relationship(back_populates="expenses")
     created_by: Optional[User] = Relationship(back_populates="expenses")
+
+
+class WarrantyItem(TimestampMixin, SQLModel, table=True):
+    __tablename__ = "warranty_items"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    type: WarrantyItemType = Field(nullable=False)
+    name: str = Field(nullable=False)
+    location: str = Field(nullable=False)
+    end_date: date = Field(nullable=False)
+    note: Optional[str] = Field(default=None)
+    is_active: bool = Field(default=True, nullable=False)

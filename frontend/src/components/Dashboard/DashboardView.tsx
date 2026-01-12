@@ -39,6 +39,7 @@ import {
   XAxis,
   YAxis
 } from "recharts";
+import { useNavigate } from "react-router-dom";
 
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import usePersistentState from "../../hooks/usePersistentState";
@@ -114,6 +115,15 @@ type QuarterlySummary = {
 
 type QuarterlyDataItem = QuarterlySummary & { quarter: string };
 
+type WarrantyCriticalItem = {
+  id: number;
+  type: "DEVICE" | "SERVICE";
+  name: string;
+  location: string;
+  end_date: string;
+  days_left: number;
+};
+
 const monthLabels = [
   "Ocak",
   "Şubat",
@@ -154,6 +164,7 @@ function formatCurrency(value: number) {
 
 export default function DashboardView() {
   const client = useAuthorizedClient();
+  const navigate = useNavigate();
   const currentYear = new Date().getFullYear();
   const [year, setYear] = usePersistentState<number>("dashboard:year", currentYear);
   const [scenarioId, setScenarioId] = usePersistentState<number | null>("dashboard:scenarioId", null);
@@ -167,6 +178,8 @@ export default function DashboardView() {
   const [purchaseStatusFeedback, setPurchaseStatusFeedback] = useState<
     { message: string; severity: "success" | "error" } | null
   >(null);
+  const [criticalWarrantyItems, setCriticalWarrantyItems] = useState<WarrantyCriticalItem[]>([]);
+  const [isWarrantyDialogOpen, setIsWarrantyDialogOpen] = useState(false);
 
   const monthOptions = [
     { value: 1, label: "Ocak" },
@@ -239,6 +252,21 @@ export default function DashboardView() {
         // Hata durumunda sessiz geçilebilir veya loglanabilir
       });
   }, [client, currentMonth, reminderKey, yearNow]);
+
+  useEffect(() => {
+    client
+      .get<WarrantyCriticalItem[]>("/warranty-items/critical")
+      .then((res) => {
+        const items = res.data ?? [];
+        setCriticalWarrantyItems(items);
+        if (items.length > 0) {
+          setIsWarrantyDialogOpen(true);
+        }
+      })
+      .catch(() => {
+        // Sessiz geç
+      });
+  }, [client]);
 
   const handleClosePurchaseDialog = () => {
     if (dontShowAgainThisMonth) {
@@ -706,6 +734,43 @@ export default function DashboardView() {
           </Stack>
         </Stack>
       </Box>
+      <Dialog
+        open={isWarrantyDialogOpen && criticalWarrantyItems.length > 0}
+        onClose={() => setIsWarrantyDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontSize: 18, fontWeight: 600 }}>
+          Garanti süresi dolmak üzere (30 gün altı)
+        </DialogTitle>
+        <DialogContent dividers>
+          <List dense sx={{ maxHeight: 400, overflowY: "auto" }}>
+            {criticalWarrantyItems.map((item) => (
+              <ListItem key={item.id}>
+                <ListItemText
+                  primary={`${item.type === "DEVICE" ? "Cihaz" : "Bakım/Hizmet"} — ${item.name} / ${item.location} — ${item.days_left} gün kaldı (Bitiş: ${item.end_date})`}
+                  primaryTypographyProps={{ variant: "body2" }}
+                />
+              </ListItem>
+            ))}
+          </List>
+        </DialogContent>
+        <DialogActions>
+          <Button size="small" onClick={() => setIsWarrantyDialogOpen(false)}>
+            Kapat
+          </Button>
+          <Button
+            variant="contained"
+            size="small"
+            onClick={() => {
+              setIsWarrantyDialogOpen(false);
+              navigate("/warranty-tracking");
+            }}
+          >
+            Garanti Takibi'ne git
+          </Button>
+        </DialogActions>
+      </Dialog>
       <Dialog
         open={isPurchaseDialogOpen && purchaseItems.length > 0}
         onClose={handleClosePurchaseDialog}
