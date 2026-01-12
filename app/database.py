@@ -76,41 +76,45 @@ def init_default_admin(session: Session) -> None:
 
 def _apply_schema_upgrades() -> None:
     inspector = inspect(engine)
-    existing_columns = {column["name"] for column in inspector.get_columns("budget_items")}
-    if "map_attribute" not in existing_columns:
-        with engine.begin() as connection:
-            connection.execute(text("ALTER TABLE budget_items ADD COLUMN map_attribute TEXT"))
-    if "map_category" not in existing_columns:
-        with engine.begin() as connection:
-            connection.execute(text("ALTER TABLE budget_items ADD COLUMN map_category TEXT"))
+    if inspector.has_table("budget_items"):
+        existing_columns = {column["name"] for column in inspector.get_columns("budget_items")}
+        if "map_attribute" not in existing_columns:
+            with engine.begin() as connection:
+                connection.execute(text("ALTER TABLE budget_items ADD COLUMN map_attribute TEXT"))
+        if "map_category" not in existing_columns:
+            with engine.begin() as connection:
+                connection.execute(text("ALTER TABLE budget_items ADD COLUMN map_category TEXT"))
 
-    expense_columns = {column["name"] for column in inspector.get_columns("expenses")}
-    if "client_hostname" not in expense_columns:
-        with engine.begin() as connection:
-            connection.execute(text("ALTER TABLE expenses ADD COLUMN client_hostname TEXT"))
-    if "kaydi_giren_kullanici" not in expense_columns:
-        with engine.begin() as connection:
-            connection.execute(text("ALTER TABLE expenses ADD COLUMN kaydi_giren_kullanici TEXT"))
+    if inspector.has_table("expenses"):
+        expense_columns = {column["name"] for column in inspector.get_columns("expenses")}
+        if "client_hostname" not in expense_columns:
+            with engine.begin() as connection:
+                connection.execute(text("ALTER TABLE expenses ADD COLUMN client_hostname TEXT"))
+        if "kaydi_giren_kullanici" not in expense_columns:
+            with engine.begin() as connection:
+                connection.execute(text("ALTER TABLE expenses ADD COLUMN kaydi_giren_kullanici TEXT"))
 
-    plan_columns = {column["name"] for column in inspector.get_columns("plan_entries")}
-    if "department" not in plan_columns:
-        with engine.begin() as connection:
-            connection.execute(text("ALTER TABLE plan_entries ADD COLUMN department VARCHAR(100)"))
+    if inspector.has_table("plan_entries"):
+        plan_columns = {column["name"] for column in inspector.get_columns("plan_entries")}
+        if "department" not in plan_columns:
+            with engine.begin() as connection:
+                connection.execute(text("ALTER TABLE plan_entries ADD COLUMN department VARCHAR(100)"))
 
-    user_columns = {column["name"] for column in inspector.get_columns("users")}
-    if "email" not in user_columns:
-        with engine.begin() as connection:
-            connection.execute(text("ALTER TABLE users ADD COLUMN email TEXT"))
-    if "username" not in user_columns:
-        with engine.begin() as connection:
-            connection.execute(text("ALTER TABLE users ADD COLUMN username TEXT"))
-            connection.execute(
-                text(
-                    "UPDATE users SET username = CASE "
-                    "WHEN username IS NULL OR username = '' THEN COALESCE(email, '') "
-                    "ELSE username END"
+    if inspector.has_table("users"):
+        user_columns = {column["name"] for column in inspector.get_columns("users")}
+        if "email" not in user_columns:
+            with engine.begin() as connection:
+                connection.execute(text("ALTER TABLE users ADD COLUMN email TEXT"))
+        if "username" not in user_columns:
+            with engine.begin() as connection:
+                connection.execute(text("ALTER TABLE users ADD COLUMN username TEXT"))
+                connection.execute(
+                    text(
+                        "UPDATE users SET username = CASE "
+                        "WHEN username IS NULL OR username = '' THEN COALESCE(email, '') "
+                        "ELSE username END"
+                    )
                 )
-            )
-    if "is_admin" not in user_columns:
-        with engine.begin() as connection:
-            connection.execute(text("ALTER TABLE users ADD COLUMN is_admin BOOLEAN DEFAULT 0"))
+        if "is_admin" not in user_columns:
+            with engine.begin() as connection:
+                connection.execute(text("ALTER TABLE users ADD COLUMN is_admin BOOLEAN DEFAULT 0"))
