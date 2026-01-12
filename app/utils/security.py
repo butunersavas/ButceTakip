@@ -59,8 +59,13 @@ def _normalize_password(password: str) -> str:
     return sha256(password_bytes).hexdigest()
 
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(_normalize_password(plain_password), hashed_password)
+def verify_password(plain_password: str, hashed_password: str | None) -> bool:
+    if not hashed_password:
+        return False
+    try:
+        return pwd_context.verify(_normalize_password(plain_password), hashed_password)
+    except Exception:
+        return False
 
 
 def get_password_hash(password: str) -> str:
