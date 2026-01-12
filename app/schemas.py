@@ -3,7 +3,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Field, validator
 
-from app.models import ExpenseStatus
+from app.models import ExpenseStatus, WarrantyItemType
 
 
 class Token(BaseModel):
@@ -225,6 +225,41 @@ class ExpenseRead(ExpenseBase):
 
     class Config:
         orm_mode = True
+
+
+class WarrantyItemBase(BaseModel):
+    type: WarrantyItemType
+    name: str
+    location: str
+    end_date: date
+    note: Optional[str] = None
+
+
+class WarrantyItemCreate(WarrantyItemBase):
+    pass
+
+
+class WarrantyItemUpdate(BaseModel):
+    type: Optional[WarrantyItemType] = None
+    name: Optional[str] = None
+    location: Optional[str] = None
+    end_date: Optional[date] = None
+    note: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+class WarrantyItemRead(WarrantyItemBase):
+    id: int
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        orm_mode = True
+
+
+class WarrantyItemCriticalRead(WarrantyItemRead):
+    days_left: int
 
 
 class DashboardSummary(BaseModel):
