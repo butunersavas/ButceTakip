@@ -1,5 +1,5 @@
 from functools import lru_cache
-from pydantic import BaseSettings, Field
+from pydantic import BaseSettings, Field, validator
 
 
 class Settings(BaseSettings):
@@ -9,6 +9,7 @@ class Settings(BaseSettings):
         env="DATABASE_URL",
     )
     secret_key: str = Field(default="change-me", env="SECRET_KEY")
+    algorithm: str = Field(default="HS256", env="ALGORITHM")
     access_token_expire_minutes: int = Field(default=60 * 24, env="ACCESS_TOKEN_EXPIRE_MINUTES")
     cors_origins: str = Field(default="*", env="CORS_ORIGINS")
 
@@ -44,6 +45,12 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
+
+    @validator("secret_key")
+    def normalize_secret_key(cls, value: str) -> str:  # noqa: D417
+        if value and value.strip():
+            return value
+        return "change-me"
 
 
 @lru_cache()

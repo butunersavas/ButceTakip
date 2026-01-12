@@ -18,6 +18,7 @@ from app.routers import (
 )
 
 app = FastAPI()
+API_PREFIX = "/api"
 
 
 def _parse_csv_env(name: str) -> list[str]:
@@ -52,17 +53,17 @@ def on_startup() -> None:
     init_db()
 
 
-app.include_router(auth.router)
-app.include_router(scenarios.router)
-app.include_router(budget_items.router)
-app.include_router(plans.router)
-app.include_router(expenses.router)
-app.include_router(dashboard.router)
-app.include_router(import_export.router)
-app.include_router(purchase_reminders.router)
-app.include_router(reports.router)
-app.include_router(users.router)
-app.include_router(warranty_items.router)
+app.include_router(auth.router, prefix=API_PREFIX)
+app.include_router(scenarios.router, prefix=API_PREFIX)
+app.include_router(budget_items.router, prefix=API_PREFIX)
+app.include_router(plans.router, prefix=API_PREFIX)
+app.include_router(expenses.router, prefix=API_PREFIX)
+app.include_router(dashboard.router, prefix=API_PREFIX)
+app.include_router(import_export.router, prefix=API_PREFIX)
+app.include_router(purchase_reminders.router, prefix=API_PREFIX)
+app.include_router(reports.router, prefix=API_PREFIX)
+app.include_router(users.router, prefix=API_PREFIX)
+app.include_router(warranty_items.router, prefix=API_PREFIX)
 
 
 @app.get("/")
