@@ -74,6 +74,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       params.append("username", normalizedUsername);
       params.append("password", password);
       params.append("grant_type", "password");
+      console.log("API_BASE", import.meta.env.VITE_API_BASE_URL);
       const response = await apiClient.post<{ access_token: string }>(
         "/auth/token",
         params,
