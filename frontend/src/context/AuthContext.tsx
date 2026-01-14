@@ -8,7 +8,7 @@ import {
 } from "react";
 import { AxiosError } from "axios";
 
-import { apiClient } from "../api/client";
+import { API_BASE, apiClient } from "../api/client";
 
 export interface AuthUser {
   id: number;
@@ -74,7 +74,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       params.append("username", normalizedUsername);
       params.append("password", password);
       params.append("grant_type", "password");
-      console.log("API_BASE", import.meta.env.VITE_API_BASE_URL);
+      console.log("API_BASE", API_BASE);
       const response = await apiClient.post<{ access_token: string }>(
         "/auth/token",
         params,
@@ -90,7 +90,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await fetchCurrentUser(accessToken);
     } catch (err) {
       const error = err as AxiosError<{ detail?: string }>;
-      setError(error.response?.data?.detail ?? "Giriş başarısız");
+      const isConnectionRefused =
+        error.message?.includes("ERR_CONNECTION_REFUSED") || error.code === "ERR_NETWORK";
+      setError(
+        isConnectionRefused
+          ? `Sunucuya bağlanılamadı. API: ${API_BASE}`
+          : (error.response?.data?.detail ?? "Giriş başarısız")
+      );
       setUser(null);
       setToken(null);
       localStorage.removeItem("butce_token");
