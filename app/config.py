@@ -11,7 +11,18 @@ class Settings(BaseSettings):
     secret_key: str = Field(default="change-me", env="SECRET_KEY")
     algorithm: str = Field(default="HS256", env="ALGORITHM")
     access_token_expire_minutes: int = Field(default=60 * 24, env="ACCESS_TOKEN_EXPIRE_MINUTES")
-    cors_origins: str = Field(default="*", env="CORS_ORIGINS")
+    allowed_hosts: list[str] = Field(
+        default=["localhost", "127.0.0.1", "172.24.2.128"],
+        env="ALLOWED_HOSTS",
+    )
+    cors_origins: list[str] = Field(
+        default=[
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            "http://172.24.2.128:5173",
+        ],
+        env="CORS_ORIGINS",
+    )
 
     DEFAULT_ADMIN_EMAIL: str = Field(default="admin@local", env="DEFAULT_ADMIN_EMAIL")
     DEFAULT_ADMIN_PASSWORD: str = Field(default="GucluBirSifre123!", env="DEFAULT_ADMIN_PASSWORD")
@@ -51,6 +62,14 @@ class Settings(BaseSettings):
         if value and value.strip():
             return value
         return "change-me"
+
+    @validator("allowed_hosts", "cors_origins", pre=True)
+    def split_csv_values(cls, value: str | list[str]) -> list[str]:  # noqa: D417
+        if isinstance(value, list):
+            return [item.strip() for item in value if item and item.strip()]
+        if not value:
+            return []
+        return [item.strip() for item in str(value).split(",") if item.strip()]
 
 
 @lru_cache()
