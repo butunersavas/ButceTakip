@@ -1,10 +1,9 @@
 import axios from "axios";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL?.trim();
+import { getApiBase } from "../config/apiBase";
 
-if (!API_BASE) {
-  throw new Error("VITE_API_BASE_URL is not set");
-}
+export const API_BASE = getApiBase();
+console.log("API_BASE", API_BASE);
 
 export const apiClient = axios.create({
   baseURL: API_BASE

@@ -18,15 +18,15 @@ Kurumsal bütçe planlama ve gerçekleşen harcamaları takip etmeye yönelik AP
 - SQLite (yerel geliştirme için varsayılan)
 
 ## Çalıştırma (Docker Compose)
-1. `.env.example` dosyasını `.env` olarak kopyalayın ve gerekli değerleri güncelleyin:
+1. `.env` dosyalarını hızlıca hazırlamak için:
    ```bash
-   cp .env.example .env
+   bash scripts/bootstrap_env.sh
    ```
 2. Docker hizmetlerini başlatın:
    ```bash
    docker compose up --build
    ```
-3. API `http://localhost:8000` adresinden ulaşılabilir. Etkileşimli dokümantasyon için `http://localhost:8000/docs` adresini ziyaret edin.
+3. API `http://<HOST>:8000` adresinden ulaşılabilir. Etkileşimli dokümantasyon için `http://<HOST>:8000/docs` adresini ziyaret edin.
 4. Web arayüzüne `http://localhost:5173` adresinden erişebilirsiniz. Arayüz API isteklerini her zaman
    `/api` yoluna yapar; geliştirme ortamında Vite proxy bu istekleri arka uç servisine yönlendirir.
 5. PgAdmin arayüzüne `http://localhost:8080` adresinden erişebilirsiniz.
@@ -104,7 +104,7 @@ ve Vite geliştirme sunucusu bu istekleri backend'e proxy eder. Proxy hedefini d
 >
 >   ```powershell
 >   Invoke-RestMethod -Method Post `
->       -Uri "http://localhost:8000/auth/register" `
+>       -Uri "http://<HOST>:8000/auth/register" `
 >       -ContentType "application/json" `
 >       -Body '{"email":"yeni.admin@local","full_name":"Yeni Admin","password":"DahaGucluSifre456!"}'
 >   ```
@@ -112,7 +112,7 @@ ve Vite geliştirme sunucusu bu istekleri backend'e proxy eder. Proxy hedefini d
 >   Alternatif olarak Windows’ta yer alan klasik `curl.exe` uygulamasını tek satırda çalıştırabilirsiniz:
 >
 >   ```powershell
->   curl.exe -X POST "http://localhost:8000/auth/register" -H "Content-Type: application/json" -d '{"email":"yeni.admin@local","full_name":"Yeni Admin","password":"DahaGucluSifre456!"}'
+>   curl.exe -X POST "http://<HOST>:8000/auth/register" -H "Content-Type: application/json" -d '{"email":"yeni.admin@local","full_name":"Yeni Admin","password":"DahaGucluSifre456!"}'
 >   ```
 
 ## Örnek CSV Şablonu
