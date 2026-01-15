@@ -26,7 +26,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import usePersistentState from "../../hooks/usePersistentState";
 import { useAuth } from "../../context/AuthContext";
-import { formatBudgetItemLabel } from "../../utils/budgetLabel";
+import { stripBudgetCode } from "../../utils/budgetLabel";
+import { formatBudgetItemMeta } from "../../utils/budgetItem";
 
 interface Scenario {
   id: number;
@@ -50,6 +51,11 @@ interface PlanEntry {
   scenario_id: number;
   budget_item_id: number;
   department?: string | null;
+  scenario?: string | null;
+  budget_code?: string | null;
+  budget_name?: string | null;
+  map_category?: string | null;
+  map_attribute?: string | null;
 }
 
 type PlanMutationPayload = {
@@ -122,7 +128,7 @@ export default function PlansView() {
     }
   });
 
-  const { data: plans, isFetching } = useQuery<PlanEntry[]>({
+  const plansQuery = useQuery<PlanEntry[]>({
     queryKey: [
       "plans",
       year,
@@ -144,7 +150,7 @@ export default function PlansView() {
     }
   });
 
-  const { data: aggregates } = useQuery<PlanAggregate[]>({
+  const aggregatesQuery = useQuery<PlanAggregate[]>({
     queryKey: ["plan-aggregate", year, scenarioId, capexOpex],
     queryFn: async () => {
       const params: Record<string, number | string> = { year };
@@ -245,7 +251,7 @@ export default function PlansView() {
 
   const rows = useMemo(() => {
     const mapped =
-      plans?.map((plan) => ({
+      plansQuery.data?.map((plan) => ({
         ...plan,
         amount: Number(plan.amount) || 0,
         budget_item_id: plan?.budget_item_id ?? null
@@ -260,26 +266,29 @@ export default function PlansView() {
       const matchesDepartment = !departmentFilter || row.department === departmentFilter;
       return matchesMonth && matchesDepartment;
     });
-  }, [plans, monthFilter, departmentFilter]);
+  }, [plansQuery.data, monthFilter, departmentFilter]);
 
   const budgetFilterOptions = useMemo(
     () =>
       createFilterOptions<BudgetItem>({
-        stringify: (option) =>
-          `${option.code ?? ""} ${option.name ?? ""} ${formatBudgetItemLabel(option)}`
+        stringify: (option) => {
+          const name = stripBudgetCode(option.name ?? "");
+          const meta = formatBudgetItemMeta(option);
+          return `${option.code ?? ""} ${name} ${meta}`;
+        }
       }),
     []
   );
 
   const departmentOptions = useMemo(() => {
     const options = new Set<string>();
-    plans?.forEach((plan) => {
+    plansQuery.data?.forEach((plan) => {
       if (plan.department) {
         options.add(plan.department);
       }
     });
     return Array.from(options).sort((a, b) => a.localeCompare(b, "tr"));
-  }, [plans]);
+  }, [plansQuery.data]);
 
   const MONTH_NAMES_TR = [
     "",
@@ -305,8 +314,12 @@ export default function PlansView() {
         flex: 1,
         valueGetter: (params) => {
           const row = params?.row;
-          if (!row || row.scenario_id == null) {
+          if (!row) {
             return "";
+          }
+
+          if (row.scenario) {
+            return row.scenario;
           }
 
           if (!Array.isArray(scenarios)) {
@@ -332,32 +345,24 @@ export default function PlansView() {
         field: "budget",
         headerName: "Bütçe Kalemi",
         flex: 1,
-        valueGetter: (params) => {
-          const item = findBudgetItem(params?.row);
-          if (!item) {
-            return "";
-          }
-
-          return formatBudgetItemLabel(item);
-        }
+        valueGetter: (params) =>
+          params?.row?.budget_name ||
+          stripBudgetCode(findBudgetItem(params?.row)?.name ?? "") ||
+          ""
       },
       {
         field: "map_category",
         headerName: "Map Capex/Opex",
         flex: 1,
-        valueGetter: (params) => {
-          const item = findBudgetItem(params?.row);
-          return item?.map_category ?? "-";
-        }
+        valueGetter: (params) =>
+          params?.row?.map_category ?? findBudgetItem(params?.row)?.map_category ?? "-"
       },
       {
         field: "map_attribute",
         headerName: "Map Nitelik",
         flex: 1,
-        valueGetter: (params) => {
-          const item = findBudgetItem(params?.row);
-          return item?.map_attribute ?? "-";
-        }
+        valueGetter: (params) =>
+          params?.row?.map_attribute ?? findBudgetItem(params?.row)?.map_attribute ?? "-"
       },
       {
         field: "department",
@@ -396,8 +401,6 @@ export default function PlansView() {
         headerName: "Tutar",
         width: 140,
         renderCell: ({ row }) => {
-          console.log("PLAN ROW AMOUNT", row.id, row.amount, row); // debug için
-
           const raw = row.amount;
           let num: number;
 
@@ -456,11 +459,11 @@ export default function PlansView() {
 
   const monthlyTotals = useMemo(() => {
     const totals = Array(12).fill(0);
-    aggregates?.forEach((aggregate) => {
+    aggregatesQuery.data?.forEach((aggregate) => {
       totals[aggregate.month - 1] += aggregate.total_amount;
     });
     return totals;
-  }, [aggregates]);
+  }, [aggregatesQuery.data]);
 
   const filteredTotal = useMemo(() => {
     return rows.reduce((sum, plan) => sum + (Number(plan.amount) || 0), 0);
@@ -472,11 +475,12 @@ export default function PlansView() {
     <Stack spacing={4}>
       <Card>
         <CardContent>
-          <Grid container spacing={3} alignItems="center">
-            <Grid item xs={12} md={2}>
+          <Grid container spacing={2} alignItems="center">
+            <Grid item xs={12} sm={6} md={2}>
               <TextField
                 label="Yıl"
                 type="number"
+                size="small"
                 value={year}
                 onChange={(event) => {
                   const value = event.target.value;
@@ -485,10 +489,11 @@ export default function PlansView() {
                 fullWidth
               />
             </Grid>
-            <Grid item xs={12} md={3}>
+            <Grid item xs={12} sm={6} md={3}>
               <TextField
                 select
                 label="Senaryo"
+                size="small"
                 value={scenarioId ?? ""}
                 onChange={(event) =>
                   setScenarioId(event.target.value ? Number(event.target.value) : null)
@@ -503,11 +508,12 @@ export default function PlansView() {
                 ))}
               </TextField>
             </Grid>
-            <Grid item xs={12} md={2}>
+            <Grid item xs={12} sm={6} md={2}>
               <TextField
                 select
                 fullWidth
                 label="Ay"
+                size="small"
                 value={monthFilter}
                 onChange={(event) =>
                   setMonthFilter(
@@ -523,23 +529,41 @@ export default function PlansView() {
                 ))}
               </TextField>
             </Grid>
-            <Grid item xs={12} md={3}>
+            <Grid item xs={12} sm={6} md={3}>
               <Autocomplete
                 options={budgetItems ?? []}
                 value={budgetItems?.find((item) => item.id === budgetItemId) ?? null}
                 onChange={(_, value) => setBudgetItemId(value?.id ?? null)}
-                getOptionLabel={(option) => formatBudgetItemLabel(option)}
+                getOptionLabel={(option) => stripBudgetCode(option.name ?? "") || "-"}
                 filterOptions={budgetFilterOptions}
                 isOptionEqualToValue={(option, value) => option.id === value.id}
+                renderOption={(props, option) => {
+                  const meta = formatBudgetItemMeta(option);
+                  return (
+                    <li {...props} key={option.id}>
+                      <Stack spacing={0.2}>
+                        <Typography variant="body2" fontWeight={600}>
+                          {stripBudgetCode(option.name ?? "") || "-"}
+                        </Typography>
+                        {meta && (
+                          <Typography variant="caption" color="text.secondary">
+                            {meta}
+                          </Typography>
+                        )}
+                      </Stack>
+                    </li>
+                  );
+                }}
                 renderInput={(params) => (
-                  <TextField {...params} label="Bütçe Kalemi" placeholder="Tümü" fullWidth />
+                  <TextField {...params} label="Bütçe Kalemi" placeholder="Tümü" fullWidth size="small" />
                 )}
               />
             </Grid>
-            <Grid item xs={12} md={2}>
+            <Grid item xs={12} sm={6} md={2}>
               <TextField
                 select
                 label="Capex/Opex"
+                size="small"
                 value={capexOpex}
                 onChange={(event) => setCapexOpex(event.target.value as "" | "capex" | "opex")}
                 fullWidth
@@ -549,10 +573,11 @@ export default function PlansView() {
                 <MenuItem value="opex">Opex</MenuItem>
               </TextField>
             </Grid>
-            <Grid item xs={12} md={2}>
+            <Grid item xs={12} sm={6} md={2}>
               <TextField
                 select
                 label="Departman"
+                size="small"
                 value={departmentFilter}
                 onChange={(event) => setDepartmentFilter(event.target.value)}
                 fullWidth
@@ -564,6 +589,38 @@ export default function PlansView() {
                   </MenuItem>
                 ))}
               </TextField>
+            </Grid>
+            <Grid item xs={12} md={2}>
+              <Stack direction="row" spacing={1} justifyContent={{ xs: "flex-start", md: "flex-end" }}>
+                <Button
+                  variant="contained"
+                  size="small"
+                  onClick={() => {
+                    plansQuery.refetch();
+                    aggregatesQuery.refetch();
+                  }}
+                >
+                  Güncelle
+                </Button>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  onClick={() => {
+                    setYear(currentYear);
+                    setScenarioId(null);
+                    setMonthFilter("");
+                    setDepartmentFilter("");
+                    setBudgetItemId(null);
+                    setCapexOpex("");
+                    setTimeout(() => {
+                      plansQuery.refetch();
+                      aggregatesQuery.refetch();
+                    }, 0);
+                  }}
+                >
+                  Sıfırla
+                </Button>
+              </Stack>
             </Grid>
           </Grid>
         </CardContent>
@@ -625,7 +682,7 @@ export default function PlansView() {
                   autoHeight
                   rows={rows ?? []}
                   columns={columns}
-                  loading={isFetching}
+                  loading={plansQuery.isFetching}
                   getRowId={(row) => row.id}
                   disableRowSelectionOnClick
                   initialState={{
@@ -708,7 +765,7 @@ export default function PlansView() {
               >
                 {budgetItems?.map((item) => (
                   <MenuItem key={item.id} value={item.id}>
-                    {formatBudgetItemLabel(item)}
+                    {stripBudgetCode(item.name ?? "") || "-"}
                   </MenuItem>
                 ))}
               </TextField>

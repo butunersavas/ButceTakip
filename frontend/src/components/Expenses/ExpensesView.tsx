@@ -4,6 +4,7 @@ import {
   Box,
   Button,
   Card,
+  CardActionArea,
   CardContent,
   Chip,
   Checkbox,
@@ -47,7 +48,6 @@ import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import usePersistentState from "../../hooks/usePersistentState";
 import { useAuth } from "../../context/AuthContext";
 import { formatBudgetItemLabel } from "../../utils/budgetLabel";
-import { SummaryCard } from "../Dashboard/SummaryCard";
 
 interface Scenario {
   id: number;
@@ -162,6 +162,9 @@ export default function ExpensesView() {
     pageSize: 10
   });
   const [, setSelectionModel] = useState<GridRowSelectionModel>([]);
+  const [selectedExpenseFilter, setSelectedExpenseFilter] = useState<
+    "ALL" | "ACTIVE" | "OUT_OF_BUDGET" | "CANCELLED"
+  >("ALL");
 
   const handleRowUpdate = useCallback(
     (updatedRow: Expense, originalRow: Expense) => ({ ...originalRow, ...updatedRow }),
@@ -378,6 +381,15 @@ export default function ExpensesView() {
     return expenses?.reduce((sum, expense) => sum + expense.amount, 0) ?? 0;
   }, [expenses]);
 
+  const activeTotal = useMemo(() => {
+    return (
+      expenses?.reduce(
+        (sum, expense) => (expense.status === "recorded" ? sum + expense.amount : sum),
+        0
+      ) ?? 0
+    );
+  }, [expenses]);
+
   const outOfBudgetTotal = useMemo(() => {
     return (
       expenses?.reduce(
@@ -395,6 +407,44 @@ export default function ExpensesView() {
       ) ?? 0
     );
   }, [expenses]);
+
+  const summaryFilterItems = useMemo<GridFilterModel["items"]>(() => {
+    switch (selectedExpenseFilter) {
+      case "ACTIVE":
+        return [{ field: "status", operator: "equals", value: "recorded" }];
+      case "OUT_OF_BUDGET":
+        return [{ field: "is_out_of_budget", operator: "is", value: true }];
+      case "CANCELLED":
+        return [{ field: "status", operator: "equals", value: "cancelled" }];
+      default:
+        return [];
+    }
+  }, [selectedExpenseFilter]);
+
+  const combinedFilterModel = useMemo<GridFilterModel>(
+    () => {
+      const reservedFields = ["status", "is_out_of_budget"];
+      const cleanedItems = filterModel.items.filter(
+        (item) => !reservedFields.includes(item.field ?? "")
+      );
+      return {
+        ...filterModel,
+        items: [...cleanedItems, ...summaryFilterItems]
+      };
+    },
+    [filterModel, summaryFilterItems]
+  );
+
+  const handleFilterModelChange = useCallback(
+    (model: GridFilterModel) => {
+      const reservedFields = ["status", "is_out_of_budget"];
+      const cleanedItems = model.items.filter(
+        (item) => !reservedFields.includes(item.field ?? "")
+      );
+      setFilterModel({ ...model, items: cleanedItems });
+    },
+    [setFilterModel]
+  );
 
   const totalAmount = useMemo(() => {
     const quantityNumber = Number(formQuantity);
@@ -644,8 +694,44 @@ export default function ExpensesView() {
   );
 
   const formattedTotalActual = formatCurrency(totalActual);
+  const formattedActive = formatCurrency(activeTotal);
   const formattedOutOfBudget = formatCurrency(outOfBudgetTotal);
   const formattedCanceled = formatCurrency(cancelledTotal);
+
+  const summaryCards = [
+    {
+      key: "ALL",
+      title: "Tümü",
+      value: formattedTotalActual,
+      subtitle: "Toplam gerçekleşen",
+      icon: <CheckCircleOutlineOutlinedIcon sx={{ fontSize: 18, color: "common.white" }} />,
+      iconColor: "primary.main"
+    },
+    {
+      key: "ACTIVE",
+      title: "Aktif",
+      value: formattedActive,
+      subtitle: "Aktif harcamalar",
+      icon: <CheckCircleOutlineOutlinedIcon sx={{ fontSize: 18, color: "common.white" }} />,
+      iconColor: "success.main"
+    },
+    {
+      key: "OUT_OF_BUDGET",
+      title: "Bütçe Dışı",
+      value: formattedOutOfBudget,
+      subtitle: "Bütçe dışı harcamalar",
+      icon: <ReportGmailerrorredOutlinedIcon sx={{ fontSize: 18, color: "common.white" }} />,
+      iconColor: "warning.main"
+    },
+    {
+      key: "CANCELLED",
+      title: "İptal",
+      value: formattedCanceled,
+      subtitle: "İptal edilenler",
+      icon: <CancelOutlinedIcon sx={{ fontSize: 18, color: "common.white" }} />,
+      iconColor: "error.main"
+    }
+  ] as const;
 
   return (
     <Stack
@@ -657,33 +743,55 @@ export default function ExpensesView() {
       }}
     >
       <Grid container spacing={2} sx={{ mb: 2 }}>
-        <Grid item xs={12} md={4}>
-          <SummaryCard
-            title="Toplam Gerçekleşen"
-            value={formattedTotalActual}
-            subtitle="Seçilen filtrelere göre gerçekleşen harcamalar"
-            icon={<CheckCircleOutlineOutlinedIcon sx={{ fontSize: 18, color: "common.white" }} />}
-            iconColor="primary.main"
-          />
-        </Grid>
-        <Grid item xs={12} md={4}>
-          <SummaryCard
-            title="Bütçe Dışı Harcamalar"
-            value={formattedOutOfBudget}
-            subtitle="Bütçe dışında kalan harcamalar"
-            icon={<ReportGmailerrorredOutlinedIcon sx={{ fontSize: 18, color: "common.white" }} />}
-            iconColor="warning.main"
-          />
-        </Grid>
-        <Grid item xs={12} md={4}>
-          <SummaryCard
-            title="İptal Edilen Harcamalar"
-            value={formattedCanceled}
-            subtitle="İptal edilen harcama toplamı"
-            icon={<CancelOutlinedIcon sx={{ fontSize: 18, color: "common.white" }} />}
-            iconColor="error.main"
-          />
-        </Grid>
+        {summaryCards.map((card) => {
+          const isSelected = selectedExpenseFilter === card.key;
+          return (
+            <Grid item xs={12} sm={6} md={3} key={card.key}>
+              <Card
+                variant="outlined"
+                sx={{
+                  borderColor: isSelected ? "primary.main" : "divider",
+                  boxShadow: isSelected ? 3 : 0,
+                  transition: "box-shadow 0.2s ease, border-color 0.2s ease",
+                }}
+              >
+                <CardActionArea
+                  onClick={() =>
+                    setSelectedExpenseFilter((prev) => (prev === card.key ? "ALL" : card.key))
+                  }
+                  sx={{ height: "100%" }}
+                >
+                  <CardContent sx={{ position: "relative", minHeight: 120 }}>
+                    <Typography variant="subtitle2" color="text.secondary">
+                      {card.title}
+                    </Typography>
+                    <Typography variant="h5" sx={{ mt: 0.5 }}>
+                      {card.value}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                      {card.subtitle}
+                    </Typography>
+                    <Box sx={{ position: "absolute", top: 12, right: 12 }}>
+                      <Box
+                        sx={{
+                          width: 40,
+                          height: 40,
+                          borderRadius: "50%",
+                          bgcolor: card.iconColor,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center"
+                        }}
+                      >
+                        {card.icon}
+                      </Box>
+                    </Box>
+                  </CardContent>
+                </CardActionArea>
+              </Card>
+            </Grid>
+          );
+        })}
       </Grid>
 
       <Card>
@@ -955,8 +1063,8 @@ export default function ExpensesView() {
               getRowId={(row) => row.id ?? `${row.budget_item_id}-${row.expense_date}-${row.amount}`}
               paginationModel={paginationModel}
               onPaginationModelChange={setPaginationModel}
-              filterModel={filterModel}
-              onFilterModelChange={setFilterModel}
+              filterModel={combinedFilterModel}
+              onFilterModelChange={handleFilterModelChange}
               sortingMode="client"
               sortModel={sortModel}
               onSortModelChange={setSortModel}

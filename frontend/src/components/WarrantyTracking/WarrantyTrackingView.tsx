@@ -4,6 +4,7 @@ import {
   Box,
   Button,
   Card,
+  CardActionArea,
   CardContent,
   Chip,
   Grid,
@@ -54,9 +55,10 @@ const typeOptions: Array<{ value: WarrantyItemType; label: string }> = [
 
 const calcDaysLeft = (endDate: string | null): number | null => {
   if (!endDate) return null;
-  const end = new Date(endDate + "T00:00:00");
-  const now = new Date();
-  const ms = end.getTime() - now.getTime();
+  const end = new Date(`${endDate}T00:00:00`);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const ms = end.getTime() - today.getTime();
   return Math.ceil(ms / (1000 * 60 * 60 * 24));
 };
 
@@ -65,7 +67,7 @@ const calcStatus = (daysLeft: number | null) => {
   if (daysLeft < 0) return { label: "Süresi Geçti", key: "expired" as const };
   if (daysLeft <= 30) return { label: "Kritik", key: "critical" as const };
   if (daysLeft <= 60) return { label: "Yaklaşıyor", key: "approaching" as const };
-  return { label: "Aktif", key: "ok" as const };
+  return { label: "Normal", key: "ok" as const };
 };
 
 const formatDate = (value: string | null | undefined) => {
@@ -74,9 +76,32 @@ const formatDate = (value: string | null | undefined) => {
   return new Intl.DateTimeFormat("tr-TR").format(date);
 };
 
+const formatTypeLabel = (value?: string | null) => {
+  if (value === "DEVICE") return "Cihaz";
+  if (value === "SERVICE") return "Bakım/Hizmet";
+  return value ?? "-";
+};
+
+const normalizeDateInput = (value: string | null | undefined) => {
+  if (!value) return "";
+  const isoMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+  }
+  const trMatch = value.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+  if (trMatch) {
+    return `${trMatch[3]}-${trMatch[2]}-${trMatch[1]}`;
+  }
+  const parsed = new Date(value);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toISOString().slice(0, 10);
+  }
+  return value;
+};
+
 const normalizeWarrantyRow = (row: any): WarrantyItem => {
   const start = row?.start_date ?? row?.startDate ?? null;
-  const end = row?.end_date ?? row?.endDate ?? null;
+  const end = normalizeDateInput(row?.end_date ?? row?.endDate ?? null) || null;
   const serialKey = row?.serial_no ?? row?.serial ?? row?.asset_tag;
   const randomId =
     (typeof globalThis !== "undefined" ? globalThis.crypto?.randomUUID?.() : undefined) ?? `${Math.random()}`;
@@ -97,12 +122,7 @@ const normalizeWarrantyRow = (row: any): WarrantyItem => {
     days_left,
     status_label: status.label,
     status_key: status.key,
-    type_label:
-      row?.type === "DEVICE"
-        ? "Cihaz"
-        : row?.type === "SERVICE"
-          ? "Bakım/Hizmet"
-          : row?.type ?? "-",
+    type_label: formatTypeLabel(row?.type),
   };
 };
 
@@ -114,6 +134,9 @@ export default function WarrantyTrackingView() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [editingItem, setEditingItem] = useState<WarrantyItem | null>(null);
+  const [selectedWarrantyFilter, setSelectedWarrantyFilter] = useState<
+    "CRITICAL" | "NEAR" | "EXPIRED" | null
+  >(null);
   const [form, setForm] = useState<WarrantyItemForm>({
     type: "DEVICE",
     name: "",
@@ -170,6 +193,17 @@ export default function WarrantyTrackingView() {
     return totals;
   }, [items]);
 
+  const filteredItems = useMemo(() => {
+    if (!selectedWarrantyFilter) return items;
+    if (selectedWarrantyFilter === "CRITICAL") {
+      return items.filter((item) => item.status_key === "critical");
+    }
+    if (selectedWarrantyFilter === "NEAR") {
+      return items.filter((item) => item.status_key === "approaching");
+    }
+    return items.filter((item) => item.status_key === "expired");
+  }, [items, selectedWarrantyFilter]);
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!form.name.trim() || !form.location.trim() || !form.end_date) {
@@ -182,11 +216,12 @@ export default function WarrantyTrackingView() {
     setSuccess(null);
 
     try {
+      const normalizedEndDate = normalizeDateInput(form.end_date);
       const payload = {
         type: form.type,
         name: form.name.trim(),
         location: form.location.trim(),
-        end_date: form.end_date,
+        end_date: normalizedEndDate,
         note: form.note.trim() || null,
       };
 
@@ -220,7 +255,7 @@ export default function WarrantyTrackingView() {
       type: item.type || "DEVICE",
       name: item.name,
       location: item.location,
-      end_date: item.end_date ?? "",
+      end_date: normalizeDateInput(item.end_date) ?? "",
       note: item.note ?? "",
     });
   }, []);
@@ -256,7 +291,7 @@ export default function WarrantyTrackingView() {
         field: "type",
         headerName: "Tip",
         flex: 0.7,
-        valueGetter: (params) => params?.row?.type_label ?? "-",
+        valueGetter: (params) => formatTypeLabel(params?.row?.type),
       },
       { field: "name", headerName: "Ad", flex: 1.2 },
       { field: "location", headerName: "Lokasyon", flex: 1 },
@@ -345,24 +380,45 @@ export default function WarrantyTrackingView() {
 
       <Grid container spacing={2}>
         {[
-          { label: "Toplam", value: summary.total, color: "primary" },
-          { label: "Kritik (1-30)", value: summary.critical, color: "error" },
-          { label: "Yaklaşıyor (31-60)", value: summary.upcoming, color: "warning" },
-          { label: "Süresi Geçti", value: summary.expired, color: "grey" },
-        ].map((item) => (
-          <Grid item xs={12} sm={6} md={3} key={item.label}>
-            <Card variant="outlined">
-              <CardContent>
-                <Typography color="text.secondary" gutterBottom>
-                  {item.label}
-                </Typography>
-                <Typography variant="h4" fontWeight={700} color={item.color === "grey" ? "text.primary" : `${item.color}.main`}>
-                  {item.value}
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-        ))}
+          { label: "Toplam", value: summary.total, color: "primary", filter: null },
+          { label: "Kritik (1-30)", value: summary.critical, color: "error", filter: "CRITICAL" as const },
+          { label: "Yaklaşıyor (31-60)", value: summary.upcoming, color: "warning", filter: "NEAR" as const },
+          { label: "Süresi Geçti", value: summary.expired, color: "grey", filter: "EXPIRED" as const },
+        ].map((item) => {
+          const isSelected = selectedWarrantyFilter === item.filter;
+          return (
+            <Grid item xs={12} sm={6} md={3} key={item.label}>
+              <Card
+                variant="outlined"
+                sx={{
+                  borderColor: isSelected ? "primary.main" : "divider",
+                  boxShadow: isSelected ? 3 : 0,
+                  transition: "box-shadow 0.2s ease, border-color 0.2s ease",
+                }}
+              >
+                <CardActionArea
+                  onClick={() =>
+                    setSelectedWarrantyFilter((prev) => (prev === item.filter ? null : item.filter))
+                  }
+                  sx={{ height: "100%" }}
+                >
+                  <CardContent>
+                    <Typography color="text.secondary" gutterBottom>
+                      {item.label}
+                    </Typography>
+                    <Typography
+                      variant="h4"
+                      fontWeight={700}
+                      color={item.color === "grey" ? "text.primary" : `${item.color}.main`}
+                    >
+                      {item.value}
+                    </Typography>
+                  </CardContent>
+                </CardActionArea>
+              </Card>
+            </Grid>
+          );
+        })}
       </Grid>
 
       <Grid container spacing={3} alignItems="flex-start">
@@ -372,11 +428,11 @@ export default function WarrantyTrackingView() {
               <Typography variant="h6" fontWeight={600} gutterBottom>
                 Garanti Kayıtları
               </Typography>
-              {(items ?? []).length === 0 ? (
+              {(filteredItems ?? []).length === 0 ? (
                 <Alert severity="info">Henüz garanti kaydı yok.</Alert>
               ) : (
                 <DataGrid
-                  rows={items ?? []}
+                  rows={filteredItems ?? []}
                   getRowId={(row) => row?.id}
                   columns={columns}
                   loading={loading}

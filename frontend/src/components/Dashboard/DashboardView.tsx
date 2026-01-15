@@ -44,7 +44,8 @@ import { useNavigate } from "react-router-dom";
 
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import usePersistentState from "../../hooks/usePersistentState";
-import { formatBudgetItemLabel, stripBudgetCode } from "../../utils/budgetLabel";
+import { stripBudgetCode } from "../../utils/budgetLabel";
+import { formatBudgetItemMeta } from "../../utils/budgetItem";
 import AccountBalanceWalletOutlinedIcon from "@mui/icons-material/AccountBalanceWalletOutlined";
 import CheckCircleOutlineOutlinedIcon from "@mui/icons-material/CheckCircleOutlineOutlined";
 import TrendingUpOutlinedIcon from "@mui/icons-material/TrendingUpOutlined";
@@ -336,11 +337,23 @@ export default function DashboardView() {
   const budgetFilterOptions = useMemo(
     () =>
       createFilterOptions<BudgetItem>({
-        stringify: (option) =>
-          `${option.code ?? ""} ${option.name ?? ""} ${formatBudgetItemLabel(option)}`
+        stringify: (option) => {
+          const name = stripBudgetCode(option.name ?? "");
+          const meta = formatBudgetItemMeta(option);
+          return `${option.code ?? ""} ${name} ${meta}`;
+        }
       }),
     []
   );
+
+  const handleResetFilters = () => {
+    setYear(currentYear);
+    setScenarioId(null);
+    setMonth(null);
+    setBudgetItemId(null);
+    setCapexOpex("");
+    setDepartment("");
+  };
 
   const monthlyData = useMemo(() => {
     if (!dashboard?.monthly) return [];
@@ -408,7 +421,8 @@ export default function DashboardView() {
           ml: 0,
           mr: 0,
           px: { xs: 2, md: 3 },
-          py: { xs: 2, md: 3 }
+          py: { xs: 2, md: 3 },
+          overflowX: "hidden"
         }}
       >
         <Stack spacing={2} sx={{ width: "100%" }}>
@@ -419,7 +433,12 @@ export default function DashboardView() {
                   <Typography variant="subtitle1" fontWeight={600} gutterBottom>
                     Filtreler
                   </Typography>
-                  <Chip label="Güncel" color="primary" variant="outlined" size="small" />
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <Chip label="Güncel" color="primary" variant="outlined" size="small" />
+                    <Button size="small" variant="outlined" onClick={handleResetFilters}>
+                      Sıfırla
+                    </Button>
+                  </Stack>
                 </Stack>
                 <Grid container spacing={2} alignItems="center">
                   <Grid item xs={12} md={2}>
@@ -495,9 +514,26 @@ export default function DashboardView() {
                       options={budgetItems ?? []}
                       value={budgetItems?.find((item) => item.id === budgetItemId) ?? null}
                       onChange={(_, value) => setBudgetItemId(value?.id ?? null)}
-                      getOptionLabel={(option) => formatBudgetItemLabel(option)}
+                      getOptionLabel={(option) => stripBudgetCode(option.name ?? "") || "-"}
                       filterOptions={budgetFilterOptions}
                       isOptionEqualToValue={(option, value) => option.id === value.id}
+                      renderOption={(props, option) => {
+                        const meta = formatBudgetItemMeta(option);
+                        return (
+                          <li {...props} key={option.id}>
+                            <Stack spacing={0.2}>
+                              <Typography variant="body2" fontWeight={600}>
+                                {stripBudgetCode(option.name ?? "") || "-"}
+                              </Typography>
+                              {meta && (
+                                <Typography variant="caption" color="text.secondary">
+                                  {meta}
+                                </Typography>
+                              )}
+                            </Stack>
+                          </li>
+                        );
+                      }}
                       renderInput={(params) => (
                         <TextField {...params} label="Bütçe Kalemi" placeholder="Tümü" fullWidth />
                       )}
@@ -570,7 +606,7 @@ export default function DashboardView() {
                   <Chip
                     label={
                       budgetItemId
-                        ? budgetItems?.find((item) => item.id === budgetItemId)?.name
+                        ? stripBudgetCode(budgetItems?.find((item) => item.id === budgetItemId)?.name ?? "")
                         : "Tüm Kalemler"
                     }
                     color={budgetItemId ? "primary" : "default"}
