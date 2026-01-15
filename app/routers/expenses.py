@@ -63,6 +63,8 @@ def _attach_user_names(session: Session, expenses: list[Expense]) -> None:
             user_ids.add(expense.created_by_user_id)
         elif expense.created_by_id:
             user_ids.add(expense.created_by_id)
+        if expense.updated_by_id:
+            user_ids.add(expense.updated_by_id)
         if expense.updated_by_user_id:
             user_ids.add(expense.updated_by_user_id)
     if not user_ids:
@@ -71,10 +73,9 @@ def _attach_user_names(session: Session, expenses: list[Expense]) -> None:
     user_map = {user.id: _user_display_name(user) for user in users}
     for expense in expenses:
         created_id = expense.created_by_user_id or expense.created_by_id
+        updated_id = expense.updated_by_user_id or expense.updated_by_id
         expense.created_by_name = user_map.get(created_id) if created_id else None
-        expense.updated_by_name = (
-            user_map.get(expense.updated_by_user_id) if expense.updated_by_user_id else None
-        )
+        expense.updated_by_name = user_map.get(updated_id) if updated_id else None
 
 
 @router.get("/", response_model=list[ExpenseRead])
@@ -162,6 +163,7 @@ def create_expense(
     expense = Expense(
         **expense_data,
         created_by_id=current_user.id,
+        updated_by_id=current_user.id,
         created_by_user_id=current_user.id,
         updated_by_user_id=current_user.id,
         client_hostname=client_hostname,
@@ -198,6 +200,7 @@ def update_expense(
         expense.amount = round(quantity * unit_price, 2)
 
     expense.updated_by_user_id = current_user.id
+    expense.updated_by_id = current_user.id
     expense.updated_at = datetime.utcnow()
     session.add(expense)
     session.commit()

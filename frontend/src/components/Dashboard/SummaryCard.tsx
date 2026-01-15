@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Avatar, Box, Card, Skeleton, Typography } from "@mui/material";
+import { Avatar, Box, Card, CardActionArea, Skeleton, Typography } from "@mui/material";
 
 export type SummaryCardProps = {
   title: string;
@@ -8,11 +8,22 @@ export type SummaryCardProps = {
   icon?: ReactNode;
   iconColor?: string;
   isLoading?: boolean;
+  onClick?: () => void;
+  selected?: boolean;
 };
 
-export function SummaryCard({ title, value, subtitle, icon, iconColor, isLoading }: SummaryCardProps) {
-  return (
-    <Card sx={{ position: "relative", borderRadius: 3, height: "100%", minHeight: 120, width: "100%" }}>
+export function SummaryCard({
+  title,
+  value,
+  subtitle,
+  icon,
+  iconColor,
+  isLoading,
+  onClick,
+  selected
+}: SummaryCardProps) {
+  const content = (
+    <>
       <Box sx={{ p: 3 }}>
         <Typography variant="subtitle2" color="text.secondary">
           {title}
@@ -38,7 +49,7 @@ export function SummaryCard({ title, value, subtitle, icon, iconColor, isLoading
           }}
         >
           <Avatar
-          sx={{
+            sx={{
               width: 40,
               height: 40,
               bgcolor: iconColor ?? "primary.main",
@@ -47,6 +58,28 @@ export function SummaryCard({ title, value, subtitle, icon, iconColor, isLoading
             {icon}
           </Avatar>
         </Box>
+      )}
+    </>
+  );
+  return (
+    <Card
+      sx={{
+        position: "relative",
+        borderRadius: 3,
+        height: "100%",
+        minHeight: 120,
+        width: "100%",
+        border: selected ? "1px solid" : undefined,
+        borderColor: selected ? "primary.main" : undefined,
+        boxShadow: selected ? 3 : undefined,
+      }}
+    >
+      {onClick ? (
+        <CardActionArea onClick={onClick} sx={{ height: "100%" }}>
+          {content}
+        </CardActionArea>
+      ) : (
+        content
       )}
     </Card>
   );

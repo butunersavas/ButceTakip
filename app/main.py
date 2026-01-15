@@ -1,9 +1,13 @@
+import logging
+
 from fastapi import FastAPI
+from sqlalchemy import text
+from sqlmodel import Session
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.config import get_settings
-from app.database import init_db
+from app.database import engine, init_db
 from app.routers import (
     auth,
     budget_items,
@@ -17,6 +21,8 @@ from app.routers import (
     users,
     warranty_items,
 )
+
+logging.basicConfig(level=logging.INFO)
 
 app = FastAPI()
 API_PREFIX = "/api"
@@ -57,3 +63,14 @@ app.include_router(warranty_items.router, prefix=API_PREFIX)
 @app.get("/")
 def healthcheck() -> dict[str, str]:
     return {"status": "ok", "message": "Budget management API"}
+
+
+@app.get("/api/health")
+def api_healthcheck() -> dict[str, str]:
+    try:
+        with Session(engine) as session:
+            session.exec(text("SELECT 1"))
+        return {"status": "ok"}
+    except Exception:
+        logging.exception("Healthcheck failed")
+        return {"status": "db_error"}

@@ -10,9 +10,17 @@ export const stripBudgetCode = (text: string | null | undefined): string => {
   return text.replace(/^SK\d+\s*[-—–]\s*/i, "").trim();
 };
 
-export const formatBudgetItemLabel = (item?: BudgetLabelItem | null): string => {
+export const formatBudgetItemLabel = (
+  item?: BudgetLabelItem | null,
+  showCode: boolean = false
+): string => {
   if (!item) return "-";
   const cleanName = stripBudgetCode(item.name ?? "") || "-";
   const meta = formatBudgetItemMeta(item);
+  if (showCode) {
+    const code = item.code?.toString().trim();
+    const withCode = code ? `${code} — ${cleanName}` : cleanName;
+    return meta ? `${withCode} (${meta})` : withCode;
+  }
   return meta ? `${cleanName} (${meta})` : cleanName;
 };

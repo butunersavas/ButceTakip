@@ -31,6 +31,16 @@ Kurumsal bütçe planlama ve gerçekleşen harcamaları takip etmeye yönelik AP
    `/api` yoluna yapar; geliştirme ortamında Vite proxy bu istekleri arka uç servisine yönlendirir.
 5. PgAdmin arayüzüne `http://localhost:8080` adresinden erişebilirsiniz.
 
+### Şema güncellemeleri (geliştirme ortamı)
+
+Veritabanı şemasında yeni alanlar eklendiğinde (ör. harcama kayıtlarına ek FK alanları), mevcut Docker veritabanı hacminde
+uyumsuzluk yaşanabilir. Geliştirme ortamında hızlı sıfırlamak için:
+
+```bash
+docker compose down -v
+docker compose up --build
+```
+
 ### Docker Compose sorun giderme
 
 `butce_db` benzeri bir kapsayıcı adının zaten kullanımda olduğuna dair uyarı alırsanız önce ilgili kapsayıcının durdurulup silindiğinden emin olun:

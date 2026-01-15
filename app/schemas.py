@@ -141,6 +141,10 @@ class PlanEntryUpdate(BaseModel):
 
 class PlanEntryRead(PlanEntryBase):
     id: int
+    scenario: Optional["ScenarioRead"] = None
+    budget_item: Optional["BudgetItemRead"] = None
+    capex_opex: Optional[str] = None
+    asset_type: Optional[str] = None
 
     class Config:
         orm_mode = True
@@ -220,6 +224,7 @@ class ExpenseUpdate(BaseModel):
 class ExpenseRead(ExpenseBase):
     id: int
     created_by_id: Optional[int]
+    updated_by_id: Optional[int] = None
     created_by_user_id: Optional[int] = None
     updated_by_user_id: Optional[int] = None
     created_by_name: Optional[str] = None
