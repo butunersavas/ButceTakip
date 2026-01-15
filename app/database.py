@@ -123,6 +123,24 @@ def _apply_schema_upgrades() -> None:
 
     if inspector.has_table("warranty_items"):
         warranty_columns = {column["name"] for column in inspector.get_columns("warranty_items")}
+        if "created_by_id" not in warranty_columns:
+            with engine.begin() as connection:
+                connection.execute(text("ALTER TABLE warranty_items ADD COLUMN created_by_id INTEGER"))
+                connection.execute(
+                    text(
+                        "UPDATE warranty_items SET created_by_id = created_by_user_id "
+                        "WHERE created_by_id IS NULL"
+                    )
+                )
+        if "updated_by_id" not in warranty_columns:
+            with engine.begin() as connection:
+                connection.execute(text("ALTER TABLE warranty_items ADD COLUMN updated_by_id INTEGER"))
+                connection.execute(
+                    text(
+                        "UPDATE warranty_items SET updated_by_id = COALESCE(updated_by_user_id, created_by_id) "
+                        "WHERE updated_by_id IS NULL"
+                    )
+                )
         if "created_by_user_id" not in warranty_columns:
             with engine.begin() as connection:
                 connection.execute(text("ALTER TABLE warranty_items ADD COLUMN created_by_user_id INTEGER"))

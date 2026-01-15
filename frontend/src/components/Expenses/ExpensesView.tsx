@@ -23,6 +23,7 @@ import {
   Tooltip,
   Typography
 } from "@mui/material";
+import Autocomplete, { createFilterOptions } from "@mui/material/Autocomplete";
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/DeleteOutline";
@@ -45,7 +46,7 @@ import dayjs from "dayjs";
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import usePersistentState from "../../hooks/usePersistentState";
 import { useAuth } from "../../context/AuthContext";
-import { formatBudgetItemLabel } from "../../utils/budgetLabel";
+import { formatBudgetItemLabel, stripBudgetCode } from "../../utils/budgetLabel";
 
 interface Scenario {
   id: number;
@@ -81,6 +82,8 @@ export interface Expense {
   kaydi_giren_kullanici: string | null;
   created_by_name?: string | null;
   updated_by_name?: string | null;
+  created_by_username?: string | null;
+  updated_by_username?: string | null;
 }
 
 interface ExpensePayload {
@@ -148,6 +151,7 @@ export default function ExpensesView() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [formQuantity, setFormQuantity] = useState<string>("1");
   const [formUnitPrice, setFormUnitPrice] = useState<string>("0");
+  const [formBudgetItemId, setFormBudgetItemId] = useState<number | null>(null);
   const [filterModel, setFilterModel] = useState<GridFilterModel>({ items: [] });
   const [sortModel, setSortModel] = useState<GridSortModel>([]);
   const [columnVisibilityModel, setColumnVisibilityModel] =
@@ -282,14 +286,16 @@ export default function ExpensesView() {
     setEditingExpense(null);
     setFormQuantity("1");
     setFormUnitPrice("0");
+    setFormBudgetItemId(budgetItemId ?? null);
     setDialogOpen(true);
-  }, [setDialogOpen, setEditingExpense, setFormQuantity, setFormUnitPrice]);
+  }, [budgetItemId, setDialogOpen, setEditingExpense, setFormQuantity, setFormUnitPrice]);
 
   const handleEdit = useCallback(
     (expense: Expense) => {
       setEditingExpense(expense);
       setFormQuantity(String(expense.quantity ?? 1));
       setFormUnitPrice(String(expense.unit_price ?? 0));
+      setFormBudgetItemId(expense.budget_item_id ?? null);
       setDialogOpen(true);
     },
     [setDialogOpen, setEditingExpense, setFormQuantity, setFormUnitPrice]
@@ -345,6 +351,10 @@ export default function ExpensesView() {
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!formBudgetItemId) {
+      setErrorMessage("Bütçe kalemi seçmelisiniz.");
+      return;
+    }
     const formData = new FormData(event.currentTarget);
     const quantity = Number(formData.get("quantity")) || 1;
     const unitPrice = Number(formData.get("unit_price")) || 0;
@@ -354,7 +364,7 @@ export default function ExpensesView() {
 
     const payload: ExpensePayload = {
       id: editingExpense?.id,
-      budget_item_id: Number(formData.get("budget_item_id")),
+      budget_item_id: formBudgetItemId,
       scenario_id: formData.get("scenario_id")
         ? Number(formData.get("scenario_id"))
         : scenarioId,
@@ -465,6 +475,17 @@ export default function ExpensesView() {
       </Tooltip>
     );
   }, []);
+
+  const budgetFilterOptions = useMemo(
+    () =>
+      createFilterOptions<BudgetItem>({
+        stringify: (option) => {
+          const name = stripBudgetCode(option.name ?? "");
+          return `${option.code ?? ""} ${name} ${option.map_category ?? ""} ${option.map_attribute ?? ""}`;
+        }
+      }),
+    []
+  );
 
   const findBudgetItem = useCallback(
     (row: unknown) => {
@@ -617,7 +638,7 @@ export default function ExpensesView() {
         width: 200,
         renderCell: ({ row }) =>
           renderTextWithTooltip(
-            row.created_by_name ?? row.kaydi_giren_kullanici,
+            row.created_by_username ?? row.created_by_name ?? row.kaydi_giren_kullanici,
             "Bilinmiyor"
           )
       },
@@ -625,7 +646,8 @@ export default function ExpensesView() {
         field: "updated_by_name",
         headerName: "Son Güncelleyen",
         width: 200,
-        renderCell: ({ row }) => renderTextWithTooltip(row.updated_by_name, "Bilinmiyor")
+        renderCell: ({ row }) =>
+          renderTextWithTooltip(row.updated_by_username ?? row.updated_by_name, "Bilinmiyor")
       },
       {
         field: "status",
@@ -872,22 +894,18 @@ export default function ExpensesView() {
                 </TextField>
               </Grid>
               <Grid item xs={12} md={3}>
-                <TextField
-                  select
-                  label="Bütçe Kalemi"
-                  value={budgetItemId ?? ""}
-                  onChange={(event) =>
-                    setBudgetItemId(event.target.value ? Number(event.target.value) : null)
-                  }
-                  fullWidth
-                >
-                  <MenuItem value="">Tümü</MenuItem>
-                  {budgetItems?.map((item) => (
-                    <MenuItem key={item.id} value={item.id}>
-                      {formatBudgetItemLabel(item)}
-                    </MenuItem>
-                  ))}
-                </TextField>
+                <Autocomplete
+                  size="small"
+                  options={budgetItems ?? []}
+                  value={budgetItems?.find((item) => item.id === budgetItemId) ?? null}
+                  onChange={(_, value) => setBudgetItemId(value?.id ?? null)}
+                  getOptionLabel={(option) => formatBudgetItemLabel(option) || "-"}
+                  filterOptions={budgetFilterOptions}
+                  isOptionEqualToValue={(option, value) => option.id === value.id}
+                  renderInput={(params) => (
+                    <TextField {...params} label="Bütçe Kalemi" placeholder="Tümü" fullWidth size="small" />
+                  )}
+                />
               </Grid>
               <Grid item xs={12} md={3}>
                 <TextField
@@ -1136,20 +1154,17 @@ export default function ExpensesView() {
               {errorMessage && <Alert severity="error">{errorMessage}</Alert>}
               <Grid container spacing={2}>
                 <Grid item xs={12} md={4}>
-                  <TextField
-                    select
-                    label="Bütçe Kalemi"
-                    name="budget_item_id"
-                    defaultValue={editingExpense?.budget_item_id ?? budgetItemId ?? ""}
-                    required
-                    fullWidth
-                  >
-                {budgetItems?.map((item) => (
-                  <MenuItem key={item.id} value={item.id}>
-                    {formatBudgetItemLabel(item)}
-                  </MenuItem>
-                ))}
-              </TextField>
+                  <Autocomplete
+                    options={budgetItems ?? []}
+                    value={budgetItems?.find((item) => item.id === formBudgetItemId) ?? null}
+                    onChange={(_, value) => setFormBudgetItemId(value?.id ?? null)}
+                    getOptionLabel={(option) => formatBudgetItemLabel(option) || "-"}
+                    filterOptions={budgetFilterOptions}
+                    isOptionEqualToValue={(option, value) => option.id === value.id}
+                    renderInput={(params) => (
+                      <TextField {...params} label="Bütçe Kalemi" required fullWidth />
+                    )}
+                  />
                 </Grid>
                 <Grid item xs={12} md={4}>
                   <TextField

@@ -449,8 +449,8 @@ export default function DashboardView() {
                     </Button>
                   </Stack>
                 </Stack>
-                <Grid container spacing={2} alignItems="center">
-                  <Grid item xs={12} md={2}>
+                <Grid container spacing={1.5} alignItems="center">
+                  <Grid item xs={12} sm={6} md={2}>
                     <TextField
                       size="small"
                       label="Yıl"
@@ -463,7 +463,7 @@ export default function DashboardView() {
                       fullWidth
                     />
                   </Grid>
-                  <Grid item xs={12} md={3}>
+                  <Grid item xs={12} sm={6} md={3}>
                     <TextField
                       size="small"
                       select
@@ -480,7 +480,7 @@ export default function DashboardView() {
                       ))}
                     </TextField>
                   </Grid>
-                  <Grid item xs={12} md={3}>
+                  <Grid item xs={12} sm={6} md={3}>
                     <TextField
                       size="small"
                       select
@@ -497,7 +497,7 @@ export default function DashboardView() {
                       ))}
                     </TextField>
                   </Grid>
-                  <Grid item xs={12} md={2}>
+                  <Grid item xs={12} sm={6} md={2}>
                     <TextField
                       select
                       fullWidth
@@ -517,7 +517,7 @@ export default function DashboardView() {
                       ))}
                     </TextField>
                   </Grid>
-                  <Grid item xs={12} md={3}>
+                  <Grid item xs={12} sm={6} md={4}>
                     <Autocomplete
                       size="small"
                       options={budgetItems ?? []}
@@ -544,11 +544,11 @@ export default function DashboardView() {
                         );
                       }}
                       renderInput={(params) => (
-                        <TextField {...params} label="Bütçe Kalemi" placeholder="Tümü" fullWidth />
+                        <TextField {...params} label="Bütçe Kalemi" placeholder="Tümü" fullWidth size="small" />
                       )}
                     />
                   </Grid>
-                  <Grid item xs={12} md={2}>
+                  <Grid item xs={12} sm={6} md={2}>
                     <TextField
                       size="small"
                       select
@@ -620,7 +620,7 @@ export default function DashboardView() {
           </Grid>
           <Stack spacing={3}>
             <Card>
-              <CardContent sx={{ height: 280 }}>
+              <CardContent sx={{ height: 280, minHeight: 280 }}>
                 <Stack direction="row" justifyContent="space-between" alignItems="center" mb={3}>
                   <Typography variant="h6" fontWeight={600}>
                     Aylık Trend Analizi
@@ -638,8 +638,9 @@ export default function DashboardView() {
                 {isLoading ? (
                   <Skeleton variant="rectangular" height="100%" />
                 ) : (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={monthlyData}>
+                  <Box sx={{ height: 200, minHeight: 200 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={monthlyData}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
                       <XAxis dataKey="monthLabel" tick={{ fill: "#475569" }} />
                       <YAxis
@@ -680,8 +681,9 @@ export default function DashboardView() {
                       radius={[6, 6, 0, 0]}
                       hide={!showOverrun}
                     />
-                  </BarChart>
-                </ResponsiveContainer>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </Box>
               )}
               </CardContent>
             </Card>
@@ -798,7 +800,8 @@ export default function DashboardView() {
                       <Grid item xs={12} sm={6} md={3} key={quarterKey}>
                         <Stack alignItems="center" spacing={1}>
                           <Typography variant="subtitle2">{quarterLabel}</Typography>
-                          <PieChart width={180} height={180}>
+                          <Box sx={{ minHeight: 180 }}>
+                            <PieChart width={180} height={180}>
                             <Pie
                               data={chartData}
                               dataKey="value"
@@ -821,6 +824,7 @@ export default function DashboardView() {
                               ]}
                             />
                           </PieChart>
+                          </Box>
                         </Stack>
                       </Grid>
                     );

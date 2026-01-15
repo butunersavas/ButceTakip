@@ -229,6 +229,8 @@ class ExpenseRead(ExpenseBase):
     updated_by_user_id: Optional[int] = None
     created_by_name: Optional[str] = None
     updated_by_name: Optional[str] = None
+    created_by_username: Optional[str] = None
+    updated_by_username: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
@@ -260,10 +262,16 @@ class WarrantyItemUpdate(BaseModel):
 class WarrantyItemRead(WarrantyItemBase):
     id: int
     is_active: bool
+    created_by_id: Optional[int] = None
+    updated_by_id: Optional[int] = None
     created_by_user_id: Optional[int] = None
     updated_by_user_id: Optional[int] = None
     created_by_name: Optional[str] = None
     updated_by_name: Optional[str] = None
+    created_by_username: Optional[str] = None
+    updated_by_username: Optional[str] = None
+    days_left: Optional[int] = None
+    status: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
