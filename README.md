@@ -84,6 +84,24 @@ E-posta ve parola değerleri sağlandığında veritabanında kayıt bulunmuyors
 oluşturma sırasında kullanılır; ileride değiştirmek isterseniz API üzerindeki kullanıcı uç noktalarını veya veritabanını
 kullanabilirsiniz.
 
+#### Admin hesabını sıfırlama (opsiyonel)
+
+Varsayılan admin hesabını yeniden oluşturmak veya parolasını resetlemek için aşağıdaki komutu çalıştırabilirsiniz:
+
+```bash
+docker compose exec api python scripts/reset_admin.py
+```
+
+İsterseniz kullanıcı bilgilerini parametre ile de verebilirsiniz:
+
+```bash
+docker compose exec api python scripts/reset_admin.py \
+  --email admin@local \
+  --password "GucluBirSifre123!" \
+  --full-name "Admin Kullanıcı" \
+  --username admin
+```
+
 ### Frontend (React)
 
 ```bash
@@ -94,8 +112,31 @@ npm run dev
 
 Varsayılan olarak arayüz `http://localhost:5173` portundan yayına alınır. API çağrıları `/api` yoluna yapılır
 ve Vite geliştirme sunucusu bu istekleri backend'e proxy eder. Proxy hedefini değiştirmek isterseniz
-`VITE_PROXY_TARGET` değişkenini kullanabilirsiniz. Örnek değerler için `frontend/.env.example` dosyasını
+`VITE_API_PROXY_TARGET` değişkenini kullanabilirsiniz. Örnek değerler için `frontend/.env.example` dosyasını
 `.env` olarak kopyalayabilirsiniz.
+
+### Nginx reverse proxy + SSL (opsiyonel)
+
+Üretimde HTTPS ile çalıştırmak için Docker Compose içinde opsiyonel bir Nginx servisi bulunur. Aşağıdaki gibi başlatabilirsiniz:
+
+```bash
+docker compose --profile nginx up --build
+```
+
+Nginx, `/` isteklerini frontend'e, `/api` isteklerini API'ye yönlendirir. TLS sertifikaları için
+`nginx/certs/fullchain.pem` ve `nginx/certs/privkey.pem` dosyalarını eklemeniz gerekir.
+
+Geliştirme için self-signed sertifika üretmek isterseniz:
+
+```bash
+mkdir -p nginx/certs
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout nginx/certs/privkey.pem \
+  -out nginx/certs/fullchain.pem \
+  -subj "/CN=localhost"
+```
+
+Gerçek domain için Let's Encrypt sertifikalarını kullanabilirsiniz (ör. certbot ile).
 
 ### LAN'dan erişim notu
 

@@ -220,6 +220,13 @@ export default function WarrantyTrackingView() {
     return items.filter((item) => item.status_key === "expired");
   }, [items, selectedWarrantyFilter]);
 
+  const activeFilterLabel = useMemo(() => {
+    if (!selectedWarrantyFilter) return null;
+    if (selectedWarrantyFilter === "CRITICAL") return "Kritik (1-30)";
+    if (selectedWarrantyFilter === "NEAR") return "Yaklaşıyor (31-60)";
+    return "Süresi Geçti";
+  }, [selectedWarrantyFilter]);
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!form.name.trim() || !form.location.trim() || !form.end_date) {
@@ -455,6 +462,19 @@ export default function WarrantyTrackingView() {
               <Typography variant="h6" fontWeight={600} gutterBottom>
                 Garanti Kayıtları
               </Typography>
+              {activeFilterLabel && (
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
+                  <Chip
+                    color="primary"
+                    size="small"
+                    label={`Aktif filtre: ${activeFilterLabel}`}
+                    onDelete={() => setSelectedWarrantyFilter(null)}
+                  />
+                  <Button size="small" variant="text" onClick={() => setSelectedWarrantyFilter(null)}>
+                    Temizle
+                  </Button>
+                </Stack>
+              )}
               {(filteredItems ?? []).length === 0 ? (
                 <Alert severity="info">Henüz garanti kaydı yok.</Alert>
               ) : (
