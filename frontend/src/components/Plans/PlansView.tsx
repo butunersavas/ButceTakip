@@ -26,7 +26,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import usePersistentState from "../../hooks/usePersistentState";
 import { useAuth } from "../../context/AuthContext";
-import { stripBudgetCode } from "../../utils/budgetLabel";
+import { formatBudgetItemLabel, stripBudgetCode } from "../../utils/budgetLabel";
 import { formatBudgetItemMeta } from "../../utils/budgetItem";
 
 interface Scenario {
@@ -51,11 +51,14 @@ interface PlanEntry {
   scenario_id: number;
   budget_item_id: number;
   department?: string | null;
-  scenario?: string | null;
-  budget_code?: string | null;
-  budget_name?: string | null;
-  map_category?: string | null;
-  map_attribute?: string | null;
+  scenario?: {
+    id: number;
+    name: string;
+    year: number;
+  } | null;
+  budget_item?: BudgetItem | null;
+  capex_opex?: string | null;
+  asset_type?: string | null;
 }
 
 type PlanMutationPayload = {
@@ -319,7 +322,7 @@ export default function PlansView() {
           }
 
           if (row.scenario) {
-            return row.scenario;
+            return row.scenario.name ?? "";
           }
 
           if (!Array.isArray(scenarios)) {
@@ -346,8 +349,8 @@ export default function PlansView() {
         headerName: "Bütçe Kalemi",
         flex: 1,
         valueGetter: (params) =>
-          params?.row?.budget_name ||
-          stripBudgetCode(findBudgetItem(params?.row)?.name ?? "") ||
+          formatBudgetItemLabel(params?.row?.budget_item) ||
+          formatBudgetItemLabel(findBudgetItem(params?.row)) ||
           ""
       },
       {
@@ -355,14 +358,20 @@ export default function PlansView() {
         headerName: "Map Capex/Opex",
         flex: 1,
         valueGetter: (params) =>
-          params?.row?.map_category ?? findBudgetItem(params?.row)?.map_category ?? "-"
+          params?.row?.capex_opex ??
+          params?.row?.budget_item?.map_category ??
+          findBudgetItem(params?.row)?.map_category ??
+          "-"
       },
       {
         field: "map_attribute",
         headerName: "Map Nitelik",
         flex: 1,
         valueGetter: (params) =>
-          params?.row?.map_attribute ?? findBudgetItem(params?.row)?.map_attribute ?? "-"
+          params?.row?.asset_type ??
+          params?.row?.budget_item?.map_attribute ??
+          findBudgetItem(params?.row)?.map_attribute ??
+          "-"
       },
       {
         field: "department",
@@ -474,8 +483,8 @@ export default function PlansView() {
   return (
     <Stack spacing={4}>
       <Card>
-        <CardContent>
-          <Grid container spacing={2} alignItems="center">
+        <CardContent sx={{ py: 1.5, px: 2 }}>
+          <Grid container spacing={1.5} alignItems="center">
             <Grid item xs={12} sm={6} md={2}>
               <TextField
                 label="Yıl"
@@ -534,7 +543,7 @@ export default function PlansView() {
                 options={budgetItems ?? []}
                 value={budgetItems?.find((item) => item.id === budgetItemId) ?? null}
                 onChange={(_, value) => setBudgetItemId(value?.id ?? null)}
-                getOptionLabel={(option) => stripBudgetCode(option.name ?? "") || "-"}
+                getOptionLabel={(option) => formatBudgetItemLabel(option) || "-"}
                 filterOptions={budgetFilterOptions}
                 isOptionEqualToValue={(option, value) => option.id === value.id}
                 renderOption={(props, option) => {
@@ -543,7 +552,7 @@ export default function PlansView() {
                     <li {...props} key={option.id}>
                       <Stack spacing={0.2}>
                         <Typography variant="body2" fontWeight={600}>
-                          {stripBudgetCode(option.name ?? "") || "-"}
+                          {formatBudgetItemLabel(option) || "-"}
                         </Typography>
                         {meta && (
                           <Typography variant="caption" color="text.secondary">
@@ -765,7 +774,7 @@ export default function PlansView() {
               >
                 {budgetItems?.map((item) => (
                   <MenuItem key={item.id} value={item.id}>
-                    {stripBudgetCode(item.name ?? "") || "-"}
+                    {formatBudgetItemLabel(item) || "-"}
                   </MenuItem>
                 ))}
               </TextField>

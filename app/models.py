@@ -36,13 +36,17 @@ class User(TimestampMixin, SQLModel, table=True):
         back_populates="created_by_user",
         sa_relationship_kwargs={"foreign_keys": "[Expense.created_by_user_id]"},
     )
-    expenses_created_legacy: list["Expense"] = Relationship(
+    created_expenses: list["Expense"] = Relationship(
         back_populates="created_by",
         sa_relationship_kwargs={"foreign_keys": "[Expense.created_by_id]"},
     )
     expenses_updated: list["Expense"] = Relationship(
         back_populates="updated_by_user",
         sa_relationship_kwargs={"foreign_keys": "[Expense.updated_by_user_id]"},
+    )
+    updated_expenses: list["Expense"] = Relationship(
+        back_populates="updated_by",
+        sa_relationship_kwargs={"foreign_keys": "[Expense.updated_by_id]"},
     )
     warranties_created: list["WarrantyItem"] = Relationship(
         back_populates="created_by_user",
@@ -128,6 +132,7 @@ class Expense(TimestampMixin, SQLModel, table=True):
     status: ExpenseStatus = Field(default=ExpenseStatus.RECORDED, nullable=False)
     is_out_of_budget: bool = Field(default=False, nullable=False)
     created_by_id: Optional[int] = Field(default=None, foreign_key="users.id")
+    updated_by_id: Optional[int] = Field(default=None, foreign_key="users.id")
     created_by_user_id: Optional[int] = Field(default=None, foreign_key="users.id")
     updated_by_user_id: Optional[int] = Field(default=None, foreign_key="users.id")
     client_hostname: Optional[str] = Field(default=None, nullable=True)
@@ -140,8 +145,12 @@ class Expense(TimestampMixin, SQLModel, table=True):
         sa_relationship_kwargs={"foreign_keys": "[Expense.created_by_user_id]"},
     )
     created_by: Optional[User] = Relationship(
-        back_populates="expenses_created_legacy",
+        back_populates="created_expenses",
         sa_relationship_kwargs={"foreign_keys": "[Expense.created_by_id]"},
+    )
+    updated_by: Optional[User] = Relationship(
+        back_populates="updated_expenses",
+        sa_relationship_kwargs={"foreign_keys": "[Expense.updated_by_id]"},
     )
     updated_by_user: Optional[User] = Relationship(
         back_populates="expenses_updated",

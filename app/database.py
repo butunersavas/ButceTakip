@@ -105,6 +105,15 @@ def _apply_schema_upgrades() -> None:
         if "updated_by_user_id" not in expense_columns:
             with engine.begin() as connection:
                 connection.execute(text("ALTER TABLE expenses ADD COLUMN updated_by_user_id INTEGER"))
+        if "updated_by_id" not in expense_columns:
+            with engine.begin() as connection:
+                connection.execute(text("ALTER TABLE expenses ADD COLUMN updated_by_id INTEGER"))
+                connection.execute(
+                    text(
+                        "UPDATE expenses SET updated_by_id = COALESCE(updated_by_user_id, created_by_id) "
+                        "WHERE updated_by_id IS NULL"
+                    )
+                )
 
     if inspector.has_table("plan_entries"):
         plan_columns = {column["name"] for column in inspector.get_columns("plan_entries")}

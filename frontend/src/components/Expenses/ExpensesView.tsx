@@ -12,12 +12,10 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  FormControl,
   FormControlLabel,
   Grid,
   IconButton,
   MenuItem,
-  InputLabel,
   Select,
   Stack,
   Switch,
@@ -76,6 +74,7 @@ export interface Expense {
   status: "recorded" | "cancelled";
   is_out_of_budget: boolean;
   created_by_id: number | null;
+  updated_by_id?: number | null;
   created_at: string;
   updated_at: string;
   client_hostname: string | null;
@@ -246,8 +245,6 @@ export default function ExpensesView() {
       return data;
     }
   });
-
-  console.log("EXPENSES QUERY RESULT", expenses);
 
   const mutation = useMutation({
     mutationFn: async (payload: ExpensePayload) => {
@@ -557,9 +554,6 @@ export default function ExpensesView() {
         headerName: "Tutar",
         width: 140,
         renderCell: ({ row }) => {
-          // Debug için:
-          console.log("EXPENSE ROW AMOUNT", row.id, row.amount, row.quantity, row.unit_price);
-
           const raw = row.amount;
 
           let num: number;
@@ -591,9 +585,6 @@ export default function ExpensesView() {
         headerName: "Birim Fiyat",
         width: 140,
         renderCell: ({ row }) => {
-          // Debug için:
-          console.log("EXPENSE ROW UNIT_PRICE", row.id, row.unit_price);
-
           const raw = row.unit_price;
           let num: number;
 
@@ -622,7 +613,7 @@ export default function ExpensesView() {
       },
       {
         field: "created_by_name",
-        headerName: "Oluşturan",
+        headerName: "Kaydı Giren",
         width: 200,
         renderCell: ({ row }) =>
           renderTextWithTooltip(
@@ -818,9 +809,40 @@ export default function ExpensesView() {
           }}
         >
           <Box sx={{ mb: 3 }}>
-            <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-              Harcama Filtreleri
-            </Typography>
+            <Stack
+              direction={{ xs: "column", sm: "row" }}
+              alignItems={{ xs: "flex-start", sm: "center" }}
+              justifyContent="space-between"
+              spacing={1}
+              sx={{ mb: 1 }}
+            >
+              <Typography variant="subtitle1" fontWeight={600}>
+                Harcama Filtreleri
+              </Typography>
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => {
+                  setYear(currentYear);
+                  setScenarioId(null);
+                  setBudgetItemId(null);
+                  setStatusFilter("");
+                  setStartDate("");
+                  setEndDate("");
+                  setCapexOpex("");
+                  setIncludeOutOfBudget(true);
+                  setShowCancelled(false);
+                  setShowOutOfBudget(false);
+                  setMineOnly(false);
+                  setTodayOnly(false);
+                  setSelectedExpenseFilter("ALL");
+                  setFilterModel({ items: [] });
+                  setSortModel([]);
+                }}
+              >
+                Sıfırla
+              </Button>
+            </Stack>
             <Grid container spacing={3} disableEqualOverflow>
               <Grid item xs={12} md={3}>
                 <TextField

@@ -3,6 +3,7 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, select
 
 from app.config import get_settings
@@ -87,11 +88,17 @@ def login_for_access_token(
         return Token(access_token=access_token)
     except HTTPException:
         raise
+    except SQLAlchemyError:
+        logger.exception("Token endpoint failed due to database error")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="internal_error",
+        )
     except Exception:
         logger.exception("Token endpoint failed")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Sunucu hatası (auth/token). Loglara bakın.",
+            detail="internal_error",
         )
 
 

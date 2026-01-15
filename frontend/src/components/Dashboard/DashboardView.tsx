@@ -44,7 +44,7 @@ import { useNavigate } from "react-router-dom";
 
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import usePersistentState from "../../hooks/usePersistentState";
-import { stripBudgetCode } from "../../utils/budgetLabel";
+import { formatBudgetItemLabel, stripBudgetCode } from "../../utils/budgetLabel";
 import { formatBudgetItemMeta } from "../../utils/budgetItem";
 import AccountBalanceWalletOutlinedIcon from "@mui/icons-material/AccountBalanceWalletOutlined";
 import CheckCircleOutlineOutlinedIcon from "@mui/icons-material/CheckCircleOutlineOutlined";
@@ -186,6 +186,9 @@ export default function DashboardView() {
   >(null);
   const [criticalWarrantyItems, setCriticalWarrantyItems] = useState<WarrantyCriticalItem[]>([]);
   const [isWarrantyDialogOpen, setIsWarrantyDialogOpen] = useState(false);
+  const [selectedKpiFilter, setSelectedKpiFilter] = useState<
+    "total_plan" | "total_actual" | "total_remaining" | "total_overrun" | null
+  >(null);
 
   const monthOptions = [
     { value: 1, label: "Ocak" },
@@ -353,6 +356,7 @@ export default function DashboardView() {
     setBudgetItemId(null);
     setCapexOpex("");
     setDepartment("");
+    setSelectedKpiFilter(null);
   };
 
   const monthlyData = useMemo(() => {
@@ -411,6 +415,11 @@ export default function DashboardView() {
   const formattedActual = formatCurrency(normalizedKpi.total_actual);
   const formattedRemaining = formatCurrency(normalizedKpi.total_remaining);
   const formattedOver = formatCurrency(normalizedKpi.total_overrun);
+
+  const showPlanned = !selectedKpiFilter || selectedKpiFilter === "total_plan";
+  const showActual = !selectedKpiFilter || selectedKpiFilter === "total_actual";
+  const showRemaining = !selectedKpiFilter || selectedKpiFilter === "total_remaining";
+  const showOverrun = !selectedKpiFilter || selectedKpiFilter === "total_overrun";
 
   return (
     <>
@@ -514,7 +523,7 @@ export default function DashboardView() {
                       options={budgetItems ?? []}
                       value={budgetItems?.find((item) => item.id === budgetItemId) ?? null}
                       onChange={(_, value) => setBudgetItemId(value?.id ?? null)}
-                      getOptionLabel={(option) => stripBudgetCode(option.name ?? "") || "-"}
+                      getOptionLabel={(option) => formatBudgetItemLabel(option) || "-"}
                       filterOptions={budgetFilterOptions}
                       isOptionEqualToValue={(option, value) => option.id === value.id}
                       renderOption={(props, option) => {
@@ -523,7 +532,7 @@ export default function DashboardView() {
                           <li {...props} key={option.id}>
                             <Stack spacing={0.2}>
                               <Typography variant="body2" fontWeight={600}>
-                                {stripBudgetCode(option.name ?? "") || "-"}
+                                {formatBudgetItemLabel(option) || "-"}
                               </Typography>
                               {meta && (
                                 <Typography variant="caption" color="text.secondary">
@@ -567,32 +576,45 @@ export default function DashboardView() {
                 icon: (
                   <AccountBalanceWalletOutlinedIcon sx={{ fontSize: 18, color: "common.white" }} />
                 ),
-                iconColor: "primary.main"
+                iconColor: "primary.main",
+                filterKey: "total_plan" as const
               },
               {
                 title: "Gerçekleşen",
                 value: formattedActual,
                 subtitle: "Harcanan toplam",
                 icon: <CheckCircleOutlineOutlinedIcon sx={{ fontSize: 18, color: "common.white" }} />,
-                iconColor: "primary.main"
+                iconColor: "primary.main",
+                filterKey: "total_actual" as const
               },
               {
                 title: "Kalan",
                 value: formattedRemaining,
                 subtitle: "Bütçede kalan",
                 icon: <TrendingUpOutlinedIcon sx={{ fontSize: 18, color: "common.white" }} />,
-                iconColor: "warning.main"
+                iconColor: "warning.main",
+                filterKey: "total_remaining" as const
               },
               {
                 title: "Aşım",
                 value: formattedOver,
                 subtitle: "Limit aşımı",
                 icon: <WarningAmberOutlinedIcon sx={{ fontSize: 18, color: "common.white" }} />,
-                iconColor: "error.main"
+                iconColor: "error.main",
+                filterKey: "total_overrun" as const
               }
             ].map((card) => (
               <Grid item xs={12} sm={6} md={3} key={card.title}>
-                <SummaryCard {...card} isLoading={isLoading} />
+                <SummaryCard
+                  {...card}
+                  isLoading={isLoading}
+                  selected={selectedKpiFilter === card.filterKey}
+                  onClick={() =>
+                    setSelectedKpiFilter((prev) =>
+                      prev === card.filterKey ? null : card.filterKey
+                    )
+                  }
+                />
               </Grid>
             ))}
           </Grid>
@@ -630,13 +652,37 @@ export default function DashboardView() {
                         labelFormatter={(label) => label}
                       />
                       <Legend />
-                      <Bar dataKey="planned" name="Planlanan" fill={pieColors.planned} radius={[6, 6, 0, 0]} />
-                      <Bar dataKey="actual" name="Gerçekleşen" fill={pieColors.actual} radius={[6, 6, 0, 0]} />
-                      <Bar dataKey="remaining" name="Kalan" fill={pieColors.remaining} radius={[6, 6, 0, 0]} />
-                      <Bar dataKey="overrun" name="Aşım" fill={pieColors.overrun} radius={[6, 6, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                )}
+                    <Bar
+                      dataKey="planned"
+                      name="Planlanan"
+                      fill={pieColors.planned}
+                      radius={[6, 6, 0, 0]}
+                      hide={!showPlanned}
+                    />
+                    <Bar
+                      dataKey="actual"
+                      name="Gerçekleşen"
+                      fill={pieColors.actual}
+                      radius={[6, 6, 0, 0]}
+                      hide={!showActual}
+                    />
+                    <Bar
+                      dataKey="remaining"
+                      name="Kalan"
+                      fill={pieColors.remaining}
+                      radius={[6, 6, 0, 0]}
+                      hide={!showRemaining}
+                    />
+                    <Bar
+                      dataKey="overrun"
+                      name="Aşım"
+                      fill={pieColors.overrun}
+                      radius={[6, 6, 0, 0]}
+                      hide={!showOverrun}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
               </CardContent>
             </Card>
 
@@ -734,11 +780,19 @@ export default function DashboardView() {
                         ? "Q3"
                         : "Q4";
 
-                    const chartData = pieKeys.map((key) => ({
-                      label: pieLabelMap[key],
-                      value: quarterSummary[key] ?? 0,
-                      color: pieColors[key]
-                    }));
+                    const chartData = pieKeys
+                      .filter((key) => {
+                        if (selectedKpiFilter === "total_plan") return key === "planned";
+                        if (selectedKpiFilter === "total_actual") return key === "actual";
+                        if (selectedKpiFilter === "total_remaining") return key === "remaining";
+                        if (selectedKpiFilter === "total_overrun") return key === "overrun";
+                        return true;
+                      })
+                      .map((key) => ({
+                        label: pieLabelMap[key],
+                        value: quarterSummary[key] ?? 0,
+                        color: pieColors[key]
+                      }));
 
                     return (
                       <Grid item xs={12} sm={6} md={3} key={quarterKey}>

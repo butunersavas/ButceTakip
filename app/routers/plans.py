@@ -2,6 +2,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func
+from sqlalchemy.orm import selectinload
 from sqlmodel import Session, select
 
 from app.dependencies import get_admin_user, get_current_user, get_db_session
@@ -31,7 +32,10 @@ def list_plans(
     session: Session = Depends(get_db_session),
     _: User = Depends(get_current_user),
 ) -> list[PlanEntry]:
-    query = select(PlanEntry)
+    query = select(PlanEntry).options(
+        selectinload(PlanEntry.scenario),
+        selectinload(PlanEntry.budget_item),
+    )
     capex_filter = _normalize_capex_opex(capex_opex)
     if capex_filter:
         query = query.join(BudgetItem, BudgetItem.id == PlanEntry.budget_item_id).where(
@@ -47,7 +51,13 @@ def list_plans(
         query = query.where(PlanEntry.month == month)
     if department is not None:
         query = query.where(PlanEntry.department == department)
-    return session.exec(query).all()
+    plans = session.exec(query).all()
+    for plan in plans:
+        budget = plan.budget_item
+        if budget:
+            plan.capex_opex = budget.map_category
+            plan.asset_type = budget.map_attribute
+    return plans
 
 
 @router.get("/aggregate", response_model=list[PlanAggregateRead])
