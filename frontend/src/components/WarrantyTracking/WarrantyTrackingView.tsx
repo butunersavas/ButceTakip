@@ -21,7 +21,7 @@ import axios from "axios";
 
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 
-type WarrantyItemType = "DEVICE" | "SERVICE";
+type WarrantyItemType = "DEVICE" | "SERVICE" | "DOMAIN_SSL";
 
 type WarrantyItem = {
   id: number | string;
@@ -31,6 +31,9 @@ type WarrantyItem = {
   end_date: string | null;
   start_date?: string | null;
   note?: string | null;
+  issuer?: string | null;
+  renewal_owner?: string | null;
+  reminder_days?: number | null;
   is_active: boolean;
   created_by_name?: string | null;
   updated_by_name?: string | null;
@@ -48,11 +51,15 @@ type WarrantyItemForm = {
   location: string;
   end_date: string;
   note: string;
+  issuer: string;
+  renewal_owner: string;
+  reminder_days: string;
 };
 
 const typeOptions: Array<{ value: WarrantyItemType; label: string }> = [
   { value: "DEVICE", label: "Cihaz" },
   { value: "SERVICE", label: "Bakım/Hizmet" },
+  { value: "DOMAIN_SSL", label: "Domain SSL" },
 ];
 
 const calcDaysLeft = (endDate: string | null): number | null => {
@@ -61,7 +68,7 @@ const calcDaysLeft = (endDate: string | null): number | null => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const ms = end.getTime() - today.getTime();
-  return Math.ceil(ms / (1000 * 60 * 60 * 24));
+  return Math.floor(ms / (1000 * 60 * 60 * 24));
 };
 
 const calcStatus = (daysLeft: number | null) => {
@@ -90,6 +97,7 @@ const formatDate = (value: string | null | undefined) => {
 const formatTypeLabel = (value?: string | null) => {
   if (value === "DEVICE") return "Cihaz";
   if (value === "SERVICE") return "Bakım/Hizmet";
+  if (value === "DOMAIN_SSL") return "Domain SSL";
   return value ?? "-";
 };
 
@@ -159,7 +167,14 @@ export default function WarrantyTrackingView() {
     location: "",
     end_date: "",
     note: "",
+    issuer: "",
+    renewal_owner: "",
+    reminder_days: "30",
   });
+
+  const isDomainSsl = form.type === "DOMAIN_SSL";
+  const nameLabel = isDomainSsl ? "Domain / Sertifika" : "Ad";
+  const locationLabel = isDomainSsl ? "Domain Lokasyonu" : "Lokasyon";
 
   const loadItems = useCallback(async () => {
     setLoading(true);
@@ -240,12 +255,16 @@ export default function WarrantyTrackingView() {
 
     try {
       const normalizedEndDate = normalizeDateInput(form.end_date);
+      const reminderValue = form.reminder_days ? Number(form.reminder_days) : null;
       const payload = {
         type: form.type,
         name: form.name.trim(),
         location: form.location.trim(),
         end_date: normalizedEndDate,
         note: form.note.trim() || null,
+        issuer: form.issuer.trim() || null,
+        renewal_owner: form.renewal_owner.trim() || null,
+        reminder_days: Number.isFinite(reminderValue) ? reminderValue : null,
       };
 
       if (editingItem) {
@@ -256,7 +275,16 @@ export default function WarrantyTrackingView() {
         setSuccess("Garanti kaydı eklendi.");
       }
 
-      setForm({ type: "DEVICE", name: "", location: "", end_date: "", note: "" });
+      setForm({
+        type: "DEVICE",
+        name: "",
+        location: "",
+        end_date: "",
+        note: "",
+        issuer: "",
+        renewal_owner: "",
+        reminder_days: "30"
+      });
       setEditingItem(null);
       await loadItems();
     } catch (err) {
@@ -280,6 +308,9 @@ export default function WarrantyTrackingView() {
       location: item.location,
       end_date: normalizeDateInput(item.end_date) ?? "",
       note: item.note ?? "",
+      issuer: item.issuer ?? "",
+      renewal_owner: item.renewal_owner ?? "",
+      reminder_days: item.reminder_days != null ? String(item.reminder_days) : "30",
     });
   }, []);
 
@@ -293,7 +324,16 @@ export default function WarrantyTrackingView() {
       setSuccess("Garanti kaydı silindi.");
       if (editingItem?.id === item.id) {
         setEditingItem(null);
-        setForm({ type: "DEVICE", name: "", location: "", end_date: "", note: "" });
+        setForm({
+          type: "DEVICE",
+          name: "",
+          location: "",
+          end_date: "",
+          note: "",
+          issuer: "",
+          renewal_owner: "",
+          reminder_days: "30"
+        });
       }
     } catch (err) {
       console.error(err);
@@ -318,6 +358,18 @@ export default function WarrantyTrackingView() {
       },
       { field: "name", headerName: "Ad", flex: 1.2 },
       { field: "location", headerName: "Lokasyon", flex: 1 },
+      {
+        field: "issuer",
+        headerName: "Sertifika Sağlayıcı",
+        flex: 1,
+        valueGetter: (params) => params?.row?.issuer ?? "-",
+      },
+      {
+        field: "renewal_owner",
+        headerName: "Yenileme Sorumlusu",
+        flex: 1,
+        valueGetter: (params) => params?.row?.renewal_owner ?? "-",
+      },
       {
         field: "end_date",
         headerName: "Bitiş Tarihi",
@@ -355,9 +407,29 @@ export default function WarrantyTrackingView() {
       {
         field: "status",
         headerName: "Durum",
-        flex: 0.8,
+        flex: 1,
         sortable: false,
-        valueGetter: (params) => params?.row?.status_label ?? "-",
+        renderCell: (params) => {
+          const row = params?.row;
+          const daysLeft =
+            typeof row?.days_left === "number"
+              ? row.days_left
+              : calcDaysLeft(row?.end_date ?? null);
+          const reminderDays = row?.reminder_days ?? null;
+          const showReminder =
+            typeof daysLeft === "number" &&
+            typeof reminderDays === "number" &&
+            daysLeft >= 0 &&
+            daysLeft <= reminderDays;
+          return (
+            <Stack spacing={0.5}>
+              <Typography variant="body2">{row?.status_label ?? "-"}</Typography>
+              {showReminder && (
+                <Chip label="Yakında yenile" size="small" color="warning" variant="outlined" />
+              )}
+            </Stack>
+          );
+        },
       },
       {
         field: "created_by",
@@ -513,16 +585,39 @@ export default function WarrantyTrackingView() {
                   ))}
                 </TextField>
                 <TextField
-                  label="Ad"
+                  label={nameLabel}
                   value={form.name}
                   onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
                   required
                 />
                 <TextField
-                  label="Lokasyon"
+                  label={locationLabel}
                   value={form.location}
                   onChange={(event) => setForm((prev) => ({ ...prev, location: event.target.value }))}
                   required
+                />
+                <TextField
+                  label="Sertifika Sağlayıcı"
+                  value={form.issuer}
+                  onChange={(event) => setForm((prev) => ({ ...prev, issuer: event.target.value }))}
+                  placeholder={isDomainSsl ? "Örn. Let's Encrypt" : "Opsiyonel"}
+                />
+                <TextField
+                  label="Yenileme Sorumlusu"
+                  value={form.renewal_owner}
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, renewal_owner: event.target.value }))
+                  }
+                  placeholder={isDomainSsl ? "Sorumlu kişi" : "Opsiyonel"}
+                />
+                <TextField
+                  label="Hatırlatma (gün)"
+                  type="number"
+                  value={form.reminder_days}
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, reminder_days: event.target.value }))
+                  }
+                  inputProps={{ min: 0, step: 1 }}
                 />
                 <TextField
                   label="Bitiş Tarihi"
@@ -545,7 +640,16 @@ export default function WarrantyTrackingView() {
                       variant="text"
                       onClick={() => {
                         setEditingItem(null);
-                        setForm({ type: "DEVICE", name: "", location: "", end_date: "", note: "" });
+                        setForm({
+                          type: "DEVICE",
+                          name: "",
+                          location: "",
+                          end_date: "",
+                          note: "",
+                          issuer: "",
+                          renewal_owner: "",
+                          reminder_days: "30"
+                        });
                       }}
                     >
                       İptal

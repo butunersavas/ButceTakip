@@ -28,6 +28,7 @@ import usePersistentState from "../../hooks/usePersistentState";
 import { useAuth } from "../../context/AuthContext";
 import { formatBudgetItemLabel, stripBudgetCode } from "../../utils/budgetLabel";
 import { formatBudgetItemMeta } from "../../utils/budgetItem";
+import FiltersBar from "../Filters/FiltersBar";
 
 interface Scenario {
   id: number;
@@ -51,6 +52,8 @@ interface PlanEntry {
   scenario_id: number;
   budget_item_id: number;
   department?: string | null;
+  scenario_name?: string | null;
+  budget_item_name?: string | null;
   scenario?: {
     id: number;
     name: string;
@@ -327,6 +330,10 @@ export default function PlansView() {
             return "";
           }
 
+          if (row.scenario_name) {
+            return row.scenario_name ?? "";
+          }
+
           if (row.scenario) {
             return row.scenario.name ?? "";
           }
@@ -354,10 +361,17 @@ export default function PlansView() {
         field: "budget",
         headerName: "Bütçe Kalemi",
         flex: 1,
-        valueGetter: (params) =>
-          formatBudgetItemLabel(params?.row?.budget_item) ||
-          formatBudgetItemLabel(findBudgetItem(params?.row)) ||
-          ""
+        valueGetter: (params) => {
+          const row = params?.row;
+          if (row?.budget_item_name) {
+            return formatBudgetItemLabel({ name: row.budget_item_name }) || "";
+          }
+          return (
+            formatBudgetItemLabel(row?.budget_item) ||
+            formatBudgetItemLabel(findBudgetItem(row)) ||
+            ""
+          );
+        }
       },
       {
         field: "map_category",
@@ -486,161 +500,132 @@ export default function PlansView() {
 
   const formattedFilteredTotal = formatCurrency(filteredTotal);
 
+  const handleApplyFilters = () => {
+    plansQuery.refetch();
+    aggregatesQuery.refetch();
+  };
+
+  const handleResetFilters = () => {
+    setYear(currentYear);
+    setScenarioId(null);
+    setMonthFilter("");
+    setDepartmentFilter("");
+    setBudgetItemId(null);
+    setCapexOpex("");
+    setFormBudgetItemId(null);
+    setTimeout(() => {
+      plansQuery.refetch();
+      aggregatesQuery.refetch();
+    }, 0);
+  };
+
   return (
     <Stack spacing={4}>
-      <Card>
-        <CardContent sx={{ py: 1.5, px: 2 }}>
-          <Grid container spacing={1} alignItems="center">
-            <Grid item xs={12} sm={6} md={2}>
-              <TextField
-                label="Yıl"
-                type="number"
-                size="small"
-                value={year}
-                onChange={(event) => {
-                  const value = event.target.value;
-                  setYear(value ? Number(value) : currentYear);
-                }}
-                fullWidth
-              />
-            </Grid>
-            <Grid item xs={12} sm={6} md={3}>
-              <TextField
-                select
-                label="Senaryo"
-                size="small"
-                value={scenarioId ?? ""}
-                onChange={(event) =>
-                  setScenarioId(event.target.value ? Number(event.target.value) : null)
-                }
-                fullWidth
-              >
-                <MenuItem value="">Tümü</MenuItem>
-                {scenarios?.map((scenario) => (
-                  <MenuItem key={scenario.id} value={scenario.id}>
-                    {scenario.name} ({scenario.year})
-                  </MenuItem>
-                ))}
-              </TextField>
-            </Grid>
-            <Grid item xs={12} sm={6} md={2}>
-              <TextField
-                select
-                fullWidth
-                label="Ay"
-                size="small"
-                value={monthFilter}
-                onChange={(event) =>
-                  setMonthFilter(
-                    event.target.value ? Number(event.target.value) : ""
-                  )
-                }
-              >
-                <MenuItem value="">Tümü</MenuItem>
-                {monthOptions.map((label, index) => (
-                  <MenuItem key={index + 1} value={index + 1}>
-                    {label}
-                  </MenuItem>
-                ))}
-              </TextField>
-            </Grid>
-            <Grid item xs={12} sm={6} md={3}>
-              <Autocomplete
-                options={budgetItems ?? []}
-                value={budgetItems?.find((item) => item.id === budgetItemId) ?? null}
-                onChange={(_, value) => setBudgetItemId(value?.id ?? null)}
-                getOptionLabel={(option) => formatBudgetItemLabel(option) || "-"}
-                filterOptions={budgetFilterOptions}
-                isOptionEqualToValue={(option, value) => option.id === value.id}
-                renderOption={(props, option) => {
-                  const meta = formatBudgetItemMeta(option);
-                  return (
-                    <li {...props} key={option.id}>
-                      <Stack spacing={0.2}>
-                        <Typography variant="body2" fontWeight={600}>
-                          {formatBudgetItemLabel(option) || "-"}
-                        </Typography>
-                        {meta && (
-                          <Typography variant="caption" color="text.secondary">
-                            {meta}
-                          </Typography>
-                        )}
-                      </Stack>
-                    </li>
-                  );
-                }}
-                renderInput={(params) => (
-                  <TextField {...params} label="Bütçe Kalemi" placeholder="Tümü" fullWidth size="small" />
-                )}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6} md={2}>
-              <TextField
-                select
-                label="Capex/Opex"
-                size="small"
-                value={capexOpex}
-                onChange={(event) => setCapexOpex(event.target.value as "" | "capex" | "opex")}
-                fullWidth
-              >
-                <MenuItem value="">Tümü</MenuItem>
-                <MenuItem value="capex">Capex</MenuItem>
-                <MenuItem value="opex">Opex</MenuItem>
-              </TextField>
-            </Grid>
-            <Grid item xs={12} sm={6} md={2}>
-              <TextField
-                select
-                label="Departman"
-                size="small"
-                value={departmentFilter}
-                onChange={(event) => setDepartmentFilter(event.target.value)}
-                fullWidth
-              >
-                <MenuItem value="">Tümü</MenuItem>
-                {departmentOptions.map((name) => (
-                  <MenuItem key={name} value={name}>
-                    {name}
-                  </MenuItem>
-                ))}
-              </TextField>
-            </Grid>
-            <Grid item xs={12} md={2}>
-              <Stack direction="row" spacing={1} justifyContent={{ xs: "flex-start", md: "flex-end" }}>
-                <Button
-                  variant="contained"
-                  size="small"
-                  onClick={() => {
-                    plansQuery.refetch();
-                    aggregatesQuery.refetch();
-                  }}
-                >
-                  Güncelle
-                </Button>
-                <Button
-                  variant="outlined"
-                  size="small"
-                  onClick={() => {
-                    setYear(currentYear);
-                    setScenarioId(null);
-                    setMonthFilter("");
-                    setDepartmentFilter("");
-                    setBudgetItemId(null);
-                    setCapexOpex("");
-                    setFormBudgetItemId(null);
-                    setTimeout(() => {
-                      plansQuery.refetch();
-                      aggregatesQuery.refetch();
-                    }, 0);
-                  }}
-                >
-                  Sıfırla
-                </Button>
-              </Stack>
-            </Grid>
-          </Grid>
-        </CardContent>
-      </Card>
+      <FiltersBar onApply={handleApplyFilters} onReset={handleResetFilters}>
+        <TextField
+          label="Yıl"
+          type="number"
+          size="small"
+          value={year}
+          onChange={(event) => {
+            const value = event.target.value;
+            setYear(value ? Number(value) : currentYear);
+          }}
+          sx={{ minWidth: 110, "& .MuiInputBase-root": { height: 40 } }}
+        />
+        <TextField
+          select
+          label="Senaryo"
+          size="small"
+          value={scenarioId ?? ""}
+          onChange={(event) =>
+            setScenarioId(event.target.value ? Number(event.target.value) : null)
+          }
+          sx={{ minWidth: 260, "& .MuiInputBase-root": { height: 40 } }}
+        >
+          <MenuItem value="">Tümü</MenuItem>
+          {scenarios?.map((scenario) => (
+            <MenuItem key={scenario.id} value={scenario.id}>
+              {scenario.name} ({scenario.year})
+            </MenuItem>
+          ))}
+        </TextField>
+        <TextField
+          select
+          label="Ay"
+          size="small"
+          value={monthFilter}
+          onChange={(event) =>
+            setMonthFilter(
+              event.target.value ? Number(event.target.value) : ""
+            )
+          }
+          sx={{ minWidth: 160, "& .MuiInputBase-root": { height: 40 } }}
+        >
+          <MenuItem value="">Tümü</MenuItem>
+          {monthOptions.map((label, index) => (
+            <MenuItem key={index + 1} value={index + 1}>
+              {label}
+            </MenuItem>
+          ))}
+        </TextField>
+        <TextField
+          select
+          label="Departman"
+          size="small"
+          value={departmentFilter}
+          onChange={(event) => setDepartmentFilter(event.target.value)}
+          sx={{ minWidth: 180, "& .MuiInputBase-root": { height: 40 } }}
+        >
+          <MenuItem value="">Tümü</MenuItem>
+          {departmentOptions.map((name) => (
+            <MenuItem key={name} value={name}>
+              {name}
+            </MenuItem>
+          ))}
+        </TextField>
+        <Autocomplete
+          options={budgetItems ?? []}
+          value={budgetItems?.find((item) => item.id === budgetItemId) ?? null}
+          onChange={(_, value) => setBudgetItemId(value?.id ?? null)}
+          getOptionLabel={(option) => formatBudgetItemLabel(option) || "-"}
+          filterOptions={budgetFilterOptions}
+          isOptionEqualToValue={(option, value) => option.id === value.id}
+          sx={{ minWidth: 320, flex: 1, "& .MuiInputBase-root": { height: 40 } }}
+          renderOption={(props, option) => {
+            const meta = formatBudgetItemMeta(option);
+            return (
+              <li {...props} key={option.id}>
+                <Stack spacing={0.2}>
+                  <Typography variant="body2" fontWeight={600}>
+                    {formatBudgetItemLabel(option) || "-"}
+                  </Typography>
+                  {meta && (
+                    <Typography variant="caption" color="text.secondary">
+                      {meta}
+                    </Typography>
+                  )}
+                </Stack>
+              </li>
+            );
+          }}
+          renderInput={(params) => (
+            <TextField {...params} label="Bütçe Kalemi" placeholder="Tümü" size="small" />
+          )}
+        />
+        <TextField
+          select
+          label="Capex/Opex"
+          size="small"
+          value={capexOpex}
+          onChange={(event) => setCapexOpex(event.target.value as "" | "capex" | "opex")}
+          sx={{ minWidth: 170, "& .MuiInputBase-root": { height: 40 } }}
+        >
+          <MenuItem value="">Tümü</MenuItem>
+          <MenuItem value="capex">Capex</MenuItem>
+          <MenuItem value="opex">Opex</MenuItem>
+        </TextField>
+      </FiltersBar>
 
       <Grid container spacing={3}>
         <Grid item xs={12} md={4}>

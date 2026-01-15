@@ -57,6 +57,9 @@ def list_plans(
         if budget:
             plan.capex_opex = budget.map_category
             plan.asset_type = budget.map_attribute
+            plan.budget_item_name = budget.name
+        if plan.scenario:
+            plan.scenario_name = plan.scenario.name
     return plans
 
 

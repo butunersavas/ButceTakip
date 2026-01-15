@@ -97,7 +97,7 @@ def delete_scenario(
 
     if (expense_count or plan_count) and not force:
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
                 f"Senaryoda {plan_count} plan ve {expense_count} harcama var. "
                 "force=true ile silebilirsiniz."

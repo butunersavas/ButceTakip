@@ -1,8 +1,9 @@
 from datetime import timedelta
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
+from pydantic import BaseModel, ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, select
 
@@ -16,6 +17,11 @@ from app.utils.validators import validate_username
 router = APIRouter(prefix="/auth", tags=["auth"])
 settings = get_settings()
 logger = logging.getLogger(__name__)
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
 
 
 def authenticate_user(session: Session, username: str, password: str) -> User | None:
@@ -69,12 +75,54 @@ def register_user(
 
 
 @router.post("/token", response_model=Token)
-def login_for_access_token(
-    form_data: OAuth2PasswordRequestForm = Depends(),
+async def login_for_access_token(
+    request: Request,
     session: Session = Depends(get_db_session),
 ) -> Token:
     try:
-        user = authenticate_user(session, form_data.username, form_data.password)
+        content_type = request.headers.get("content-type", "")
+        is_json = content_type.split(";")[0].strip().lower() == "application/json"
+        if is_json:
+            try:
+                payload = await request.json()
+            except Exception:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="Geçersiz JSON gövdesi.",
+                )
+            try:
+                login_data = LoginRequest(**payload)
+            except ValidationError as exc:
+                logger.info("Login validation failed: %s", exc.errors())
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="Kullanıcı adı ve şifre zorunludur.",
+                )
+        else:
+            form = await request.form()
+            try:
+                form_data = OAuth2PasswordRequestForm(
+                    username=form.get("username"),
+                    password=form.get("password"),
+                    scope=form.get("scope", "") or "",
+                    grant_type=form.get("grant_type"),
+                    client_id=form.get("client_id"),
+                    client_secret=form.get("client_secret"),
+                )
+            except TypeError:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="Kullanıcı adı ve şifre zorunludur.",
+                )
+            try:
+                login_data = LoginRequest(username=form_data.username, password=form_data.password)
+            except ValidationError:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="Kullanıcı adı ve şifre zorunludur.",
+                )
+
+        user = authenticate_user(session, login_data.username, login_data.password)
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -92,13 +140,13 @@ def login_for_access_token(
         logger.exception("Token endpoint failed due to database error")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="internal_error",
+            detail="Internal server error",
         )
     except Exception:
         logger.exception("Token endpoint failed")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="internal_error",
+            detail="Internal server error",
         )
 
 

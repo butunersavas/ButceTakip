@@ -57,6 +57,7 @@ import {
   COLOR_PLANNED,
   COLOR_REMAINING
 } from "../../theme/chartColors";
+import FiltersBar from "../Filters/FiltersBar";
 
 interface DashboardSummary {
   month: number;
@@ -119,7 +120,7 @@ type QuarterlyDataItem = QuarterlySummary & { quarter: string };
 
 type WarrantyCriticalItem = {
   id: number;
-  type: "DEVICE" | "SERVICE";
+  type: "DEVICE" | "SERVICE" | "DOMAIN_SSL";
   name: string;
   location: string;
   end_date: string;
@@ -323,7 +324,7 @@ export default function DashboardView() {
     });
   }, [scenarios, year]);
 
-  const { data: dashboard, isLoading } = useQuery<DashboardResponse>({
+  const { data: dashboard, isLoading, refetch: refetchDashboard } = useQuery<DashboardResponse>({
     queryKey: ["dashboard", year, scenarioId, month, budgetItemId, department, capexOpex],
     queryFn: async () => {
       const params: Record<string, number | string> = { year };
@@ -357,6 +358,13 @@ export default function DashboardView() {
     setCapexOpex("");
     setDepartment("");
     setSelectedKpiFilter(null);
+    setTimeout(() => {
+      refetchDashboard();
+    }, 0);
+  };
+
+  const handleApplyFilters = () => {
+    refetchDashboard();
   };
 
   const monthlyData = useMemo(() => {
@@ -435,137 +443,109 @@ export default function DashboardView() {
         }}
       >
         <Stack spacing={2} sx={{ width: "100%" }}>
-          <Card>
-            <CardContent sx={{ py: 1.5, px: 2.5 }}>
-              <Stack spacing={1.5}>
-                <Stack direction="row" justifyContent="space-between" alignItems="center">
-                  <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-                    Filtreler
-                  </Typography>
-                  <Stack direction="row" spacing={1} alignItems="center">
-                    <Chip label="Güncel" color="primary" variant="outlined" size="small" />
-                    <Button size="small" variant="outlined" onClick={handleResetFilters}>
-                      Sıfırla
-                    </Button>
-                  </Stack>
-                </Stack>
-                <Grid container spacing={1.5} alignItems="center">
-                  <Grid item xs={12} sm={6} md={2}>
-                    <TextField
-                      size="small"
-                      label="Yıl"
-                      type="number"
-                      value={year}
-                      onChange={(event) => {
-                        const value = event.target.value;
-                        setYear(value ? Number(value) : currentYear);
-                      }}
-                      fullWidth
-                    />
-                  </Grid>
-                  <Grid item xs={12} sm={6} md={3}>
-                    <TextField
-                      size="small"
-                      select
-                      label="Senaryo"
-                      value={scenarioId ?? ""}
-                      onChange={(event) => setScenarioId(event.target.value ? Number(event.target.value) : null)}
-                      fullWidth
-                    >
-                      <MenuItem value="">Tümü</MenuItem>
-                      {scenarios?.map((scenario) => (
-                        <MenuItem key={scenario.id} value={scenario.id}>
-                          {scenario.name} ({scenario.year})
-                        </MenuItem>
-                      ))}
-                    </TextField>
-                  </Grid>
-                  <Grid item xs={12} sm={6} md={3}>
-                    <TextField
-                      size="small"
-                      select
-                      label="Departman"
-                      value={department}
-                      onChange={(event) => setDepartment(event.target.value || "")}
-                      fullWidth
-                    >
-                      <MenuItem value="">Tümü</MenuItem>
-                      {departments.map((name) => (
-                        <MenuItem key={name} value={name}>
-                          {name}
-                        </MenuItem>
-                      ))}
-                    </TextField>
-                  </Grid>
-                  <Grid item xs={12} sm={6} md={2}>
-                    <TextField
-                      select
-                      fullWidth
-                      size="small"
-                      label="Ay"
-                      value={month ?? ""}
-                      onChange={(event) => {
-                        const value = event.target.value;
-                        setMonth(value === "" ? null : Number(value));
-                      }}
-                    >
-                      <MenuItem value="">Tüm Aylar</MenuItem>
-                      {monthOptions.map((m) => (
-                        <MenuItem key={m.value} value={m.value}>
-                          {m.label}
-                        </MenuItem>
-                      ))}
-                    </TextField>
-                  </Grid>
-                  <Grid item xs={12} sm={6} md={4}>
-                    <Autocomplete
-                      size="small"
-                      options={budgetItems ?? []}
-                      value={budgetItems?.find((item) => item.id === budgetItemId) ?? null}
-                      onChange={(_, value) => setBudgetItemId(value?.id ?? null)}
-                      getOptionLabel={(option) => formatBudgetItemLabel(option) || "-"}
-                      filterOptions={budgetFilterOptions}
-                      isOptionEqualToValue={(option, value) => option.id === value.id}
-                      renderOption={(props, option) => {
-                        const meta = formatBudgetItemMeta(option);
-                        return (
-                          <li {...props} key={option.id}>
-                            <Stack spacing={0.2}>
-                              <Typography variant="body2" fontWeight={600}>
-                                {formatBudgetItemLabel(option) || "-"}
-                              </Typography>
-                              {meta && (
-                                <Typography variant="caption" color="text.secondary">
-                                  {meta}
-                                </Typography>
-                              )}
-                            </Stack>
-                          </li>
-                        );
-                      }}
-                      renderInput={(params) => (
-                        <TextField {...params} label="Bütçe Kalemi" placeholder="Tümü" fullWidth size="small" />
+          <FiltersBar onApply={handleApplyFilters} onReset={handleResetFilters}>
+            <TextField
+              size="small"
+              label="Yıl"
+              type="number"
+              value={year}
+              onChange={(event) => {
+                const value = event.target.value;
+                setYear(value ? Number(value) : currentYear);
+              }}
+              sx={{ minWidth: 110, "& .MuiInputBase-root": { height: 40 } }}
+            />
+            <TextField
+              size="small"
+              select
+              label="Senaryo"
+              value={scenarioId ?? ""}
+              onChange={(event) => setScenarioId(event.target.value ? Number(event.target.value) : null)}
+              sx={{ minWidth: 260, "& .MuiInputBase-root": { height: 40 } }}
+            >
+              <MenuItem value="">Tümü</MenuItem>
+              {scenarios?.map((scenario) => (
+                <MenuItem key={scenario.id} value={scenario.id}>
+                  {scenario.name} ({scenario.year})
+                </MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              size="small"
+              select
+              label="Ay"
+              value={month ?? ""}
+              onChange={(event) => {
+                const value = event.target.value;
+                setMonth(value === "" ? null : Number(value));
+              }}
+              sx={{ minWidth: 160, "& .MuiInputBase-root": { height: 40 } }}
+            >
+              <MenuItem value="">Tüm Aylar</MenuItem>
+              {monthOptions.map((m) => (
+                <MenuItem key={m.value} value={m.value}>
+                  {m.label}
+                </MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              size="small"
+              select
+              label="Departman"
+              value={department}
+              onChange={(event) => setDepartment(event.target.value || "")}
+              sx={{ minWidth: 180, "& .MuiInputBase-root": { height: 40 } }}
+            >
+              <MenuItem value="">Tümü</MenuItem>
+              {departments.map((name) => (
+                <MenuItem key={name} value={name}>
+                  {name}
+                </MenuItem>
+              ))}
+            </TextField>
+            <Autocomplete
+              size="small"
+              options={budgetItems ?? []}
+              value={budgetItems?.find((item) => item.id === budgetItemId) ?? null}
+              onChange={(_, value) => setBudgetItemId(value?.id ?? null)}
+              getOptionLabel={(option) => formatBudgetItemLabel(option) || "-"}
+              filterOptions={budgetFilterOptions}
+              isOptionEqualToValue={(option, value) => option.id === value.id}
+              sx={{ minWidth: 320, flex: 1, "& .MuiInputBase-root": { height: 40 } }}
+              renderOption={(props, option) => {
+                const meta = formatBudgetItemMeta(option);
+                return (
+                  <li {...props} key={option.id}>
+                    <Stack spacing={0.2}>
+                      <Typography variant="body2" fontWeight={600}>
+                        {formatBudgetItemLabel(option) || "-"}
+                      </Typography>
+                      {meta && (
+                        <Typography variant="caption" color="text.secondary">
+                          {meta}
+                        </Typography>
                       )}
-                    />
-                  </Grid>
-                  <Grid item xs={12} sm={6} md={2}>
-                    <TextField
-                      size="small"
-                      select
-                      label="Capex/Opex"
-                      value={capexOpex}
-                      onChange={(event) => setCapexOpex(event.target.value as "" | "capex" | "opex")}
-                      fullWidth
-                    >
-                      <MenuItem value="">Tümü</MenuItem>
-                      <MenuItem value="capex">Capex</MenuItem>
-                      <MenuItem value="opex">Opex</MenuItem>
-                    </TextField>
-                  </Grid>
-                </Grid>
-              </Stack>
-            </CardContent>
-          </Card>
+                    </Stack>
+                  </li>
+                );
+              }}
+              renderInput={(params) => (
+                <TextField {...params} label="Bütçe Kalemi" placeholder="Tümü" size="small" />
+              )}
+            />
+            <TextField
+              size="small"
+              select
+              label="Capex/Opex"
+              value={capexOpex}
+              onChange={(event) => setCapexOpex(event.target.value as "" | "capex" | "opex")}
+              sx={{ minWidth: 170, "& .MuiInputBase-root": { height: 40 } }}
+            >
+              <MenuItem value="">Tümü</MenuItem>
+              <MenuItem value="capex">Capex</MenuItem>
+              <MenuItem value="opex">Opex</MenuItem>
+            </TextField>
+          </FiltersBar>
 
           <Grid container spacing={2} sx={{ mb: 3 }}>
             {[

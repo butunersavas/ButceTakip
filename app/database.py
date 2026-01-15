@@ -93,6 +93,15 @@ def _apply_schema_upgrades() -> None:
         if "kaydi_giren_kullanici" not in expense_columns:
             with engine.begin() as connection:
                 connection.execute(text("ALTER TABLE expenses ADD COLUMN kaydi_giren_kullanici TEXT"))
+        if "created_by_id" not in expense_columns:
+            with engine.begin() as connection:
+                connection.execute(text("ALTER TABLE expenses ADD COLUMN created_by_id INTEGER"))
+                connection.execute(
+                    text(
+                        "UPDATE expenses SET created_by_id = created_by_user_id "
+                        "WHERE created_by_id IS NULL"
+                    )
+                )
         if "created_by_user_id" not in expense_columns:
             with engine.begin() as connection:
                 connection.execute(text("ALTER TABLE expenses ADD COLUMN created_by_user_id INTEGER"))
@@ -123,6 +132,17 @@ def _apply_schema_upgrades() -> None:
 
     if inspector.has_table("warranty_items"):
         warranty_columns = {column["name"] for column in inspector.get_columns("warranty_items")}
+        if "issuer" not in warranty_columns:
+            with engine.begin() as connection:
+                connection.execute(text("ALTER TABLE warranty_items ADD COLUMN issuer TEXT"))
+        if "renewal_owner" not in warranty_columns:
+            with engine.begin() as connection:
+                connection.execute(text("ALTER TABLE warranty_items ADD COLUMN renewal_owner TEXT"))
+        if "reminder_days" not in warranty_columns:
+            with engine.begin() as connection:
+                connection.execute(
+                    text("ALTER TABLE warranty_items ADD COLUMN reminder_days INTEGER DEFAULT 30")
+                )
         if "created_by_id" not in warranty_columns:
             with engine.begin() as connection:
                 connection.execute(text("ALTER TABLE warranty_items ADD COLUMN created_by_id INTEGER"))
