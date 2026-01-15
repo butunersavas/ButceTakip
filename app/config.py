@@ -19,10 +19,12 @@ class Settings(BaseSettings):
     cors_origins: list[str] = Field(
         default=[
             "http://localhost:5173",
+            "http://localhost:8000",
             "http://127.0.0.1:5173",
+            "http://127.0.0.1:8000",
             "http://172.24.2.128:5173",
         ],
-        env="CORS_ORIGINS",
+        env=["CORS_ORIGINS", "ALLOWED_ORIGINS"],
     )
 
     DEFAULT_ADMIN_EMAIL: str = Field(default="admin@local", env="DEFAULT_ADMIN_EMAIL")
