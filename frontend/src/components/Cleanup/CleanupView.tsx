@@ -117,6 +117,12 @@ function CleaningToolsSection() {
     return scenario ? `${scenario.name} (${scenario.year})` : "";
   }, [scenarioId, scenarios]);
 
+  const isDefaultScenario = useMemo(() => {
+    if (!scenarioId || !scenarios) return false;
+    const scenario = scenarios.find((item) => item.id === scenarioId);
+    return scenario?.name?.trim().toLowerCase() === "temel";
+  }, [scenarioId, scenarios]);
+
   const cleanupMutation = useMutation({
     mutationFn: async () => {
       const { data } = await client.post<CleanupResponse>("/io/cleanup", {
@@ -334,6 +340,9 @@ function CleaningToolsSection() {
               ))}
               {actionType === "cleanup" && <MenuItem value="">Tüm senaryolar</MenuItem>}
             </TextField>
+            {actionType === "delete-scenario" && isDefaultScenario && (
+              <Alert severity="info">Temel senaryosu silinemez.</Alert>
+            )}
             {actionType === "cleanup" ? (
               <>
                 <TextField
@@ -394,7 +403,7 @@ function CleaningToolsSection() {
                   !isAdmin ||
                   cleanupMutation.isPending ||
                   deleteScenarioMutation.isPending ||
-                  (actionType === "delete-scenario" && scenarioId === "")
+                  (actionType === "delete-scenario" && (scenarioId === "" || isDefaultScenario))
                 }
               >
                 {actionType === "delete-scenario" ? "Senaryoyu Sil" : "Temizleme İşlemini Başlat"}
