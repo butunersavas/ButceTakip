@@ -91,6 +91,27 @@ class Settings(BaseSettings):
             return value
         return "change-me"
 
+    @validator("allowed_hosts", pre=True)
+    def normalize_allowed_hosts(cls, value: str | list[str] | None) -> list[str]:  # noqa: D417
+        default_hosts = ["localhost", "127.0.0.1"]
+        if value is None:
+            return default_hosts
+        if isinstance(value, list):
+            cleaned = [item.strip() for item in value if item and item.strip()]
+            return cleaned or default_hosts
+        raw = str(value).strip()
+        if not raw:
+            return default_hosts
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, list):
+                cleaned = [str(item).strip() for item in parsed if str(item).strip()]
+                return cleaned or default_hosts
+        except Exception:
+            pass
+        cleaned = [item.strip() for item in raw.split(",") if item.strip()]
+        return cleaned or default_hosts
+
     @validator("allowed_hosts", "cors_origins", pre=True)
     def split_csv_values(cls, value: str | list[str]) -> list[str]:  # noqa: D417
         if isinstance(value, list):

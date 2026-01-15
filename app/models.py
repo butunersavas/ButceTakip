@@ -19,6 +19,7 @@ class ExpenseStatus(str, enum.Enum):
 class WarrantyItemType(str, enum.Enum):
     DEVICE = "DEVICE"
     SERVICE = "SERVICE"
+    DOMAIN_SSL = "DOMAIN_SSL"
 
 
 class User(TimestampMixin, SQLModel, table=True):
@@ -32,21 +33,21 @@ class User(TimestampMixin, SQLModel, table=True):
     is_active: bool = Field(default=True, nullable=False)
     is_admin: bool = Field(default=False, nullable=False)
 
-    expenses: list["Expense"] = Relationship(
+    expenses_created: list["Expense"] = Relationship(
         back_populates="created_by",
-        sa_relationship_kwargs={"foreign_keys": "[Expense.created_by_user_id]"},
+        sa_relationship_kwargs={"foreign_keys": "[Expense.created_by_id]"},
     )
     expenses_updated: list["Expense"] = Relationship(
         back_populates="updated_by",
-        sa_relationship_kwargs={"foreign_keys": "[Expense.updated_by_user_id]"},
+        sa_relationship_kwargs={"foreign_keys": "[Expense.updated_by_id]"},
     )
-    warranties: list["WarrantyItem"] = Relationship(
+    warranties_created: list["WarrantyItem"] = Relationship(
         back_populates="created_by",
-        sa_relationship_kwargs={"foreign_keys": "[WarrantyItem.created_by_user_id]"},
+        sa_relationship_kwargs={"foreign_keys": "[WarrantyItem.created_by_id]"},
     )
     warranties_updated: list["WarrantyItem"] = Relationship(
         back_populates="updated_by",
-        sa_relationship_kwargs={"foreign_keys": "[WarrantyItem.updated_by_user_id]"},
+        sa_relationship_kwargs={"foreign_keys": "[WarrantyItem.updated_by_id]"},
     )
 
 
@@ -129,12 +130,12 @@ class Expense(TimestampMixin, SQLModel, table=True):
     budget_item: BudgetItem = Relationship(back_populates="expenses")
     scenario: Optional[Scenario] = Relationship(back_populates="expenses")
     created_by: Optional[User] = Relationship(
-        back_populates="expenses",
-        sa_relationship_kwargs={"foreign_keys": "[Expense.created_by_user_id]"},
+        back_populates="expenses_created",
+        sa_relationship_kwargs={"foreign_keys": "[Expense.created_by_id]"},
     )
     updated_by: Optional[User] = Relationship(
         back_populates="expenses_updated",
-        sa_relationship_kwargs={"foreign_keys": "[Expense.updated_by_user_id]"},
+        sa_relationship_kwargs={"foreign_keys": "[Expense.updated_by_id]"},
     )
 
 
@@ -147,6 +148,9 @@ class WarrantyItem(TimestampMixin, SQLModel, table=True):
     location: str = Field(nullable=False)
     end_date: date = Field(nullable=False)
     note: Optional[str] = Field(default=None)
+    issuer: Optional[str] = Field(default=None, nullable=True)
+    renewal_owner: Optional[str] = Field(default=None, nullable=True)
+    reminder_days: Optional[int] = Field(default=30, nullable=True)
     is_active: bool = Field(default=True, nullable=False)
     created_by_id: Optional[int] = Field(default=None, foreign_key="users.id")
     updated_by_id: Optional[int] = Field(default=None, foreign_key="users.id")
@@ -154,10 +158,10 @@ class WarrantyItem(TimestampMixin, SQLModel, table=True):
     updated_by_user_id: Optional[int] = Field(default=None, foreign_key="users.id")
 
     created_by: Optional[User] = Relationship(
-        back_populates="warranties",
-        sa_relationship_kwargs={"foreign_keys": "[WarrantyItem.created_by_user_id]"},
+        back_populates="warranties_created",
+        sa_relationship_kwargs={"foreign_keys": "[WarrantyItem.created_by_id]"},
     )
     updated_by: Optional[User] = Relationship(
         back_populates="warranties_updated",
-        sa_relationship_kwargs={"foreign_keys": "[WarrantyItem.updated_by_user_id]"},
+        sa_relationship_kwargs={"foreign_keys": "[WarrantyItem.updated_by_id]"},
     )

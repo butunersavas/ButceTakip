@@ -47,6 +47,7 @@ import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import usePersistentState from "../../hooks/usePersistentState";
 import { useAuth } from "../../context/AuthContext";
 import { formatBudgetItemLabel, stripBudgetCode } from "../../utils/budgetLabel";
+import FiltersBar from "../Filters/FiltersBar";
 
 interface Scenario {
   id: number;
@@ -215,7 +216,7 @@ export default function ExpensesView() {
     }
   }, [GRID_VIEWS_KEY]);
 
-  const { data: expenses, isFetching } = useQuery<Expense[]>({
+  const { data: expenses, isFetching, refetch: refetchExpenses } = useQuery<Expense[]>({
     queryKey: [
       "expenses",
       year,
@@ -711,6 +712,31 @@ export default function ExpensesView() {
   const formattedOutOfBudget = formatCurrency(outOfBudgetTotal);
   const formattedCanceled = formatCurrency(cancelledTotal);
 
+  const handleApplyFilters = () => {
+    refetchExpenses();
+  };
+
+  const handleResetFilters = () => {
+    setYear(currentYear);
+    setScenarioId(null);
+    setBudgetItemId(null);
+    setStatusFilter("");
+    setStartDate("");
+    setEndDate("");
+    setCapexOpex("");
+    setIncludeOutOfBudget(true);
+    setShowCancelled(false);
+    setShowOutOfBudget(false);
+    setMineOnly(false);
+    setTodayOnly(false);
+    setSelectedExpenseFilter("ALL");
+    setFilterModel({ items: [] });
+    setSortModel([]);
+    setTimeout(() => {
+      refetchExpenses();
+    }, 0);
+  };
+
   const summaryCards = [
     {
       key: "ALL",
@@ -830,100 +856,66 @@ export default function ExpensesView() {
             overflow: "visible"
           }}
         >
-          <Box sx={{ mb: 3 }}>
-            <Stack
-              direction={{ xs: "column", sm: "row" }}
-              alignItems={{ xs: "flex-start", sm: "center" }}
-              justifyContent="space-between"
-              spacing={1}
-              sx={{ mb: 1 }}
-            >
-              <Typography variant="subtitle1" fontWeight={600}>
-                Harcama Filtreleri
-              </Typography>
-              <Button
+          <Box sx={{ mb: 3, display: "flex", flexDirection: "column", gap: 2 }}>
+            <FiltersBar title="Harcama Filtreleri" onApply={handleApplyFilters} onReset={handleResetFilters}>
+              <TextField
+                label="Yıl"
+                type="number"
                 size="small"
-                variant="outlined"
-                onClick={() => {
-                  setYear(currentYear);
-                  setScenarioId(null);
-                  setBudgetItemId(null);
-                  setStatusFilter("");
-                  setStartDate("");
-                  setEndDate("");
-                  setCapexOpex("");
-                  setIncludeOutOfBudget(true);
-                  setShowCancelled(false);
-                  setShowOutOfBudget(false);
-                  setMineOnly(false);
-                  setTodayOnly(false);
-                  setSelectedExpenseFilter("ALL");
-                  setFilterModel({ items: [] });
-                  setSortModel([]);
-                }}
+                value={year}
+                onChange={(event) => setYear(event.target.value ? Number(event.target.value) : "")}
+                sx={{ minWidth: 110, "& .MuiInputBase-root": { height: 40 } }}
+              />
+              <TextField
+                select
+                label="Senaryo"
+                size="small"
+                value={scenarioId ?? ""}
+                onChange={(event) =>
+                  setScenarioId(event.target.value ? Number(event.target.value) : null)
+                }
+                sx={{ minWidth: 260, "& .MuiInputBase-root": { height: 40 } }}
               >
-                Sıfırla
-              </Button>
-            </Stack>
+                <MenuItem value="">Tümü</MenuItem>
+                {scenarios?.map((scenario) => (
+                  <MenuItem key={scenario.id} value={scenario.id}>
+                    {scenario.year}
+                  </MenuItem>
+                ))}
+              </TextField>
+              <Autocomplete
+                size="small"
+                options={budgetItems ?? []}
+                value={budgetItems?.find((item) => item.id === budgetItemId) ?? null}
+                onChange={(_, value) => setBudgetItemId(value?.id ?? null)}
+                getOptionLabel={(option) => formatBudgetItemLabel(option) || "-"}
+                filterOptions={budgetFilterOptions}
+                isOptionEqualToValue={(option, value) => option.id === value.id}
+                sx={{ minWidth: 320, flex: 1, "& .MuiInputBase-root": { height: 40 } }}
+                renderInput={(params) => (
+                  <TextField {...params} label="Bütçe Kalemi" placeholder="Tümü" size="small" />
+                )}
+              />
+              <TextField
+                select
+                label="Capex/Opex"
+                size="small"
+                value={capexOpex}
+                onChange={(event) => setCapexOpex(event.target.value as "" | "capex" | "opex")}
+                sx={{ minWidth: 170, "& .MuiInputBase-root": { height: 40 } }}
+              >
+                <MenuItem value="">Tümü</MenuItem>
+                <MenuItem value="capex">Capex</MenuItem>
+                <MenuItem value="opex">Opex</MenuItem>
+              </TextField>
+            </FiltersBar>
+
             <Grid container spacing={3} disableEqualOverflow>
-              <Grid item xs={12} md={3}>
-                <TextField
-                  label="Yıl"
-                  type="number"
-                  value={year}
-                  onChange={(event) => setYear(event.target.value ? Number(event.target.value) : "")}
-                  fullWidth
-                />
-              </Grid>
-              <Grid item xs={12} md={3}>
-                <TextField
-                  select
-                  label="Senaryo"
-                  value={scenarioId ?? ""}
-                  onChange={(event) =>
-                    setScenarioId(event.target.value ? Number(event.target.value) : null)
-                  }
-                  fullWidth
-                >
-                  <MenuItem value="">Tümü</MenuItem>
-                  {scenarios?.map((scenario) => (
-                    <MenuItem key={scenario.id} value={scenario.id}>
-                      {scenario.year}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              </Grid>
-              <Grid item xs={12} md={3}>
-                <Autocomplete
-                  size="small"
-                  options={budgetItems ?? []}
-                  value={budgetItems?.find((item) => item.id === budgetItemId) ?? null}
-                  onChange={(_, value) => setBudgetItemId(value?.id ?? null)}
-                  getOptionLabel={(option) => formatBudgetItemLabel(option) || "-"}
-                  filterOptions={budgetFilterOptions}
-                  isOptionEqualToValue={(option, value) => option.id === value.id}
-                  renderInput={(params) => (
-                    <TextField {...params} label="Bütçe Kalemi" placeholder="Tümü" fullWidth size="small" />
-                  )}
-                />
-              </Grid>
-              <Grid item xs={12} md={3}>
-                <TextField
-                  select
-                  label="Capex/Opex"
-                  value={capexOpex}
-                  onChange={(event) => setCapexOpex(event.target.value as "" | "capex" | "opex")}
-                  fullWidth
-                >
-                  <MenuItem value="">Tümü</MenuItem>
-                  <MenuItem value="capex">Capex</MenuItem>
-                  <MenuItem value="opex">Opex</MenuItem>
-                </TextField>
-              </Grid>
               <Grid item xs={12} md={3}>
                 <TextField
                   select
                   label="Durum"
+                  size="small"
                   value={statusFilter}
                   onChange={(event) => setStatusFilter(event.target.value as Expense["status"] | "")}
                   fullWidth
@@ -937,6 +929,7 @@ export default function ExpensesView() {
                 <TextField
                   label="Başlangıç Tarihi"
                   type="date"
+                  size="small"
                   value={startDate}
                   onChange={(event) => setStartDate(event.target.value)}
                   fullWidth
@@ -947,6 +940,7 @@ export default function ExpensesView() {
                 <TextField
                   label="Bitiş Tarihi"
                   type="date"
+                  size="small"
                   value={endDate}
                   onChange={(event) => setEndDate(event.target.value)}
                   fullWidth
