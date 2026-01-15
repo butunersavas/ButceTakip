@@ -20,6 +20,32 @@ def _calculate_days_left(end_date: date, today: date | None = None) -> int:
     return (end_date - base_date).days
 
 
+def _user_display_name(user: User | None) -> str | None:
+    if not user:
+        return None
+    return user.full_name or user.username or user.email
+
+
+def _attach_user_names(session: Session, items: list[WarrantyItem]) -> None:
+    user_ids: set[int] = set()
+    for item in items:
+        if item.created_by_user_id:
+            user_ids.add(item.created_by_user_id)
+        if item.updated_by_user_id:
+            user_ids.add(item.updated_by_user_id)
+    if not user_ids:
+        return
+    users = session.exec(select(User).where(User.id.in_(user_ids))).all()
+    user_map = {user.id: _user_display_name(user) for user in users}
+    for item in items:
+        item.created_by_name = (
+            user_map.get(item.created_by_user_id) if item.created_by_user_id else None
+        )
+        item.updated_by_name = (
+            user_map.get(item.updated_by_user_id) if item.updated_by_user_id else None
+        )
+
+
 @router.get("", response_model=list[WarrantyItemRead])
 def list_warranty_items(
     include_inactive: bool = False,
@@ -29,19 +55,26 @@ def list_warranty_items(
     statement = select(WarrantyItem)
     if not include_inactive:
         statement = statement.where(WarrantyItem.is_active.is_(True))
-    return session.exec(statement).all()
+    items = session.exec(statement).all()
+    _attach_user_names(session, items)
+    return items
 
 
 @router.post("", response_model=WarrantyItemRead, status_code=status.HTTP_201_CREATED)
 def create_warranty_item(
     item_in: WarrantyItemCreate,
     session: Session = Depends(get_db_session),
-    _: User = Depends(get_admin_user),
+    current_user: User = Depends(get_admin_user),
 ) -> WarrantyItem:
-    item = WarrantyItem(**item_in.dict())
+    item = WarrantyItem(
+        **item_in.dict(),
+        created_by_user_id=current_user.id,
+        updated_by_user_id=current_user.id,
+    )
     session.add(item)
     session.commit()
     session.refresh(item)
+    _attach_user_names(session, [item])
     return item
 
 
@@ -50,17 +83,19 @@ def update_warranty_item(
     item_id: int,
     item_in: WarrantyItemUpdate,
     session: Session = Depends(get_db_session),
-    _: User = Depends(get_admin_user),
+    current_user: User = Depends(get_admin_user),
 ) -> WarrantyItem:
     item = session.get(WarrantyItem, item_id)
     if not item:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Warranty item not found")
     for field, value in item_in.dict(exclude_unset=True).items():
         setattr(item, field, value)
+    item.updated_by_user_id = current_user.id
     item.updated_at = datetime.utcnow()
     session.add(item)
     session.commit()
     session.refresh(item)
+    _attach_user_names(session, [item])
     return item
 
 
@@ -68,12 +103,13 @@ def update_warranty_item(
 def delete_warranty_item(
     item_id: int,
     session: Session = Depends(get_db_session),
-    _: User = Depends(get_admin_user),
+    current_user: User = Depends(get_admin_user),
 ) -> None:
     item = session.get(WarrantyItem, item_id)
     if not item:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Warranty item not found")
     item.is_active = False
+    item.updated_by_user_id = current_user.id
     item.updated_at = datetime.utcnow()
     session.add(item)
     session.commit()
@@ -86,6 +122,7 @@ def list_critical_warranty_items(
     _: User = Depends(get_current_user),
 ) -> list[WarrantyItemCriticalRead]:
     active_items = session.exec(select(WarrantyItem).where(WarrantyItem.is_active.is_(True))).all()
+    _attach_user_names(session, active_items)
     today = date.today()
     critical_items: list[WarrantyItemCriticalRead] = []
     for item in active_items:
@@ -100,6 +137,10 @@ def list_critical_warranty_items(
                     end_date=item.end_date,
                     note=item.note,
                     is_active=item.is_active,
+                    created_by_user_id=item.created_by_user_id,
+                    updated_by_user_id=item.updated_by_user_id,
+                    created_by_name=getattr(item, "created_by_name", None),
+                    updated_by_name=getattr(item, "updated_by_name", None),
                     created_at=item.created_at,
                     updated_at=item.updated_at,
                     days_left=days_left,

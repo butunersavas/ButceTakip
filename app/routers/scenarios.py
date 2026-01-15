@@ -82,6 +82,12 @@ def delete_scenario(
     if not scenario:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
 
+    if scenario.name.strip().lower() == "temel":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Temel senaryosu silinemez.",
+        )
+
     expense_count = session.exec(
         select(func.count(Expense.id)).where(Expense.scenario_id == scenario_id)
     ).one()
@@ -92,10 +98,10 @@ def delete_scenario(
     if (expense_count or plan_count) and not force:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "message": "Bu senaryo mevcut kayıtlar tarafından kullanıldığı için silinemez.",
-                "references": {"expenses": expense_count, "plans": plan_count},
-            },
+            detail=(
+                f"Senaryoda {plan_count} plan ve {expense_count} harcama var. "
+                "force=true ile silebilirsiniz."
+            ),
         )
 
     candidate_budget_item_ids: set[int] = set(

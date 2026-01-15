@@ -24,6 +24,7 @@ import {
   TextField,
   Typography
 } from "@mui/material";
+import Autocomplete, { createFilterOptions } from "@mui/material/Autocomplete";
 import { useQuery } from "@tanstack/react-query";
 import {
   Bar,
@@ -43,7 +44,7 @@ import { useNavigate } from "react-router-dom";
 
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import usePersistentState from "../../hooks/usePersistentState";
-import { formatBudgetItemLabel } from "../../utils/budgetItem";
+import { formatBudgetItemLabel, stripBudgetCode } from "../../utils/budgetLabel";
 import AccountBalanceWalletOutlinedIcon from "@mui/icons-material/AccountBalanceWalletOutlined";
 import CheckCircleOutlineOutlinedIcon from "@mui/icons-material/CheckCircleOutlineOutlined";
 import TrendingUpOutlinedIcon from "@mui/icons-material/TrendingUpOutlined";
@@ -170,6 +171,10 @@ export default function DashboardView() {
   const [scenarioId, setScenarioId] = usePersistentState<number | null>("dashboard:scenarioId", null);
   const [month, setMonth] = usePersistentState<number | null>("dashboard:month", null);
   const [budgetItemId, setBudgetItemId] = usePersistentState<number | null>("dashboard:budgetItemId", null);
+  const [capexOpex, setCapexOpex] = usePersistentState<"" | "capex" | "opex">(
+    "dashboard:capexOpex",
+    ""
+  );
   const [department, setDepartment] = useState<string>("");
   const [purchaseItems, setPurchaseItems] = useState<PurchaseReminderItem[]>([]);
   const [isPurchaseDialogOpen, setIsPurchaseDialogOpen] = useState(false);
@@ -276,7 +281,7 @@ export default function DashboardView() {
   };
 
   const { data: riskyItems = [] } = useQuery<RiskyItem[]>({
-    queryKey: ["dashboard", "risky-items", year, month, department],
+    queryKey: ["dashboard", "risky-items", year, month, department, capexOpex],
     queryFn: async () => {
       const params: Record<string, number | string> = { year };
 
@@ -286,6 +291,10 @@ export default function DashboardView() {
 
       if (department) {
         params.department = department;
+      }
+
+      if (capexOpex) {
+        params.capex_opex = capexOpex;
       }
 
       const { data } = await client.get<RiskyItem[]>("/dashboard/risky-items", {
@@ -311,17 +320,27 @@ export default function DashboardView() {
   }, [scenarios, year]);
 
   const { data: dashboard, isLoading } = useQuery<DashboardResponse>({
-    queryKey: ["dashboard", year, scenarioId, month, budgetItemId, department],
+    queryKey: ["dashboard", year, scenarioId, month, budgetItemId, department, capexOpex],
     queryFn: async () => {
       const params: Record<string, number | string> = { year };
       if (scenarioId) params.scenario_id = scenarioId;
       if (month) params.month = month;
       if (budgetItemId) params.budget_item_id = budgetItemId;
       if (department) params.department = department;
+      if (capexOpex) params.capex_opex = capexOpex;
       const { data } = await client.get<DashboardResponse>("/dashboard", { params });
       return data;
     }
   });
+
+  const budgetFilterOptions = useMemo(
+    () =>
+      createFilterOptions<BudgetItem>({
+        stringify: (option) =>
+          `${option.code ?? ""} ${option.name ?? ""} ${formatBudgetItemLabel(option)}`
+      }),
+    []
+  );
 
   const monthlyData = useMemo(() => {
     if (!dashboard?.monthly) return [];
@@ -470,21 +489,32 @@ export default function DashboardView() {
                       ))}
                     </TextField>
                   </Grid>
+                  <Grid item xs={12} md={3}>
+                    <Autocomplete
+                      size="small"
+                      options={budgetItems ?? []}
+                      value={budgetItems?.find((item) => item.id === budgetItemId) ?? null}
+                      onChange={(_, value) => setBudgetItemId(value?.id ?? null)}
+                      getOptionLabel={(option) => formatBudgetItemLabel(option)}
+                      filterOptions={budgetFilterOptions}
+                      isOptionEqualToValue={(option, value) => option.id === value.id}
+                      renderInput={(params) => (
+                        <TextField {...params} label="Bütçe Kalemi" placeholder="Tümü" fullWidth />
+                      )}
+                    />
+                  </Grid>
                   <Grid item xs={12} md={2}>
                     <TextField
                       size="small"
                       select
-                      label="Bütçe Kalemi"
-                      value={budgetItemId ?? ""}
-                      onChange={(event) => setBudgetItemId(event.target.value ? Number(event.target.value) : null)}
+                      label="Capex/Opex"
+                      value={capexOpex}
+                      onChange={(event) => setCapexOpex(event.target.value as "" | "capex" | "opex")}
                       fullWidth
                     >
                       <MenuItem value="">Tümü</MenuItem>
-                      {budgetItems?.map((item) => (
-                        <MenuItem key={item.id} value={item.id}>
-                          {formatBudgetItemLabel(item)}
-                        </MenuItem>
-                      ))}
+                      <MenuItem value="capex">Capex</MenuItem>
+                      <MenuItem value="opex">Opex</MenuItem>
                     </TextField>
                   </Grid>
                 </Grid>
@@ -721,7 +751,7 @@ export default function DashboardView() {
                     {riskyItems.map((item) => (
                       <ListItem key={item.budget_item_id}>
                         <ListItemText
-                          primary={`${item.budget_code} – ${item.budget_name}`}
+                          primary={stripBudgetCode(item.budget_name) || "-"}
                           secondary={`Plan: ${item.plan.toLocaleString()} | Gerçekleşen: ${item.actual.toLocaleString()} | %${Math.round(item.ratio * 100)}`}
                           primaryTypographyProps={{ variant: "body2" }}
                         />
@@ -804,7 +834,7 @@ export default function DashboardView() {
                 }
               >
                 <ListItemText
-                  primary={`${item.budget_code} – ${item.budget_name}`}
+                  primary={stripBudgetCode(item.budget_name) || "-"}
                   secondary={
                     item.is_form_prepared
                       ? "Satın alma formu hazırlandı"

@@ -93,12 +93,33 @@ def _apply_schema_upgrades() -> None:
         if "kaydi_giren_kullanici" not in expense_columns:
             with engine.begin() as connection:
                 connection.execute(text("ALTER TABLE expenses ADD COLUMN kaydi_giren_kullanici TEXT"))
+        if "created_by_user_id" not in expense_columns:
+            with engine.begin() as connection:
+                connection.execute(text("ALTER TABLE expenses ADD COLUMN created_by_user_id INTEGER"))
+                connection.execute(
+                    text(
+                        "UPDATE expenses SET created_by_user_id = created_by_id "
+                        "WHERE created_by_user_id IS NULL"
+                    )
+                )
+        if "updated_by_user_id" not in expense_columns:
+            with engine.begin() as connection:
+                connection.execute(text("ALTER TABLE expenses ADD COLUMN updated_by_user_id INTEGER"))
 
     if inspector.has_table("plan_entries"):
         plan_columns = {column["name"] for column in inspector.get_columns("plan_entries")}
         if "department" not in plan_columns:
             with engine.begin() as connection:
                 connection.execute(text("ALTER TABLE plan_entries ADD COLUMN department VARCHAR(100)"))
+
+    if inspector.has_table("warranty_items"):
+        warranty_columns = {column["name"] for column in inspector.get_columns("warranty_items")}
+        if "created_by_user_id" not in warranty_columns:
+            with engine.begin() as connection:
+                connection.execute(text("ALTER TABLE warranty_items ADD COLUMN created_by_user_id INTEGER"))
+        if "updated_by_user_id" not in warranty_columns:
+            with engine.begin() as connection:
+                connection.execute(text("ALTER TABLE warranty_items ADD COLUMN updated_by_user_id INTEGER"))
 
     if inspector.has_table("users"):
         user_columns = {column["name"] for column in inspector.get_columns("users")}

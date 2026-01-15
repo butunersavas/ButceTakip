@@ -46,7 +46,7 @@ import dayjs from "dayjs";
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import usePersistentState from "../../hooks/usePersistentState";
 import { useAuth } from "../../context/AuthContext";
-import { formatBudgetItemLabel } from "../../utils/budgetItem";
+import { formatBudgetItemLabel } from "../../utils/budgetLabel";
 import { SummaryCard } from "../Dashboard/SummaryCard";
 
 interface Scenario {
@@ -80,6 +80,8 @@ export interface Expense {
   updated_at: string;
   client_hostname: string | null;
   kaydi_giren_kullanici: string | null;
+  created_by_name?: string | null;
+  updated_by_name?: string | null;
 }
 
 interface ExpensePayload {
@@ -132,6 +134,10 @@ export default function ExpensesView() {
   const [statusFilter, setStatusFilter] = usePersistentState<"" | Expense["status"]>("expenses:status", "");
   const [startDate, setStartDate] = usePersistentState<string>("expenses:startDate", "");
   const [endDate, setEndDate] = usePersistentState<string>("expenses:endDate", "");
+  const [capexOpex, setCapexOpex] = usePersistentState<"" | "capex" | "opex">(
+    "expenses:capexOpex",
+    ""
+  );
   const [includeOutOfBudget, setIncludeOutOfBudget] = usePersistentState<boolean>("expenses:includeOutOfBudget", true);
   const [includeCancelled, setIncludeCancelled] = useState(false);
   const [showCancelled, setShowCancelled] = usePersistentState<boolean>("expenses:showCancelled", false);
@@ -212,6 +218,7 @@ export default function ExpensesView() {
       statusFilter,
       startDate,
       endDate,
+      capexOpex,
       includeOutOfBudget,
       showCancelled,
       showOutOfBudget,
@@ -226,6 +233,7 @@ export default function ExpensesView() {
       if (statusFilter) params.status_filter = statusFilter;
       if (startDate) params.start_date = startDate;
       if (endDate) params.end_date = endDate;
+      if (capexOpex) params.capex_opex = capexOpex;
       params.include_out_of_budget = includeOutOfBudget;
       params.show_cancelled = showCancelled;
       params.show_out_of_budget = showOutOfBudget;
@@ -450,41 +458,39 @@ export default function ExpensesView() {
         field: "budget_item_id",
         headerName: "Bütçe Kalemi",
         width: 240,
-        valueGetter: (value, row) => {
-          const item = findBudgetItem(row);
+        valueGetter: (params) => {
+          const item = findBudgetItem(params?.row);
           if (!item) {
             return "";
           }
 
-          const code = item.code ?? item.budget_code ?? "";
-          const name = item.name ?? item.budget_name ?? "";
-
-          return `${code} ${name}`.trim();
+          return formatBudgetItemLabel(item);
         }
       },
       {
         field: "map_category",
         headerName: "Map Capex/Opex",
         width: 180,
-        valueGetter: (value, row) => {
-          const item = findBudgetItem(row);
-          return item?.map_category ?? "";
+        valueGetter: (params) => {
+          const item = findBudgetItem(params?.row);
+          return item?.map_category ?? "-";
         }
       },
       {
         field: "map_attribute",
         headerName: "Map Nitelik",
         width: 180,
-        valueGetter: (value, row) => {
-          const item = findBudgetItem(row);
-          return item?.map_attribute ?? "";
+        valueGetter: (params) => {
+          const item = findBudgetItem(params?.row);
+          return item?.map_attribute ?? "-";
         }
       },
       {
         field: "scenario_id",
         headerName: "Bütçe Yılı",
         width: 150,
-        valueGetter: (value, row) => {
+        valueGetter: (params) => {
+          const row = params?.row;
           if (!row || row.scenario_id == null || !Array.isArray(scenarios)) {
             return "";
           }
@@ -565,10 +571,20 @@ export default function ExpensesView() {
         renderCell: ({ row }) => renderTextWithTooltip(row.vendor)
       },
       {
-        field: "kaydi_giren_kullanici",
-        headerName: "Kaydı Giren",
-        width: 220,
-        renderCell: ({ row }) => renderTextWithTooltip(row.kaydi_giren_kullanici, "Bilinmiyor")
+        field: "created_by_name",
+        headerName: "Oluşturan",
+        width: 200,
+        renderCell: ({ row }) =>
+          renderTextWithTooltip(
+            row.created_by_name ?? row.kaydi_giren_kullanici,
+            "Bilinmiyor"
+          )
+      },
+      {
+        field: "updated_by_name",
+        headerName: "Son Güncelleyen",
+        width: 200,
+        renderCell: ({ row }) => renderTextWithTooltip(row.updated_by_name, "Bilinmiyor")
       },
       {
         field: "status",
@@ -741,6 +757,19 @@ export default function ExpensesView() {
                       {formatBudgetItemLabel(item)}
                     </MenuItem>
                   ))}
+                </TextField>
+              </Grid>
+              <Grid item xs={12} md={3}>
+                <TextField
+                  select
+                  label="Capex/Opex"
+                  value={capexOpex}
+                  onChange={(event) => setCapexOpex(event.target.value as "" | "capex" | "opex")}
+                  fullWidth
+                >
+                  <MenuItem value="">Tümü</MenuItem>
+                  <MenuItem value="capex">Capex</MenuItem>
+                  <MenuItem value="opex">Opex</MenuItem>
                 </TextField>
               </Grid>
               <Grid item xs={12} md={3}>
@@ -921,7 +950,7 @@ export default function ExpensesView() {
           <Box sx={{ height: 520, width: "100%" }}>
             <DataGrid
               key={renderVersion}
-              rows={rows}
+              rows={rows ?? []}
               columns={columns}
               getRowId={(row) => row.id ?? `${row.budget_item_id}-${row.expense_date}-${row.amount}`}
               paginationModel={paginationModel}

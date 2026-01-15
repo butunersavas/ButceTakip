@@ -17,6 +17,7 @@ import {
   Tooltip,
   Typography
 } from "@mui/material";
+import Autocomplete, { createFilterOptions } from "@mui/material/Autocomplete";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/DeleteOutline";
 import { DataGrid, GridColDef } from "@mui/x-data-grid";
@@ -25,7 +26,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import usePersistentState from "../../hooks/usePersistentState";
 import { useAuth } from "../../context/AuthContext";
-import { formatBudgetItemLabel } from "../../utils/budgetItem";
+import { formatBudgetItemLabel } from "../../utils/budgetLabel";
 
 interface Scenario {
   id: number;
@@ -100,6 +101,7 @@ export default function PlansView() {
   const [monthFilter, setMonthFilter] = useState<number | "">("");
   const [departmentFilter, setDepartmentFilter] = useState<string>("");
   const [budgetItemId, setBudgetItemId] = usePersistentState<number | null>("plans:budgetItemId", null);
+  const [capexOpex, setCapexOpex] = usePersistentState<"" | "capex" | "opex">("plans:capexOpex", "");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState<PlanEntry | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -121,23 +123,33 @@ export default function PlansView() {
   });
 
   const { data: plans, isFetching } = useQuery<PlanEntry[]>({
-    queryKey: ["plans", year, scenarioId, budgetItemId, monthFilter || "", departmentFilter || ""],
+    queryKey: [
+      "plans",
+      year,
+      scenarioId,
+      budgetItemId,
+      monthFilter || "",
+      departmentFilter || "",
+      capexOpex
+    ],
     queryFn: async () => {
       const params: Record<string, number | string> = { year };
       if (scenarioId) params.scenario_id = scenarioId;
       if (budgetItemId) params.budget_item_id = budgetItemId;
       if (monthFilter !== "") params.month = Number(monthFilter);
       if (departmentFilter) params.department = departmentFilter;
+      if (capexOpex) params.capex_opex = capexOpex;
       const { data } = await client.get<PlanEntry[]>("/plans", { params });
       return data;
     }
   });
 
   const { data: aggregates } = useQuery<PlanAggregate[]>({
-    queryKey: ["plan-aggregate", year, scenarioId],
+    queryKey: ["plan-aggregate", year, scenarioId, capexOpex],
     queryFn: async () => {
-      const params: Record<string, number> = { year };
+      const params: Record<string, number | string> = { year };
       if (scenarioId) params.scenario_id = scenarioId;
+      if (capexOpex) params.capex_opex = capexOpex;
       const { data } = await client.get<PlanAggregate[]>("/plans/aggregate", { params });
       return data;
     }
@@ -250,6 +262,15 @@ export default function PlansView() {
     });
   }, [plans, monthFilter, departmentFilter]);
 
+  const budgetFilterOptions = useMemo(
+    () =>
+      createFilterOptions<BudgetItem>({
+        stringify: (option) =>
+          `${option.code ?? ""} ${option.name ?? ""} ${formatBudgetItemLabel(option)}`
+      }),
+    []
+  );
+
   const departmentOptions = useMemo(() => {
     const options = new Set<string>();
     plans?.forEach((plan) => {
@@ -282,7 +303,8 @@ export default function PlansView() {
         field: "scenario",
         headerName: "Senaryo",
         flex: 1,
-        valueGetter: (value, row) => {
+        valueGetter: (params) => {
+          const row = params?.row;
           if (!row || row.scenario_id == null) {
             return "";
           }
@@ -310,49 +332,46 @@ export default function PlansView() {
         field: "budget",
         headerName: "Bütçe Kalemi",
         flex: 1,
-        valueGetter: (value, row) => {
-          const item = findBudgetItem(row);
+        valueGetter: (params) => {
+          const item = findBudgetItem(params?.row);
           if (!item) {
             return "";
           }
 
-          const code = item.code ?? item.budget_code ?? "";
-          const name = item.name ?? item.budget_name ?? "";
-
-          return `${code} ${name}`.trim();
+          return formatBudgetItemLabel(item);
         }
       },
       {
         field: "map_category",
         headerName: "Map Capex/Opex",
         flex: 1,
-        valueGetter: (value, row) => {
-          const item = findBudgetItem(row);
-          return item?.map_category ?? "";
+        valueGetter: (params) => {
+          const item = findBudgetItem(params?.row);
+          return item?.map_category ?? "-";
         }
       },
       {
         field: "map_attribute",
         headerName: "Map Nitelik",
         flex: 1,
-        valueGetter: (value, row) => {
-          const item = findBudgetItem(row);
-          return item?.map_attribute ?? "";
+        valueGetter: (params) => {
+          const item = findBudgetItem(params?.row);
+          return item?.map_attribute ?? "-";
         }
       },
       {
         field: "department",
         headerName: "Departman",
         flex: 1,
-        valueGetter: (value, row) => row.department ?? "",
+        valueGetter: (params) => params?.row?.department ?? "-",
       },
       { field: "year", headerName: "Yıl", width: 110 },
       {
         field: "month",
         headerName: "Ay",
         width: 120,
-        valueGetter: (value, row) => {
-          const raw = row?.month;
+        valueGetter: (params) => {
+          const raw = params?.row?.month;
 
           // month zaten sayıysa
           if (typeof raw === "number") {
@@ -505,21 +524,29 @@ export default function PlansView() {
               </TextField>
             </Grid>
             <Grid item xs={12} md={3}>
+              <Autocomplete
+                options={budgetItems ?? []}
+                value={budgetItems?.find((item) => item.id === budgetItemId) ?? null}
+                onChange={(_, value) => setBudgetItemId(value?.id ?? null)}
+                getOptionLabel={(option) => formatBudgetItemLabel(option)}
+                filterOptions={budgetFilterOptions}
+                isOptionEqualToValue={(option, value) => option.id === value.id}
+                renderInput={(params) => (
+                  <TextField {...params} label="Bütçe Kalemi" placeholder="Tümü" fullWidth />
+                )}
+              />
+            </Grid>
+            <Grid item xs={12} md={2}>
               <TextField
                 select
-                label="Bütçe Kalemi"
-                value={budgetItemId ?? ""}
-                onChange={(event) =>
-                  setBudgetItemId(event.target.value ? Number(event.target.value) : null)
-                }
+                label="Capex/Opex"
+                value={capexOpex}
+                onChange={(event) => setCapexOpex(event.target.value as "" | "capex" | "opex")}
                 fullWidth
               >
                 <MenuItem value="">Tümü</MenuItem>
-                {budgetItems?.map((item) => (
-                  <MenuItem key={item.id} value={item.id}>
-                    {formatBudgetItemLabel(item)}
-                  </MenuItem>
-                ))}
+                <MenuItem value="capex">Capex</MenuItem>
+                <MenuItem value="opex">Opex</MenuItem>
               </TextField>
             </Grid>
             <Grid item xs={12} md={2}>

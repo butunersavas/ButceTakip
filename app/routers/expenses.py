@@ -2,6 +2,7 @@ from datetime import date, datetime
 import ipaddress
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from sqlalchemy import func
 from sqlmodel import Session, select
 
 from app.dependencies import get_current_user, get_db_session
@@ -40,6 +41,42 @@ def _extract_client_identifier(request: Request) -> str | None:
     return None
 
 
+def _normalize_capex_opex(value: str | None) -> str | None:
+    if not value:
+        return None
+    normalized = value.strip().lower()
+    if normalized in {"capex", "opex"}:
+        return normalized
+    return None
+
+
+def _user_display_name(user: User | None) -> str | None:
+    if not user:
+        return None
+    return user.full_name or user.username or user.email
+
+
+def _attach_user_names(session: Session, expenses: list[Expense]) -> None:
+    user_ids: set[int] = set()
+    for expense in expenses:
+        if expense.created_by_user_id:
+            user_ids.add(expense.created_by_user_id)
+        elif expense.created_by_id:
+            user_ids.add(expense.created_by_id)
+        if expense.updated_by_user_id:
+            user_ids.add(expense.updated_by_user_id)
+    if not user_ids:
+        return
+    users = session.exec(select(User).where(User.id.in_(user_ids))).all()
+    user_map = {user.id: _user_display_name(user) for user in users}
+    for expense in expenses:
+        created_id = expense.created_by_user_id or expense.created_by_id
+        expense.created_by_name = user_map.get(created_id) if created_id else None
+        expense.updated_by_name = (
+            user_map.get(expense.updated_by_user_id) if expense.updated_by_user_id else None
+        )
+
+
 @router.get("/", response_model=list[ExpenseRead])
 def list_expenses(
     year: int | None = Query(default=None),
@@ -53,10 +90,16 @@ def list_expenses(
     show_out_of_budget: bool = Query(default=False),
     mine_only: bool = Query(default=False),
     today_only: bool = Query(default=False),
+    capex_opex: str | None = Query(default=None),
     session: Session = Depends(get_db_session),
     current_user: User = Depends(get_current_user),
 ) -> list[Expense]:
     query = select(Expense)
+    capex_filter = _normalize_capex_opex(capex_opex)
+    if capex_filter:
+        query = query.join(BudgetItem, BudgetItem.id == Expense.budget_item_id).where(
+            func.lower(BudgetItem.map_category) == capex_filter
+        )
     if today_only:
         query = query.where(Expense.expense_date == date.today())
     elif year is not None:
@@ -88,8 +131,12 @@ def list_expenses(
     if not (include_out_of_budget and show_out_of_budget):
         query = query.where(Expense.is_out_of_budget.is_(False))
     if mine_only:
-        query = query.where(Expense.created_by_id == current_user.id)
-    return session.exec(query.order_by(Expense.expense_date.desc())).all()
+        query = query.where(
+            func.coalesce(Expense.created_by_user_id, Expense.created_by_id) == current_user.id
+        )
+    expenses = session.exec(query.order_by(Expense.expense_date.desc())).all()
+    _attach_user_names(session, expenses)
+    return expenses
 
 
 @router.post("/", response_model=ExpenseRead, status_code=201)
@@ -115,12 +162,15 @@ def create_expense(
     expense = Expense(
         **expense_data,
         created_by_id=current_user.id,
+        created_by_user_id=current_user.id,
+        updated_by_user_id=current_user.id,
         client_hostname=client_hostname,
         kaydi_giren_kullanici=current_user.username,
     )
     session.add(expense)
     session.commit()
     session.refresh(expense)
+    _attach_user_names(session, [expense])
     return expense
 
 
@@ -134,7 +184,8 @@ def update_expense(
     expense = session.get(Expense, expense_id)
     if not expense:
         raise HTTPException(status_code=404, detail="Expense not found")
-    if expense.created_by_id not in (None, current_user.id) and not current_user.is_admin:
+    owner_id = expense.created_by_user_id or expense.created_by_id
+    if owner_id not in (None, current_user.id) and not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Not allowed")
     for field, value in expense_in.dict(exclude_unset=True).items():
         if field == "kaydi_giren_kullanici":
@@ -146,10 +197,12 @@ def update_expense(
     if not expense.amount and quantity and unit_price:
         expense.amount = round(quantity * unit_price, 2)
 
+    expense.updated_by_user_id = current_user.id
     expense.updated_at = datetime.utcnow()
     session.add(expense)
     session.commit()
     session.refresh(expense)
+    _attach_user_names(session, [expense])
     return expense
 
 
@@ -162,7 +215,8 @@ def delete_expense(
     expense = session.get(Expense, expense_id)
     if not expense:
         raise HTTPException(status_code=404, detail="Expense not found")
-    if expense.created_by_id not in (None, current_user.id) and not current_user.is_admin:
+    owner_id = expense.created_by_user_id or expense.created_by_id
+    if owner_id not in (None, current_user.id) and not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Not allowed")
     session.delete(expense)
     session.commit()

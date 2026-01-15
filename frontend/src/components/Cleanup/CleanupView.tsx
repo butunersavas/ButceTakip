@@ -23,6 +23,7 @@ import axios from "axios";
 
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import { useAuth } from "../../context/AuthContext";
+import { formatBudgetItemLabel } from "../../utils/budgetLabel";
 
 interface Scenario {
   id: number;
@@ -190,6 +191,24 @@ function CleaningToolsSection() {
           setError(detail);
           return;
         }
+
+        const status = err.response?.status;
+        if (status === 403) {
+          setError("Bu işlem için yetkiniz yok.");
+          return;
+        }
+        if (status === 404) {
+          setError("Senaryo bulunamadı.");
+          return;
+        }
+        if (status === 409) {
+          setError("Senaryo bağlı kayıtlar nedeniyle silinemedi. force=true ile silebilirsiniz.");
+          return;
+        }
+        if (status === 400) {
+          setError("Senaryo silinirken geçersiz bir istek oluştu.");
+          return;
+        }
       }
 
       setError(
@@ -332,7 +351,7 @@ function CleaningToolsSection() {
                   {!budgetItems?.length && <MenuItem value="">Bütçe kalemi bulunamadı</MenuItem>}
                   {budgetItems?.map((item) => (
                     <MenuItem key={item.id} value={item.id}>
-                      {item.code} - {item.name}
+                      {formatBudgetItemLabel(item)}
                     </MenuItem>
                   ))}
                   <MenuItem value="">Tüm bütçe kalemleri</MenuItem>
