@@ -14,56 +14,59 @@ export default function FiltersBar({ title = "Filtreler", onApply, onReset, chil
   return (
     <Card>
       <CardContent sx={{ py: 1.5, px: 2.5 }}>
-        <Stack spacing={1.5}>
-          <Stack direction="row" justifyContent="space-between" alignItems="center">
-            <Typography variant="subtitle1" fontWeight={600}>
-              {title}
-            </Typography>
-            <Stack direction="row" spacing={1} alignItems="center">
-              <Button
-                size="small"
-                variant="contained"
-                startIcon={<FilterAltOutlinedIcon sx={{ fontSize: 18 }} />}
-                onClick={onApply}
-                sx={{
-                  height: 32,
-                  minWidth: 88,
-                  borderRadius: 999,
-                  fontSize: 12.5,
-                  textTransform: "none",
-                  px: 1.5
-                }}
-              >
-                Uygula
-              </Button>
-              <Button
-                size="small"
-                variant="outlined"
-                startIcon={<RestartAltOutlinedIcon sx={{ fontSize: 18 }} />}
-                onClick={onReset}
-                sx={{
-                  height: 32,
-                  minWidth: 88,
-                  borderRadius: 999,
-                  fontSize: 12.5,
-                  textTransform: "none",
-                  px: 1.5
-                }}
-              >
-                Sıfırla
-              </Button>
-            </Stack>
-          </Stack>
+        <Stack
+          direction={{ xs: "column", lg: "row" }}
+          spacing={1.5}
+          alignItems={{ xs: "flex-start", lg: "center" }}
+        >
+          <Typography variant="subtitle2" fontWeight={700} sx={{ minWidth: "fit-content" }}>
+            {title}
+          </Typography>
           <Box
             sx={{
               display: "flex",
               alignItems: "center",
               gap: 1.5,
-              flexWrap: { xs: "wrap", lg: "nowrap" }
+              flexWrap: { xs: "wrap", lg: "nowrap" },
+              flex: 1
             }}
           >
             {children}
           </Box>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <Button
+              size="small"
+              variant="contained"
+              startIcon={<FilterAltOutlinedIcon sx={{ fontSize: 18 }} />}
+              onClick={onApply}
+              sx={{
+                height: 32,
+                minWidth: 88,
+                borderRadius: 999,
+                fontSize: 12.5,
+                textTransform: "none",
+                px: 1.5
+              }}
+            >
+              Uygula
+            </Button>
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<RestartAltOutlinedIcon sx={{ fontSize: 18 }} />}
+              onClick={onReset}
+              sx={{
+                height: 32,
+                minWidth: 88,
+                borderRadius: 999,
+                fontSize: 12.5,
+                textTransform: "none",
+                px: 1.5
+              }}
+            >
+              Sıfırla
+            </Button>
+          </Stack>
         </Stack>
       </CardContent>
     </Card>

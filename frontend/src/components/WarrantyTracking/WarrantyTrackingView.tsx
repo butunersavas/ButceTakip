@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Box,
@@ -32,8 +32,10 @@ type WarrantyItem = {
   start_date?: string | null;
   note?: string | null;
   issuer?: string | null;
+  certificate_issuer?: string | null;
   renewal_owner?: string | null;
   reminder_days?: number | null;
+  remind_days_before?: number | null;
   is_active: boolean;
   created_by_name?: string | null;
   updated_by_name?: string | null;
@@ -51,9 +53,9 @@ type WarrantyItemForm = {
   location: string;
   end_date: string;
   note: string;
-  issuer: string;
+  certificate_issuer: string;
   renewal_owner: string;
-  reminder_days: string;
+  remind_days_before: string;
 };
 
 const typeOptions: Array<{ value: WarrantyItemType; label: string }> = [
@@ -71,11 +73,11 @@ const calcDaysLeft = (endDate: string | null): number | null => {
   return Math.floor(ms / (1000 * 60 * 60 * 24));
 };
 
-const calcStatus = (daysLeft: number | null) => {
+const calcStatus = (daysLeft: number | null, remindDaysBefore = 30) => {
   if (daysLeft === null) return { label: "-", key: "unknown" as const };
   if (daysLeft < 0) return { label: "Süresi Geçti", key: "expired" as const };
-  if (daysLeft <= 30) return { label: "Kritik", key: "critical" as const };
-  if (daysLeft <= 60) return { label: "Yaklaşıyor", key: "approaching" as const };
+  if (daysLeft <= remindDaysBefore) return { label: "Kritik", key: "critical" as const };
+  if (daysLeft <= remindDaysBefore + 30) return { label: "Yaklaşıyor", key: "approaching" as const };
   return { label: "Aktif", key: "ok" as const };
 };
 
@@ -121,6 +123,12 @@ const normalizeDateInput = (value: string | null | undefined) => {
 const normalizeWarrantyRow = (row: any): WarrantyItem => {
   const start = row?.start_date ?? row?.startDate ?? null;
   const end = normalizeDateInput(row?.end_date ?? row?.endDate ?? null) || null;
+  const remindDaysBefore =
+    typeof row?.remind_days_before === "number"
+      ? row.remind_days_before
+      : typeof row?.reminder_days === "number"
+        ? row.reminder_days
+        : 30;
   const serialKey = row?.serial_no ?? row?.serial ?? row?.asset_tag;
   const randomId =
     (typeof globalThis !== "undefined" ? globalThis.crypto?.randomUUID?.() : undefined) ?? `${Math.random()}`;
@@ -136,7 +144,7 @@ const normalizeWarrantyRow = (row: any): WarrantyItem => {
   const status =
     typeof statusLabel === "string" && statusLabel.trim().length
       ? { label: statusLabel, key: mapStatusKey(statusLabel) }
-      : calcStatus(days_left);
+      : calcStatus(days_left, remindDaysBefore);
   return {
     ...row,
     id,
@@ -147,6 +155,8 @@ const normalizeWarrantyRow = (row: any): WarrantyItem => {
     status_label: status.label,
     status_key: status.key,
     type_label: formatTypeLabel(row?.type),
+    certificate_issuer: row?.certificate_issuer ?? row?.issuer ?? null,
+    remind_days_before: remindDaysBefore,
   };
 };
 
@@ -158,6 +168,7 @@ export default function WarrantyTrackingView() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [editingItem, setEditingItem] = useState<WarrantyItem | null>(null);
+  const tableRef = useRef<HTMLDivElement | null>(null);
   const [selectedWarrantyFilter, setSelectedWarrantyFilter] = useState<
     "CRITICAL" | "NEAR" | "EXPIRED" | null
   >(null);
@@ -167,9 +178,9 @@ export default function WarrantyTrackingView() {
     location: "",
     end_date: "",
     note: "",
-    issuer: "",
+    certificate_issuer: "",
     renewal_owner: "",
-    reminder_days: "30",
+    remind_days_before: "30",
   });
 
   const isDomainSsl = form.type === "DOMAIN_SSL";
@@ -210,14 +221,18 @@ export default function WarrantyTrackingView() {
     };
     items.forEach((item) => {
       const daysLeft = item.days_left ?? calcDaysLeft(item.end_date);
+      const remindDaysBefore =
+        item.remind_days_before ??
+        item.reminder_days ??
+        30;
       if (daysLeft === null) {
         return;
       }
       if (daysLeft < 0) {
         totals.expired += 1;
-      } else if (daysLeft <= 30) {
+      } else if (daysLeft <= remindDaysBefore) {
         totals.critical += 1;
-      } else if (daysLeft <= 60) {
+      } else if (daysLeft <= remindDaysBefore + 30) {
         totals.upcoming += 1;
       }
     });
@@ -237,8 +252,8 @@ export default function WarrantyTrackingView() {
 
   const activeFilterLabel = useMemo(() => {
     if (!selectedWarrantyFilter) return null;
-    if (selectedWarrantyFilter === "CRITICAL") return "Kritik (1-30)";
-    if (selectedWarrantyFilter === "NEAR") return "Yaklaşıyor (31-60)";
+    if (selectedWarrantyFilter === "CRITICAL") return "Kritik";
+    if (selectedWarrantyFilter === "NEAR") return "Yaklaşıyor";
     return "Süresi Geçti";
   }, [selectedWarrantyFilter]);
 
@@ -255,16 +270,16 @@ export default function WarrantyTrackingView() {
 
     try {
       const normalizedEndDate = normalizeDateInput(form.end_date);
-      const reminderValue = form.reminder_days ? Number(form.reminder_days) : null;
+      const reminderValue = form.remind_days_before ? Number(form.remind_days_before) : null;
       const payload = {
         type: form.type,
         name: form.name.trim(),
         location: form.location.trim(),
         end_date: normalizedEndDate,
         note: form.note.trim() || null,
-        issuer: form.issuer.trim() || null,
+        certificate_issuer: form.certificate_issuer.trim() || null,
         renewal_owner: form.renewal_owner.trim() || null,
-        reminder_days: Number.isFinite(reminderValue) ? reminderValue : null,
+        remind_days_before: Number.isFinite(reminderValue) ? reminderValue : null,
       };
 
       if (editingItem) {
@@ -281,9 +296,9 @@ export default function WarrantyTrackingView() {
         location: "",
         end_date: "",
         note: "",
-        issuer: "",
+        certificate_issuer: "",
         renewal_owner: "",
-        reminder_days: "30"
+        remind_days_before: "30"
       });
       setEditingItem(null);
       await loadItems();
@@ -308,9 +323,14 @@ export default function WarrantyTrackingView() {
       location: item.location,
       end_date: normalizeDateInput(item.end_date) ?? "",
       note: item.note ?? "",
-      issuer: item.issuer ?? "",
+      certificate_issuer: item.certificate_issuer ?? item.issuer ?? "",
       renewal_owner: item.renewal_owner ?? "",
-      reminder_days: item.reminder_days != null ? String(item.reminder_days) : "30",
+      remind_days_before:
+        item.remind_days_before != null
+          ? String(item.remind_days_before)
+          : item.reminder_days != null
+            ? String(item.reminder_days)
+            : "30",
     });
   }, []);
 
@@ -330,9 +350,9 @@ export default function WarrantyTrackingView() {
           location: "",
           end_date: "",
           note: "",
-          issuer: "",
+          certificate_issuer: "",
           renewal_owner: "",
-          reminder_days: "30"
+          remind_days_before: "30"
         });
       }
     } catch (err) {
@@ -359,10 +379,10 @@ export default function WarrantyTrackingView() {
       { field: "name", headerName: "Ad", flex: 1.2 },
       { field: "location", headerName: "Lokasyon", flex: 1 },
       {
-        field: "issuer",
+        field: "certificate_issuer",
         headerName: "Sertifika Sağlayıcı",
         flex: 1,
-        valueGetter: (params) => params?.row?.issuer ?? "-",
+        valueGetter: (params) => params?.row?.certificate_issuer ?? "-",
       },
       {
         field: "renewal_owner",
@@ -415,7 +435,7 @@ export default function WarrantyTrackingView() {
             typeof row?.days_left === "number"
               ? row.days_left
               : calcDaysLeft(row?.end_date ?? null);
-          const reminderDays = row?.reminder_days ?? null;
+          const reminderDays = row?.remind_days_before ?? row?.reminder_days ?? null;
           const showReminder =
             typeof daysLeft === "number" &&
             typeof reminderDays === "number" &&
@@ -487,8 +507,8 @@ export default function WarrantyTrackingView() {
       <Grid container spacing={2}>
         {[
           { label: "Toplam", value: summary.total, color: "primary", filter: null },
-          { label: "Kritik (1-30)", value: summary.critical, color: "error", filter: "CRITICAL" as const },
-          { label: "Yaklaşıyor (31-60)", value: summary.upcoming, color: "warning", filter: "NEAR" as const },
+          { label: "Kritik", value: summary.critical, color: "error", filter: "CRITICAL" as const },
+          { label: "Yaklaşıyor", value: summary.upcoming, color: "warning", filter: "NEAR" as const },
           { label: "Süresi Geçti", value: summary.expired, color: "grey", filter: "EXPIRED" as const },
         ].map((item) => {
           const isSelected = selectedWarrantyFilter === item.filter;
@@ -504,7 +524,13 @@ export default function WarrantyTrackingView() {
               >
                 <CardActionArea
                   onClick={() =>
-                    setSelectedWarrantyFilter((prev) => (prev === item.filter ? null : item.filter))
+                    setSelectedWarrantyFilter((prev) => {
+                      const next = prev === item.filter ? null : item.filter;
+                      requestAnimationFrame(() => {
+                        tableRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                      });
+                      return next;
+                    })
                   }
                   sx={{ height: "100%" }}
                 >
@@ -528,7 +554,7 @@ export default function WarrantyTrackingView() {
       </Grid>
 
       <Grid container spacing={3} alignItems="flex-start">
-        <Grid item xs={12} lg={8}>
+        <Grid item xs={12} lg={8} ref={tableRef}>
           <Card variant="outlined">
             <CardContent sx={{ height: 560 }}>
               <Typography variant="h6" fontWeight={600} gutterBottom>
@@ -598,8 +624,10 @@ export default function WarrantyTrackingView() {
                 />
                 <TextField
                   label="Sertifika Sağlayıcı"
-                  value={form.issuer}
-                  onChange={(event) => setForm((prev) => ({ ...prev, issuer: event.target.value }))}
+                  value={form.certificate_issuer}
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, certificate_issuer: event.target.value }))
+                  }
                   placeholder={isDomainSsl ? "Örn. Let's Encrypt" : "Opsiyonel"}
                 />
                 <TextField
@@ -611,11 +639,11 @@ export default function WarrantyTrackingView() {
                   placeholder={isDomainSsl ? "Sorumlu kişi" : "Opsiyonel"}
                 />
                 <TextField
-                  label="Hatırlatma (gün)"
+                  label="Otomatik hatırlatma (gün)"
                   type="number"
-                  value={form.reminder_days}
+                  value={form.remind_days_before}
                   onChange={(event) =>
-                    setForm((prev) => ({ ...prev, reminder_days: event.target.value }))
+                    setForm((prev) => ({ ...prev, remind_days_before: event.target.value }))
                   }
                   inputProps={{ min: 0, step: 1 }}
                 />
@@ -646,9 +674,9 @@ export default function WarrantyTrackingView() {
                           location: "",
                           end_date: "",
                           note: "",
-                          issuer: "",
+                          certificate_issuer: "",
                           renewal_owner: "",
-                          reminder_days: "30"
+                          remind_days_before: "30"
                         });
                       }}
                     >

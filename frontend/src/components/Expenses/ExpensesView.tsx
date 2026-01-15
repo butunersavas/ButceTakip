@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Component, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import {
   Alert,
   Box,
@@ -110,6 +111,43 @@ type SavedGridView = {
   columnVisibilityModel: GridColumnVisibilityModel;
 };
 
+type ExpensesErrorBoundaryProps = {
+  children: ReactNode;
+};
+
+type ExpensesErrorBoundaryState = {
+  hasError: boolean;
+};
+
+class ExpensesErrorBoundary extends Component<
+  ExpensesErrorBoundaryProps,
+  ExpensesErrorBoundaryState
+> {
+  state: ExpensesErrorBoundaryState = {
+    hasError: false
+  };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error) {
+    console.error("Expenses page error", error);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <Alert severity="error">
+          Veri yüklenemedi. Lütfen sayfayı yenileyip tekrar deneyin.
+        </Alert>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("tr-TR", {
     style: "currency",
@@ -126,6 +164,7 @@ export default function ExpensesView() {
   const client = useAuthorizedClient();
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const tableRef = useRef<HTMLDivElement | null>(null);
 
   const currentUserId = user?.id ?? "anon";
   const GRID_VIEWS_KEY = `expenses-grid-views-${currentUserId}`;
@@ -398,23 +437,24 @@ export default function ExpensesView() {
     );
   }, [expenses]);
 
+  const safeExpenses = useMemo(
+    () => (Array.isArray(expenses) ? expenses : []),
+    [expenses]
+  );
+
   const outOfBudgetTotal = useMemo(() => {
-    return (
-      expenses?.reduce(
-        (sum, expense) => (expense.is_out_of_budget ? sum + expense.amount : sum),
-        0
-      ) ?? 0
+    return safeExpenses.reduce(
+      (sum, expense) => (expense.is_out_of_budget ? sum + expense.amount : sum),
+      0
     );
-  }, [expenses]);
+  }, [safeExpenses]);
 
   const cancelledTotal = useMemo(() => {
-    return (
-      expenses?.reduce(
-        (sum, expense) => (expense.status === "cancelled" ? sum + expense.amount : sum),
-        0
-      ) ?? 0
+    return safeExpenses.reduce(
+      (sum, expense) => (expense.status === "cancelled" ? sum + expense.amount : sum),
+      0
     );
-  }, [expenses]);
+  }, [safeExpenses]);
 
   const summaryFilterItems = useMemo<GridFilterModel["items"]>(() => {
     switch (selectedExpenseFilter) {
@@ -509,11 +549,11 @@ export default function ExpensesView() {
   );
 
   const rows = useMemo(() => {
-    return expenses?.map((expense) => ({
+    return safeExpenses.map((expense) => ({
       ...expense,
       budget_item_id: expense?.budget_item_id ?? null
-    })) ?? [];
-  }, [expenses]);
+    }));
+  }, [safeExpenses]);
 
   const baseColumns = useMemo<GridColDef[]>(() => {
     return [
@@ -773,14 +813,15 @@ export default function ExpensesView() {
   ] as const;
 
   return (
-    <Stack
-      spacing={3}
-      sx={{
-        width: "100%",
-        minWidth: 0,
-        maxWidth: "100%"
-      }}
-    >
+    <ExpensesErrorBoundary>
+      <Stack
+        spacing={3}
+        sx={{
+          width: "100%",
+          minWidth: 0,
+          maxWidth: "100%"
+        }}
+      >
       <Grid container spacing={2} sx={{ mb: 2 }}>
         {summaryCards.map((card) => {
           const isSelected = selectedExpenseFilter === card.key;
@@ -796,7 +837,13 @@ export default function ExpensesView() {
               >
                 <CardActionArea
                   onClick={() =>
-                    setSelectedExpenseFilter((prev) => (prev === card.key ? "ALL" : card.key))
+                    setSelectedExpenseFilter((prev) => {
+                      const next = prev === card.key ? "ALL" : card.key;
+                      requestAnimationFrame(() => {
+                        tableRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                      });
+                      return next;
+                    })
                   }
                   sx={{ height: "100%" }}
                 >
@@ -846,7 +893,7 @@ export default function ExpensesView() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card ref={tableRef}>
         <CardContent
           sx={{
             flexGrow: 1,
@@ -1273,6 +1320,7 @@ export default function ExpensesView() {
           </DialogActions>
         </form>
       </Dialog>
-    </Stack>
+      </Stack>
+    </ExpensesErrorBoundary>
   );
 }

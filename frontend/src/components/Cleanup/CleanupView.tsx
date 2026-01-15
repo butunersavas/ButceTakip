@@ -108,6 +108,26 @@ function CleaningToolsSection() {
   }, [scenarios]);
 
   useEffect(() => {
+    if (actionType !== "delete-scenario") return;
+    if (!scenarios?.length) {
+      setScenarioId("");
+      return;
+    }
+
+    const deletableScenario =
+      scenarios.find((scenario) => scenario.name?.trim().toLowerCase() !== "temel") ?? null;
+    setScenarioId((previous) => {
+      if (previous && scenarios.some((scenario) => scenario.id === previous)) {
+        const selectedScenario = scenarios.find((scenario) => scenario.id === previous);
+        if (selectedScenario?.name?.trim().toLowerCase() !== "temel") {
+          return previous;
+        }
+      }
+      return deletableScenario?.id ?? "";
+    });
+  }, [actionType, scenarios]);
+
+  useEffect(() => {
     if (budgetItems && budgetItems.length > 0) {
       setBudgetItemId((previous) => {
         if (previous && budgetItems.some((item) => item.id === previous)) {
@@ -131,6 +151,11 @@ function CleaningToolsSection() {
     const scenario = scenarios.find((item) => item.id === scenarioId);
     return scenario?.name?.trim().toLowerCase() === "temel";
   }, [scenarioId, scenarios]);
+
+  const hasDeletableScenario = useMemo(() => {
+    if (!scenarios) return false;
+    return scenarios.some((scenario) => scenario.name?.trim().toLowerCase() !== "temel");
+  }, [scenarios]);
 
   const cleanupMutation = useMutation({
     mutationFn: async () => {
@@ -337,7 +362,9 @@ function CleaningToolsSection() {
               disabled={!scenarios?.length}
               helperText={
                 actionType === "delete-scenario"
-                  ? "Silme işlemi yalnızca seçilen senaryoya uygulanır."
+                  ? hasDeletableScenario
+                    ? "Silme işlemi yalnızca seçilen senaryoya uygulanır."
+                    : "Temel dışında silinebilecek bir senaryo bulunamadı."
                   : "Temizlik işlemi sadece seçilen senaryoda uygulanır."
               }
             >

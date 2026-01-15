@@ -1,6 +1,9 @@
 from datetime import date, datetime
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, select
 
 from app.dependencies import get_admin_user, get_current_user, get_db_session
@@ -13,6 +16,7 @@ from app.schemas import (
 )
 
 router = APIRouter(prefix="/warranty-items", tags=["Warranty Items"])
+logger = logging.getLogger(__name__)
 
 
 def _calculate_days_left(end_date: date, today: date | None = None) -> int:
@@ -20,14 +24,22 @@ def _calculate_days_left(end_date: date, today: date | None = None) -> int:
     return (end_date - base_date).days
 
 
-def _calculate_status(days_left: int) -> str:
+def _calculate_status(days_left: int, remind_days_before: int) -> str:
     if days_left < 0:
         return "Süresi Geçti"
-    if days_left <= 30:
+    if days_left <= remind_days_before:
         return "Kritik"
-    if days_left <= 60:
+    if days_left <= remind_days_before + 30:
         return "Yaklaşıyor"
     return "Aktif"
+
+
+def _resolve_remind_days(item: WarrantyItem) -> int:
+    if isinstance(item.remind_days_before, int):
+        return item.remind_days_before
+    if isinstance(item.reminder_days, int):
+        return item.reminder_days
+    return 30
 
 
 def _user_display_name(user: User | None) -> str | None:
@@ -64,8 +76,13 @@ def _attach_status_fields(items: list[WarrantyItem]) -> None:
     today = date.today()
     for item in items:
         days_left = _calculate_days_left(item.end_date, today)
+        remind_days_before = _resolve_remind_days(item)
+        if item.remind_days_before is None:
+            item.remind_days_before = remind_days_before
+        if item.certificate_issuer is None and item.issuer:
+            item.certificate_issuer = item.issuer
         item.days_left = days_left
-        item.status = _calculate_status(days_left)
+        item.status = _calculate_status(days_left, remind_days_before)
 
 
 @router.get("", response_model=list[WarrantyItemRead])
@@ -89,16 +106,29 @@ def create_warranty_item(
     session: Session = Depends(get_db_session),
     current_user: User = Depends(get_admin_user),
 ) -> WarrantyItem:
+    item_data = item_in.dict()
+    if item_data.get("certificate_issuer") and not item_data.get("issuer"):
+        item_data["issuer"] = item_data["certificate_issuer"]
+    if item_data.get("remind_days_before") is not None and item_data.get("reminder_days") is None:
+        item_data["reminder_days"] = item_data["remind_days_before"]
     item = WarrantyItem(
-        **item_in.dict(),
+        **item_data,
         created_by_id=current_user.id,
         updated_by_id=current_user.id,
         created_by_user_id=current_user.id,
         updated_by_user_id=current_user.id,
     )
-    session.add(item)
-    session.commit()
-    session.refresh(item)
+    try:
+        session.add(item)
+        session.commit()
+        session.refresh(item)
+    except SQLAlchemyError:
+        logger.exception("Failed to create warranty item")
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Garanti kaydı oluşturulamadı.",
+        )
     _attach_user_names(session, [item])
     _attach_status_fields([item])
     return item
@@ -114,16 +144,29 @@ def update_warranty_item(
     item = session.get(WarrantyItem, item_id)
     if not item:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Warranty item not found")
-    for field, value in item_in.dict(exclude_unset=True).items():
+    update_data = item_in.dict(exclude_unset=True)
+    if update_data.get("certificate_issuer") and not update_data.get("issuer"):
+        update_data["issuer"] = update_data["certificate_issuer"]
+    if update_data.get("remind_days_before") is not None and update_data.get("reminder_days") is None:
+        update_data["reminder_days"] = update_data["remind_days_before"]
+    for field, value in update_data.items():
         setattr(item, field, value)
     if item.created_by_id is None:
         item.created_by_id = item.created_by_user_id
     item.updated_by_user_id = current_user.id
     item.updated_by_id = current_user.id
     item.updated_at = datetime.utcnow()
-    session.add(item)
-    session.commit()
-    session.refresh(item)
+    try:
+        session.add(item)
+        session.commit()
+        session.refresh(item)
+    except SQLAlchemyError:
+        logger.exception("Failed to update warranty item", extra={"item_id": item_id})
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Garanti kaydı güncellenemedi.",
+        )
     _attach_user_names(session, [item])
     _attach_status_fields([item])
     return item
@@ -142,8 +185,16 @@ def delete_warranty_item(
     item.updated_by_user_id = current_user.id
     item.updated_by_id = current_user.id
     item.updated_at = datetime.utcnow()
-    session.add(item)
-    session.commit()
+    try:
+        session.add(item)
+        session.commit()
+    except SQLAlchemyError:
+        logger.exception("Failed to delete warranty item", extra={"item_id": item_id})
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Garanti kaydı silinemedi.",
+        )
     return None
 
 
@@ -158,7 +209,8 @@ def list_critical_warranty_items(
     critical_items: list[WarrantyItemCriticalRead] = []
     for item in active_items:
         days_left = _calculate_days_left(item.end_date, today)
-        if 1 <= days_left <= 30:
+        remind_days_before = _resolve_remind_days(item)
+        if 1 <= days_left <= remind_days_before:
             critical_items.append(
                 WarrantyItemCriticalRead(
                     id=item.id,
@@ -167,9 +219,9 @@ def list_critical_warranty_items(
                     location=item.location,
                     end_date=item.end_date,
                     note=item.note,
-                    issuer=item.issuer,
+                    certificate_issuer=item.certificate_issuer or item.issuer,
                     renewal_owner=item.renewal_owner,
-                    reminder_days=item.reminder_days,
+                    remind_days_before=item.remind_days_before or item.reminder_days or 30,
                     is_active=item.is_active,
                     created_by_id=item.created_by_id,
                     updated_by_id=item.updated_by_id,
@@ -179,7 +231,7 @@ def list_critical_warranty_items(
                     updated_by_name=getattr(item, "updated_by_name", None),
                     created_by_username=getattr(item, "created_by_username", None),
                     updated_by_username=getattr(item, "updated_by_username", None),
-                    status=_calculate_status(days_left),
+                    status=_calculate_status(days_left, remind_days_before),
                     created_at=item.created_at,
                     updated_at=item.updated_at,
                     days_left=days_left,

@@ -135,6 +135,18 @@ def _apply_schema_upgrades() -> None:
         if "issuer" not in warranty_columns:
             with engine.begin() as connection:
                 connection.execute(text("ALTER TABLE warranty_items ADD COLUMN issuer TEXT"))
+        if "certificate_issuer" not in warranty_columns:
+            with engine.begin() as connection:
+                connection.execute(
+                    text("ALTER TABLE warranty_items ADD COLUMN certificate_issuer TEXT")
+                )
+                connection.execute(
+                    text(
+                        "UPDATE warranty_items "
+                        "SET certificate_issuer = issuer "
+                        "WHERE certificate_issuer IS NULL AND issuer IS NOT NULL"
+                    )
+                )
         if "renewal_owner" not in warranty_columns:
             with engine.begin() as connection:
                 connection.execute(text("ALTER TABLE warranty_items ADD COLUMN renewal_owner TEXT"))
@@ -142,6 +154,21 @@ def _apply_schema_upgrades() -> None:
             with engine.begin() as connection:
                 connection.execute(
                     text("ALTER TABLE warranty_items ADD COLUMN reminder_days INTEGER DEFAULT 30")
+                )
+        if "remind_days_before" not in warranty_columns:
+            with engine.begin() as connection:
+                connection.execute(
+                    text(
+                        "ALTER TABLE warranty_items "
+                        "ADD COLUMN remind_days_before INTEGER DEFAULT 30"
+                    )
+                )
+                connection.execute(
+                    text(
+                        "UPDATE warranty_items "
+                        "SET remind_days_before = reminder_days "
+                        "WHERE remind_days_before IS NULL AND reminder_days IS NOT NULL"
+                    )
                 )
         if "created_by_id" not in warranty_columns:
             with engine.begin() as connection:
