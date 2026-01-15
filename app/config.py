@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     algorithm: str = Field(default="HS256", env="ALGORITHM")
     access_token_expire_minutes: int = Field(default=60 * 24, env="ACCESS_TOKEN_EXPIRE_MINUTES")
     allowed_hosts: list[str] = Field(
-        default=["localhost", "127.0.0.1", "172.24.2.128"],
+        default=["localhost", "127.0.0.1", "0.0.0.0", "172.24.2.128"],
         env="ALLOWED_HOSTS",
     )
     cors_origins: list[str] = Field(
@@ -93,7 +93,7 @@ class Settings(BaseSettings):
 
     @validator("allowed_hosts", pre=True)
     def normalize_allowed_hosts(cls, value: str | list[str] | None) -> list[str]:  # noqa: D417
-        default_hosts = ["localhost", "127.0.0.1"]
+        default_hosts = ["localhost", "127.0.0.1", "0.0.0.0"]
         if value is None:
             return default_hosts
         if isinstance(value, list):

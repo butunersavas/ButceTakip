@@ -87,7 +87,7 @@ async def login_for_access_token(
                 payload = await request.json()
             except Exception:
                 raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Geçersiz JSON gövdesi.",
                 )
             try:
@@ -95,7 +95,7 @@ async def login_for_access_token(
             except ValidationError as exc:
                 logger.info("Login validation failed: %s", exc.errors())
                 raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Kullanıcı adı ve şifre zorunludur.",
                 )
         else:
@@ -111,14 +111,14 @@ async def login_for_access_token(
                 )
             except TypeError:
                 raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Kullanıcı adı ve şifre zorunludur.",
                 )
             try:
                 login_data = LoginRequest(username=form_data.username, password=form_data.password)
             except ValidationError:
                 raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Kullanıcı adı ve şifre zorunludur.",
                 )
 

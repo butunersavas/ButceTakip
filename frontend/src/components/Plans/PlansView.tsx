@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Button,
@@ -126,6 +126,21 @@ export default function PlansView() {
       return data;
     }
   });
+
+  useEffect(() => {
+    if (!scenarios?.length) return;
+    setScenarioId((previous) => {
+      if (previous && scenarios.some((scenario) => scenario.id === previous)) {
+        return previous;
+      }
+
+      const defaultScenario =
+        scenarios.find((scenario) => scenario.name?.trim().toLowerCase() === "temel") ||
+        scenarios.find((scenario) => scenario.year === year) ||
+        scenarios[0];
+      return defaultScenario?.id ?? null;
+    });
+  }, [scenarios, setScenarioId, year]);
 
   const { data: budgetItems } = useQuery<BudgetItem[]>({
     queryKey: ["budget-items"],
