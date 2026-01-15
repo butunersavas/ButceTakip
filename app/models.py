@@ -36,6 +36,10 @@ class User(TimestampMixin, SQLModel, table=True):
         back_populates="created_by_user",
         sa_relationship_kwargs={"foreign_keys": "[Expense.created_by_user_id]"},
     )
+    expenses_created_legacy: list["Expense"] = Relationship(
+        back_populates="created_by",
+        sa_relationship_kwargs={"foreign_keys": "[Expense.created_by_id]"},
+    )
     expenses_updated: list["Expense"] = Relationship(
         back_populates="updated_by_user",
         sa_relationship_kwargs={"foreign_keys": "[Expense.updated_by_user_id]"},
@@ -134,6 +138,10 @@ class Expense(TimestampMixin, SQLModel, table=True):
     created_by_user: Optional[User] = Relationship(
         back_populates="expenses_created",
         sa_relationship_kwargs={"foreign_keys": "[Expense.created_by_user_id]"},
+    )
+    created_by: Optional[User] = Relationship(
+        back_populates="expenses_created_legacy",
+        sa_relationship_kwargs={"foreign_keys": "[Expense.created_by_id]"},
     )
     updated_by_user: Optional[User] = Relationship(
         back_populates="expenses_updated",
