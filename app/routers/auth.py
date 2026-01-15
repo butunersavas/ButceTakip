@@ -1,4 +1,5 @@
 from datetime import timedelta
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
@@ -13,6 +14,7 @@ from app.utils.validators import validate_username
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 
 def authenticate_user(session: Session, username: str, password: str) -> User | None:
@@ -70,18 +72,27 @@ def login_for_access_token(
     form_data: OAuth2PasswordRequestForm = Depends(),
     session: Session = Depends(get_db_session),
 ) -> Token:
-    user = authenticate_user(session, form_data.username, form_data.password)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
-            headers={"WWW-Authenticate": "Bearer"},
+    try:
+        user = authenticate_user(session, form_data.username, form_data.password)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Kullanıcı adı veya şifre hatalı",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        access_token = create_access_token(
+            data={"sub": str(user.id), "is_admin": user.is_admin},
+            expires_delta=timedelta(minutes=settings.access_token_expire_minutes),
         )
-    access_token = create_access_token(
-        data={"sub": str(user.id), "is_admin": user.is_admin},
-        expires_delta=timedelta(minutes=settings.access_token_expire_minutes),
-    )
-    return Token(access_token=access_token)
+        return Token(access_token=access_token)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Token endpoint failed")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Sunucu hatası (auth/token). Loglara bakın.",
+        )
 
 
 @router.post("/change-password")
