@@ -1,3 +1,4 @@
+import json
 from functools import lru_cache
 from pydantic import BaseSettings, Field, validator
 
@@ -56,6 +57,30 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
+        case_sensitive = False
+
+        @classmethod
+        def parse_env_var(cls, field_name: str, raw_value: str):
+            if field_name in {"allowed_hosts", "cors_origins"}:
+                if raw_value is None:
+                    return []
+                s = str(raw_value).strip()
+                if not s:
+                    return []
+
+                try:
+                    v = json.loads(s)
+                    if isinstance(v, list):
+                        return v
+                except Exception:
+                    pass
+
+                return [p.strip() for p in s.split(",") if p.strip()]
+
+            try:
+                return json.loads(raw_value)
+            except Exception:
+                return raw_value
 
     @validator("secret_key")
     def normalize_secret_key(cls, value: str) -> str:  # noqa: D417
