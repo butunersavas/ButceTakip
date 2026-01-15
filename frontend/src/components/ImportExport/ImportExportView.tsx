@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Button,
@@ -11,6 +11,7 @@ import {
   TextField,
   Typography
 } from "@mui/material";
+import Autocomplete, { createFilterOptions } from "@mui/material/Autocomplete";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
 import DownloadIcon from "@mui/icons-material/Download";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -18,7 +19,7 @@ import * as XLSX from "xlsx";
 
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import usePersistentState from "../../hooks/usePersistentState";
-import { formatBudgetItemLabel } from "../../utils/budgetItem";
+import { formatBudgetItemLabel, stripBudgetCode } from "../../utils/budgetLabel";
 
 interface Scenario {
   id: number;
@@ -153,6 +154,15 @@ export default function ImportExportView() {
       return data;
     }
   });
+
+  const budgetFilterOptions = useMemo(
+    () =>
+      createFilterOptions<BudgetItem>({
+        stringify: (option) =>
+          `${option.code ?? ""} ${stripBudgetCode(option.name ?? "")} ${option.map_category ?? ""} ${option.map_attribute ?? ""}`
+      }),
+    []
+  );
 
   useEffect(() => {
     if (!scenarios?.length) return;
@@ -427,22 +437,17 @@ export default function ImportExportView() {
                     </TextField>
                   </Grid>
                   <Grid item xs={12}>
-                    <TextField
-                      select
-                      label="Bütçe Kalemi"
-                      value={budgetItemId ?? ""}
-                      onChange={(event) =>
-                        setBudgetItemId(event.target.value ? Number(event.target.value) : null)
-                      }
-                      fullWidth
-                    >
-                <MenuItem value="">Tümü</MenuItem>
-                {budgetItems?.map((item) => (
-                  <MenuItem key={item.id} value={item.id}>
-                    {formatBudgetItemLabel(item)}
-                  </MenuItem>
-                ))}
-                    </TextField>
+                    <Autocomplete
+                      options={budgetItems ?? []}
+                      value={budgetItems?.find((item) => item.id === budgetItemId) ?? null}
+                      onChange={(_, value) => setBudgetItemId(value?.id ?? null)}
+                      getOptionLabel={(option) => formatBudgetItemLabel(option) || "-"}
+                      filterOptions={budgetFilterOptions}
+                      isOptionEqualToValue={(option, value) => option.id === value.id}
+                      renderInput={(params) => (
+                        <TextField {...params} label="Bütçe Kalemi" placeholder="Tümü" fullWidth />
+                      )}
+                    />
                   </Grid>
                 </Grid>
                 <Grid container spacing={2}>

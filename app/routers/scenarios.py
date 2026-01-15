@@ -84,7 +84,7 @@ def delete_scenario(
 
     if scenario.name.strip().lower() == "temel":
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="Temel senaryosu silinemez.",
         )
 

@@ -34,6 +34,8 @@ type WarrantyItem = {
   is_active: boolean;
   created_by_name?: string | null;
   updated_by_name?: string | null;
+  created_by_username?: string | null;
+  updated_by_username?: string | null;
   days_left?: number | null;
   status_label?: string;
   status_key?: "expired" | "critical" | "approaching" | "ok" | "unknown";
@@ -67,7 +69,16 @@ const calcStatus = (daysLeft: number | null) => {
   if (daysLeft < 0) return { label: "Süresi Geçti", key: "expired" as const };
   if (daysLeft <= 30) return { label: "Kritik", key: "critical" as const };
   if (daysLeft <= 60) return { label: "Yaklaşıyor", key: "approaching" as const };
-  return { label: "Normal", key: "ok" as const };
+  return { label: "Aktif", key: "ok" as const };
+};
+
+const mapStatusKey = (status?: string | null) => {
+  const normalized = status?.toLowerCase?.() ?? "";
+  if (normalized.includes("süresi geçti")) return "expired" as const;
+  if (normalized.includes("kritik")) return "critical" as const;
+  if (normalized.includes("yaklaşıyor")) return "approaching" as const;
+  if (normalized.includes("aktif")) return "ok" as const;
+  return "unknown" as const;
 };
 
 const formatDate = (value: string | null | undefined) => {
@@ -111,8 +122,13 @@ const normalizeWarrantyRow = (row: any): WarrantyItem => {
     row?.uuid ??
     row?._id ??
     (serialKey ? `${serialKey}-${start ?? "nostart"}` : randomId);
-  const days_left = calcDaysLeft(end ?? null);
-  const status = calcStatus(days_left);
+  const days_left =
+    typeof row?.days_left === "number" ? row.days_left : calcDaysLeft(end ?? null);
+  const statusLabel = row?.status ?? row?.status_label ?? null;
+  const status =
+    typeof statusLabel === "string" && statusLabel.trim().length
+      ? { label: statusLabel, key: mapStatusKey(statusLabel) }
+      : calcStatus(days_left);
   return {
     ...row,
     id,
@@ -337,11 +353,22 @@ export default function WarrantyTrackingView() {
         valueGetter: (params) => params?.row?.status_label ?? "-",
       },
       {
-        field: "action_user",
-        headerName: "İşlem Yapan",
+        field: "created_by",
+        headerName: "Kaydı Giren",
         flex: 1,
         valueGetter: (params) =>
-          params?.row?.updated_by_name ?? params?.row?.created_by_name ?? "-",
+          params?.row?.created_by_username ??
+          params?.row?.created_by_name ??
+          "-",
+      },
+      {
+        field: "updated_by",
+        headerName: "Son Güncelleyen",
+        flex: 1,
+        valueGetter: (params) =>
+          params?.row?.updated_by_username ??
+          params?.row?.updated_by_name ??
+          "-",
       },
       { field: "note", headerName: "Not", flex: 1.2, sortable: false },
       {

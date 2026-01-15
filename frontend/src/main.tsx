@@ -28,6 +28,9 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
       <ThemeModeProvider>
         <GlobalStyles
           styles={{
+            "*, *::before, *::after": {
+              boxSizing: "border-box"
+            },
             html: {
               height: "100%",
               overflowY: "scroll",

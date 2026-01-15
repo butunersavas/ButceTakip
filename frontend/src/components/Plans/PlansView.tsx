@@ -114,6 +114,7 @@ export default function PlansView() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState<PlanEntry | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [formBudgetItemId, setFormBudgetItemId] = useState<number | null>(null);
 
   const { data: scenarios } = useQuery<Scenario[]>({
     queryKey: ["scenarios"],
@@ -194,12 +195,17 @@ export default function PlansView() {
 
   const handleEdit = useCallback((plan: PlanEntry) => {
     setEditingPlan(plan);
+    setFormBudgetItemId(plan.budget_item_id ?? null);
     setDialogOpen(true);
     setFormError(null);
   }, []);
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!formBudgetItemId) {
+      setFormError("Bütçe kalemi seçmelisiniz.");
+      return;
+    }
     const formData = new FormData(event.currentTarget);
     const payload: PlanMutationPayload = {
       id: editingPlan?.id ?? undefined,
@@ -207,7 +213,7 @@ export default function PlansView() {
       month: Number(formData.get("month")),
       amount: Number(formData.get("amount")),
       scenario_id: Number(formData.get("scenario_id")),
-      budget_item_id: Number(formData.get("budget_item_id"))
+      budget_item_id: formBudgetItemId
     };
 
     const departmentValue = (formData.get("department") || "").toString().trim();
@@ -484,7 +490,7 @@ export default function PlansView() {
     <Stack spacing={4}>
       <Card>
         <CardContent sx={{ py: 1.5, px: 2 }}>
-          <Grid container spacing={1.5} alignItems="center">
+          <Grid container spacing={1} alignItems="center">
             <Grid item xs={12} sm={6} md={2}>
               <TextField
                 label="Yıl"
@@ -621,6 +627,7 @@ export default function PlansView() {
                     setDepartmentFilter("");
                     setBudgetItemId(null);
                     setCapexOpex("");
+                    setFormBudgetItemId(null);
                     setTimeout(() => {
                       plansQuery.refetch();
                       aggregatesQuery.refetch();
@@ -765,19 +772,17 @@ export default function PlansView() {
                   </MenuItem>
                 ))}
               </TextField>
-              <TextField
-                select
-                label="Bütçe Kalemi"
-                name="budget_item_id"
-                defaultValue={editingPlan?.budget_item_id ?? budgetItemId ?? ""}
-                required
-              >
-                {budgetItems?.map((item) => (
-                  <MenuItem key={item.id} value={item.id}>
-                    {formatBudgetItemLabel(item) || "-"}
-                  </MenuItem>
-                ))}
-              </TextField>
+              <Autocomplete
+                options={budgetItems ?? []}
+                value={budgetItems?.find((item) => item.id === formBudgetItemId) ?? null}
+                onChange={(_, value) => setFormBudgetItemId(value?.id ?? null)}
+                getOptionLabel={(option) => formatBudgetItemLabel(option) || "-"}
+                filterOptions={budgetFilterOptions}
+                isOptionEqualToValue={(option, value) => option.id === value.id}
+                renderInput={(params) => (
+                  <TextField {...params} label="Bütçe Kalemi" required fullWidth />
+                )}
+              />
               <TextField
                 label="Departman"
                 name="department"

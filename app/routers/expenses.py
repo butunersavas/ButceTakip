@@ -76,6 +76,8 @@ def _attach_user_names(session: Session, expenses: list[Expense]) -> None:
         updated_id = expense.updated_by_user_id or expense.updated_by_id
         expense.created_by_name = user_map.get(created_id) if created_id else None
         expense.updated_by_name = user_map.get(updated_id) if updated_id else None
+        expense.created_by_username = expense.created_by_name
+        expense.updated_by_username = expense.updated_by_name
 
 
 @router.get("/", response_model=list[ExpenseRead])

@@ -17,13 +17,14 @@ import {
   TextField,
   Typography
 } from "@mui/material";
+import Autocomplete, { createFilterOptions } from "@mui/material/Autocomplete";
 import CleaningServicesIcon from "@mui/icons-material/CleaningServicesOutlined";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import { useAuth } from "../../context/AuthContext";
-import { formatBudgetItemLabel } from "../../utils/budgetLabel";
+import { formatBudgetItemLabel, stripBudgetCode } from "../../utils/budgetLabel";
 
 interface Scenario {
   id: number;
@@ -68,6 +69,14 @@ function CleaningToolsSection() {
   const [operationMessage, setOperationMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [actionType, setActionType] = useState<"cleanup" | "delete-scenario">("cleanup");
+
+  const budgetFilterOptions = useMemo(
+    () =>
+      createFilterOptions<BudgetItem>({
+        stringify: (option) => `${option.code ?? ""} ${stripBudgetCode(option.name ?? "")}`
+      }),
+    []
+  );
 
   const { data: scenarios } = useQuery<Scenario[]>({
     queryKey: ["scenarios"],
@@ -345,26 +354,24 @@ function CleaningToolsSection() {
             )}
             {actionType === "cleanup" ? (
               <>
-                <TextField
-                  select
-                  label="Bütçe Kalemi"
-                  value={budgetItemId}
-                  onChange={(event) => {
-                    const value = event.target.value;
-                    setBudgetItemId(value === "" ? "" : Number(value));
-                  }}
-                  fullWidth
+                <Autocomplete
+                  options={budgetItems ?? []}
+                  value={budgetItems?.find((item) => item.id === budgetItemId) ?? null}
+                  onChange={(_, value) => setBudgetItemId(value?.id ?? "")}
+                  getOptionLabel={(option) => formatBudgetItemLabel(option) || "-"}
+                  filterOptions={budgetFilterOptions}
+                  isOptionEqualToValue={(option, value) => option.id === value.id}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Bütçe Kalemi"
+                      fullWidth
+                      helperText="İsteğe bağlı olarak belirli bir bütçe kalemine göre filtreleyin."
+                      placeholder="Tüm bütçe kalemleri"
+                    />
+                  )}
                   disabled={!budgetItems?.length}
-                  helperText="İsteğe bağlı olarak belirli bir bütçe kalemine göre filtreleyin."
-                >
-                  {!budgetItems?.length && <MenuItem value="">Bütçe kalemi bulunamadı</MenuItem>}
-                  {budgetItems?.map((item) => (
-                    <MenuItem key={item.id} value={item.id}>
-                      {formatBudgetItemLabel(item)}
-                    </MenuItem>
-                  ))}
-                  <MenuItem value="">Tüm bütçe kalemleri</MenuItem>
-                </TextField>
+                />
                 <FormControlLabel
                   control={
                     <Checkbox
