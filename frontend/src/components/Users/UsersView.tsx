@@ -254,12 +254,13 @@ export default function UsersView() {
                 </Box>
               ) : (
                 <DataGrid
-                  rows={users}
+                  rows={users ?? []}
                   columns={columns}
                   autoHeight
                   disableRowSelectionOnClick
                   pageSizeOptions={[10, 25, 50]}
                   initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
+                  getRowId={(row) => row.id}
                 />
               )}
             </CardContent>

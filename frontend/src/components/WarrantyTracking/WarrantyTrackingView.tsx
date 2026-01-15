@@ -31,6 +31,12 @@ type WarrantyItem = {
   start_date?: string | null;
   note?: string | null;
   is_active: boolean;
+  created_by_name?: string | null;
+  updated_by_name?: string | null;
+  days_left?: number | null;
+  status_label?: string;
+  status_key?: "expired" | "critical" | "approaching" | "ok" | "unknown";
+  type_label?: string;
 };
 
 type WarrantyItemForm = {
@@ -46,49 +52,25 @@ const typeOptions: Array<{ value: WarrantyItemType; label: string }> = [
   { value: "SERVICE", label: "Bakım/Hizmet" },
 ];
 
-const dayInMs = 1000 * 60 * 60 * 24;
-
-const toLocalDate = (value: string) => {
-  const [year, month, day] = value.split("-").map(Number);
-  return new Date(year, month - 1, day);
+const calcDaysLeft = (endDate: string | null): number | null => {
+  if (!endDate) return null;
+  const end = new Date(endDate + "T00:00:00");
+  const now = new Date();
+  const ms = end.getTime() - now.getTime();
+  return Math.ceil(ms / (1000 * 60 * 60 * 24));
 };
 
-const getDaysLeft = (endDate: string | null | undefined) => {
-  if (!endDate) return 0;
-  const end = toLocalDate(endDate);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return Math.floor((end.getTime() - today.getTime()) / dayInMs);
-};
-
-const getStatusLabel = (daysLeft: number) => {
-  if (daysLeft <= 0) return "Süresi Geçti";
-  if (daysLeft <= 30) return "Kritik";
-  if (daysLeft <= 60) return "Yaklaşıyor";
-  return "Normal";
-};
-
-const getStatusChipProps = (daysLeft: number) => {
-  if (daysLeft <= 0) {
-    return {
-      sx: {
-        bgcolor: (theme: any) => (theme.palette.mode === "dark" ? "grey.700" : "grey.300"),
-        color: "text.primary",
-      },
-    };
-  }
-  if (daysLeft <= 30) {
-    return { color: "error" as const };
-  }
-  if (daysLeft <= 60) {
-    return { color: "warning" as const };
-  }
-  return { color: "success" as const };
+const calcStatus = (daysLeft: number | null) => {
+  if (daysLeft === null) return { label: "-", key: "unknown" as const };
+  if (daysLeft < 0) return { label: "Süresi Geçti", key: "expired" as const };
+  if (daysLeft <= 30) return { label: "Kritik", key: "critical" as const };
+  if (daysLeft <= 60) return { label: "Yaklaşıyor", key: "approaching" as const };
+  return { label: "Aktif", key: "ok" as const };
 };
 
 const formatDate = (value: string | null | undefined) => {
   if (!value) return "-";
-  const date = toLocalDate(value);
+  const date = new Date(value + "T00:00:00");
   return new Intl.DateTimeFormat("tr-TR").format(date);
 };
 
@@ -98,14 +80,29 @@ const normalizeWarrantyRow = (row: any): WarrantyItem => {
   const serialKey = row?.serial_no ?? row?.serial ?? row?.asset_tag;
   const randomId =
     (typeof globalThis !== "undefined" ? globalThis.crypto?.randomUUID?.() : undefined) ?? `${Math.random()}`;
-  const id = row?.id ?? row?.warranty_id ?? row?.uuid ?? row?._id ?? (serialKey ? `${serialKey}-${start ?? "nostart"}` : randomId);
-
+  const id =
+    row?.id ??
+    row?.warranty_id ??
+    row?.uuid ??
+    row?._id ??
+    (serialKey ? `${serialKey}-${start ?? "nostart"}` : randomId);
+  const days_left = calcDaysLeft(end ?? null);
+  const status = calcStatus(days_left);
   return {
     ...row,
     id,
     type: row?.type ?? row?.device_type ?? row?.asset_type ?? "",
     start_date: start,
     end_date: end,
+    days_left,
+    status_label: status.label,
+    status_key: status.key,
+    type_label:
+      row?.type === "DEVICE"
+        ? "Cihaz"
+        : row?.type === "SERVICE"
+          ? "Bakım/Hizmet"
+          : row?.type ?? "-",
   };
 };
 
@@ -158,8 +155,11 @@ export default function WarrantyTrackingView() {
       expired: 0,
     };
     items.forEach((item) => {
-      const daysLeft = getDaysLeft(item.end_date);
-      if (daysLeft <= 0) {
+      const daysLeft = item.days_left ?? calcDaysLeft(item.end_date);
+      if (daysLeft === null) {
+        return;
+      }
+      if (daysLeft < 0) {
         totals.expired += 1;
       } else if (daysLeft <= 30) {
         totals.critical += 1;
@@ -256,12 +256,7 @@ export default function WarrantyTrackingView() {
         field: "type",
         headerName: "Tip",
         flex: 0.7,
-        valueGetter: (params) => {
-          const type = params?.row?.type;
-          if (type === "DEVICE") return "Cihaz";
-          if (type === "SERVICE") return "Bakım/Hizmet";
-          return "";
-        },
+        valueGetter: (params) => params?.row?.type_label ?? "-",
       },
       { field: "name", headerName: "Ad", flex: 1.2 },
       { field: "location", headerName: "Lokasyon", flex: 1 },
@@ -269,7 +264,7 @@ export default function WarrantyTrackingView() {
         field: "end_date",
         headerName: "Bitiş Tarihi",
         flex: 0.9,
-        valueGetter: (params) => formatDate(params?.row?.end_date ?? params?.row?.endDate ?? null),
+        valueGetter: (params) => formatDate(params?.row?.end_date ?? null),
       },
       {
         field: "days_left",
@@ -277,9 +272,26 @@ export default function WarrantyTrackingView() {
         flex: 0.8,
         sortable: false,
         renderCell: (params) => {
-          const daysLeft = getDaysLeft(params?.row?.end_date ?? params?.row?.endDate ?? null);
-          const chipProps = getStatusChipProps(daysLeft);
-          return <Chip size="small" {...chipProps} label={`${daysLeft} gün`} />;
+          const daysLeft = params?.row?.days_left ?? null;
+          const statusKey = params?.row?.status_key ?? "unknown";
+          const chipProps =
+            statusKey === "expired"
+              ? {
+                  sx: {
+                    bgcolor: (theme: any) =>
+                      theme.palette.mode === "dark" ? "grey.700" : "grey.300",
+                    color: "text.primary",
+                  },
+                }
+              : statusKey === "critical"
+                ? { color: "error" as const }
+                : statusKey === "approaching"
+                  ? { color: "warning" as const }
+                  : statusKey === "ok"
+                    ? { color: "success" as const }
+                    : { color: "default" as const };
+          const label = daysLeft === null ? "-" : `${daysLeft} gün`;
+          return <Chip size="small" {...chipProps} label={label} />;
         },
       },
       {
@@ -287,8 +299,14 @@ export default function WarrantyTrackingView() {
         headerName: "Durum",
         flex: 0.8,
         sortable: false,
+        valueGetter: (params) => params?.row?.status_label ?? "-",
+      },
+      {
+        field: "action_user",
+        headerName: "İşlem Yapan",
+        flex: 1,
         valueGetter: (params) =>
-          getStatusLabel(getDaysLeft(params?.row?.end_date ?? params?.row?.endDate ?? null)),
+          params?.row?.updated_by_name ?? params?.row?.created_by_name ?? "-",
       },
       { field: "note", headerName: "Not", flex: 1.2, sortable: false },
       {

@@ -4,7 +4,7 @@ from typing import Iterable
 
 from sqlmodel import Session, func, select
 
-from app.models import Expense, ExpenseStatus, PlanEntry
+from app.models import BudgetItem, Expense, ExpenseStatus, PlanEntry
 
 
 @dataclass
@@ -38,8 +38,13 @@ def compute_monthly_summary(
     budget_item_id: int | None = None,
     month: int | None = None,
     department: str | None = None,
+    capex_opex: str | None = None,
 ) -> list[MonthlyAggregate]:
     plan_query = select(PlanEntry.month, func.sum(PlanEntry.amount)).where(PlanEntry.year == year)
+    if capex_opex in {"capex", "opex"}:
+        plan_query = plan_query.join(BudgetItem, BudgetItem.id == PlanEntry.budget_item_id).where(
+            func.lower(BudgetItem.map_category) == capex_opex
+        )
     if scenario_id is not None:
         plan_query = plan_query.where(PlanEntry.scenario_id == scenario_id)
     if budget_item_id is not None:
@@ -58,6 +63,10 @@ def compute_monthly_summary(
         .where(Expense.status == ExpenseStatus.RECORDED)
         .where(Expense.is_out_of_budget.is_(False))
     )
+    if capex_opex in {"capex", "opex"}:
+        expense_query = expense_query.join(
+            BudgetItem, BudgetItem.id == Expense.budget_item_id
+        ).where(func.lower(BudgetItem.map_category) == capex_opex)
     if scenario_id is not None:
         expense_query = expense_query.where(Expense.scenario_id == scenario_id)
     if budget_item_id is not None:
@@ -94,8 +103,11 @@ def compute_quarterly_summary(
     scenario_id: int | None = None,
     budget_item_id: int | None = None,
     department: str | None = None,
+    capex_opex: str | None = None,
 ) -> list[QuarterlyAggregate]:
-    monthly = compute_monthly_summary(session, year, scenario_id, budget_item_id, None, department)
+    monthly = compute_monthly_summary(
+        session, year, scenario_id, budget_item_id, None, department, capex_opex
+    )
     planned_map = defaultdict(float, {item.month: item.planned for item in monthly})
     actual_map = defaultdict(float, {item.month: item.actual for item in monthly})
 
@@ -105,6 +117,10 @@ def compute_quarterly_summary(
         .where(Expense.is_out_of_budget.is_(True))
         .where(Expense.status == ExpenseStatus.RECORDED)
     )
+    if capex_opex in {"capex", "opex"}:
+        out_of_budget_query = out_of_budget_query.join(
+            BudgetItem, BudgetItem.id == Expense.budget_item_id
+        ).where(func.lower(BudgetItem.map_category) == capex_opex)
     if scenario_id is not None:
         out_of_budget_query = out_of_budget_query.where(Expense.scenario_id == scenario_id)
     if budget_item_id is not None:
@@ -127,6 +143,10 @@ def compute_quarterly_summary(
         .where(func.extract("year", Expense.expense_date) == year)
         .where(Expense.status == ExpenseStatus.CANCELLED)
     )
+    if capex_opex in {"capex", "opex"}:
+        cancelled_query = cancelled_query.join(
+            BudgetItem, BudgetItem.id == Expense.budget_item_id
+        ).where(func.lower(BudgetItem.map_category) == capex_opex)
     if scenario_id is not None:
         cancelled_query = cancelled_query.where(Expense.scenario_id == scenario_id)
     if budget_item_id is not None:

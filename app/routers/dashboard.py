@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlmodel import Session, func, select
+from sqlalchemy import func
+from sqlmodel import Session, select
 
 from app.dependencies import get_current_user, get_db_session
 from app.models import BudgetItem, Expense, ExpenseStatus, PlanEntry
@@ -15,6 +16,15 @@ from app.services.analytics import compute_monthly_summary, totalize
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
 
+def _normalize_capex_opex(value: str | None) -> str | None:
+    if not value:
+        return None
+    normalized = value.strip().lower()
+    if normalized in {"capex", "opex"}:
+        return normalized
+    return None
+
+
 @router.get("/", response_model=DashboardResponse)
 def get_dashboard(
     year: int = Query(..., description="Year to summarize"),
@@ -22,12 +32,16 @@ def get_dashboard(
     month: int | None = Query(default=None),
     budget_item_id: int | None = Query(default=None),
     department: str | None = Query(default=None),
+    capex_opex: str | None = Query(default=None),
     session: Session = Depends(get_db_session),
     _ = Depends(get_current_user),
 ) -> DashboardResponse:
     if year is None:
         raise HTTPException(status_code=400, detail="Year is required")
-    monthly = compute_monthly_summary(session, year, scenario_id, budget_item_id, month, department)
+    capex_filter = _normalize_capex_opex(capex_opex)
+    monthly = compute_monthly_summary(
+        session, year, scenario_id, budget_item_id, month, department, capex_filter
+    )
     total_plan, total_actual = totalize(monthly)
     # Remaining budget should never go below zero – once there is an overrun we
     # already report that separately via ``total_overrun``.
@@ -58,11 +72,17 @@ def _budget_item_aggregates(
     year: int,
     month: int | None = None,
     department: str | None = None,
+    capex_opex: str | None = None,
 ):
     plan_query = select(
         PlanEntry.budget_item_id,
         func.sum(PlanEntry.amount).label("plan_total"),
     ).where(PlanEntry.year == year)
+
+    if capex_opex in {"capex", "opex"}:
+        plan_query = plan_query.join(
+            BudgetItem, BudgetItem.id == PlanEntry.budget_item_id
+        ).where(func.lower(BudgetItem.map_category) == capex_opex)
 
     if department is not None:
         plan_query = plan_query.where(PlanEntry.department == department)
@@ -81,6 +101,11 @@ def _budget_item_aggregates(
         .where(Expense.status == ExpenseStatus.RECORDED)
         .where(Expense.is_out_of_budget.is_(False))
     )
+
+    if capex_opex in {"capex", "opex"}:
+        expense_query = expense_query.join(
+            BudgetItem, BudgetItem.id == Expense.budget_item_id
+        ).where(func.lower(BudgetItem.map_category) == capex_opex)
 
     if department is not None:
         department_budget_items_query = (
@@ -117,10 +142,13 @@ def get_risky_budget_items(
     year: int,
     month: int | None = None,
     department: str | None = Query(default=None),
+    capex_opex: str | None = Query(default=None),
     session: Session = Depends(get_db_session),
     _ = Depends(get_current_user),
 ) -> list[RiskyItem]:
-    rows = _budget_item_aggregates(session, year, month, department)
+    rows = _budget_item_aggregates(
+        session, year, month, department, _normalize_capex_opex(capex_opex)
+    )
     items: list[RiskyItem] = []
 
     for row in rows:
@@ -151,10 +179,13 @@ def get_no_spend_items(
     year: int,
     month: int | None = None,
     department: str | None = Query(default=None),
+    capex_opex: str | None = Query(default=None),
     session: Session = Depends(get_db_session),
     _ = Depends(get_current_user),
 ) -> list[NoSpendItem]:
-    rows = _budget_item_aggregates(session, year, month, department)
+    rows = _budget_item_aggregates(
+        session, year, month, department, _normalize_capex_opex(capex_opex)
+    )
     items: list[NoSpendItem] = []
 
     for row in rows:

@@ -105,6 +105,8 @@ class Expense(TimestampMixin, SQLModel, table=True):
     status: ExpenseStatus = Field(default=ExpenseStatus.RECORDED, nullable=False)
     is_out_of_budget: bool = Field(default=False, nullable=False)
     created_by_id: Optional[int] = Field(default=None, foreign_key="users.id")
+    created_by_user_id: Optional[int] = Field(default=None, foreign_key="users.id")
+    updated_by_user_id: Optional[int] = Field(default=None, foreign_key="users.id")
     client_hostname: Optional[str] = Field(default=None, nullable=True)
     kaydi_giren_kullanici: Optional[str] = Field(default=None, nullable=True)
 
@@ -123,3 +125,5 @@ class WarrantyItem(TimestampMixin, SQLModel, table=True):
     end_date: date = Field(nullable=False)
     note: Optional[str] = Field(default=None)
     is_active: bool = Field(default=True, nullable=False)
+    created_by_user_id: Optional[int] = Field(default=None, foreign_key="users.id")
+    updated_by_user_id: Optional[int] = Field(default=None, foreign_key="users.id")

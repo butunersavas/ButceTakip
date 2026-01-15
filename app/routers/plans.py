@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func
 from sqlmodel import Session, select
 
 from app.dependencies import get_admin_user, get_current_user, get_db_session
@@ -10,6 +11,15 @@ from app.schemas import PlanAggregateRead, PlanEntryCreate, PlanEntryRead, PlanE
 router = APIRouter(prefix="/plans", tags=["Plans"])
 
 
+def _normalize_capex_opex(value: str | None) -> str | None:
+    if not value:
+        return None
+    normalized = value.strip().lower()
+    if normalized in {"capex", "opex"}:
+        return normalized
+    return None
+
+
 @router.get("/", response_model=list[PlanEntryRead])
 def list_plans(
     year: int | None = None,
@@ -17,10 +27,16 @@ def list_plans(
     budget_item_id: int | None = None,
     month: int | None = Query(default=None),
     department: str | None = Query(default=None),
+    capex_opex: str | None = Query(default=None),
     session: Session = Depends(get_db_session),
     _: User = Depends(get_current_user),
 ) -> list[PlanEntry]:
     query = select(PlanEntry)
+    capex_filter = _normalize_capex_opex(capex_opex)
+    if capex_filter:
+        query = query.join(BudgetItem, BudgetItem.id == PlanEntry.budget_item_id).where(
+            func.lower(BudgetItem.map_category) == capex_filter
+        )
     if year is not None:
         query = query.where(PlanEntry.year == year)
     if scenario_id is not None:
@@ -38,6 +54,7 @@ def list_plans(
 def aggregate_plans(
     year: int = Query(...),
     scenario_id: int | None = None,
+    capex_opex: str | None = Query(default=None),
     session: Session = Depends(get_db_session),
     _: User = Depends(get_current_user),
 ):
@@ -45,6 +62,11 @@ def aggregate_plans(
     query = query.where(PlanEntry.year == year)
     if scenario_id is not None:
         query = query.where(PlanEntry.scenario_id == scenario_id)
+    capex_filter = _normalize_capex_opex(capex_opex)
+    if capex_filter:
+        query = query.join(BudgetItem, BudgetItem.id == PlanEntry.budget_item_id).where(
+            func.lower(BudgetItem.map_category) == capex_filter
+        )
     plans = session.exec(query).all()
     aggregates: dict[tuple[int, int], float] = {}
     for plan in plans:

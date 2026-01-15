@@ -64,18 +64,19 @@ class Settings(BaseSettings):
             if field_name in {"allowed_hosts", "cors_origins"}:
                 if raw_value is None:
                     return []
-                s = str(raw_value).strip()
-                if not s:
+
+                raw_text = str(raw_value).strip()
+                if not raw_text:
                     return []
 
                 try:
-                    v = json.loads(s)
-                    if isinstance(v, list):
-                        return v
+                    parsed = json.loads(raw_text)
+                    if isinstance(parsed, list):
+                        return parsed
                 except Exception:
                     pass
 
-                return [p.strip() for p in s.split(",") if p.strip()]
+                return [item.strip() for item in raw_text.split(",") if item.strip()]
 
             try:
                 return json.loads(raw_value)
