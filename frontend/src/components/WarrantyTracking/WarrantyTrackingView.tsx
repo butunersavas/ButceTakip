@@ -23,11 +23,12 @@ import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 type WarrantyItemType = "DEVICE" | "SERVICE";
 
 type WarrantyItem = {
-  id: number;
-  type: WarrantyItemType;
+  id: number | string;
+  type: WarrantyItemType | "";
   name: string;
   location: string;
-  end_date: string;
+  end_date: string | null;
+  start_date?: string | null;
   note?: string | null;
   is_active: boolean;
 };
@@ -52,7 +53,7 @@ const toLocalDate = (value: string) => {
   return new Date(year, month - 1, day);
 };
 
-const getDaysLeft = (endDate: string) => {
+const getDaysLeft = (endDate: string | null | undefined) => {
   if (!endDate) return 0;
   const end = toLocalDate(endDate);
   const today = new Date();
@@ -85,10 +86,27 @@ const getStatusChipProps = (daysLeft: number) => {
   return { color: "success" as const };
 };
 
-const formatDate = (value: string) => {
+const formatDate = (value: string | null | undefined) => {
   if (!value) return "-";
   const date = toLocalDate(value);
   return new Intl.DateTimeFormat("tr-TR").format(date);
+};
+
+const normalizeWarrantyRow = (row: any): WarrantyItem => {
+  const start = row?.start_date ?? row?.startDate ?? null;
+  const end = row?.end_date ?? row?.endDate ?? null;
+  const serialKey = row?.serial_no ?? row?.serial ?? row?.asset_tag;
+  const randomId =
+    (typeof globalThis !== "undefined" ? globalThis.crypto?.randomUUID?.() : undefined) ?? `${Math.random()}`;
+  const id = row?.id ?? row?.warranty_id ?? row?.uuid ?? row?._id ?? (serialKey ? `${serialKey}-${start ?? "nostart"}` : randomId);
+
+  return {
+    ...row,
+    id,
+    type: row?.type ?? row?.device_type ?? row?.asset_type ?? "",
+    start_date: start,
+    end_date: end,
+  };
 };
 
 export default function WarrantyTrackingView() {
@@ -111,8 +129,10 @@ export default function WarrantyTrackingView() {
     setLoading(true);
     setError(null);
     try {
-      const { data } = await client.get<WarrantyItem[]>("/warranty-items");
-      setItems(data);
+      const { data } = await client.get("/warranty-items");
+      const raw = Array.isArray(data) ? data : (data as { items?: WarrantyItem[] } | null)?.items ?? [];
+      const normalized = raw.filter(Boolean).map(normalizeWarrantyRow);
+      setItems(normalized);
     } catch (err) {
       console.error(err);
       if (axios.isAxiosError(err)) {
@@ -197,10 +217,10 @@ export default function WarrantyTrackingView() {
   const handleEdit = useCallback((item: WarrantyItem) => {
     setEditingItem(item);
     setForm({
-      type: item.type,
+      type: item.type || "DEVICE",
       name: item.name,
       location: item.location,
-      end_date: item.end_date,
+      end_date: item.end_date ?? "",
       note: item.note ?? "",
     });
   }, []);
@@ -236,7 +256,12 @@ export default function WarrantyTrackingView() {
         field: "type",
         headerName: "Tip",
         flex: 0.7,
-        valueGetter: (params) => (params.row.type === "DEVICE" ? "Cihaz" : "Bakım/Hizmet"),
+        valueGetter: (params) => {
+          const type = params?.row?.type;
+          if (type === "DEVICE") return "Cihaz";
+          if (type === "SERVICE") return "Bakım/Hizmet";
+          return "";
+        },
       },
       { field: "name", headerName: "Ad", flex: 1.2 },
       { field: "location", headerName: "Lokasyon", flex: 1 },
@@ -244,7 +269,7 @@ export default function WarrantyTrackingView() {
         field: "end_date",
         headerName: "Bitiş Tarihi",
         flex: 0.9,
-        valueGetter: (params) => formatDate(params.row.end_date),
+        valueGetter: (params) => formatDate(params?.row?.end_date ?? params?.row?.endDate ?? null),
       },
       {
         field: "days_left",
@@ -252,7 +277,7 @@ export default function WarrantyTrackingView() {
         flex: 0.8,
         sortable: false,
         renderCell: (params) => {
-          const daysLeft = getDaysLeft(params.row.end_date);
+          const daysLeft = getDaysLeft(params?.row?.end_date ?? params?.row?.endDate ?? null);
           const chipProps = getStatusChipProps(daysLeft);
           return <Chip size="small" {...chipProps} label={`${daysLeft} gün`} />;
         },
@@ -262,7 +287,8 @@ export default function WarrantyTrackingView() {
         headerName: "Durum",
         flex: 0.8,
         sortable: false,
-        valueGetter: (params) => getStatusLabel(getDaysLeft(params.row.end_date)),
+        valueGetter: (params) =>
+          getStatusLabel(getDaysLeft(params?.row?.end_date ?? params?.row?.endDate ?? null)),
       },
       { field: "note", headerName: "Not", flex: 1.2, sortable: false },
       {
@@ -270,16 +296,19 @@ export default function WarrantyTrackingView() {
         headerName: "İşlemler",
         flex: 0.7,
         sortable: false,
-        renderCell: (params) => (
-          <Stack direction="row" spacing={1}>
-            <IconButton size="small" onClick={() => handleEdit(params.row)}>
-              <EditOutlinedIcon fontSize="small" />
-            </IconButton>
-            <IconButton size="small" color="error" onClick={() => handleDelete(params.row)}>
-              <DeleteOutlineOutlinedIcon fontSize="small" />
-            </IconButton>
-          </Stack>
-        ),
+        renderCell: (params) => {
+          if (!params?.row) return null;
+          return (
+            <Stack direction="row" spacing={1}>
+              <IconButton size="small" onClick={() => handleEdit(params.row)}>
+                <EditOutlinedIcon fontSize="small" />
+              </IconButton>
+              <IconButton size="small" color="error" onClick={() => handleDelete(params.row)}>
+                <DeleteOutlineOutlinedIcon fontSize="small" />
+              </IconButton>
+            </Stack>
+          );
+        },
       },
     ],
     [handleDelete, handleEdit]
@@ -325,16 +354,21 @@ export default function WarrantyTrackingView() {
               <Typography variant="h6" fontWeight={600} gutterBottom>
                 Garanti Kayıtları
               </Typography>
-              <DataGrid
-                rows={items}
-                columns={columns}
-                loading={loading}
-                disableRowSelectionOnClick
-                autoHeight={false}
-                pageSizeOptions={[5, 10, 20]}
-                initialState={{ pagination: { paginationModel: { pageSize: 10, page: 0 } } }}
-                sx={{ border: "none" }}
-              />
+              {(items ?? []).length === 0 ? (
+                <Alert severity="info">Henüz garanti kaydı yok.</Alert>
+              ) : (
+                <DataGrid
+                  rows={items ?? []}
+                  getRowId={(row) => row?.id}
+                  columns={columns}
+                  loading={loading}
+                  disableRowSelectionOnClick
+                  autoHeight={false}
+                  pageSizeOptions={[5, 10, 20]}
+                  initialState={{ pagination: { paginationModel: { pageSize: 10, page: 0 } } }}
+                  sx={{ border: "none" }}
+                />
+              )}
             </CardContent>
           </Card>
         </Grid>
