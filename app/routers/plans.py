@@ -32,7 +32,7 @@ def list_plans(
     capex_opex: str | None = Query(default=None),
     session: Session = Depends(get_db_session),
     _: User = Depends(get_current_user),
-) -> list[PlanEntry]:
+) -> list[PlanEntryRead]:
     query = select(PlanEntry).options(
         selectinload(PlanEntry.scenario),
         selectinload(PlanEntry.budget_item),
@@ -64,15 +64,18 @@ def list_plans(
         for plan in plans:
             if not plan.budget_item and plan.budget_code:
                 plan.budget_item = fallback_map.get(plan.budget_code)
+    results: list[PlanEntryRead] = []
     for plan in plans:
         budget = plan.budget_item
+        read_item = PlanEntryRead.from_orm(plan)
         if budget:
-            plan.capex_opex = budget.map_category.title() if budget.map_category else None
-            plan.asset_type = budget.map_attribute
-            plan.budget_item_name = budget.name
+            read_item.capex_opex = budget.map_category.title() if budget.map_category else None
+            read_item.asset_type = budget.map_attribute
+            read_item.budget_item_name = budget.name
         if plan.scenario:
-            plan.scenario_name = plan.scenario.name
-    return plans
+            read_item.scenario_name = plan.scenario.name
+        results.append(read_item)
+    return results
 
 
 @router.get("/aggregate", response_model=list[PlanAggregateRead])

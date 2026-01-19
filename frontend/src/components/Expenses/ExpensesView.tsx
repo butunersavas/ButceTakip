@@ -288,6 +288,21 @@ export default function ExpensesView() {
       params.today_only = todayOnly;
       const { data } = await client.get<Expense[]>("/expenses", { params });
       return data;
+    },
+    onSuccess: () => {
+      setErrorMessage(null);
+    },
+    onError: (error: unknown) => {
+      if (axios.isAxiosError(error)) {
+        const detail =
+          (error.response?.data as { detail?: string; message?: string } | undefined)?.detail ||
+          (error.response?.data as { detail?: string; message?: string } | undefined)?.message;
+        if (detail) {
+          setErrorMessage(detail);
+          return;
+        }
+      }
+      setErrorMessage("Harcama verileri yüklenemedi. Lütfen tekrar deneyin.");
     }
   });
 
@@ -839,6 +854,7 @@ export default function ExpensesView() {
           maxWidth: "100%"
         }}
       >
+        {errorMessage && <Alert severity="error">{errorMessage}</Alert>}
       <Grid container spacing={2} sx={{ mb: 2 }}>
         {summaryCards.map((card) => {
           const isSelected = selectedExpenseFilter === card.key;

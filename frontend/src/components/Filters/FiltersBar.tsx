@@ -15,9 +15,11 @@ export default function FiltersBar({ title = "Filtreler", onApply, onReset, chil
     <Card>
       <CardContent sx={{ py: 1.5, px: 2.5 }}>
         <Stack
-          direction={{ xs: "column", lg: "row" }}
-          spacing={1.5}
-          alignItems={{ xs: "flex-start", lg: "center" }}
+          direction="row"
+          spacing={1}
+          alignItems="center"
+          flexWrap="wrap"
+          sx={{ rowGap: 1 }}
         >
           <Typography variant="subtitle2" fontWeight={700} sx={{ minWidth: "fit-content" }}>
             {title}
@@ -26,8 +28,8 @@ export default function FiltersBar({ title = "Filtreler", onApply, onReset, chil
             sx={{
               display: "flex",
               alignItems: "center",
-              gap: 1.5,
-              flexWrap: { xs: "wrap", lg: "nowrap" },
+              gap: 1,
+              flexWrap: "wrap",
               flex: 1
             }}
           >
@@ -40,12 +42,8 @@ export default function FiltersBar({ title = "Filtreler", onApply, onReset, chil
               startIcon={<FilterAltOutlinedIcon sx={{ fontSize: 18 }} />}
               onClick={onApply}
               sx={{
-                height: 32,
-                minWidth: 88,
-                borderRadius: 999,
-                fontSize: 12.5,
-                textTransform: "none",
-                px: 1.5
+                minWidth: 90,
+                textTransform: "none"
               }}
             >
               Uygula
@@ -56,12 +54,8 @@ export default function FiltersBar({ title = "Filtreler", onApply, onReset, chil
               startIcon={<RestartAltOutlinedIcon sx={{ fontSize: 18 }} />}
               onClick={onReset}
               sx={{
-                height: 32,
-                minWidth: 88,
-                borderRadius: 999,
-                fontSize: 12.5,
-                textTransform: "none",
-                px: 1.5
+                minWidth: 90,
+                textTransform: "none"
               }}
             >
               Sıfırla
