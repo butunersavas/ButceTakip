@@ -19,12 +19,16 @@ router = APIRouter(prefix="/warranty-items", tags=["Warranty Items"])
 logger = logging.getLogger(__name__)
 
 
-def _calculate_days_left(end_date: date, today: date | None = None) -> int:
+def _calculate_days_left(end_date: date | None, today: date | None = None) -> int | None:
+    if end_date is None:
+        return None
     base_date = today or date.today()
     return (end_date - base_date).days
 
 
-def _calculate_status(days_left: int) -> str:
+def _calculate_status(days_left: int | None) -> str | None:
+    if days_left is None:
+        return None
     if days_left < 0:
         return "Süresi Geçti"
     if days_left <= 30:
@@ -233,6 +237,8 @@ def list_critical_warranty_items(
     critical_items: list[WarrantyItemCriticalRead] = []
     for item in active_items:
         days_left = _calculate_days_left(item.end_date, today)
+        if days_left is None:
+            continue
         remind_days_before = _resolve_remind_days(item)
         if 0 <= days_left <= 30:
             critical_items.append(
