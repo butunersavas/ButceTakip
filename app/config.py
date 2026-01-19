@@ -5,6 +5,7 @@ from pydantic import BaseSettings, Field, validator
 
 class Settings(BaseSettings):
     app_name: str = "ButceTakip"
+    environment: str = Field(default="development", env=["ENVIRONMENT", "ENV", "APP_ENV"])
     database_url: str = Field(
         default="sqlite:///./butce_takip.db",
         env="DATABASE_URL",

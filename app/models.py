@@ -86,6 +86,7 @@ class PlanEntry(TimestampMixin, SQLModel, table=True):
     amount: float = Field(default=0, nullable=False)
     scenario_id: int = Field(foreign_key="scenarios.id", nullable=False)
     budget_item_id: int = Field(foreign_key="budget_items.id", nullable=False)
+    budget_code: Optional[str] = Field(default=None, nullable=True)
     department: Optional[str] = Field(default=None, max_length=100, nullable=True)
 
     scenario: Scenario = Relationship(back_populates="plans")

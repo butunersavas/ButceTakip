@@ -80,6 +80,7 @@ def init_default_admin(session: Session) -> None:
 
 def _apply_schema_upgrades() -> None:
     inspector = inspect(engine)
+    is_postgres = engine.dialect.name == "postgresql"
 
     def ensure_timestamp_columns(table_name: str) -> None:
         if not inspector.has_table(table_name):
@@ -153,8 +154,11 @@ def _apply_schema_upgrades() -> None:
         if "department" not in plan_columns:
             with engine.begin() as connection:
                 connection.execute(text("ALTER TABLE plan_entries ADD COLUMN department VARCHAR(100)"))
+        if "budget_code" not in plan_columns:
+            with engine.begin() as connection:
+                connection.execute(text("ALTER TABLE plan_entries ADD COLUMN budget_code TEXT"))
 
-    if inspector.has_table("warranty_items"):
+    if is_postgres and inspector.has_table("warranty_items"):
         warranty_columns = {column["name"] for column in inspector.get_columns("warranty_items")}
         if "domain" not in warranty_columns:
             with engine.begin() as connection:

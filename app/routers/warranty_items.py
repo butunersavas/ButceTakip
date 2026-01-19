@@ -126,6 +126,12 @@ def create_warranty_item(
     current_user: User = Depends(get_admin_user),
 ) -> WarrantyItem:
     item_data = item_in.dict()
+    logger.debug("Warranty item create payload: %s", item_data)
+    if item_data.get("end_date") is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="end_date is required",
+        )
     if item_data.get("certificate_issuer") and not item_data.get("issuer"):
         item_data["issuer"] = item_data["certificate_issuer"]
     remind_days_value = item_data.get("remind_days") or item_data.get("remind_days_before")
@@ -144,12 +150,13 @@ def create_warranty_item(
         session.add(item)
         session.commit()
         session.refresh(item)
-    except SQLAlchemyError:
+    except SQLAlchemyError as exc:
         logger.exception("Failed to create warranty item")
         session.rollback()
+        detail = str(exc.orig) if getattr(exc, "orig", None) else "DB constraint error"
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Garanti kaydı oluşturulamadı.",
+            detail=detail,
         )
     _attach_user_names(session, [item])
     _attach_status_fields([item])

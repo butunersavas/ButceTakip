@@ -143,11 +143,13 @@ def delete_scenario(
 
             session.delete(scenario)
     except IntegrityError:
+        session.rollback()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Senaryonun bağlı kayıtları olduğu için silinemedi",
         )
     except SQLAlchemyError:
+        session.rollback()
         logger.exception(
             "Beklenmedik bir hata nedeniyle senaryo silinemedi",
             extra={"scenario_id": scenario_id},

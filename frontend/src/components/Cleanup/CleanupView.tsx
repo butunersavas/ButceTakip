@@ -6,6 +6,7 @@ import {
   Card,
   CardContent,
   Checkbox,
+  CircularProgress,
   Divider,
   FormControl,
   FormControlLabel,
@@ -253,6 +254,8 @@ function CleaningToolsSection() {
     }
   });
 
+  const isDeletingScenario = deleteScenarioMutation.isPending && actionType === "delete-scenario";
+
   const handleCleanup = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
@@ -441,7 +444,9 @@ function CleaningToolsSection() {
                 type="submit"
                 variant="contained"
                 color="error"
-                startIcon={<CleaningServicesIcon />}
+                startIcon={
+                  isDeletingScenario ? <CircularProgress size={18} color="inherit" /> : <CleaningServicesIcon />
+                }
                 disabled={
                   !isAdmin ||
                   cleanupMutation.isPending ||
@@ -450,7 +455,11 @@ function CleaningToolsSection() {
                     (scenarioId === "" || (isDefaultScenario && !confirmDefaultDelete)))
                 }
               >
-                {actionType === "delete-scenario" ? "Senaryoyu Sil" : "Temizleme İşlemini Başlat"}
+                {actionType === "delete-scenario"
+                  ? isDeletingScenario
+                    ? "Senaryo siliniyor..."
+                    : "Senaryoyu Sil"
+                  : "Temizleme İşlemini Başlat"}
               </Button>
             </Box>
           </Stack>

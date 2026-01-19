@@ -53,6 +53,17 @@ def list_plans(
     if department is not None:
         query = query.where(PlanEntry.department == department)
     plans = session.exec(query).all()
+    missing_codes = {
+        plan.budget_code
+        for plan in plans
+        if not plan.budget_item and getattr(plan, "budget_code", None)
+    }
+    if missing_codes:
+        fallback_items = session.exec(select(BudgetItem).where(BudgetItem.code.in_(missing_codes))).all()
+        fallback_map = {item.code: item for item in fallback_items}
+        for plan in plans:
+            if not plan.budget_item and plan.budget_code:
+                plan.budget_item = fallback_map.get(plan.budget_code)
     for plan in plans:
         budget = plan.budget_item
         if budget:
