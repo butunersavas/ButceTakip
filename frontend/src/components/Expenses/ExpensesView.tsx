@@ -18,6 +18,7 @@ import {
   IconButton,
   MenuItem,
   Select,
+  Snackbar,
   Stack,
   Switch,
   TextField,
@@ -190,6 +191,8 @@ export default function ExpensesView() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [listLoadFailed, setListLoadFailed] = useState(false);
+  const [listErrorToastOpen, setListErrorToastOpen] = useState(false);
   const [formQuantity, setFormQuantity] = useState<string>("1");
   const [formUnitPrice, setFormUnitPrice] = useState<string>("0");
   const [formBudgetItemId, setFormBudgetItemId] = useState<number | null>(null);
@@ -318,11 +321,15 @@ export default function ExpensesView() {
         setErrorMessage(
           resolveApiErrorMessage(error, "Harcama verileri yüklenemedi. Lütfen tekrar deneyin.")
         );
+        setListLoadFailed(true);
+        setListErrorToastOpen(true);
         throw error;
       }
     },
     onSuccess: () => {
       setErrorMessage(null);
+      setListLoadFailed(false);
+      setListErrorToastOpen(false);
     },
     onError: () => {
       // handled in queryFn
@@ -503,6 +510,8 @@ export default function ExpensesView() {
     () => (Array.isArray(expenses) ? expenses : []),
     [expenses]
   );
+
+  const showListLoadError = listLoadFailed && !isFetching && safeExpenses.length === 0;
 
   const outOfBudgetTotal = useMemo(() => {
     return safeExpenses.reduce(
@@ -887,58 +896,72 @@ export default function ExpensesView() {
         }}
       >
         {errorMessage && <Alert severity="error">{errorMessage}</Alert>}
-      <Grid container spacing={2} sx={{ mb: 2 }}>
-        {summaryCards.map((card) => {
-          const isSelected = selectedExpenseFilter === card.key;
-          return (
-            <Grid item xs={12} sm={6} md={3} key={card.key}>
-              <Card
-                variant="outlined"
-                sx={{
-                  borderColor: isSelected ? "primary.main" : "divider",
-                  boxShadow: isSelected ? 3 : 0,
-                  transition: "box-shadow 0.2s ease, border-color 0.2s ease",
-                }}
-              >
-                <CardActionArea
-                  onClick={() =>
-                    setSelectedExpenseFilter((prev) => {
-                      return prev === card.key ? "ALL" : card.key;
-                    })
-                  }
-                  sx={{ height: "100%" }}
+        <Snackbar
+          open={listErrorToastOpen}
+          autoHideDuration={6000}
+          onClose={() => setListErrorToastOpen(false)}
+          anchorOrigin={{ vertical: "top", horizontal: "center" }}
+        >
+          <Alert
+            severity="error"
+            onClose={() => setListErrorToastOpen(false)}
+            sx={{ width: "100%" }}
+          >
+            Liste yüklenemedi.
+          </Alert>
+        </Snackbar>
+        <Grid container spacing={2} sx={{ mb: 2 }}>
+          {summaryCards.map((card) => {
+            const isSelected = selectedExpenseFilter === card.key;
+            return (
+              <Grid item xs={12} sm={6} md={3} key={card.key}>
+                <Card
+                  variant="outlined"
+                  sx={{
+                    borderColor: isSelected ? "primary.main" : "divider",
+                    boxShadow: isSelected ? 3 : 0,
+                    transition: "box-shadow 0.2s ease, border-color 0.2s ease",
+                  }}
                 >
-                  <CardContent sx={{ position: "relative", minHeight: 120 }}>
-                    <Typography variant="subtitle2" color="text.secondary">
-                      {card.title}
-                    </Typography>
-                    <Typography variant="h5" sx={{ mt: 0.5 }}>
-                      {card.value}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                      {card.subtitle}
-                    </Typography>
-                    <Box sx={{ position: "absolute", top: 12, right: 12 }}>
-                      <Box
-                        sx={{
-                          width: 40,
-                          height: 40,
-                          borderRadius: "50%",
-                          bgcolor: card.iconColor,
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center"
-                        }}
-                      >
-                        {card.icon}
+                  <CardActionArea
+                    onClick={() =>
+                      setSelectedExpenseFilter((prev) => {
+                        return prev === card.key ? "ALL" : card.key;
+                      })
+                    }
+                    sx={{ height: "100%" }}
+                  >
+                    <CardContent sx={{ position: "relative", minHeight: 120 }}>
+                      <Typography variant="subtitle2" color="text.secondary">
+                        {card.title}
+                      </Typography>
+                      <Typography variant="h5" sx={{ mt: 0.5 }}>
+                        {card.value}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                        {card.subtitle}
+                      </Typography>
+                      <Box sx={{ position: "absolute", top: 12, right: 12 }}>
+                        <Box
+                          sx={{
+                            width: 40,
+                            height: 40,
+                            borderRadius: "50%",
+                            bgcolor: card.iconColor,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center"
+                          }}
+                        >
+                          {card.icon}
+                        </Box>
                       </Box>
-                    </Box>
-                  </CardContent>
-                </CardActionArea>
-              </Card>
-            </Grid>
-          );
-        })}
+                    </CardContent>
+                  </CardActionArea>
+                </Card>
+              </Grid>
+            );
+          })}
       </Grid>
 
       <Card>
@@ -1198,52 +1221,56 @@ export default function ExpensesView() {
             </Stack>
           </Box>
           <Box sx={{ height: 520, width: "100%" }}>
-            <DataGrid
-              key={renderVersion}
-              rows={rows ?? []}
-              columns={columns}
-              getRowId={(row) => row.id ?? `${row.budget_item_id}-${row.expense_date}-${row.amount}`}
-              paginationModel={paginationModel}
-              onPaginationModelChange={setPaginationModel}
-              filterModel={combinedFilterModel}
-              onFilterModelChange={handleFilterModelChange}
-              sortingMode="client"
-              sortModel={sortModel}
-              onSortModelChange={setSortModel}
-              checkboxSelection
-              disableRowSelectionOnClick
-              initialState={{
-                pagination: {
-                  paginationModel: { pageSize: 10 }
-                },
-                columns: {
-                  columnVisibilityModel,
-                },
-              }}
-              slots={{ toolbar: GridToolbar }}
-              slotProps={{
-                toolbar: {
-                  showQuickFilter: true,
-                  quickFilterProps: { debounceMs: 500 },
-                },
-              }}
-              onRowSelectionModelChange={(newSelection) =>
-                setSelectionModel(newSelection as number[])
-              }
-              processRowUpdate={(updatedRow, originalRow) =>
-                handleRowUpdate(updatedRow, originalRow)
-              }
-              getRowHeight={() => "auto"}
-              getEstimatedRowHeight={() => 64}
-              sx={{
-                "& .MuiDataGrid-cell": {
-                  py: 1.5,
-                },
-                "& .MuiDataGrid-columnHeaders": {
-                  bgcolor: (theme) => `${theme.palette.background.paper}`,
-                },
-              }}
-            />
+            {showListLoadError ? (
+              <Alert severity="error">Liste yüklenemedi.</Alert>
+            ) : (
+              <DataGrid
+                key={renderVersion}
+                rows={rows ?? []}
+                columns={columns}
+                getRowId={(row) => row.id ?? `${row.budget_item_id}-${row.expense_date}-${row.amount}`}
+                paginationModel={paginationModel}
+                onPaginationModelChange={setPaginationModel}
+                filterModel={combinedFilterModel}
+                onFilterModelChange={handleFilterModelChange}
+                sortingMode="client"
+                sortModel={sortModel}
+                onSortModelChange={setSortModel}
+                checkboxSelection
+                disableRowSelectionOnClick
+                initialState={{
+                  pagination: {
+                    paginationModel: { pageSize: 10 }
+                  },
+                  columns: {
+                    columnVisibilityModel,
+                  },
+                }}
+                slots={{ toolbar: GridToolbar }}
+                slotProps={{
+                  toolbar: {
+                    showQuickFilter: true,
+                    quickFilterProps: { debounceMs: 500 },
+                  },
+                }}
+                onRowSelectionModelChange={(newSelection) =>
+                  setSelectionModel(newSelection as number[])
+                }
+                processRowUpdate={(updatedRow, originalRow) =>
+                  handleRowUpdate(updatedRow, originalRow)
+                }
+                getRowHeight={() => "auto"}
+                getEstimatedRowHeight={() => 64}
+                sx={{
+                  "& .MuiDataGrid-cell": {
+                    py: 1.5,
+                  },
+                  "& .MuiDataGrid-columnHeaders": {
+                    bgcolor: (theme) => `${theme.palette.background.paper}`,
+                  },
+                }}
+              />
+            )}
           </Box>
         </CardContent>
       </Card>

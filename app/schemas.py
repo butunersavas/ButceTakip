@@ -2,6 +2,7 @@ from datetime import date, datetime
 from typing import Optional
 
 from pydantic import BaseModel, Field, validator
+from sqlmodel import SQLModel
 
 from app.models import ExpenseStatus, WarrantyItemType
 
@@ -301,9 +302,20 @@ class ExpenseUpdate(BaseModel):
         return parsed
 
 
-class ExpenseRead(ExpenseBase):
+class ExpenseRead(SQLModel, table=False):
     id: int
-    created_by_id: Optional[int]
+    budget_item_id: int
+    scenario_id: Optional[int] = None
+    expense_date: Optional[date] = Field(default=None, alias="date")
+    amount: Optional[float] = None
+    quantity: Optional[float] = None
+    unit_price: Optional[float] = None
+    vendor: Optional[str] = None
+    description: Optional[str] = None
+    status: Optional[ExpenseStatus] = None
+    is_out_of_budget: Optional[bool] = Field(default=None, alias="out_of_budget")
+    is_cancelled: Optional[bool] = None
+    created_by_id: Optional[int] = None
     updated_by_id: Optional[int] = None
     created_by_user_id: Optional[int] = None
     updated_by_user_id: Optional[int] = None
@@ -316,11 +328,15 @@ class ExpenseRead(ExpenseBase):
     budget_name: Optional[str] = None
     capex_opex: Optional[str] = None
     department: Optional[str] = None
-    created_at: datetime
-    updated_at: datetime
+    asset_type: Optional[str] = None
+    client_hostname: Optional[str] = None
+    kaydi_giren_kullanici: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
     class Config:
         orm_mode = True
+        allow_population_by_field_name = True
 
 
 class WarrantyItemBase(BaseModel):

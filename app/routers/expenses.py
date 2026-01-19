@@ -5,7 +5,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import aliased
 from sqlmodel import Session, select
 
 from app.dependencies import get_current_user, get_db_session
@@ -54,66 +54,70 @@ def _normalize_capex_opex(value: str | None) -> str | None:
     return None
 
 
-def _user_display_name(user: User | None) -> str | None:
-    if not user:
-        return None
-    return user.full_name or user.username or user.email
-
-
-def _build_user_map(session: Session, expenses: list[Expense]) -> dict[int, str | None]:
-    user_ids: set[int] = set()
-    for expense in expenses:
-        if expense.created_by_user_id:
-            user_ids.add(expense.created_by_user_id)
-        elif expense.created_by_id:
-            user_ids.add(expense.created_by_id)
-        if expense.updated_by_id:
-            user_ids.add(expense.updated_by_id)
-        if expense.updated_by_user_id:
-            user_ids.add(expense.updated_by_user_id)
-    if not user_ids:
-        return {}
-    users = session.exec(select(User).where(User.id.in_(user_ids))).all()
-    return {user.id: _user_display_name(user) for user in users}
-
-
 def _build_expense_read(
-    expense: Expense,
-    user_map: dict[int, str | None],
+    row: dict,
     department_map: dict[tuple[int, int | None], str] | None = None,
 ) -> ExpenseRead:
-    read_item = ExpenseRead.from_orm(expense)
-    created_id = expense.created_by_user_id or expense.created_by_id
-    updated_id = expense.updated_by_user_id or expense.updated_by_id
-    read_item.created_by_name = user_map.get(created_id) if created_id else None
-    read_item.updated_by_name = user_map.get(updated_id) if updated_id else None
-    read_item.created_by_username = read_item.created_by_name
-    read_item.updated_by_username = read_item.updated_by_name
-    if expense.scenario:
-        read_item.scenario_name = expense.scenario.name
-    if expense.budget_item:
-        read_item.budget_code = expense.budget_item.code
-        read_item.budget_name = expense.budget_item.name
-        read_item.capex_opex = (
-            expense.budget_item.map_category.title()
-            if expense.budget_item.map_category
-            else None
-        )
+    created_name = (
+        row.get("created_full_name")
+        or row.get("created_username")
+        or row.get("created_email")
+    )
+    updated_name = (
+        row.get("updated_full_name")
+        or row.get("updated_username")
+        or row.get("updated_email")
+    )
+    capex_opex = (
+        str(row.get("capex_opex")).title() if row.get("capex_opex") else None
+    )
+    department = None
     if department_map:
-        key = (expense.budget_item_id, expense.scenario_id)
-        read_item.department = department_map.get(key) or department_map.get(
-            (expense.budget_item_id, None)
+        key = (row.get("budget_item_id"), row.get("scenario_id"))
+        department = department_map.get(key) or department_map.get(
+            (row.get("budget_item_id"), None)
         )
-    return read_item
+    status = row.get("status")
+    return ExpenseRead(
+        id=row.get("id"),
+        budget_item_id=row.get("budget_item_id"),
+        scenario_id=row.get("scenario_id"),
+        expense_date=row.get("expense_date"),
+        amount=row.get("amount"),
+        quantity=row.get("quantity"),
+        unit_price=row.get("unit_price"),
+        vendor=row.get("vendor"),
+        description=row.get("description"),
+        status=status,
+        is_out_of_budget=row.get("is_out_of_budget"),
+        is_cancelled=status == ExpenseStatus.CANCELLED if status else None,
+        created_by_id=row.get("created_by_id"),
+        updated_by_id=row.get("updated_by_id"),
+        created_by_user_id=row.get("created_by_user_id"),
+        updated_by_user_id=row.get("updated_by_user_id"),
+        created_by_name=created_name,
+        updated_by_name=updated_name,
+        created_by_username=created_name,
+        updated_by_username=updated_name,
+        scenario_name=row.get("scenario_name"),
+        budget_code=row.get("budget_code"),
+        budget_name=row.get("budget_name"),
+        capex_opex=capex_opex,
+        department=department,
+        asset_type=row.get("asset_type"),
+        client_hostname=row.get("client_hostname"),
+        kaydi_giren_kullanici=row.get("kaydi_giren_kullanici"),
+        created_at=row.get("created_at"),
+        updated_at=row.get("updated_at"),
+    )
 
 
 def _build_department_map(
     session: Session,
-    expenses: list[Expense],
+    budget_ids: set[int],
     year: int | None,
     scenario_id: int | None,
 ) -> dict[tuple[int, int | None], str]:
-    budget_ids = {expense.budget_item_id for expense in expenses}
     if not budget_ids:
         return {}
     query = (
@@ -131,6 +135,80 @@ def _build_department_map(
         for row in rows
         if row.department
     }
+
+
+def _expense_read_query(
+    capex_filter: str | None,
+) -> select:
+    created_user = aliased(User)
+    updated_user = aliased(User)
+    query = (
+        select(
+            Expense.id,
+            Expense.budget_item_id,
+            Expense.scenario_id,
+            Expense.expense_date,
+            Expense.amount,
+            Expense.quantity,
+            Expense.unit_price,
+            Expense.vendor,
+            Expense.description,
+            Expense.status,
+            Expense.is_out_of_budget,
+            Expense.created_at,
+            Expense.updated_at,
+            Expense.created_by_id,
+            Expense.updated_by_id,
+            Expense.created_by_user_id,
+            Expense.updated_by_user_id,
+            Expense.client_hostname,
+            Expense.kaydi_giren_kullanici,
+            BudgetItem.code.label("budget_code"),
+            BudgetItem.name.label("budget_name"),
+            BudgetItem.map_category.label("capex_opex"),
+            BudgetItem.map_attribute.label("asset_type"),
+            Scenario.name.label("scenario_name"),
+            created_user.full_name.label("created_full_name"),
+            created_user.username.label("created_username"),
+            created_user.email.label("created_email"),
+            updated_user.full_name.label("updated_full_name"),
+            updated_user.username.label("updated_username"),
+            updated_user.email.label("updated_email"),
+        )
+        .select_from(Expense)
+        .join(BudgetItem, BudgetItem.id == Expense.budget_item_id)
+        .outerjoin(Scenario, Scenario.id == Expense.scenario_id)
+        .outerjoin(
+            created_user,
+            created_user.id == func.coalesce(Expense.created_by_user_id, Expense.created_by_id),
+        )
+        .outerjoin(
+            updated_user,
+            updated_user.id == func.coalesce(Expense.updated_by_user_id, Expense.updated_by_id),
+        )
+    )
+    if capex_filter:
+        query = query.where(func.lower(BudgetItem.map_category) == capex_filter)
+    return query
+
+
+def _fetch_expense_read(
+    session: Session,
+    expense_id: int,
+    year: int | None = None,
+    scenario_id: int | None = None,
+) -> ExpenseRead:
+    query = _expense_read_query(None).where(Expense.id == expense_id)
+    row = session.exec(query).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Expense not found")
+    department_map = _build_department_map(
+        session,
+        {row.budget_item_id},
+        year,
+        scenario_id,
+    )
+    return _build_expense_read(row._mapping, department_map)
 
 
 @router.get("", response_model=list[ExpenseRead])
@@ -151,15 +229,8 @@ def list_expenses(
     session: Session = Depends(get_db_session),
     current_user: User = Depends(get_current_user),
 ) -> list[ExpenseRead]:
-    query = select(Expense).options(
-        selectinload(Expense.budget_item),
-        selectinload(Expense.scenario),
-    )
     capex_filter = _normalize_capex_opex(capex_opex)
-    if capex_filter:
-        query = query.join(BudgetItem, BudgetItem.id == Expense.budget_item_id).where(
-            func.lower(BudgetItem.map_category) == capex_filter
-        )
+    query = _expense_read_query(capex_filter)
     if today_only:
         query = query.where(Expense.expense_date == date.today())
     elif year is not None:
@@ -195,18 +266,18 @@ def list_expenses(
             func.coalesce(Expense.created_by_user_id, Expense.created_by_id) == current_user.id
         )
     try:
-        expenses = session.exec(query.order_by(Expense.expense_date.desc())).all()
-    except SQLAlchemyError:
+        rows = session.exec(query.order_by(Expense.expense_date.desc())).all()
+    except Exception as exc:
         logger.exception("Failed to list expenses")
         raise HTTPException(
-            status_code=500,
-            detail="Harcama listesi alınırken bir hata oluştu.",
+            status_code=400,
+            detail=f"Harcama listesi alınırken bir hata oluştu: {exc}",
         )
-    user_map = _build_user_map(session, expenses)
-    department_map = _build_department_map(session, expenses, year, scenario_id)
+    budget_ids = {row.budget_item_id for row in rows}
+    department_map = _build_department_map(session, budget_ids, year, scenario_id)
     return [
-        _build_expense_read(expense, user_map, department_map)
-        for expense in expenses
+        _build_expense_read(row._mapping, department_map)
+        for row in rows
     ]
 
 
@@ -249,8 +320,7 @@ def create_expense(
         session.rollback()
         detail = str(exc.orig) if getattr(exc, "orig", None) else "DB constraint error"
         raise HTTPException(status_code=400, detail=detail)
-    user_map = _build_user_map(session, [expense])
-    return _build_expense_read(expense, user_map)
+    return _fetch_expense_read(session, expense.id, scenario_id=expense.scenario_id)
 
 
 @router.put("/{expense_id}", response_model=ExpenseRead)
@@ -288,8 +358,7 @@ def update_expense(
         session.rollback()
         detail = str(exc.orig) if getattr(exc, "orig", None) else "DB constraint error"
         raise HTTPException(status_code=400, detail=detail)
-    user_map = _build_user_map(session, [expense])
-    return _build_expense_read(expense, user_map)
+    return _fetch_expense_read(session, expense.id, scenario_id=expense.scenario_id)
 
 
 @router.delete("/{expense_id}", status_code=204)
