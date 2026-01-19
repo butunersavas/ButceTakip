@@ -722,6 +722,8 @@ export default function ExpensesView() {
         field: "is_out_of_budget",
         headerName: "Bütçe Dışı",
         width: 140,
+        type: "boolean",
+        valueGetter: (params) => Boolean(params?.row?.is_out_of_budget),
         renderCell: ({ row }) =>
           row.is_out_of_budget ? (
             <Chip label="Bütçe Dışı" color="warning" size="small" />

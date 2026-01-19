@@ -13,11 +13,12 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     const status = error?.response?.status;
-    if (status === 422 || status === 500) {
-      const detail =
-        error?.response?.data?.detail ??
-        error?.response?.data?.message ??
-        "Beklenmedik bir hata oluştu.";
+    const detail =
+      error?.response?.data?.detail ??
+      error?.response?.data?.message ??
+      error?.message ??
+      "Beklenmedik bir hata oluştu.";
+    if (detail) {
       window.dispatchEvent(
         new CustomEvent("api-error", {
           detail: { status, message: String(detail) }
