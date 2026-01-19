@@ -453,7 +453,7 @@ export default function DashboardView() {
                 const value = event.target.value;
                 setYear(value ? Number(value) : currentYear);
               }}
-              sx={{ minWidth: 110, "& .MuiInputBase-root": { height: 40 } }}
+              sx={{ minWidth: 160, "& .MuiInputBase-root": { height: 40 } }}
             />
             <TextField
               size="small"
@@ -461,7 +461,7 @@ export default function DashboardView() {
               label="Senaryo"
               value={scenarioId ?? ""}
               onChange={(event) => setScenarioId(event.target.value ? Number(event.target.value) : null)}
-              sx={{ minWidth: 260, "& .MuiInputBase-root": { height: 40 } }}
+              sx={{ minWidth: 240, "& .MuiInputBase-root": { height: 40 } }}
             >
               <MenuItem value="">Tümü</MenuItem>
               {scenarios?.map((scenario) => (

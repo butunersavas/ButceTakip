@@ -67,7 +67,9 @@ def update_scenario(
 def delete_scenario(
     scenario_id: int,
     cascade: bool = Query(False, description="İlişkili tüm verileri de silerek kaldır"),
+    hard: bool | None = Query(default=None, description="Alias for cascade delete"),
     force: bool | None = Query(default=None, description="Backwards compatible alias", include_in_schema=False),
+    confirm: bool = Query(False, description="Temel senaryoyu silmeyi onayla"),
     session: Session = Depends(get_db_session),
     current_user: User = Depends(get_current_user),
 ) -> Response:
@@ -87,7 +89,13 @@ def delete_scenario(
     if not scenario:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
 
-    cascade_delete = cascade or bool(force)
+    cascade_delete = cascade or bool(force) or bool(hard)
+
+    if scenario.name.strip().lower() == "temel" and not confirm:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Temel senaryosunu silmek için confirm=true ile onay verin.",
+        )
 
     expense_count = session.exec(
         select(func.count(Expense.id)).where(Expense.scenario_id == scenario_id)

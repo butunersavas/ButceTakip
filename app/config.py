@@ -17,6 +17,7 @@ class Settings(BaseSettings):
         default=["localhost", "127.0.0.1", "0.0.0.0", "api", "172.24.2.128"],
         env="ALLOWED_HOSTS",
     )
+    trusted_hosts: list[str] | None = Field(default=None, env="TRUSTED_HOSTS")
     cors_origins: list[str] = Field(
         default=[
             "http://localhost:5173",
@@ -62,7 +63,7 @@ class Settings(BaseSettings):
 
         @classmethod
         def parse_env_var(cls, field_name: str, raw_value: str):
-            if field_name in {"allowed_hosts", "cors_origins"}:
+            if field_name in {"allowed_hosts", "cors_origins", "trusted_hosts"}:
                 if raw_value is None:
                     return []
 
@@ -111,7 +112,25 @@ class Settings(BaseSettings):
         cleaned = [item.strip() for item in raw.split(",") if item.strip()]
         return cleaned or default_hosts
 
-    @validator("allowed_hosts", "cors_origins", pre=True)
+    @validator("trusted_hosts", pre=True)
+    def normalize_trusted_hosts(cls, value: str | list[str] | None) -> list[str] | None:  # noqa: D417
+        if value is None:
+            return None
+        if isinstance(value, list):
+            cleaned = [item.strip() for item in value if item and item.strip()]
+            return cleaned
+        raw = str(value).strip()
+        if not raw:
+            return []
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, list):
+                return [str(item).strip() for item in parsed if str(item).strip()]
+        except Exception:
+            pass
+        return [item.strip() for item in raw.split(",") if item.strip()]
+
+    @validator("allowed_hosts", "cors_origins", "trusted_hosts", pre=True)
     def split_csv_values(cls, value: str | list[str]) -> list[str]:  # noqa: D417
         if isinstance(value, list):
             return [item.strip() for item in value if item and item.strip()]

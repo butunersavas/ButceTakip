@@ -1,0 +1,4 @@
+ALTER TABLE warranty_items
+    ADD COLUMN IF NOT EXISTS issuer VARCHAR NULL,
+    ADD COLUMN IF NOT EXISTS renewal_responsible VARCHAR NULL,
+    ADD COLUMN IF NOT EXISTS reminder_days INT NULL DEFAULT 30;
