@@ -31,10 +31,12 @@ type WarrantyItem = {
   end_date: string | null;
   start_date?: string | null;
   note?: string | null;
+  domain?: string | null;
   issuer?: string | null;
   certificate_issuer?: string | null;
   renewal_owner?: string | null;
   reminder_days?: number | null;
+  remind_days?: number | null;
   remind_days_before?: number | null;
   is_active: boolean;
   created_by_name?: string | null;
@@ -53,9 +55,10 @@ type WarrantyItemForm = {
   location: string;
   end_date: string;
   note: string;
-  certificate_issuer: string;
+  issuer: string;
   renewal_owner: string;
-  remind_days_before: string;
+  remind_days: string;
+  domain: string;
 };
 
 const typeOptions: Array<{ value: WarrantyItemType; label: string }> = [
@@ -73,11 +76,11 @@ const calcDaysLeft = (endDate: string | null): number | null => {
   return Math.floor(ms / (1000 * 60 * 60 * 24));
 };
 
-const calcStatus = (daysLeft: number | null, remindDaysBefore = 30) => {
+const calcStatus = (daysLeft: number | null) => {
   if (daysLeft === null) return { label: "-", key: "unknown" as const };
   if (daysLeft < 0) return { label: "Süresi Geçti", key: "expired" as const };
-  if (daysLeft <= remindDaysBefore) return { label: "Kritik", key: "critical" as const };
-  if (daysLeft <= remindDaysBefore + 30) return { label: "Yaklaşıyor", key: "approaching" as const };
+  if (daysLeft <= 30) return { label: "Kritik", key: "critical" as const };
+  if (daysLeft <= 60) return { label: "Yaklaşıyor", key: "approaching" as const };
   return { label: "Aktif", key: "ok" as const };
 };
 
@@ -124,7 +127,9 @@ const normalizeWarrantyRow = (row: any): WarrantyItem => {
   const start = row?.start_date ?? row?.startDate ?? null;
   const end = normalizeDateInput(row?.end_date ?? row?.endDate ?? null) || null;
   const remindDaysBefore =
-    typeof row?.remind_days_before === "number"
+    typeof row?.remind_days === "number"
+      ? row.remind_days
+      : typeof row?.remind_days_before === "number"
       ? row.remind_days_before
       : typeof row?.reminder_days === "number"
         ? row.reminder_days
@@ -144,7 +149,7 @@ const normalizeWarrantyRow = (row: any): WarrantyItem => {
   const status =
     typeof statusLabel === "string" && statusLabel.trim().length
       ? { label: statusLabel, key: mapStatusKey(statusLabel) }
-      : calcStatus(days_left, remindDaysBefore);
+      : calcStatus(days_left);
   return {
     ...row,
     id,
@@ -156,6 +161,9 @@ const normalizeWarrantyRow = (row: any): WarrantyItem => {
     status_key: status.key,
     type_label: formatTypeLabel(row?.type),
     certificate_issuer: row?.certificate_issuer ?? row?.issuer ?? null,
+    issuer: row?.issuer ?? row?.certificate_issuer ?? null,
+    domain: row?.domain ?? null,
+    remind_days: remindDaysBefore,
     remind_days_before: remindDaysBefore,
   };
 };
@@ -178,14 +186,15 @@ export default function WarrantyTrackingView() {
     location: "",
     end_date: "",
     note: "",
-    certificate_issuer: "",
+    issuer: "",
     renewal_owner: "",
-    remind_days_before: "30",
+    remind_days: "30",
+    domain: "",
   });
 
   const isDomainSsl = form.type === "DOMAIN_SSL";
-  const nameLabel = isDomainSsl ? "Domain / Sertifika" : "Ad";
-  const locationLabel = isDomainSsl ? "Domain Lokasyonu" : "Lokasyon";
+  const nameLabel = isDomainSsl ? "Sertifika Adı" : "Ad";
+  const locationLabel = isDomainSsl ? "Lokasyon" : "Lokasyon";
 
   const loadItems = useCallback(async () => {
     setLoading(true);
@@ -222,6 +231,7 @@ export default function WarrantyTrackingView() {
     items.forEach((item) => {
       const daysLeft = item.days_left ?? calcDaysLeft(item.end_date);
       const remindDaysBefore =
+        item.remind_days ??
         item.remind_days_before ??
         item.reminder_days ??
         30;
@@ -230,9 +240,9 @@ export default function WarrantyTrackingView() {
       }
       if (daysLeft < 0) {
         totals.expired += 1;
-      } else if (daysLeft <= remindDaysBefore) {
+      } else if (daysLeft <= 30) {
         totals.critical += 1;
-      } else if (daysLeft <= remindDaysBefore + 30) {
+      } else if (daysLeft <= 60) {
         totals.upcoming += 1;
       }
     });
@@ -270,16 +280,17 @@ export default function WarrantyTrackingView() {
 
     try {
       const normalizedEndDate = normalizeDateInput(form.end_date);
-      const reminderValue = form.remind_days_before ? Number(form.remind_days_before) : null;
+      const reminderValue = form.remind_days ? Number(form.remind_days) : null;
       const payload = {
         type: form.type,
         name: form.name.trim(),
         location: form.location.trim(),
+        domain: form.domain.trim() || null,
         end_date: normalizedEndDate,
         note: form.note.trim() || null,
-        certificate_issuer: form.certificate_issuer.trim() || null,
+        issuer: form.issuer.trim() || null,
         renewal_owner: form.renewal_owner.trim() || null,
-        remind_days_before: Number.isFinite(reminderValue) ? reminderValue : null,
+        remind_days: Number.isFinite(reminderValue) ? reminderValue : null,
       };
 
       if (editingItem) {
@@ -296,9 +307,10 @@ export default function WarrantyTrackingView() {
         location: "",
         end_date: "",
         note: "",
-        certificate_issuer: "",
+        issuer: "",
         renewal_owner: "",
-        remind_days_before: "30"
+        remind_days: "30",
+        domain: ""
       });
       setEditingItem(null);
       await loadItems();
@@ -323,14 +335,17 @@ export default function WarrantyTrackingView() {
       location: item.location,
       end_date: normalizeDateInput(item.end_date) ?? "",
       note: item.note ?? "",
-      certificate_issuer: item.certificate_issuer ?? item.issuer ?? "",
+      issuer: item.issuer ?? item.certificate_issuer ?? "",
       renewal_owner: item.renewal_owner ?? "",
-      remind_days_before:
-        item.remind_days_before != null
-          ? String(item.remind_days_before)
-          : item.reminder_days != null
-            ? String(item.reminder_days)
-            : "30",
+      remind_days:
+        item.remind_days != null
+          ? String(item.remind_days)
+          : item.remind_days_before != null
+            ? String(item.remind_days_before)
+            : item.reminder_days != null
+              ? String(item.reminder_days)
+              : "30",
+      domain: item.domain ?? "",
     });
   }, []);
 
@@ -350,9 +365,10 @@ export default function WarrantyTrackingView() {
           location: "",
           end_date: "",
           note: "",
-          certificate_issuer: "",
+          issuer: "",
           renewal_owner: "",
-          remind_days_before: "30"
+          remind_days: "30",
+          domain: ""
         });
       }
     } catch (err) {
@@ -382,7 +398,14 @@ export default function WarrantyTrackingView() {
         field: "certificate_issuer",
         headerName: "Sertifika Sağlayıcı",
         flex: 1,
-        valueGetter: (params) => params?.row?.certificate_issuer ?? "-",
+        valueGetter: (params) =>
+          params?.row?.issuer ?? params?.row?.certificate_issuer ?? "-",
+      },
+      {
+        field: "domain",
+        headerName: "Domain",
+        flex: 1,
+        valueGetter: (params) => params?.row?.domain ?? "-",
       },
       {
         field: "renewal_owner",
@@ -435,7 +458,7 @@ export default function WarrantyTrackingView() {
             typeof row?.days_left === "number"
               ? row.days_left
               : calcDaysLeft(row?.end_date ?? null);
-          const reminderDays = row?.remind_days_before ?? row?.reminder_days ?? null;
+          const reminderDays = row?.remind_days ?? row?.remind_days_before ?? row?.reminder_days ?? null;
           const showReminder =
             typeof daysLeft === "number" &&
             typeof reminderDays === "number" &&
@@ -622,11 +645,19 @@ export default function WarrantyTrackingView() {
                   onChange={(event) => setForm((prev) => ({ ...prev, location: event.target.value }))}
                   required
                 />
+                {isDomainSsl && (
+                  <TextField
+                    label="Domain (FQDN)"
+                    value={form.domain}
+                    onChange={(event) => setForm((prev) => ({ ...prev, domain: event.target.value }))}
+                    placeholder="example.com"
+                  />
+                )}
                 <TextField
                   label="Sertifika Sağlayıcı"
-                  value={form.certificate_issuer}
+                  value={form.issuer}
                   onChange={(event) =>
-                    setForm((prev) => ({ ...prev, certificate_issuer: event.target.value }))
+                    setForm((prev) => ({ ...prev, issuer: event.target.value }))
                   }
                   placeholder={isDomainSsl ? "Örn. Let's Encrypt" : "Opsiyonel"}
                 />
@@ -641,9 +672,9 @@ export default function WarrantyTrackingView() {
                 <TextField
                   label="Otomatik hatırlatma (gün)"
                   type="number"
-                  value={form.remind_days_before}
+                  value={form.remind_days}
                   onChange={(event) =>
-                    setForm((prev) => ({ ...prev, remind_days_before: event.target.value }))
+                    setForm((prev) => ({ ...prev, remind_days: event.target.value }))
                   }
                   inputProps={{ min: 0, step: 1 }}
                 />
@@ -674,9 +705,10 @@ export default function WarrantyTrackingView() {
                           location: "",
                           end_date: "",
                           note: "",
-                          certificate_issuer: "",
+                          issuer: "",
                           renewal_owner: "",
-                          remind_days_before: "30"
+                          remind_days: "30",
+                          domain: ""
                         });
                       }}
                     >

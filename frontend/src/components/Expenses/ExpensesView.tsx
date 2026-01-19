@@ -91,7 +91,7 @@ export interface Expense {
 interface ExpensePayload {
   id?: number;
   budget_item_id: number;
-  scenario_id?: number | null;
+  scenario_id: number;
   expense_date: string;
   amount: number;
   quantity: number;
@@ -420,6 +420,11 @@ export default function ExpensesView() {
       kaydi_giren_kullanici:
         editingExpense?.kaydi_giren_kullanici ?? user?.username ?? user?.full_name ?? undefined
     };
+
+    if (!payload.scenario_id) {
+      setErrorMessage("Senaryo seçmelisiniz.");
+      return;
+    }
 
     mutation.mutate(payload);
   };
@@ -926,7 +931,7 @@ export default function ExpensesView() {
                 <MenuItem value="">Tümü</MenuItem>
                 {scenarios?.map((scenario) => (
                   <MenuItem key={scenario.id} value={scenario.id}>
-                    {scenario.year}
+                    {scenario.name} ({scenario.year})
                   </MenuItem>
                 ))}
               </TextField>
@@ -1214,11 +1219,11 @@ export default function ExpensesView() {
                     name="scenario_id"
                     defaultValue={editingExpense?.scenario_id ?? scenarioId ?? ""}
                     fullWidth
+                    required
                   >
-                    <MenuItem value="">Seçili Değil</MenuItem>
                     {scenarios?.map((scenario) => (
                       <MenuItem key={scenario.id} value={scenario.id}>
-                        {scenario.year}
+                        {scenario.name} ({scenario.year})
                       </MenuItem>
                     ))}
                   </TextField>

@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+import logging
 from typing import Iterator
 
 from sqlalchemy import inspect, text
@@ -12,6 +13,7 @@ from .utils.security import get_password_hash
 settings = get_settings()
 is_sqlite = settings.database_url.startswith("sqlite")
 connect_args = {"check_same_thread": False} if is_sqlite else {}
+logger = logging.getLogger(__name__)
 engine = create_engine(
     settings.database_url,
     echo=False,
@@ -62,12 +64,14 @@ def init_default_admin(session: Session) -> None:
             is_admin=True,
             is_active=True,
         )
+        logger.info("Default admin created.")
     else:
         user.email = admin_email
         user.full_name = admin_full_name
         user.is_admin = True
         user.is_active = True
         user.hashed_password = hashed_password
+        logger.info("Default admin exists.")
 
     session.add(user)
     session.commit()
@@ -132,6 +136,9 @@ def _apply_schema_upgrades() -> None:
 
     if inspector.has_table("warranty_items"):
         warranty_columns = {column["name"] for column in inspector.get_columns("warranty_items")}
+        if "domain" not in warranty_columns:
+            with engine.begin() as connection:
+                connection.execute(text("ALTER TABLE warranty_items ADD COLUMN domain TEXT"))
         if "issuer" not in warranty_columns:
             with engine.begin() as connection:
                 connection.execute(text("ALTER TABLE warranty_items ADD COLUMN issuer TEXT"))
@@ -154,6 +161,17 @@ def _apply_schema_upgrades() -> None:
             with engine.begin() as connection:
                 connection.execute(
                     text("ALTER TABLE warranty_items ADD COLUMN reminder_days INTEGER DEFAULT 30")
+                )
+        if "remind_days" not in warranty_columns:
+            with engine.begin() as connection:
+                connection.execute(
+                    text("ALTER TABLE warranty_items ADD COLUMN remind_days INTEGER DEFAULT 30")
+                )
+                connection.execute(
+                    text(
+                        "UPDATE warranty_items SET remind_days = reminder_days "
+                        "WHERE remind_days IS NULL AND reminder_days IS NOT NULL"
+                    )
                 )
         if "remind_days_before" not in warranty_columns:
             with engine.begin() as connection:

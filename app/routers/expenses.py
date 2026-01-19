@@ -80,7 +80,7 @@ def _attach_user_names(session: Session, expenses: list[Expense]) -> None:
         expense.updated_by_username = expense.updated_by_name
 
 
-@router.get("/", response_model=list[ExpenseRead])
+@router.get("", response_model=list[ExpenseRead])
 def list_expenses(
     year: int | None = Query(default=None),
     budget_item_id: int | None = Query(default=None),
@@ -142,7 +142,7 @@ def list_expenses(
     return expenses
 
 
-@router.post("/", response_model=ExpenseRead, status_code=201)
+@router.post("", response_model=ExpenseRead, status_code=201)
 def create_expense(
     expense_in: ExpenseCreate,
     request: Request,
@@ -151,14 +151,13 @@ def create_expense(
 ) -> Expense:
     if not session.get(BudgetItem, expense_in.budget_item_id):
         raise HTTPException(status_code=400, detail="Budget item not found")
-    if expense_in.scenario_id and not session.get(Scenario, expense_in.scenario_id):
+    if not session.get(Scenario, expense_in.scenario_id):
         raise HTTPException(status_code=400, detail="Scenario not found")
     client_hostname = expense_in.client_hostname or _extract_client_identifier(request)
 
     quantity = expense_in.quantity or 1
     unit_price = expense_in.unit_price or 0
-
-    if not expense_in.amount and quantity and unit_price:
+    if expense_in.amount is None:
         expense_in.amount = round(quantity * unit_price, 2)
 
     expense_data = expense_in.dict(exclude={"client_hostname", "kaydi_giren_kullanici"})

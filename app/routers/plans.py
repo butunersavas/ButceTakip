@@ -21,9 +21,9 @@ def _normalize_capex_opex(value: str | None) -> str | None:
     return None
 
 
-@router.get("/", response_model=list[PlanEntryRead])
+@router.get("", response_model=list[PlanEntryRead])
 def list_plans(
-    year: int | None = None,
+    year: int = Query(...),
     scenario_id: int | None = None,
     budget_item_id: int | None = None,
     month: int | None = Query(default=None),
@@ -55,7 +55,7 @@ def list_plans(
     for plan in plans:
         budget = plan.budget_item
         if budget:
-            plan.capex_opex = budget.map_category
+            plan.capex_opex = budget.map_category.title() if budget.map_category else None
             plan.asset_type = budget.map_attribute
             plan.budget_item_name = budget.name
         if plan.scenario:
@@ -108,7 +108,7 @@ def list_departments(
     return sorted({dept for dept in departments if dept})
 
 
-@router.post("/", response_model=PlanEntryRead, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=PlanEntryRead, status_code=status.HTTP_201_CREATED)
 def create_plan_entry(
     plan_in: PlanEntryCreate,
     session: Session = Depends(get_db_session),

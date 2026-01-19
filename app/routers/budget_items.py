@@ -10,14 +10,14 @@ from app.schemas import BudgetItemCreate, BudgetItemRead, BudgetItemUpdate
 router = APIRouter(prefix="/budget-items", tags=["Budget Items"])
 
 
-@router.get("/", response_model=list[BudgetItemRead])
+@router.get("", response_model=list[BudgetItemRead])
 def list_budget_items(
     session: Session = Depends(get_db_session), current_user: User = Depends(get_current_user)
 ) -> list[BudgetItem]:
     return session.exec(select(BudgetItem)).all()
 
 
-@router.post("/", response_model=BudgetItemRead, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=BudgetItemRead, status_code=status.HTTP_201_CREATED)
 def create_budget_item(
     item_in: BudgetItemCreate,
     session: Session = Depends(get_db_session),

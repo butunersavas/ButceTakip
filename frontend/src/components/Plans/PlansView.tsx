@@ -12,6 +12,7 @@ import {
   Grid,
   IconButton,
   MenuItem,
+  Snackbar,
   Stack,
   TextField,
   Tooltip,
@@ -118,6 +119,7 @@ export default function PlansView() {
   const [editingPlan, setEditingPlan] = useState<PlanEntry | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [formBudgetItemId, setFormBudgetItemId] = useState<number | null>(null);
+  const [listError, setListError] = useState<string | null>(null);
 
   const { data: scenarios } = useQuery<Scenario[]>({
     queryKey: ["scenarios"],
@@ -171,6 +173,14 @@ export default function PlansView() {
       return data;
     }
   });
+
+  useEffect(() => {
+    if (plansQuery.isError) {
+      const error = plansQuery.error as any;
+      const detail = error?.response?.data?.detail ?? "Plan kayıtları alınamadı.";
+      setListError(detail);
+    }
+  }, [plansQuery.error, plansQuery.isError]);
 
   const aggregatesQuery = useQuery<PlanAggregate[]>({
     queryKey: ["plan-aggregate", year, scenarioId, capexOpex],
@@ -699,7 +709,7 @@ export default function PlansView() {
                   rows={rows ?? []}
                   columns={columns}
                   loading={plansQuery.isFetching}
-                  getRowId={(row) => row.id}
+                  getRowId={(row) => row.id ?? `${row.year}-${row.month}-${row.budget_item_id}`}
                   disableRowSelectionOnClick
                   initialState={{
                     pagination: { paginationModel: { pageSize: 10, page: 0 } }
@@ -799,6 +809,16 @@ export default function PlansView() {
           </DialogActions>
         </form>
       </Dialog>
+      <Snackbar
+        open={Boolean(listError)}
+        autoHideDuration={5000}
+        onClose={() => setListError(null)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+      >
+        <Alert severity="error" onClose={() => setListError(null)} sx={{ width: "100%" }}>
+          {listError}
+        </Alert>
+      </Snackbar>
     </Stack>
   );
 }

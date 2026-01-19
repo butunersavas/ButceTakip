@@ -69,6 +69,7 @@ function CleaningToolsSection() {
   const [operationMessage, setOperationMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [actionType, setActionType] = useState<"cleanup" | "delete-scenario">("cleanup");
+  const [confirmDefaultDelete, setConfirmDefaultDelete] = useState(false);
 
   const budgetFilterOptions = useMemo(
     () =>
@@ -113,17 +114,11 @@ function CleaningToolsSection() {
       setScenarioId("");
       return;
     }
-
-    const deletableScenario =
-      scenarios.find((scenario) => scenario.name?.trim().toLowerCase() !== "temel") ?? null;
     setScenarioId((previous) => {
       if (previous && scenarios.some((scenario) => scenario.id === previous)) {
-        const selectedScenario = scenarios.find((scenario) => scenario.id === previous);
-        if (selectedScenario?.name?.trim().toLowerCase() !== "temel") {
-          return previous;
-        }
+        return previous;
       }
-      return deletableScenario?.id ?? "";
+      return scenarios[0]?.id ?? "";
     });
   }, [actionType, scenarios]);
 
@@ -152,10 +147,9 @@ function CleaningToolsSection() {
     return scenario?.name?.trim().toLowerCase() === "temel";
   }, [scenarioId, scenarios]);
 
-  const hasDeletableScenario = useMemo(() => {
-    if (!scenarios) return false;
-    return scenarios.some((scenario) => scenario.name?.trim().toLowerCase() !== "temel");
-  }, [scenarios]);
+  useEffect(() => {
+    setConfirmDefaultDelete(false);
+  }, [scenarioId, actionType]);
 
   const cleanupMutation = useMutation({
     mutationFn: async () => {
@@ -200,7 +194,7 @@ function CleaningToolsSection() {
   const deleteScenarioMutation = useMutation({
     mutationFn: async (scenarioToDelete: number) => {
       await client.delete(`/scenarios/${scenarioToDelete}`, {
-        params: { force: true }
+        params: { cascade: true }
       });
       return scenarioToDelete;
     },
@@ -242,7 +236,7 @@ function CleaningToolsSection() {
           return;
         }
         if (status === 409) {
-          setError("Senaryo bağlı kayıtlar nedeniyle silinemedi. force=true ile silebilirsiniz.");
+          setError("Senaryo bağlı kayıtlar nedeniyle silinemedi. cascade=true ile silebilirsiniz.");
           return;
         }
         if (status === 400) {
@@ -270,6 +264,10 @@ function CleaningToolsSection() {
     if (actionType === "delete-scenario") {
       if (!scenarioId || typeof scenarioId !== "number") {
         setError("Silmek için bir senaryo seçmelisiniz.");
+        return;
+      }
+      if (isDefaultScenario && !confirmDefaultDelete) {
+        setError("Temel senaryosunu silmek için geri alınamaz onayını işaretlemelisiniz.");
         return;
       }
 
@@ -362,9 +360,7 @@ function CleaningToolsSection() {
               disabled={!scenarios?.length}
               helperText={
                 actionType === "delete-scenario"
-                  ? hasDeletableScenario
-                    ? "Silme işlemi yalnızca seçilen senaryoya uygulanır."
-                    : "Temel dışında silinebilecek bir senaryo bulunamadı."
+                  ? "Silme işlemi yalnızca seçilen senaryoya uygulanır."
                   : "Temizlik işlemi sadece seçilen senaryoda uygulanır."
               }
             >
@@ -377,7 +373,9 @@ function CleaningToolsSection() {
               {actionType === "cleanup" && <MenuItem value="">Tüm senaryolar</MenuItem>}
             </TextField>
             {actionType === "delete-scenario" && isDefaultScenario && (
-              <Alert severity="info">Temel senaryosu silinemez.</Alert>
+              <Alert severity="warning">
+                Temel senaryosu silinebilir. Bu işlem geri alınamaz, devam etmeden önce onay verin.
+              </Alert>
             )}
             {actionType === "cleanup" ? (
               <>
@@ -425,6 +423,17 @@ function CleaningToolsSection() {
                   Bu seçenek, seçilen senaryoyu ve ona bağlı bütçe kayıtlarını veritabanından kalıcı
                   olarak siler.
                 </Typography>
+                {isDefaultScenario && (
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={confirmDefaultDelete}
+                        onChange={(event) => setConfirmDefaultDelete(event.target.checked)}
+                      />
+                    }
+                    label="Bu işlem geri alınamaz, Temel senaryosunu kalıcı olarak silmeyi onaylıyorum."
+                  />
+                )}
               </>
             )}
             <Box>
@@ -437,7 +446,8 @@ function CleaningToolsSection() {
                   !isAdmin ||
                   cleanupMutation.isPending ||
                   deleteScenarioMutation.isPending ||
-                  (actionType === "delete-scenario" && (scenarioId === "" || isDefaultScenario))
+                  (actionType === "delete-scenario" &&
+                    (scenarioId === "" || (isDefaultScenario && !confirmDefaultDelete)))
                 }
               >
                 {actionType === "delete-scenario" ? "Senaryoyu Sil" : "Temizleme İşlemini Başlat"}
