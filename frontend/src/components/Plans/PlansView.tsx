@@ -54,13 +54,8 @@ interface PlanEntry {
   budget_item_id: number;
   department?: string | null;
   scenario_name?: string | null;
-  budget_item_name?: string | null;
-  scenario?: {
-    id: number;
-    name: string;
-    year: number;
-  } | null;
-  budget_item?: BudgetItem | null;
+  budget_code?: string | null;
+  budget_name?: string | null;
   capex_opex?: string | null;
   asset_type?: string | null;
 }
@@ -359,10 +354,6 @@ export default function PlansView() {
             return row.scenario_name ?? "";
           }
 
-          if (row.scenario) {
-            return row.scenario.name ?? "";
-          }
-
           if (!Array.isArray(scenarios)) {
             return "";
           }
@@ -388,14 +379,13 @@ export default function PlansView() {
         flex: 1,
         valueGetter: (params) => {
           const row = params?.row;
-          if (row?.budget_item_name) {
-            return formatBudgetItemLabel({ name: row.budget_item_name }) || "";
+          if (row?.budget_name || row?.budget_code) {
+            return formatBudgetItemLabel({
+              code: row.budget_code ?? undefined,
+              name: row.budget_name ?? ""
+            });
           }
-          return (
-            formatBudgetItemLabel(row?.budget_item) ||
-            formatBudgetItemLabel(findBudgetItem(row)) ||
-            ""
-          );
+          return formatBudgetItemLabel(findBudgetItem(row)) || "";
         }
       },
       {
@@ -404,9 +394,8 @@ export default function PlansView() {
         flex: 1,
         valueGetter: (params) =>
           params?.row?.capex_opex ??
-          params?.row?.budget_item?.map_category ??
           findBudgetItem(params?.row)?.map_category ??
-          "-"
+          ""
       },
       {
         field: "map_attribute",
@@ -414,15 +403,14 @@ export default function PlansView() {
         flex: 1,
         valueGetter: (params) =>
           params?.row?.asset_type ??
-          params?.row?.budget_item?.map_attribute ??
           findBudgetItem(params?.row)?.map_attribute ??
-          "-"
+          ""
       },
       {
         field: "department",
         headerName: "Departman",
         flex: 1,
-        valueGetter: (params) => params?.row?.department ?? "-",
+        valueGetter: (params) => params?.row?.department ?? "",
       },
       { field: "year", headerName: "Yıl", width: 110 },
       {

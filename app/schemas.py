@@ -140,14 +140,17 @@ class PlanEntryUpdate(BaseModel):
     department: str | None = Field(default=None, max_length=100)
 
 
-class PlanEntryRead(PlanEntryBase):
+class PlanEntryRead(SQLModel, table=False):
     id: int
-    scenario: Optional["ScenarioRead"] = None
-    budget_item: Optional["BudgetItemRead"] = None
+    year: int
+    month: int
+    amount: float
+    scenario_id: int
+    budget_item_id: int
+    department: Optional[str] = None
     scenario_name: Optional[str] = None
     budget_code: Optional[str] = None
     budget_name: Optional[str] = None
-    budget_item_name: Optional[str] = None
     capex_opex: Optional[str] = None
     asset_type: Optional[str] = None
 
@@ -256,6 +259,7 @@ class ExpenseUpdate(BaseModel):
     vendor: Optional[str] = None
     description: Optional[str] = None
     status: Optional[ExpenseStatus] = None
+    status: Optional[ExpenseStatus] = None
     is_out_of_budget: Optional[bool] = None
     client_hostname: Optional[str] = None
     kaydi_giren_kullanici: Optional[str] = None
@@ -304,35 +308,28 @@ class ExpenseUpdate(BaseModel):
 
 class ExpenseRead(SQLModel, table=False):
     id: int
-    budget_item_id: int
     scenario_id: Optional[int] = None
+    budget_item_id: int
+    budget_code: Optional[str] = None
     expense_date: Optional[date] = Field(default=None, alias="date")
     amount: Optional[float] = None
     quantity: Optional[float] = None
     unit_price: Optional[float] = None
     vendor: Optional[str] = None
     description: Optional[str] = None
-    status: Optional[ExpenseStatus] = None
     is_out_of_budget: Optional[bool] = Field(default=None, alias="out_of_budget")
     is_cancelled: Optional[bool] = None
-    created_by_id: Optional[int] = None
-    updated_by_id: Optional[int] = None
-    created_by_user_id: Optional[int] = None
-    updated_by_user_id: Optional[int] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    scenario_name: Optional[str] = None
+    budget_name: Optional[str] = None
+    department: Optional[str] = None
+    capex_opex: Optional[str] = None
+    asset_type: Optional[str] = None
     created_by_name: Optional[str] = None
     updated_by_name: Optional[str] = None
     created_by_username: Optional[str] = None
     updated_by_username: Optional[str] = None
-    scenario_name: Optional[str] = None
-    budget_code: Optional[str] = None
-    budget_name: Optional[str] = None
-    capex_opex: Optional[str] = None
-    department: Optional[str] = None
-    asset_type: Optional[str] = None
-    client_hostname: Optional[str] = None
-    kaydi_giren_kullanici: Optional[str] = None
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
 
     class Config:
         orm_mode = True
@@ -416,8 +413,21 @@ class WarrantyItemUpdate(BaseModel):
         raise ValueError("Invalid end_date")
 
 
-class WarrantyItemRead(WarrantyItemBase):
+class WarrantyItemRead(SQLModel, table=False):
     id: int
+    type: WarrantyItemType
+    name: str
+    location: str
+    domain: Optional[str] = None
+    end_date: Optional[date] = None
+    note: Optional[str] = None
+    issuer: Optional[str] = None
+    certificate_issuer: Optional[str] = None
+    renewal_owner: Optional[str] = None
+    renewal_responsible: Optional[str] = None
+    reminder_days: Optional[int] = None
+    remind_days: Optional[int] = None
+    remind_days_before: Optional[int] = None
     is_active: bool
     created_by_id: Optional[int] = None
     updated_by_id: Optional[int] = None
@@ -485,6 +495,7 @@ class SpendMonthlySummary(BaseModel):
     actual_total: float
     within_plan_total: float
     over_total: float
+    remaining_total: float
 
 
 class RiskyItem(BaseModel):

@@ -194,8 +194,8 @@ function CleaningToolsSection() {
 
   const deleteScenarioMutation = useMutation({
     mutationFn: async (scenarioToDelete: number) => {
-      await client.delete(`/scenarios/${scenarioToDelete}`, {
-        params: { cascade: true, confirm: isDefaultScenario ? confirmDefaultDelete : undefined }
+      await client.delete(`/scenarios/${scenarioToDelete}/hard`, {
+        params: { confirm: true }
       });
       return scenarioToDelete;
     },

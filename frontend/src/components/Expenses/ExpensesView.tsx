@@ -71,6 +71,7 @@ export interface Expense {
   budget_item_id: number;
   scenario_id: number | null;
   expense_date: string;
+  date?: string;
   amount: number;
   quantity: number;
   unit_price: number;
@@ -78,7 +79,8 @@ export interface Expense {
   description: string | null;
   status: "recorded" | "cancelled";
   is_out_of_budget: boolean;
-  created_by_id: number | null;
+  out_of_budget?: boolean;
+  created_by_id?: number | null;
   updated_by_id?: number | null;
   created_at: string;
   updated_at: string;
@@ -316,7 +318,12 @@ export default function ExpensesView() {
         params.mine_only = mineOnly;
         params.today_only = todayOnly;
         const { data } = await client.get<Expense[]>("/expenses", { params });
-        return data;
+        return data.map((item) => ({
+          ...item,
+          expense_date: item.expense_date ?? item.date ?? "",
+          is_out_of_budget: item.is_out_of_budget ?? item.out_of_budget ?? false,
+          status: item.status ?? (item.is_cancelled ? "cancelled" : "recorded")
+        }));
       } catch (error) {
         setErrorMessage(
           resolveApiErrorMessage(error, "Harcama verileri yüklenemedi. Lütfen tekrar deneyin.")
@@ -924,11 +931,13 @@ export default function ExpensesView() {
                   }}
                 >
                   <CardActionArea
-                    onClick={() =>
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
                       setSelectedExpenseFilter((prev) => {
                         return prev === card.key ? "ALL" : card.key;
-                      })
-                    }
+                      });
+                    }}
                     sx={{ height: "100%" }}
                   >
                     <CardContent sx={{ position: "relative", minHeight: 120 }}>

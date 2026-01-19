@@ -7,7 +7,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlmodel import Session, select
 
 from app.dependencies import get_current_user, get_db_session
-from app.models import BudgetItem, Expense, PlanEntry, PurchaseFormStatus, Scenario, User
+from app.models import BudgetItem, Expense, PlanEntry, PurchaseFormStatus, Scenario, User, WarrantyItem
 from app.schemas import ScenarioCreate, ScenarioRead, ScenarioUpdate
 
 logger = logging.getLogger(__name__)
@@ -169,3 +169,63 @@ def delete_scenario(
 
     logger.info("Scenario deleted", extra={"scenario_id": scenario_id, "user_id": current_user.id})
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.delete("/{scenario_id}/hard")
+def hard_delete_scenario(
+    scenario_id: int,
+    confirm: bool = Query(False),
+    session: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+):
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bu işlem için yetkiniz yok",
+        )
+    if not confirm:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="confirm required")
+
+    scenario = session.get(Scenario, scenario_id)
+    if not scenario:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
+
+    deleted_counts = {
+        "expenses": 0,
+        "plan_entries": 0,
+        "scenario_budget_mappings": 0,
+        "warranty_items": 0,
+        "scenario": 0,
+    }
+
+    try:
+        with session.begin():
+            deleted_counts["expenses"] = (
+                session.exec(delete(Expense).where(Expense.scenario_id == scenario_id)).rowcount or 0
+            )
+            deleted_counts["plan_entries"] = (
+                session.exec(delete(PlanEntry).where(PlanEntry.scenario_id == scenario_id)).rowcount
+                or 0
+            )
+            if hasattr(WarrantyItem, "scenario_id"):
+                deleted_counts["warranty_items"] = (
+                    session.exec(
+                        delete(WarrantyItem).where(WarrantyItem.scenario_id == scenario_id)
+                    ).rowcount
+                    or 0
+                )
+            session.delete(scenario)
+            deleted_counts["scenario"] = 1
+    except IntegrityError as exc:
+        logger.exception("Hard delete failed due to integrity error", extra={"scenario_id": scenario_id})
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc.orig) if getattr(exc, "orig", None) else "SCENARIO DELETE FAILED",
+        )
+    except Exception as exc:
+        logger.exception("Hard delete failed", extra={"scenario_id": scenario_id})
+        session.rollback()
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    return {"ok": True, "scenario_id": scenario_id, "deleted": deleted_counts}
