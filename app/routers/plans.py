@@ -21,6 +21,19 @@ def _normalize_capex_opex(value: str | None) -> str | None:
     return None
 
 
+def _build_plan_read(plan: PlanEntry, budget: BudgetItem | None = None) -> PlanEntryRead:
+    read_item = PlanEntryRead.from_orm(plan)
+    if budget:
+        read_item.budget_code = budget.code
+        read_item.budget_name = budget.name
+        read_item.budget_item_name = budget.name
+        read_item.capex_opex = budget.map_category.title() if budget.map_category else None
+        read_item.asset_type = budget.map_attribute
+    if plan.scenario:
+        read_item.scenario_name = plan.scenario.name
+    return read_item
+
+
 @router.get("", response_model=list[PlanEntryRead])
 @router.get("/", response_model=list[PlanEntryRead], include_in_schema=False)
 def list_plans(
@@ -53,6 +66,7 @@ def list_plans(
     if department is not None:
         query = query.where(PlanEntry.department == department)
     plans = session.exec(query).all()
+    fallback_map: dict[str, BudgetItem] = {}
     missing_codes = {
         plan.budget_code
         for plan in plans
@@ -61,20 +75,10 @@ def list_plans(
     if missing_codes:
         fallback_items = session.exec(select(BudgetItem).where(BudgetItem.code.in_(missing_codes))).all()
         fallback_map = {item.code: item for item in fallback_items}
-        for plan in plans:
-            if not plan.budget_item and plan.budget_code:
-                plan.budget_item = fallback_map.get(plan.budget_code)
     results: list[PlanEntryRead] = []
     for plan in plans:
-        budget = plan.budget_item
-        read_item = PlanEntryRead.from_orm(plan)
-        if budget:
-            read_item.capex_opex = budget.map_category.title() if budget.map_category else None
-            read_item.asset_type = budget.map_attribute
-            read_item.budget_item_name = budget.name
-        if plan.scenario:
-            read_item.scenario_name = plan.scenario.name
-        results.append(read_item)
+        budget = plan.budget_item or fallback_map.get(plan.budget_code)
+        results.append(_build_plan_read(plan, budget))
     return results
 
 
@@ -131,7 +135,7 @@ def create_plan_entry(
     plan_in: PlanEntryCreate,
     session: Session = Depends(get_db_session),
     _: User = Depends(get_admin_user),
-) -> PlanEntry:
+) -> PlanEntryRead:
     if not session.get(Scenario, plan_in.scenario_id):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Scenario not found")
     if not session.get(BudgetItem, plan_in.budget_item_id):
@@ -140,7 +144,10 @@ def create_plan_entry(
     session.add(plan)
     session.commit()
     session.refresh(plan)
-    return plan
+    budget = session.get(BudgetItem, plan.budget_item_id)
+    if not plan.scenario:
+        plan.scenario = session.get(Scenario, plan.scenario_id)
+    return _build_plan_read(plan, budget)
 
 
 @router.put("/{plan_id}", response_model=PlanEntryRead)
@@ -150,7 +157,7 @@ def update_plan_entry(
     plan_in: PlanEntryUpdate,
     session: Session = Depends(get_db_session),
     _: User = Depends(get_admin_user),
-) -> PlanEntry:
+) -> PlanEntryRead:
     plan = session.get(PlanEntry, plan_id)
     if not plan:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan not found")
@@ -160,7 +167,10 @@ def update_plan_entry(
     session.add(plan)
     session.commit()
     session.refresh(plan)
-    return plan
+    budget = session.get(BudgetItem, plan.budget_item_id)
+    if not plan.scenario:
+        plan.scenario = session.get(Scenario, plan.scenario_id)
+    return _build_plan_read(plan, budget)
 
 
 @router.delete("/{plan_id}", status_code=status.HTTP_204_NO_CONTENT)

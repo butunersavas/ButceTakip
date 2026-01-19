@@ -144,6 +144,8 @@ class PlanEntryRead(PlanEntryBase):
     scenario: Optional["ScenarioRead"] = None
     budget_item: Optional["BudgetItemRead"] = None
     scenario_name: Optional[str] = None
+    budget_code: Optional[str] = None
+    budget_name: Optional[str] = None
     budget_item_name: Optional[str] = None
     capex_opex: Optional[str] = None
     asset_type: Optional[str] = None
@@ -309,6 +311,11 @@ class ExpenseRead(ExpenseBase):
     updated_by_name: Optional[str] = None
     created_by_username: Optional[str] = None
     updated_by_username: Optional[str] = None
+    scenario_name: Optional[str] = None
+    budget_code: Optional[str] = None
+    budget_name: Optional[str] = None
+    capex_opex: Optional[str] = None
+    department: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
@@ -435,6 +442,33 @@ class DashboardKPI(BaseModel):
 class DashboardResponse(BaseModel):
     kpi: DashboardKPI
     monthly: list[DashboardSummary]
+
+
+class OverBudgetSummary(BaseModel):
+    over_total: float
+    over_item_count: int
+
+
+class OverBudgetItem(BaseModel):
+    budget_code: str
+    budget_name: str
+    plan: float
+    actual: float
+    over: float
+    over_pct: float
+
+
+class OverBudgetResponse(BaseModel):
+    summary: OverBudgetSummary
+    items: list[OverBudgetItem]
+
+
+class SpendMonthlySummary(BaseModel):
+    month: int
+    plan_total: float
+    actual_total: float
+    within_plan_total: float
+    over_total: float
 
 
 class RiskyItem(BaseModel):
