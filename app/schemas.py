@@ -197,10 +197,40 @@ class ExpenseBase(BaseModel):
     client_hostname: Optional[str] = None
     kaydi_giren_kullanici: Optional[str] = None
 
+    @validator("expense_date", pre=True)
+    def parse_expense_date(cls, value: date | str) -> date:  # noqa: D417
+        if isinstance(value, date):
+            return value
+        if isinstance(value, str):
+            raw = value.strip()
+            if not raw:
+                raise ValueError("expense_date is required")
+            try:
+                return datetime.strptime(raw, "%Y-%m-%d").date()
+            except ValueError:
+                pass
+            try:
+                return datetime.strptime(raw, "%d.%m.%Y").date()
+            except ValueError as exc:
+                raise ValueError("expense_date must be YYYY-MM-DD or DD.MM.YYYY") from exc
+        raise ValueError("Invalid expense_date")
+
     @validator("amount", "quantity", "unit_price")
-    def validate_non_negative(cls, value: float | None) -> float | None:
+    def validate_non_negative(cls, value: float | str | None) -> float | None:
         if value is None:
             return value
+        if isinstance(value, str):
+            raw = value.strip()
+            if not raw:
+                return None
+            if "," in raw and "." in raw:
+                raw = raw.replace(".", "").replace(",", ".")
+            else:
+                raw = raw.replace(",", ".")
+            try:
+                value = float(raw)
+            except ValueError as exc:
+                raise ValueError("Value must be a number") from exc
         if value < 0:
             raise ValueError("Value must be non-negative")
         return value
@@ -226,6 +256,47 @@ class ExpenseUpdate(BaseModel):
     is_out_of_budget: Optional[bool] = None
     client_hostname: Optional[str] = None
     kaydi_giren_kullanici: Optional[str] = None
+
+    @validator("expense_date", pre=True)
+    def parse_expense_date(cls, value: date | str | None) -> date | None:  # noqa: D417
+        if value is None:
+            return None
+        if isinstance(value, date):
+            return value
+        if isinstance(value, str):
+            raw = value.strip()
+            if not raw:
+                return None
+            try:
+                return datetime.strptime(raw, "%Y-%m-%d").date()
+            except ValueError:
+                pass
+            try:
+                return datetime.strptime(raw, "%d.%m.%Y").date()
+            except ValueError as exc:
+                raise ValueError("expense_date must be YYYY-MM-DD or DD.MM.YYYY") from exc
+        raise ValueError("Invalid expense_date")
+
+    @validator("amount", "quantity", "unit_price", pre=True)
+    def normalize_numeric_fields(cls, value: float | str | None) -> float | None:  # noqa: D417
+        if value is None:
+            return None
+        if isinstance(value, (int, float)):
+            return float(value)
+        raw = str(value).strip()
+        if not raw:
+            return None
+        if "," in raw and "." in raw:
+            raw = raw.replace(".", "").replace(",", ".")
+        else:
+            raw = raw.replace(",", ".")
+        try:
+            parsed = float(raw)
+        except ValueError as exc:
+            raise ValueError("Value must be a number") from exc
+        if parsed < 0:
+            raise ValueError("Value must be non-negative")
+        return parsed
 
 
 class ExpenseRead(ExpenseBase):
