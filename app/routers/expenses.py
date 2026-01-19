@@ -1,16 +1,19 @@
 from datetime import date, datetime
 import ipaddress
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import selectinload
 from sqlmodel import Session, select
 
 from app.dependencies import get_current_user, get_db_session
-from app.models import BudgetItem, Expense, ExpenseStatus, Scenario, User
+from app.models import BudgetItem, Expense, ExpenseStatus, PlanEntry, Scenario, User
 from app.schemas import ExpenseCreate, ExpenseRead, ExpenseUpdate
 
 router = APIRouter(prefix="/expenses", tags=["Expenses"])
+logger = logging.getLogger(__name__)
 
 
 def _extract_client_identifier(request: Request) -> str | None:
@@ -74,7 +77,11 @@ def _build_user_map(session: Session, expenses: list[Expense]) -> dict[int, str 
     return {user.id: _user_display_name(user) for user in users}
 
 
-def _build_expense_read(expense: Expense, user_map: dict[int, str | None]) -> ExpenseRead:
+def _build_expense_read(
+    expense: Expense,
+    user_map: dict[int, str | None],
+    department_map: dict[tuple[int, int | None], str] | None = None,
+) -> ExpenseRead:
     read_item = ExpenseRead.from_orm(expense)
     created_id = expense.created_by_user_id or expense.created_by_id
     updated_id = expense.updated_by_user_id or expense.updated_by_id
@@ -82,7 +89,48 @@ def _build_expense_read(expense: Expense, user_map: dict[int, str | None]) -> Ex
     read_item.updated_by_name = user_map.get(updated_id) if updated_id else None
     read_item.created_by_username = read_item.created_by_name
     read_item.updated_by_username = read_item.updated_by_name
+    if expense.scenario:
+        read_item.scenario_name = expense.scenario.name
+    if expense.budget_item:
+        read_item.budget_code = expense.budget_item.code
+        read_item.budget_name = expense.budget_item.name
+        read_item.capex_opex = (
+            expense.budget_item.map_category.title()
+            if expense.budget_item.map_category
+            else None
+        )
+    if department_map:
+        key = (expense.budget_item_id, expense.scenario_id)
+        read_item.department = department_map.get(key) or department_map.get(
+            (expense.budget_item_id, None)
+        )
     return read_item
+
+
+def _build_department_map(
+    session: Session,
+    expenses: list[Expense],
+    year: int | None,
+    scenario_id: int | None,
+) -> dict[tuple[int, int | None], str]:
+    budget_ids = {expense.budget_item_id for expense in expenses}
+    if not budget_ids:
+        return {}
+    query = (
+        select(PlanEntry.budget_item_id, PlanEntry.scenario_id, PlanEntry.department)
+        .where(PlanEntry.department.is_not(None))
+        .where(PlanEntry.budget_item_id.in_(budget_ids))
+    )
+    if year is not None:
+        query = query.where(PlanEntry.year == year)
+    if scenario_id is not None:
+        query = query.where(PlanEntry.scenario_id == scenario_id)
+    rows = session.exec(query).all()
+    return {
+        (row.budget_item_id, row.scenario_id): row.department
+        for row in rows
+        if row.department
+    }
 
 
 @router.get("", response_model=list[ExpenseRead])
@@ -103,7 +151,10 @@ def list_expenses(
     session: Session = Depends(get_db_session),
     current_user: User = Depends(get_current_user),
 ) -> list[ExpenseRead]:
-    query = select(Expense)
+    query = select(Expense).options(
+        selectinload(Expense.budget_item),
+        selectinload(Expense.scenario),
+    )
     capex_filter = _normalize_capex_opex(capex_opex)
     if capex_filter:
         query = query.join(BudgetItem, BudgetItem.id == Expense.budget_item_id).where(
@@ -143,9 +194,20 @@ def list_expenses(
         query = query.where(
             func.coalesce(Expense.created_by_user_id, Expense.created_by_id) == current_user.id
         )
-    expenses = session.exec(query.order_by(Expense.expense_date.desc())).all()
+    try:
+        expenses = session.exec(query.order_by(Expense.expense_date.desc())).all()
+    except SQLAlchemyError:
+        logger.exception("Failed to list expenses")
+        raise HTTPException(
+            status_code=500,
+            detail="Harcama listesi alınırken bir hata oluştu.",
+        )
     user_map = _build_user_map(session, expenses)
-    return [_build_expense_read(expense, user_map) for expense in expenses]
+    department_map = _build_department_map(session, expenses, year, scenario_id)
+    return [
+        _build_expense_read(expense, user_map, department_map)
+        for expense in expenses
+    ]
 
 
 @router.post("", response_model=ExpenseRead, status_code=201)

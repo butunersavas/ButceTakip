@@ -21,6 +21,11 @@ import {
   Snackbar,
   Skeleton,
   Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
   TextField,
   Typography
 } from "@mui/material";
@@ -31,10 +36,8 @@ import {
   BarChart,
   CartesianGrid,
   Legend,
+  Line,
   ReferenceLine,
-  Pie,
-  PieChart,
-  Cell,
   ResponsiveContainer,
   Tooltip as RechartsTooltip,
   XAxis,
@@ -77,6 +80,33 @@ interface DashboardResponse {
   monthly: DashboardSummary[];
 }
 
+interface OverBudgetSummary {
+  over_total: number;
+  over_item_count: number;
+}
+
+interface OverBudgetItem {
+  budget_code: string;
+  budget_name: string;
+  plan: number;
+  actual: number;
+  over: number;
+  over_pct: number;
+}
+
+interface OverBudgetResponse {
+  summary: OverBudgetSummary;
+  items: OverBudgetItem[];
+}
+
+interface SpendMonthlySummary {
+  month: number;
+  plan_total: number;
+  actual_total: number;
+  within_plan_total: number;
+  over_total: number;
+}
+
 interface Scenario {
   id: number;
   name: string;
@@ -116,8 +146,6 @@ type QuarterlySummary = {
   overrun: number;
 };
 
-type QuarterlyDataItem = QuarterlySummary & { quarter: string };
-
 type WarrantyCriticalItem = {
   id: number;
   type: "DEVICE" | "SERVICE" | "DOMAIN_SSL";
@@ -142,8 +170,6 @@ const monthLabels = [
   "Aralık"
 ];
 
-const pieKeys: Array<keyof QuarterlySummary> = ["planned", "actual", "remaining", "overrun"];
-
 const pieColors: Record<keyof QuarterlySummary, string> = {
   planned: COLOR_PLANNED,
   actual: COLOR_ACTUAL,
@@ -151,12 +177,18 @@ const pieColors: Record<keyof QuarterlySummary, string> = {
   overrun: COLOR_OVER
 };
 
-const pieLabelMap = {
-  planned: "Planlanan",
-  actual: "Gerçekleşen",
-  remaining: "Kalan",
-  overrun: "Aşım"
-} as const;
+function useDebouncedValue<T>(value: T, delayMs: number): T {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      setDebouncedValue(value);
+    }, delayMs);
+    return () => window.clearTimeout(handle);
+  }, [value, delayMs]);
+
+  return debouncedValue;
+}
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("tr-TR", {
@@ -190,6 +222,7 @@ export default function DashboardView() {
   const [selectedKpiFilter, setSelectedKpiFilter] = useState<
     "total_plan" | "total_actual" | "total_remaining" | "total_overrun" | null
   >(null);
+  const [isOverBudgetDialogOpen, setIsOverBudgetDialogOpen] = useState(false);
 
   const monthOptions = [
     { value: 1, label: "Ocak" },
@@ -210,6 +243,20 @@ export default function DashboardView() {
   const yearNow = now.getFullYear();
   const currentMonth = now.getMonth() + 1;
   const reminderKey = `purchase-reminder-${yearNow}-${currentMonth}`;
+  const debouncedFilters = useDebouncedValue(
+    useMemo(
+      () => ({
+        year,
+        scenarioId,
+        month,
+        budgetItemId,
+        department,
+        capexOpex
+      }),
+      [year, scenarioId, month, budgetItemId, department, capexOpex]
+    ),
+    300
+  );
 
   const { data: scenarios } = useQuery<Scenario[]>({
     queryKey: ["scenarios"],
@@ -228,12 +275,12 @@ export default function DashboardView() {
   });
 
   const { data: departments = [] } = useQuery<string[]>({
-    queryKey: ["departments", year, scenarioId],
+    queryKey: ["departments", debouncedFilters.year, debouncedFilters.scenarioId],
     queryFn: async () => {
       const { data } = await client.get<string[]>("/plans/departments", {
         params: {
-          year,
-          scenario_id: scenarioId || undefined
+          year: debouncedFilters.year,
+          scenario_id: debouncedFilters.scenarioId || undefined
         }
       });
       return data ?? [];
@@ -286,20 +333,27 @@ export default function DashboardView() {
   };
 
   const { data: riskyItems = [] } = useQuery<RiskyItem[]>({
-    queryKey: ["dashboard", "risky-items", year, month, department, capexOpex],
+    queryKey: [
+      "dashboard",
+      "risky-items",
+      debouncedFilters.year,
+      debouncedFilters.month,
+      debouncedFilters.department,
+      debouncedFilters.capexOpex
+    ],
     queryFn: async () => {
-      const params: Record<string, number | string> = { year };
+      const params: Record<string, number | string> = { year: debouncedFilters.year };
 
-      if (month) {
-        params.month = month;
+      if (debouncedFilters.month) {
+        params.month = debouncedFilters.month;
       }
 
-      if (department) {
-        params.department = department;
+      if (debouncedFilters.department) {
+        params.department = debouncedFilters.department;
       }
 
-      if (capexOpex) {
-        params.capex_opex = capexOpex;
+      if (debouncedFilters.capexOpex) {
+        params.capex_opex = debouncedFilters.capexOpex;
       }
 
       const { data } = await client.get<RiskyItem[]>("/dashboard/risky-items", {
@@ -324,18 +378,93 @@ export default function DashboardView() {
     });
   }, [scenarios, year]);
 
-  const { data: dashboard, isLoading, refetch: refetchDashboard } = useQuery<DashboardResponse>({
-    queryKey: ["dashboard", year, scenarioId, month, budgetItemId, department, capexOpex],
+  const { data: dashboard, isLoading } = useQuery<DashboardResponse>({
+    queryKey: [
+      "dashboard",
+      debouncedFilters.year,
+      debouncedFilters.scenarioId,
+      debouncedFilters.month,
+      debouncedFilters.budgetItemId,
+      debouncedFilters.department,
+      debouncedFilters.capexOpex
+    ],
     queryFn: async () => {
-      const params: Record<string, number | string> = { year };
-      if (scenarioId) params.scenario_id = scenarioId;
-      if (month) params.month = month;
-      if (budgetItemId) params.budget_item_id = budgetItemId;
-      if (department) params.department = department;
-      if (capexOpex) params.capex_opex = capexOpex;
+      const params: Record<string, number | string> = { year: debouncedFilters.year };
+      if (debouncedFilters.scenarioId) params.scenario_id = debouncedFilters.scenarioId;
+      if (debouncedFilters.month) params.month = debouncedFilters.month;
+      if (debouncedFilters.budgetItemId) params.budget_item_id = debouncedFilters.budgetItemId;
+      if (debouncedFilters.department) params.department = debouncedFilters.department;
+      if (debouncedFilters.capexOpex) params.capex_opex = debouncedFilters.capexOpex;
       const { data } = await client.get<DashboardResponse>("/dashboard", { params });
       return data;
     }
+  });
+
+  const selectedBudgetCode = useMemo(() => {
+    if (!debouncedFilters.budgetItemId) return undefined;
+    return budgetItems?.find((item) => item.id === debouncedFilters.budgetItemId)?.code;
+  }, [budgetItems, debouncedFilters.budgetItemId]);
+
+  const { data: overBudget } = useQuery<OverBudgetResponse>({
+    queryKey: [
+      "dashboard",
+      "overbudget",
+      debouncedFilters.year,
+      debouncedFilters.scenarioId,
+      debouncedFilters.month,
+      debouncedFilters.budgetItemId,
+      selectedBudgetCode,
+      debouncedFilters.department,
+      debouncedFilters.capexOpex
+    ],
+    queryFn: async () => {
+      const params: Record<string, number | string> = {
+        year: debouncedFilters.year,
+        months: 3
+      };
+      if (debouncedFilters.scenarioId) params.scenario_id = debouncedFilters.scenarioId;
+      if (debouncedFilters.month) params.month = debouncedFilters.month;
+      if (debouncedFilters.department) params.department = debouncedFilters.department;
+      if (debouncedFilters.capexOpex) params.capex_opex = debouncedFilters.capexOpex;
+      if (selectedBudgetCode) {
+        params.budget_code = selectedBudgetCode;
+      }
+      const { data } = await client.get<OverBudgetResponse>("/dashboard/overbudget", {
+        params
+      });
+      return data;
+    },
+    enabled: Boolean(debouncedFilters.year)
+  });
+
+  const { data: spendLastMonths = [] } = useQuery<SpendMonthlySummary[]>({
+    queryKey: [
+      "dashboard",
+      "spend-last-months",
+      debouncedFilters.year,
+      debouncedFilters.scenarioId,
+      debouncedFilters.month,
+      debouncedFilters.budgetItemId,
+      debouncedFilters.department,
+      debouncedFilters.capexOpex
+    ],
+    queryFn: async () => {
+      const params: Record<string, number | string> = {
+        year: debouncedFilters.year,
+        months: 3
+      };
+      if (debouncedFilters.scenarioId) params.scenario_id = debouncedFilters.scenarioId;
+      if (debouncedFilters.month) params.month = debouncedFilters.month;
+      if (debouncedFilters.budgetItemId) params.budget_item_id = debouncedFilters.budgetItemId;
+      if (debouncedFilters.department) params.department = debouncedFilters.department;
+      if (debouncedFilters.capexOpex) params.capex_opex = debouncedFilters.capexOpex;
+      const { data } = await client.get<SpendMonthlySummary[]>(
+        "/dashboard/spend_last_months",
+        { params }
+      );
+      return data ?? [];
+    },
+    enabled: Boolean(debouncedFilters.year)
   });
 
   const budgetFilterOptions = useMemo(
@@ -358,13 +487,6 @@ export default function DashboardView() {
     setCapexOpex("");
     setDepartment("");
     setSelectedKpiFilter(null);
-    setTimeout(() => {
-      refetchDashboard();
-    }, 0);
-  };
-
-  const handleApplyFilters = () => {
-    refetchDashboard();
   };
 
   const monthlyData = useMemo(() => {
@@ -386,23 +508,6 @@ export default function DashboardView() {
     });
   }, [dashboard]);
 
-  const quarterlyData = useMemo<QuarterlyDataItem[]>(() => {
-    if (!dashboard?.monthly?.length) return [];
-    const quarters = [
-      { label: "Q1", months: [1, 2, 3] },
-      { label: "Q2", months: [4, 5, 6] },
-      { label: "Q3", months: [7, 8, 9] },
-      { label: "Q4", months: [10, 11, 12] }
-    ];
-    return quarters.map(({ label, months }) => {
-      const entries = dashboard.monthly.filter((item) => months.includes(item.month));
-      const planned = entries.reduce((sum, item) => sum + (item.planned ?? 0), 0);
-      const actual = entries.reduce((sum, item) => sum + (item.actual ?? 0), 0);
-      const remaining = Math.max(planned - actual, 0);
-      const overrun = Math.max(actual - planned, 0);
-      return { quarter: label, planned, actual, remaining, overrun } satisfies QuarterlyDataItem;
-    });
-  }, [dashboard]);
   const normalizedKpi = useMemo(() => {
     const totalPlan = dashboard?.kpi.total_plan ?? 0;
     const totalActual = dashboard?.kpi.total_actual ?? 0;
@@ -422,7 +527,21 @@ export default function DashboardView() {
   const formattedTotalPlan = formatCurrency(normalizedKpi.total_plan);
   const formattedActual = formatCurrency(normalizedKpi.total_actual);
   const formattedRemaining = formatCurrency(normalizedKpi.total_remaining);
-  const formattedOver = formatCurrency(normalizedKpi.total_overrun);
+  const formattedOver = formatCurrency(
+    overBudget?.summary?.over_total ?? normalizedKpi.total_overrun
+  );
+  const overBudgetItems = overBudget?.items ?? [];
+  const overBudgetSummary = overBudget?.summary;
+  const selectedBudgetOverrun = debouncedFilters.budgetItemId
+    ? overBudgetItems[0]
+    : null;
+  const overBudgetSubtitle = debouncedFilters.budgetItemId
+    ? selectedBudgetOverrun
+      ? `Plan: ${formatCurrency(selectedBudgetOverrun.plan)} • Gerçekleşen: ${formatCurrency(
+          selectedBudgetOverrun.actual
+        )}`
+      : "Seçili kalem için veri yok"
+    : `${overBudgetSummary?.over_item_count ?? 0} kalemde aşım`;
 
   const showPlanned = !selectedKpiFilter || selectedKpiFilter === "total_plan";
   const showActual = !selectedKpiFilter || selectedKpiFilter === "total_actual";
@@ -443,7 +562,7 @@ export default function DashboardView() {
         }}
       >
         <Stack spacing={2} sx={{ width: "100%" }}>
-          <FiltersBar onApply={handleApplyFilters} onReset={handleResetFilters}>
+          <FiltersBar onReset={handleResetFilters}>
             <TextField
               size="small"
               label="Yıl"
@@ -578,7 +697,7 @@ export default function DashboardView() {
               {
                 title: "Aşım",
                 value: formattedOver,
-                subtitle: "Limit aşımı",
+                subtitle: overBudgetSubtitle,
                 icon: <WarningAmberOutlinedIcon sx={{ fontSize: 18, color: "common.white" }} />,
                 iconColor: "error.main",
                 filterKey: "total_overrun" as const
@@ -598,6 +717,56 @@ export default function DashboardView() {
               </Grid>
             ))}
           </Grid>
+          {budgetItemId ? null : (
+            <Card>
+              <CardContent>
+                <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
+                  <Typography variant="h6" fontWeight={600}>
+                    Aşım Yapan Kalemler (Top 10)
+                  </Typography>
+                  {overBudgetItems.length > 10 && (
+                    <Button
+                      variant="text"
+                      size="small"
+                      onClick={() => setIsOverBudgetDialogOpen(true)}
+                    >
+                      Tümünü Gör
+                    </Button>
+                  )}
+                </Stack>
+                {overBudgetItems.length === 0 ? (
+                  <Typography variant="body2" color="text.secondary">
+                    Aşım yapan kalem bulunmuyor.
+                  </Typography>
+                ) : (
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Kalem</TableCell>
+                        <TableCell align="right">Plan</TableCell>
+                        <TableCell align="right">Gerçekleşen</TableCell>
+                        <TableCell align="right">Aşım</TableCell>
+                        <TableCell align="right">%</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {overBudgetItems.slice(0, 10).map((item) => (
+                        <TableRow key={item.budget_code}>
+                          <TableCell>
+                            {stripBudgetCode(item.budget_name) || item.budget_code}
+                          </TableCell>
+                          <TableCell align="right">{formatCurrency(item.plan)}</TableCell>
+                          <TableCell align="right">{formatCurrency(item.actual)}</TableCell>
+                          <TableCell align="right">{formatCurrency(item.over)}</TableCell>
+                          <TableCell align="right">{item.over_pct.toFixed(1)}%</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+          )}
           <Stack spacing={3}>
             <Card>
               <CardContent sx={{ height: 280, minHeight: 280 }}>
@@ -621,47 +790,47 @@ export default function DashboardView() {
                   <Box sx={{ height: 200, minHeight: 200 }}>
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={monthlyData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
-                      <XAxis dataKey="monthLabel" tick={{ fill: "#475569" }} />
-                      <YAxis
-                        tick={{ fill: "#475569" }}
-                        tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
-                      />
-                      <ReferenceLine y={0} stroke="#9e9e9e" strokeDasharray="3 3" />
-                      <RechartsTooltip
-                        formatter={(value: number) => formatCurrency(value)}
-                        labelFormatter={(label) => label}
-                      />
-                      <Legend />
-                    <Bar
-                      dataKey="planned"
-                      name="Planlanan"
-                      fill={pieColors.planned}
-                      radius={[6, 6, 0, 0]}
-                      hide={!showPlanned}
-                    />
-                    <Bar
-                      dataKey="actual"
-                      name="Gerçekleşen"
-                      fill={pieColors.actual}
-                      radius={[6, 6, 0, 0]}
-                      hide={!showActual}
-                    />
-                    <Bar
-                      dataKey="remaining"
-                      name="Kalan"
-                      fill={pieColors.remaining}
-                      radius={[6, 6, 0, 0]}
-                      hide={!showRemaining}
-                    />
-                    <Bar
-                      dataKey="overrun"
-                      name="Aşım"
-                      fill={pieColors.overrun}
-                      radius={[6, 6, 0, 0]}
-                      hide={!showOverrun}
-                    />
-                    </BarChart>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                        <XAxis dataKey="monthLabel" tick={{ fill: "#475569" }} />
+                        <YAxis
+                          tick={{ fill: "#475569" }}
+                          tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
+                        />
+                        <ReferenceLine y={0} stroke="#9e9e9e" strokeDasharray="3 3" />
+                        <RechartsTooltip
+                          formatter={(value: number) => formatCurrency(value)}
+                          labelFormatter={(label) => label}
+                        />
+                        <Legend />
+                        <Bar
+                          dataKey="planned"
+                          name="Planlanan"
+                          fill={pieColors.planned}
+                          radius={[6, 6, 0, 0]}
+                          hide={!showPlanned}
+                        />
+                        <Bar
+                          dataKey="actual"
+                          name="Gerçekleşen"
+                          fill={pieColors.actual}
+                          radius={[6, 6, 0, 0]}
+                          hide={!showActual}
+                        />
+                        <Bar
+                          dataKey="remaining"
+                          name="Kalan"
+                          fill={pieColors.remaining}
+                          radius={[6, 6, 0, 0]}
+                          hide={!showRemaining}
+                        />
+                        <Bar
+                          dataKey="overrun"
+                          name="Aşım"
+                          fill={pieColors.overrun}
+                          radius={[6, 6, 0, 0]}
+                          hide={!showOverrun}
+                        />
+                      </BarChart>
                   </ResponsiveContainer>
                 </Box>
               )}
@@ -679,16 +848,8 @@ export default function DashboardView() {
                   <Typography variant="h6" fontWeight={700}>
                     3 Aylık Harcama Dağılımı
                   </Typography>
-                  <Button
-                    variant="outlined"
-                    size="small"
-                    sx={{ borderRadius: 999, textTransform: "none" }}
-                  >
-                    Son 4 Çeyrek
-                  </Button>
                 </Stack>
 
-                {/* LEJAND – Planlanan / Gerçekleşen / Kalan / Aşım (renkler korunuyor) */}
                 <Stack
                   direction="row"
                   spacing={3}
@@ -701,115 +862,100 @@ export default function DashboardView() {
                         width: 12,
                         height: 12,
                         borderRadius: "50%",
-                        bgcolor: pieColors.planned
-                      }}
-                    />
-                    <Typography variant="caption">Planlanan</Typography>
-                  </Stack>
-
-                  <Stack direction="row" spacing={1} alignItems="center">
-                    <Box
-                      sx={{
-                        width: 12,
-                        height: 12,
-                        borderRadius: "50%",
-                        bgcolor: pieColors.actual
-                      }}
-                    />
-                    <Typography variant="caption">Gerçekleşen</Typography>
-                  </Stack>
-
-                  <Stack direction="row" spacing={1} alignItems="center">
-                    <Box
-                      sx={{
-                        width: 12,
-                        height: 12,
-                        borderRadius: "50%",
-                        bgcolor: pieColors.remaining
-                      }}
-                    />
-                    <Typography variant="caption">Kalan</Typography>
-                  </Stack>
-
-                  <Stack direction="row" spacing={1} alignItems="center">
-                    <Box
-                      sx={{
-                        width: 12,
-                        height: 12,
-                        borderRadius: "50%",
-                        bgcolor: pieColors.overrun
-                      }}
-                    />
-                    <Typography variant="caption">Aşım</Typography>
-                  </Stack>
+                      bgcolor: pieColors.planned
+                    }}
+                  />
+                  <Typography variant="caption">Planlanan</Typography>
                 </Stack>
 
-                {/* 4 ÇEYREK İÇİN YAN YANA DONUT GRAFİKLER */}
-                <Grid container spacing={3}>
-                  {["Q1", "Q2", "Q3", "Q4"].map((quarterKey) => {
-                    const quarterSummary = quarterlyData.find(
-                      (item) => item.quarter === quarterKey
-                    );
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <Box
+                    sx={{
+                      width: 12,
+                      height: 12,
+                      borderRadius: "50%",
+                      bgcolor: pieColors.actual
+                    }}
+                  />
+                  <Typography variant="caption">Plan içi gerçekleşen</Typography>
+                </Stack>
 
-                    if (!quarterSummary) return null;
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <Box
+                    sx={{
+                      width: 12,
+                      height: 12,
+                      borderRadius: "50%",
+                      bgcolor: pieColors.overrun
+                    }}
+                  />
+                  <Typography variant="caption">Aşım</Typography>
+                </Stack>
+              </Stack>
 
-                    const quarterLabel =
-                      quarterKey === "Q1"
-                        ? "Q1"
-                        : quarterKey === "Q2"
-                        ? "Q2"
-                        : quarterKey === "Q3"
-                        ? "Q3"
-                        : "Q4";
-
-                    const chartData = pieKeys
-                      .filter((key) => {
-                        if (selectedKpiFilter === "total_plan") return key === "planned";
-                        if (selectedKpiFilter === "total_actual") return key === "actual";
-                        if (selectedKpiFilter === "total_remaining") return key === "remaining";
-                        if (selectedKpiFilter === "total_overrun") return key === "overrun";
-                        return true;
-                      })
-                      .map((key) => ({
-                        label: pieLabelMap[key],
-                        value: quarterSummary[key] ?? 0,
-                        color: pieColors[key]
-                      }));
-
-                    return (
-                      <Grid item xs={12} sm={6} md={3} key={quarterKey}>
-                        <Stack alignItems="center" spacing={1}>
-                          <Typography variant="subtitle2">{quarterLabel}</Typography>
-                          <Box sx={{ minHeight: 180 }}>
-                            <PieChart width={180} height={180}>
-                            <Pie
-                              data={chartData}
-                              dataKey="value"
-                              nameKey="label"
-                              innerRadius={55}
-                              outerRadius={75}
-                              paddingAngle={3}
-                              strokeWidth={1}
-                            >
-                              {chartData.map((entry) => (
-                                <Cell key={entry.label} fill={entry.color} />
-                              ))}
-                            </Pie>
-
-                            {/* HOVER’DA TUTAR GÖSTEREN TOOLTIP */}
-                            <RechartsTooltip
-                              formatter={(value: number, name: string) => [
-                                formatCurrency(Number(value) || 0),
-                                name
-                              ]}
-                            />
-                          </PieChart>
-                          </Box>
-                        </Stack>
-                      </Grid>
-                    );
-                  })}
-                </Grid>
+                <Box sx={{ height: 240 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={spendLastMonths.map((item) => ({
+                        ...item,
+                        monthLabel: monthLabels[item.month - 1]
+                      }))}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                      <XAxis dataKey="monthLabel" tick={{ fill: "#475569" }} />
+                      <YAxis
+                        tick={{ fill: "#475569" }}
+                        tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
+                      />
+                      <RechartsTooltip
+                        content={({ active, payload, label }) => {
+                          if (!active || !payload?.length) return null;
+                          const data = payload[0]?.payload as SpendMonthlySummary & {
+                            monthLabel: string;
+                          };
+                          return (
+                            <Box sx={{ bgcolor: "background.paper", p: 1.5, borderRadius: 1, boxShadow: 3 }}>
+                              <Typography variant="caption" fontWeight={600}>
+                                {label}
+                              </Typography>
+                              <Typography variant="body2">
+                                Plan: {formatCurrency(data.plan_total)}
+                              </Typography>
+                              <Typography variant="body2">
+                                Gerçekleşen: {formatCurrency(data.actual_total)}
+                              </Typography>
+                              <Typography variant="body2">
+                                Aşım: {formatCurrency(data.over_total)}
+                              </Typography>
+                            </Box>
+                          );
+                        }}
+                      />
+                      <Legend />
+                      <Bar
+                        dataKey="within_plan_total"
+                        name="Plan içi gerçekleşen"
+                        fill={pieColors.actual}
+                        stackId="actual"
+                        radius={[6, 6, 0, 0]}
+                      />
+                      <Bar
+                        dataKey="over_total"
+                        name="Aşım"
+                        fill={pieColors.overrun}
+                        stackId="actual"
+                        radius={[6, 6, 0, 0]}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="plan_total"
+                        name="Planlanan"
+                        stroke={pieColors.planned}
+                        strokeWidth={2}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </Box>
               </CardContent>
             </Card>
 
@@ -872,6 +1018,53 @@ export default function DashboardView() {
             }}
           >
             Garanti Takibi'ne git
+          </Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog
+        open={isOverBudgetDialogOpen}
+        onClose={() => setIsOverBudgetDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontSize: 18, fontWeight: 600 }}>
+          Aşım Yapan Kalemler
+        </DialogTitle>
+        <DialogContent dividers>
+          {overBudgetItems.length === 0 ? (
+            <Typography variant="body2" color="text.secondary">
+              Aşım yapan kalem bulunmuyor.
+            </Typography>
+          ) : (
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Kalem</TableCell>
+                  <TableCell align="right">Plan</TableCell>
+                  <TableCell align="right">Gerçekleşen</TableCell>
+                  <TableCell align="right">Aşım</TableCell>
+                  <TableCell align="right">%</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {overBudgetItems.map((item) => (
+                  <TableRow key={`${item.budget_code}-${item.budget_name}`}>
+                    <TableCell>
+                      {stripBudgetCode(item.budget_name) || item.budget_code}
+                    </TableCell>
+                    <TableCell align="right">{formatCurrency(item.plan)}</TableCell>
+                    <TableCell align="right">{formatCurrency(item.actual)}</TableCell>
+                    <TableCell align="right">{formatCurrency(item.over)}</TableCell>
+                    <TableCell align="right">{item.over_pct.toFixed(1)}%</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button size="small" onClick={() => setIsOverBudgetDialogOpen(false)}>
+            Kapat
           </Button>
         </DialogActions>
       </Dialog>

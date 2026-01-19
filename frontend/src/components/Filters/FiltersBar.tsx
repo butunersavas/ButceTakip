@@ -5,7 +5,7 @@ import RestartAltOutlinedIcon from "@mui/icons-material/RestartAltOutlined";
 
 type FiltersBarProps = {
   title?: string;
-  onApply: () => void;
+  onApply?: () => void;
   onReset: () => void;
   children: ReactNode;
 };
@@ -36,18 +36,20 @@ export default function FiltersBar({ title = "Filtreler", onApply, onReset, chil
             {children}
           </Box>
           <Stack direction="row" spacing={1} alignItems="center">
-            <Button
-              size="small"
-              variant="contained"
-              startIcon={<FilterAltOutlinedIcon sx={{ fontSize: 18 }} />}
-              onClick={onApply}
-              sx={{
-                minWidth: 90,
-                textTransform: "none"
-              }}
-            >
-              Uygula
-            </Button>
+            {onApply && (
+              <Button
+                size="small"
+                variant="contained"
+                startIcon={<FilterAltOutlinedIcon sx={{ fontSize: 18 }} />}
+                onClick={onApply}
+                sx={{
+                  minWidth: 90,
+                  textTransform: "none"
+                }}
+              >
+                Uygula
+              </Button>
+            )}
             <Button
               size="small"
               variant="outlined"

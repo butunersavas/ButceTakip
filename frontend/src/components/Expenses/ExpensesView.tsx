@@ -349,6 +349,7 @@ export default function ExpensesView() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      refetchExpenses();
       setDialogOpen(false);
       setErrorMessage(null);
     },
@@ -902,11 +903,7 @@ export default function ExpensesView() {
                 <CardActionArea
                   onClick={() =>
                     setSelectedExpenseFilter((prev) => {
-                      const next = prev === card.key ? "ALL" : card.key;
-                      requestAnimationFrame(() => {
-                        tableRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-                      });
-                      return next;
+                      return prev === card.key ? "ALL" : card.key;
                     })
                   }
                   sx={{ height: "100%" }}
