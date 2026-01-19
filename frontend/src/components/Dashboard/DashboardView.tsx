@@ -35,8 +35,10 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   Legend,
-  Line,
+  Pie,
+  PieChart,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip as RechartsTooltip,
@@ -105,6 +107,7 @@ interface SpendMonthlySummary {
   actual_total: number;
   within_plan_total: number;
   over_total: number;
+  remaining_total: number;
 }
 
 interface Scenario {
@@ -467,6 +470,28 @@ export default function DashboardView() {
     enabled: Boolean(debouncedFilters.year)
   });
 
+  const { data: trendMonths = [], isLoading: isTrendLoading } = useQuery<SpendMonthlySummary[]>({
+    queryKey: [
+      "dashboard",
+      "trend",
+      debouncedFilters.year,
+      debouncedFilters.scenarioId,
+      debouncedFilters.budgetItemId,
+      debouncedFilters.department,
+      debouncedFilters.capexOpex
+    ],
+    queryFn: async () => {
+      const params: Record<string, number | string> = { year: debouncedFilters.year };
+      if (debouncedFilters.scenarioId) params.scenario_id = debouncedFilters.scenarioId;
+      if (debouncedFilters.budgetItemId) params.budget_item_id = debouncedFilters.budgetItemId;
+      if (debouncedFilters.department) params.department = debouncedFilters.department;
+      if (debouncedFilters.capexOpex) params.capex_opex = debouncedFilters.capexOpex;
+      const { data } = await client.get<SpendMonthlySummary[]>("/dashboard/trend", { params });
+      return data ?? [];
+    },
+    enabled: Boolean(debouncedFilters.year)
+  });
+
   const budgetFilterOptions = useMemo(
     () =>
       createFilterOptions<BudgetItem>({
@@ -490,23 +515,30 @@ export default function DashboardView() {
   };
 
   const monthlyData = useMemo(() => {
-    if (!dashboard?.monthly) return [];
-    return dashboard.monthly.map((entry) => {
-      const planned = entry.planned ?? 0;
-      const actual = entry.actual ?? 0;
-      const remaining = Math.max(planned - actual, 0);
-      const overrun = Math.max(actual - planned, 0);
+    if (!trendMonths?.length) return [];
+    return trendMonths.map((entry) => ({
+      month: entry.month,
+      planned: entry.plan_total ?? 0,
+      actual: entry.actual_total ?? 0,
+      remaining: entry.remaining_total ?? 0,
+      overrun: entry.over_total ?? 0,
+      monthLabel: monthLabels[entry.month - 1]
+    }));
+  }, [trendMonths]);
 
-      return {
-        ...entry,
-        planned,
-        actual,
-        remaining,
-        overrun,
-        monthLabel: monthLabels[entry.month - 1]
-      };
-    });
-  }, [dashboard]);
+  const pieTotals = useMemo(() => {
+    const planned = spendLastMonths.reduce((sum, item) => sum + (item.plan_total ?? 0), 0);
+    const withinPlan = spendLastMonths.reduce(
+      (sum, item) => sum + (item.within_plan_total ?? 0),
+      0
+    );
+    const overrun = spendLastMonths.reduce((sum, item) => sum + (item.over_total ?? 0), 0);
+    return [
+      { name: "Planlanan", value: planned, color: pieColors.planned },
+      { name: "Plan içi gerçekleşen", value: withinPlan, color: pieColors.actual },
+      { name: "Aşım", value: overrun, color: pieColors.overrun }
+    ];
+  }, [spendLastMonths]);
 
   const normalizedKpi = useMemo(() => {
     const totalPlan = dashboard?.kpi.total_plan ?? 0;
@@ -717,56 +749,6 @@ export default function DashboardView() {
               </Grid>
             ))}
           </Grid>
-          {budgetItemId ? null : (
-            <Card>
-              <CardContent>
-                <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
-                  <Typography variant="h6" fontWeight={600}>
-                    Aşım Yapan Kalemler (Top 10)
-                  </Typography>
-                  {overBudgetItems.length > 10 && (
-                    <Button
-                      variant="text"
-                      size="small"
-                      onClick={() => setIsOverBudgetDialogOpen(true)}
-                    >
-                      Tümünü Gör
-                    </Button>
-                  )}
-                </Stack>
-                {overBudgetItems.length === 0 ? (
-                  <Typography variant="body2" color="text.secondary">
-                    Aşım yapan kalem bulunmuyor.
-                  </Typography>
-                ) : (
-                  <Table size="small">
-                    <TableHead>
-                      <TableRow>
-                        <TableCell>Kalem</TableCell>
-                        <TableCell align="right">Plan</TableCell>
-                        <TableCell align="right">Gerçekleşen</TableCell>
-                        <TableCell align="right">Aşım</TableCell>
-                        <TableCell align="right">%</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {overBudgetItems.slice(0, 10).map((item) => (
-                        <TableRow key={item.budget_code}>
-                          <TableCell>
-                            {stripBudgetCode(item.budget_name) || item.budget_code}
-                          </TableCell>
-                          <TableCell align="right">{formatCurrency(item.plan)}</TableCell>
-                          <TableCell align="right">{formatCurrency(item.actual)}</TableCell>
-                          <TableCell align="right">{formatCurrency(item.over)}</TableCell>
-                          <TableCell align="right">{item.over_pct.toFixed(1)}%</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
-              </CardContent>
-            </Card>
-          )}
           <Stack spacing={3}>
             <Card>
               <CardContent sx={{ height: 280, minHeight: 280 }}>
@@ -784,7 +766,7 @@ export default function DashboardView() {
                     variant={budgetItemId ? "filled" : "outlined"}
                   />
                 </Stack>
-                {isLoading ? (
+                {isTrendLoading ? (
                   <Skeleton variant="rectangular" height="100%" />
                 ) : (
                   <Box sx={{ height: 200, minHeight: 200 }}>
@@ -895,65 +877,26 @@ export default function DashboardView() {
 
                 <Box sx={{ height: 240 }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={spendLastMonths.map((item) => ({
-                        ...item,
-                        monthLabel: monthLabels[item.month - 1]
-                      }))}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
-                      <XAxis dataKey="monthLabel" tick={{ fill: "#475569" }} />
-                      <YAxis
-                        tick={{ fill: "#475569" }}
-                        tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
-                      />
+                    <PieChart>
                       <RechartsTooltip
-                        content={({ active, payload, label }) => {
-                          if (!active || !payload?.length) return null;
-                          const data = payload[0]?.payload as SpendMonthlySummary & {
-                            monthLabel: string;
-                          };
-                          return (
-                            <Box sx={{ bgcolor: "background.paper", p: 1.5, borderRadius: 1, boxShadow: 3 }}>
-                              <Typography variant="caption" fontWeight={600}>
-                                {label}
-                              </Typography>
-                              <Typography variant="body2">
-                                Plan: {formatCurrency(data.plan_total)}
-                              </Typography>
-                              <Typography variant="body2">
-                                Gerçekleşen: {formatCurrency(data.actual_total)}
-                              </Typography>
-                              <Typography variant="body2">
-                                Aşım: {formatCurrency(data.over_total)}
-                              </Typography>
-                            </Box>
-                          );
-                        }}
+                        formatter={(value: number, name: string) =>
+                          [formatCurrency(value), name]
+                        }
                       />
                       <Legend />
-                      <Bar
-                        dataKey="within_plan_total"
-                        name="Plan içi gerçekleşen"
-                        fill={pieColors.actual}
-                        stackId="actual"
-                        radius={[6, 6, 0, 0]}
-                      />
-                      <Bar
-                        dataKey="over_total"
-                        name="Aşım"
-                        fill={pieColors.overrun}
-                        stackId="actual"
-                        radius={[6, 6, 0, 0]}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="plan_total"
-                        name="Planlanan"
-                        stroke={pieColors.planned}
-                        strokeWidth={2}
-                      />
-                    </BarChart>
+                      <Pie
+                        data={pieTotals}
+                        dataKey="value"
+                        nameKey="name"
+                        innerRadius={60}
+                        outerRadius={90}
+                        paddingAngle={2}
+                      >
+                        {pieTotals.map((entry) => (
+                          <Cell key={entry.name} fill={entry.color} />
+                        ))}
+                      </Pie>
+                    </PieChart>
                   </ResponsiveContainer>
                 </Box>
               </CardContent>
@@ -981,6 +924,57 @@ export default function DashboardView() {
                 )}
               </CardContent>
             </Card>
+
+            {budgetItemId ? null : (
+              <Card>
+                <CardContent>
+                  <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
+                    <Typography variant="h6" fontWeight={600}>
+                      Aşım Yapan Kalemler (Top 10)
+                    </Typography>
+                    {overBudgetItems.length > 10 && (
+                      <Button
+                        variant="text"
+                        size="small"
+                        onClick={() => setIsOverBudgetDialogOpen(true)}
+                      >
+                        Tümünü Gör
+                      </Button>
+                    )}
+                  </Stack>
+                  {overBudgetItems.length === 0 ? (
+                    <Typography variant="body2" color="text.secondary">
+                      Aşım yapan kalem bulunmuyor.
+                    </Typography>
+                  ) : (
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Kalem</TableCell>
+                          <TableCell align="right">Plan</TableCell>
+                          <TableCell align="right">Gerçekleşen</TableCell>
+                          <TableCell align="right">Aşım</TableCell>
+                          <TableCell align="right">%</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {overBudgetItems.slice(0, 10).map((item) => (
+                          <TableRow key={item.budget_code}>
+                            <TableCell>
+                              {stripBudgetCode(item.budget_name) || item.budget_code}
+                            </TableCell>
+                            <TableCell align="right">{formatCurrency(item.plan)}</TableCell>
+                            <TableCell align="right">{formatCurrency(item.actual)}</TableCell>
+                            <TableCell align="right">{formatCurrency(item.over)}</TableCell>
+                            <TableCell align="right">{item.over_pct.toFixed(1)}%</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                </CardContent>
+              </Card>
+            )}
           </Stack>
         </Stack>
       </Box>

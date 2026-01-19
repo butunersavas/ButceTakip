@@ -38,6 +38,116 @@ def _resolve_month_range(month: int | None, months: int) -> list[int]:
     return list(range(start_month, end_month + 1))
 
 
+def _calculate_item_based_monthly_totals(
+    session: Session,
+    *,
+    year: int,
+    month_range: list[int],
+    scenario_id: int | None = None,
+    budget_item_id: int | None = None,
+    department: str | None = None,
+    capex_opex: str | None = None,
+) -> list[SpendMonthlySummary]:
+    plan_query = (
+        select(
+            PlanEntry.month,
+            PlanEntry.budget_item_id,
+            func.sum(PlanEntry.amount).label("plan_total"),
+        )
+        .where(PlanEntry.year == year)
+        .where(PlanEntry.month.in_(month_range))
+    )
+    if scenario_id is not None:
+        plan_query = plan_query.where(PlanEntry.scenario_id == scenario_id)
+    if budget_item_id is not None:
+        plan_query = plan_query.where(PlanEntry.budget_item_id == budget_item_id)
+    if department is not None:
+        plan_query = plan_query.where(PlanEntry.department == department)
+    if capex_opex:
+        plan_query = plan_query.join(
+            BudgetItem, BudgetItem.id == PlanEntry.budget_item_id
+        ).where(func.lower(BudgetItem.map_category) == capex_opex)
+    plan_rows = session.exec(plan_query.group_by(PlanEntry.month, PlanEntry.budget_item_id)).all()
+
+    expense_query = (
+        select(
+            func.extract("month", Expense.expense_date).label("month"),
+            Expense.budget_item_id,
+            func.sum(Expense.amount).label("actual_total"),
+        )
+        .where(func.extract("year", Expense.expense_date) == year)
+        .where(func.extract("month", Expense.expense_date).in_(month_range))
+        .where(Expense.status == ExpenseStatus.RECORDED)
+        .where(Expense.is_out_of_budget.is_(False))
+    )
+    if scenario_id is not None:
+        expense_query = expense_query.where(Expense.scenario_id == scenario_id)
+    if budget_item_id is not None:
+        expense_query = expense_query.where(Expense.budget_item_id == budget_item_id)
+    if capex_opex:
+        expense_query = expense_query.join(
+            BudgetItem, BudgetItem.id == Expense.budget_item_id
+        ).where(func.lower(BudgetItem.map_category) == capex_opex)
+    if department is not None:
+        department_budget_items_query = (
+            select(PlanEntry.budget_item_id)
+            .where(PlanEntry.year == year)
+            .where(PlanEntry.department == department)
+        )
+        if scenario_id is not None:
+            department_budget_items_query = department_budget_items_query.where(
+                PlanEntry.scenario_id == scenario_id
+            )
+        expense_query = expense_query.where(
+            Expense.budget_item_id.in_(department_budget_items_query)
+        )
+    expense_rows = session.exec(
+        expense_query.group_by(func.extract("month", Expense.expense_date), Expense.budget_item_id)
+    ).all()
+
+    plan_map: dict[tuple[int, int], float] = {
+        (int(row.month), row.budget_item_id): float(row.plan_total or 0)
+        for row in plan_rows
+    }
+    expense_map: dict[tuple[int, int], float] = {
+        (int(row.month), row.budget_item_id): float(row.actual_total or 0)
+        for row in expense_rows
+    }
+
+    results: list[SpendMonthlySummary] = []
+    for month_value in month_range:
+        plan_total = 0.0
+        actual_total = 0.0
+        over_total = 0.0
+        remaining_total = 0.0
+        within_plan_total = 0.0
+        item_ids = {
+            budget_id
+            for (month_key, budget_id) in plan_map.keys() | expense_map.keys()
+            if month_key == month_value
+        }
+        for budget_id in item_ids:
+            plan_item = plan_map.get((month_value, budget_id), 0.0)
+            actual_item = expense_map.get((month_value, budget_id), 0.0)
+            plan_total += plan_item
+            actual_total += actual_item
+            over_total += max(actual_item - plan_item, 0)
+            remaining_total += max(plan_item - actual_item, 0)
+            within_plan_total += min(actual_item, plan_item)
+
+        results.append(
+            SpendMonthlySummary(
+                month=month_value,
+                plan_total=plan_total,
+                actual_total=actual_total,
+                within_plan_total=within_plan_total,
+                over_total=over_total,
+                remaining_total=remaining_total,
+            )
+        )
+    return results
+
+
 @router.get("", response_model=DashboardResponse)
 def get_dashboard(
     year: int = Query(..., description="Year to summarize"),
@@ -337,76 +447,42 @@ def get_spend_last_months(
     month_range = _resolve_month_range(month, months)
     capex_filter = _normalize_capex_opex(capex_opex)
 
-    plan_query = (
-        select(
-            PlanEntry.month,
-            func.sum(PlanEntry.amount).label("plan_total"),
-        )
-        .where(PlanEntry.year == resolved_year)
-        .where(PlanEntry.month.in_(month_range))
+    return _calculate_item_based_monthly_totals(
+        session,
+        year=resolved_year,
+        month_range=month_range,
+        scenario_id=scenario_id,
+        budget_item_id=budget_item_id,
+        department=department,
+        capex_opex=capex_filter,
     )
-    if scenario_id is not None:
-        plan_query = plan_query.where(PlanEntry.scenario_id == scenario_id)
-    if budget_item_id is not None:
-        plan_query = plan_query.where(PlanEntry.budget_item_id == budget_item_id)
-    if department is not None:
-        plan_query = plan_query.where(PlanEntry.department == department)
-    if capex_filter:
-        plan_query = plan_query.join(
-            BudgetItem, BudgetItem.id == PlanEntry.budget_item_id
-        ).where(func.lower(BudgetItem.map_category) == capex_filter)
-    plan_query = plan_query.group_by(PlanEntry.month)
-    plan_rows = session.exec(plan_query).all()
-    plan_map = {row.month: float(row.plan_total or 0) for row in plan_rows}
 
-    expense_query = (
-        select(
-            func.extract("month", Expense.expense_date).label("month"),
-            func.sum(Expense.amount).label("actual_total"),
-        )
-        .where(func.extract("year", Expense.expense_date) == resolved_year)
-        .where(func.extract("month", Expense.expense_date).in_(month_range))
-        .where(Expense.status == ExpenseStatus.RECORDED)
-        .where(Expense.is_out_of_budget.is_(False))
+
+@router.get("/trend", response_model=list[SpendMonthlySummary])
+def get_spend_trend(
+    year: int | None = Query(default=None),
+    scenario_id: int | None = Query(default=None),
+    budget_item_id: int | None = Query(default=None),
+    department: str | None = Query(default=None),
+    capex_opex: str | None = Query(default=None),
+    session: Session = Depends(get_db_session),
+    _ = Depends(get_current_user),
+) -> list[SpendMonthlySummary]:
+    resolved_year = year
+    if resolved_year is None and scenario_id is not None:
+        scenario = session.get(Scenario, scenario_id)
+        resolved_year = scenario.year if scenario else None
+    if resolved_year is None:
+        resolved_year = date.today().year
+
+    capex_filter = _normalize_capex_opex(capex_opex)
+    month_range = list(range(1, 13))
+    return _calculate_item_based_monthly_totals(
+        session,
+        year=resolved_year,
+        month_range=month_range,
+        scenario_id=scenario_id,
+        budget_item_id=budget_item_id,
+        department=department,
+        capex_opex=capex_filter,
     )
-    if scenario_id is not None:
-        expense_query = expense_query.where(Expense.scenario_id == scenario_id)
-    if budget_item_id is not None:
-        expense_query = expense_query.where(Expense.budget_item_id == budget_item_id)
-    if capex_filter:
-        expense_query = expense_query.join(
-            BudgetItem, BudgetItem.id == Expense.budget_item_id
-        ).where(func.lower(BudgetItem.map_category) == capex_filter)
-    if department is not None:
-        department_budget_items_query = (
-            select(PlanEntry.budget_item_id)
-            .where(PlanEntry.year == resolved_year)
-            .where(PlanEntry.department == department)
-        )
-        if scenario_id is not None:
-            department_budget_items_query = department_budget_items_query.where(
-                PlanEntry.scenario_id == scenario_id
-            )
-        expense_query = expense_query.where(
-            Expense.budget_item_id.in_(department_budget_items_query)
-        )
-    expense_query = expense_query.group_by(func.extract("month", Expense.expense_date))
-    expense_rows = session.exec(expense_query).all()
-    expense_map = {int(row.month): float(row.actual_total or 0) for row in expense_rows}
-
-    results: list[SpendMonthlySummary] = []
-    for month_value in month_range:
-        plan_total = plan_map.get(month_value, 0)
-        actual_total = expense_map.get(month_value, 0)
-        within_plan_total = min(actual_total, plan_total)
-        over_total = max(actual_total - plan_total, 0)
-        results.append(
-            SpendMonthlySummary(
-                month=month_value,
-                plan_total=plan_total,
-                actual_total=actual_total,
-                within_plan_total=within_plan_total,
-                over_total=over_total,
-            )
-        )
-    return results

@@ -2,7 +2,6 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func
-from sqlalchemy.orm import selectinload
 from sqlmodel import Session, select
 
 from app.dependencies import get_admin_user, get_current_user, get_db_session
@@ -21,17 +20,53 @@ def _normalize_capex_opex(value: str | None) -> str | None:
     return None
 
 
-def _build_plan_read(plan: PlanEntry, budget: BudgetItem | None = None) -> PlanEntryRead:
-    read_item = PlanEntryRead.from_orm(plan)
-    if budget:
-        read_item.budget_code = budget.code
-        read_item.budget_name = budget.name
-        read_item.budget_item_name = budget.name
-        read_item.capex_opex = budget.map_category.title() if budget.map_category else None
-        read_item.asset_type = budget.map_attribute
-    if plan.scenario:
-        read_item.scenario_name = plan.scenario.name
-    return read_item
+def _plan_read_query(capex_filter: str | None):
+    query = (
+        select(
+            PlanEntry.id,
+            PlanEntry.year,
+            PlanEntry.month,
+            PlanEntry.amount,
+            PlanEntry.scenario_id,
+            PlanEntry.budget_item_id,
+            PlanEntry.department,
+            Scenario.name.label("scenario_name"),
+            BudgetItem.code.label("budget_code"),
+            BudgetItem.name.label("budget_name"),
+            BudgetItem.map_category.label("capex_opex"),
+            BudgetItem.map_attribute.label("asset_type"),
+        )
+        .select_from(PlanEntry)
+        .join(Scenario, Scenario.id == PlanEntry.scenario_id)
+        .join(BudgetItem, BudgetItem.id == PlanEntry.budget_item_id)
+    )
+    if capex_filter:
+        query = query.where(func.lower(BudgetItem.map_category) == capex_filter)
+    return query
+
+
+def _build_plan_read(row: dict) -> PlanEntryRead:
+    return PlanEntryRead(
+        id=row.get("id"),
+        year=row.get("year"),
+        month=row.get("month"),
+        amount=row.get("amount"),
+        scenario_id=row.get("scenario_id"),
+        budget_item_id=row.get("budget_item_id"),
+        department=row.get("department"),
+        scenario_name=row.get("scenario_name"),
+        budget_code=row.get("budget_code"),
+        budget_name=row.get("budget_name"),
+        capex_opex=row.get("capex_opex").title() if row.get("capex_opex") else None,
+        asset_type=row.get("asset_type"),
+    )
+
+
+def _fetch_plan_read(session: Session, plan_id: int) -> PlanEntryRead:
+    row = session.exec(_plan_read_query(None).where(PlanEntry.id == plan_id)).first()
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan not found")
+    return _build_plan_read(row._mapping)
 
 
 @router.get("", response_model=list[PlanEntryRead])
@@ -46,15 +81,8 @@ def list_plans(
     session: Session = Depends(get_db_session),
     _: User = Depends(get_current_user),
 ) -> list[PlanEntryRead]:
-    query = select(PlanEntry).options(
-        selectinload(PlanEntry.scenario),
-        selectinload(PlanEntry.budget_item),
-    )
     capex_filter = _normalize_capex_opex(capex_opex)
-    if capex_filter:
-        query = query.join(BudgetItem, BudgetItem.id == PlanEntry.budget_item_id).where(
-            func.lower(BudgetItem.map_category) == capex_filter
-        )
+    query = _plan_read_query(capex_filter)
     if year is not None:
         query = query.where(PlanEntry.year == year)
     if scenario_id is not None:
@@ -65,21 +93,8 @@ def list_plans(
         query = query.where(PlanEntry.month == month)
     if department is not None:
         query = query.where(PlanEntry.department == department)
-    plans = session.exec(query).all()
-    fallback_map: dict[str, BudgetItem] = {}
-    missing_codes = {
-        plan.budget_code
-        for plan in plans
-        if not plan.budget_item and getattr(plan, "budget_code", None)
-    }
-    if missing_codes:
-        fallback_items = session.exec(select(BudgetItem).where(BudgetItem.code.in_(missing_codes))).all()
-        fallback_map = {item.code: item for item in fallback_items}
-    results: list[PlanEntryRead] = []
-    for plan in plans:
-        budget = plan.budget_item or fallback_map.get(plan.budget_code)
-        results.append(_build_plan_read(plan, budget))
-    return results
+    rows = session.exec(query).all()
+    return [_build_plan_read(row._mapping) for row in rows]
 
 
 @router.get("/aggregate", response_model=list[PlanAggregateRead])
@@ -144,10 +159,7 @@ def create_plan_entry(
     session.add(plan)
     session.commit()
     session.refresh(plan)
-    budget = session.get(BudgetItem, plan.budget_item_id)
-    if not plan.scenario:
-        plan.scenario = session.get(Scenario, plan.scenario_id)
-    return _build_plan_read(plan, budget)
+    return _fetch_plan_read(session, plan.id)
 
 
 @router.put("/{plan_id}", response_model=PlanEntryRead)
@@ -167,10 +179,7 @@ def update_plan_entry(
     session.add(plan)
     session.commit()
     session.refresh(plan)
-    budget = session.get(BudgetItem, plan.budget_item_id)
-    if not plan.scenario:
-        plan.scenario = session.get(Scenario, plan.scenario_id)
-    return _build_plan_read(plan, budget)
+    return _fetch_plan_read(session, plan.id)
 
 
 @router.delete("/{plan_id}", status_code=status.HTTP_204_NO_CONTENT)

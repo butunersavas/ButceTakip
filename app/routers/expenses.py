@@ -91,10 +91,6 @@ def _build_expense_read(
         status=status,
         is_out_of_budget=row.get("is_out_of_budget"),
         is_cancelled=status == ExpenseStatus.CANCELLED if status else None,
-        created_by_id=row.get("created_by_id"),
-        updated_by_id=row.get("updated_by_id"),
-        created_by_user_id=row.get("created_by_user_id"),
-        updated_by_user_id=row.get("updated_by_user_id"),
         created_by_name=created_name,
         updated_by_name=updated_name,
         created_by_username=created_name,
@@ -105,8 +101,6 @@ def _build_expense_read(
         capex_opex=capex_opex,
         department=department,
         asset_type=row.get("asset_type"),
-        client_hostname=row.get("client_hostname"),
-        kaydi_giren_kullanici=row.get("kaydi_giren_kullanici"),
         created_at=row.get("created_at"),
         updated_at=row.get("updated_at"),
     )
@@ -270,7 +264,7 @@ def list_expenses(
     except Exception as exc:
         logger.exception("Failed to list expenses")
         raise HTTPException(
-            status_code=400,
+            status_code=500,
             detail=f"Harcama listesi alınırken bir hata oluştu: {exc}",
         )
     budget_ids = {row.budget_item_id for row in rows}

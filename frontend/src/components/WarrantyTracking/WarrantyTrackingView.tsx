@@ -44,6 +44,7 @@ type WarrantyItem = {
   updated_by_name?: string | null;
   created_by_username?: string | null;
   updated_by_username?: string | null;
+  updated_at?: string | null;
   days_left?: number | null;
   status_label?: string;
   status_key?: "expired" | "critical" | "approaching" | "ok" | "unknown";
@@ -411,7 +412,7 @@ export default function WarrantyTrackingView() {
         valueGetter: (params) => params?.row?.domain ?? "-",
       },
       {
-        field: "renewal_owner",
+        field: "renewal_responsible",
         headerName: "Yenileme Sorumlusu",
         flex: 1,
         valueGetter: (params) =>
@@ -422,6 +423,12 @@ export default function WarrantyTrackingView() {
         headerName: "Bitiş Tarihi",
         flex: 0.9,
         valueGetter: (params) => formatDate(params?.row?.end_date ?? null),
+      },
+      {
+        field: "updated_at",
+        headerName: "Son Güncelleme",
+        flex: 0.9,
+        valueGetter: (params) => formatDate(params?.row?.updated_at ?? null),
       },
       {
         field: "days_left",
@@ -479,7 +486,7 @@ export default function WarrantyTrackingView() {
         },
       },
       {
-        field: "created_by",
+        field: "created_by_name",
         headerName: "Kaydı Giren",
         flex: 1,
         valueGetter: (params) =>
@@ -488,7 +495,7 @@ export default function WarrantyTrackingView() {
           "-",
       },
       {
-        field: "updated_by",
+        field: "updated_by_name",
         headerName: "Son Güncelleyen",
         flex: 1,
         valueGetter: (params) =>
