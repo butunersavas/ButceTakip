@@ -1,6 +1,7 @@
 import logging
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlmodel import Session
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,9 +23,9 @@ from app.routers import (
     warranty_items,
 )
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 
-app = FastAPI()
+app = FastAPI(redirect_slashes=False)
 API_PREFIX = "/api"
 settings = get_settings()
 
@@ -45,6 +46,12 @@ app.add_middleware(
 @app.on_event("startup")
 def on_startup() -> None:
     init_db()
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    logging.exception("Unhandled error on %s", request.url.path)
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 
 app.include_router(auth.router, prefix=API_PREFIX)

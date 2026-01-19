@@ -35,7 +35,7 @@ import MenuIcon from "@mui/icons-material/Menu";
 import DarkModeIcon from "@mui/icons-material/DarkModeOutlined";
 import LightModeIcon from "@mui/icons-material/LightModeOutlined";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import type { Location, To } from "react-router-dom";
 
@@ -72,6 +72,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const [newPasswordAgain, setNewPasswordAgain] = useState("");
   const [isSavingPassword, setIsSavingPassword] = useState(false);
   const [feedback, setFeedback] = useState<{ message: string; severity: "success" | "error" } | null>(null);
+  const [apiError, setApiError] = useState<{ message: string; status?: number } | null>(null);
 
   const navItems = useMemo<NavItem[]>(() => {
     const items: NavItem[] = [
@@ -122,6 +123,17 @@ export default function AppLayout({ children }: AppLayoutProps) {
 
     return items;
   }, [user?.is_admin]);
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ message?: string; status?: number }>).detail;
+      if (detail?.message) {
+        setApiError({ message: detail.message, status: detail.status });
+      }
+    };
+    window.addEventListener("api-error", handler as EventListener);
+    return () => window.removeEventListener("api-error", handler as EventListener);
+  }, []);
 
   const userDisplayName = user?.full_name?.trim() || user?.username || "Kullanıcı";
   const userInitials = useMemo(() => {
@@ -397,6 +409,19 @@ export default function AppLayout({ children }: AppLayoutProps) {
           {feedback && (
             <Alert severity={feedback.severity} onClose={() => setFeedback(null)} sx={{ width: "100%" }}>
               {feedback.message}
+            </Alert>
+          )}
+        </Snackbar>
+        <Snackbar
+          open={Boolean(apiError)}
+          autoHideDuration={5000}
+          onClose={() => setApiError(null)}
+          anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        >
+          {apiError && (
+            <Alert severity="error" onClose={() => setApiError(null)} sx={{ width: "100%" }}>
+              {apiError.status ? `[${apiError.status}] ` : ""}
+              {apiError.message}
             </Alert>
           )}
         </Snackbar>

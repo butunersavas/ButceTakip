@@ -185,23 +185,28 @@ class PurchaseFormPreparedReportItem(BaseModel):
 
 class ExpenseBase(BaseModel):
     budget_item_id: int
-    scenario_id: Optional[int] = None
-    expense_date: date
-    amount: float
+    scenario_id: int
+    expense_date: date = Field(alias="date")
+    amount: float | None = None
     quantity: float = 1
     unit_price: float = 0
     vendor: Optional[str] = None
     description: Optional[str] = None
     status: ExpenseStatus = ExpenseStatus.RECORDED
-    is_out_of_budget: bool = False
+    is_out_of_budget: bool = Field(default=False, alias="out_of_budget")
     client_hostname: Optional[str] = None
     kaydi_giren_kullanici: Optional[str] = None
 
     @validator("amount", "quantity", "unit_price")
-    def validate_non_negative(cls, value: float) -> float:
+    def validate_non_negative(cls, value: float | None) -> float | None:
+        if value is None:
+            return value
         if value < 0:
             raise ValueError("Value must be non-negative")
         return value
+
+    class Config:
+        allow_population_by_field_name = True
 
 
 class ExpenseCreate(ExpenseBase):
@@ -244,10 +249,13 @@ class WarrantyItemBase(BaseModel):
     type: WarrantyItemType
     name: str
     location: str
+    domain: Optional[str] = None
     end_date: date
     note: Optional[str] = None
+    issuer: Optional[str] = None
     certificate_issuer: Optional[str] = None
     renewal_owner: Optional[str] = None
+    remind_days: Optional[int] = Field(default=30, ge=0)
     remind_days_before: Optional[int] = Field(default=30, ge=0)
 
 
@@ -259,10 +267,13 @@ class WarrantyItemUpdate(BaseModel):
     type: Optional[WarrantyItemType] = None
     name: Optional[str] = None
     location: Optional[str] = None
+    domain: Optional[str] = None
     end_date: Optional[date] = None
     note: Optional[str] = None
+    issuer: Optional[str] = None
     certificate_issuer: Optional[str] = None
     renewal_owner: Optional[str] = None
+    remind_days: Optional[int] = None
     remind_days_before: Optional[int] = None
     is_active: Optional[bool] = None
 

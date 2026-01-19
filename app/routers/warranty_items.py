@@ -24,17 +24,19 @@ def _calculate_days_left(end_date: date, today: date | None = None) -> int:
     return (end_date - base_date).days
 
 
-def _calculate_status(days_left: int, remind_days_before: int) -> str:
+def _calculate_status(days_left: int) -> str:
     if days_left < 0:
         return "Süresi Geçti"
-    if days_left <= remind_days_before:
+    if days_left <= 30:
         return "Kritik"
-    if days_left <= remind_days_before + 30:
+    if days_left <= 60:
         return "Yaklaşıyor"
     return "Aktif"
 
 
 def _resolve_remind_days(item: WarrantyItem) -> int:
+    if isinstance(item.remind_days, int):
+        return item.remind_days
     if isinstance(item.remind_days_before, int):
         return item.remind_days_before
     if isinstance(item.reminder_days, int):
@@ -79,10 +81,16 @@ def _attach_status_fields(items: list[WarrantyItem]) -> None:
         remind_days_before = _resolve_remind_days(item)
         if item.remind_days_before is None:
             item.remind_days_before = remind_days_before
+        if item.remind_days is None:
+            item.remind_days = remind_days_before
+        if item.reminder_days is None:
+            item.reminder_days = remind_days_before
         if item.certificate_issuer is None and item.issuer:
             item.certificate_issuer = item.issuer
+        if item.issuer is None and item.certificate_issuer:
+            item.issuer = item.certificate_issuer
         item.days_left = days_left
-        item.status = _calculate_status(days_left, remind_days_before)
+        item.status = _calculate_status(days_left)
 
 
 @router.get("", response_model=list[WarrantyItemRead])
@@ -109,8 +117,11 @@ def create_warranty_item(
     item_data = item_in.dict()
     if item_data.get("certificate_issuer") and not item_data.get("issuer"):
         item_data["issuer"] = item_data["certificate_issuer"]
-    if item_data.get("remind_days_before") is not None and item_data.get("reminder_days") is None:
-        item_data["reminder_days"] = item_data["remind_days_before"]
+    remind_days_value = item_data.get("remind_days") or item_data.get("remind_days_before")
+    if remind_days_value is not None:
+        item_data.setdefault("remind_days_before", remind_days_value)
+        item_data.setdefault("reminder_days", remind_days_value)
+        item_data.setdefault("remind_days", remind_days_value)
     item = WarrantyItem(
         **item_data,
         created_by_id=current_user.id,
@@ -147,8 +158,11 @@ def update_warranty_item(
     update_data = item_in.dict(exclude_unset=True)
     if update_data.get("certificate_issuer") and not update_data.get("issuer"):
         update_data["issuer"] = update_data["certificate_issuer"]
-    if update_data.get("remind_days_before") is not None and update_data.get("reminder_days") is None:
-        update_data["reminder_days"] = update_data["remind_days_before"]
+    remind_days_value = update_data.get("remind_days") or update_data.get("remind_days_before")
+    if remind_days_value is not None:
+        update_data.setdefault("remind_days_before", remind_days_value)
+        update_data.setdefault("reminder_days", remind_days_value)
+        update_data.setdefault("remind_days", remind_days_value)
     for field, value in update_data.items():
         setattr(item, field, value)
     if item.created_by_id is None:
@@ -210,18 +224,23 @@ def list_critical_warranty_items(
     for item in active_items:
         days_left = _calculate_days_left(item.end_date, today)
         remind_days_before = _resolve_remind_days(item)
-        if 1 <= days_left <= remind_days_before:
+        if 0 <= days_left <= 30:
             critical_items.append(
                 WarrantyItemCriticalRead(
                     id=item.id,
                     type=item.type,
                     name=item.name,
                     location=item.location,
+                    domain=item.domain,
                     end_date=item.end_date,
                     note=item.note,
+                    issuer=item.issuer or item.certificate_issuer,
                     certificate_issuer=item.certificate_issuer or item.issuer,
                     renewal_owner=item.renewal_owner,
-                    remind_days_before=item.remind_days_before or item.reminder_days or 30,
+                    remind_days_before=item.remind_days_before
+                    or item.remind_days
+                    or item.reminder_days
+                    or 30,
                     is_active=item.is_active,
                     created_by_id=item.created_by_id,
                     updated_by_id=item.updated_by_id,
@@ -231,7 +250,7 @@ def list_critical_warranty_items(
                     updated_by_name=getattr(item, "updated_by_name", None),
                     created_by_username=getattr(item, "created_by_username", None),
                     updated_by_username=getattr(item, "updated_by_username", None),
-                    status=_calculate_status(days_left, remind_days_before),
+                    status=_calculate_status(days_left),
                     created_at=item.created_at,
                     updated_at=item.updated_at,
                     days_left=days_left,

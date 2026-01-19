@@ -25,7 +25,7 @@ def _normalize_capex_opex(value: str | None) -> str | None:
     return None
 
 
-@router.get("/", response_model=DashboardResponse)
+@router.get("", response_model=DashboardResponse)
 def get_dashboard(
     year: int = Query(..., description="Year to summarize"),
     scenario_id: int | None = Query(default=None),
