@@ -57,7 +57,7 @@ def _user_display_name(user: User | None) -> str | None:
     return user.full_name or user.username or user.email
 
 
-def _attach_user_names(session: Session, expenses: list[Expense]) -> None:
+def _build_user_map(session: Session, expenses: list[Expense]) -> dict[int, str | None]:
     user_ids: set[int] = set()
     for expense in expenses:
         if expense.created_by_user_id:
@@ -69,16 +69,20 @@ def _attach_user_names(session: Session, expenses: list[Expense]) -> None:
         if expense.updated_by_user_id:
             user_ids.add(expense.updated_by_user_id)
     if not user_ids:
-        return
+        return {}
     users = session.exec(select(User).where(User.id.in_(user_ids))).all()
-    user_map = {user.id: _user_display_name(user) for user in users}
-    for expense in expenses:
-        created_id = expense.created_by_user_id or expense.created_by_id
-        updated_id = expense.updated_by_user_id or expense.updated_by_id
-        expense.created_by_name = user_map.get(created_id) if created_id else None
-        expense.updated_by_name = user_map.get(updated_id) if updated_id else None
-        expense.created_by_username = expense.created_by_name
-        expense.updated_by_username = expense.updated_by_name
+    return {user.id: _user_display_name(user) for user in users}
+
+
+def _build_expense_read(expense: Expense, user_map: dict[int, str | None]) -> ExpenseRead:
+    read_item = ExpenseRead.from_orm(expense)
+    created_id = expense.created_by_user_id or expense.created_by_id
+    updated_id = expense.updated_by_user_id or expense.updated_by_id
+    read_item.created_by_name = user_map.get(created_id) if created_id else None
+    read_item.updated_by_name = user_map.get(updated_id) if updated_id else None
+    read_item.created_by_username = read_item.created_by_name
+    read_item.updated_by_username = read_item.updated_by_name
+    return read_item
 
 
 @router.get("", response_model=list[ExpenseRead])
@@ -98,7 +102,7 @@ def list_expenses(
     capex_opex: str | None = Query(default=None),
     session: Session = Depends(get_db_session),
     current_user: User = Depends(get_current_user),
-) -> list[Expense]:
+) -> list[ExpenseRead]:
     query = select(Expense)
     capex_filter = _normalize_capex_opex(capex_opex)
     if capex_filter:
@@ -140,8 +144,8 @@ def list_expenses(
             func.coalesce(Expense.created_by_user_id, Expense.created_by_id) == current_user.id
         )
     expenses = session.exec(query.order_by(Expense.expense_date.desc())).all()
-    _attach_user_names(session, expenses)
-    return expenses
+    user_map = _build_user_map(session, expenses)
+    return [_build_expense_read(expense, user_map) for expense in expenses]
 
 
 @router.post("", response_model=ExpenseRead, status_code=201)
@@ -151,7 +155,7 @@ def create_expense(
     request: Request,
     session: Session = Depends(get_db_session),
     current_user: User = Depends(get_current_user),
-) -> Expense:
+) -> ExpenseRead:
     if not expense_in.scenario_id:
         raise HTTPException(status_code=400, detail="scenario_id is required")
     if not session.get(BudgetItem, expense_in.budget_item_id):
@@ -183,8 +187,8 @@ def create_expense(
         session.rollback()
         detail = str(exc.orig) if getattr(exc, "orig", None) else "DB constraint error"
         raise HTTPException(status_code=400, detail=detail)
-    _attach_user_names(session, [expense])
-    return expense
+    user_map = _build_user_map(session, [expense])
+    return _build_expense_read(expense, user_map)
 
 
 @router.put("/{expense_id}", response_model=ExpenseRead)
@@ -194,7 +198,7 @@ def update_expense(
     expense_in: ExpenseUpdate,
     session: Session = Depends(get_db_session),
     current_user: User = Depends(get_current_user),
-) -> Expense:
+) -> ExpenseRead:
     expense = session.get(Expense, expense_id)
     if not expense:
         raise HTTPException(status_code=404, detail="Expense not found")
@@ -222,8 +226,8 @@ def update_expense(
         session.rollback()
         detail = str(exc.orig) if getattr(exc, "orig", None) else "DB constraint error"
         raise HTTPException(status_code=400, detail=detail)
-    _attach_user_names(session, [expense])
-    return expense
+    user_map = _build_user_map(session, [expense])
+    return _build_expense_read(expense, user_map)
 
 
 @router.delete("/{expense_id}", status_code=204)

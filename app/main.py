@@ -1,4 +1,5 @@
 import logging
+import os
 from uuid import uuid4
 
 from fastapi import FastAPI, Request
@@ -33,17 +34,25 @@ API_PREFIX = "/api"
 settings = get_settings()
 
 app.add_middleware(
-    TrustedHostMiddleware,
-    allowed_hosts=settings.allowed_hosts,
-)
-
-app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+trusted_hosts = settings.trusted_hosts
+trusted_hosts_env = os.getenv("TRUSTED_HOSTS")
+if trusted_hosts is None and settings.environment.lower() in {"development", "dev", "local"}:
+    trusted_hosts = []
+elif trusted_hosts is None and trusted_hosts_env is None:
+    trusted_hosts = settings.allowed_hosts
+
+if trusted_hosts:
+    app.add_middleware(
+        TrustedHostMiddleware,
+        allowed_hosts=trusted_hosts,
+    )
 
 
 @app.on_event("startup")

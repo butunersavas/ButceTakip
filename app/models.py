@@ -153,6 +153,7 @@ class WarrantyItem(TimestampMixin, SQLModel, table=True):
     issuer: Optional[str] = Field(default=None, nullable=True)
     certificate_issuer: Optional[str] = Field(default=None, nullable=True)
     renewal_owner: Optional[str] = Field(default=None, nullable=True)
+    renewal_responsible: Optional[str] = Field(default=None, nullable=True)
     reminder_days: Optional[int] = Field(default=30, nullable=True)
     remind_days: Optional[int] = Field(default=30, nullable=True)
     remind_days_before: Optional[int] = Field(default=30, nullable=True)
