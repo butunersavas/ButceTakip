@@ -192,7 +192,14 @@ export default function ImportExportView() {
       queryClient.invalidateQueries({ queryKey: ["scenarios"] });
     } catch (err) {
       console.error(err);
-      setError("Dosya içe aktarılırken bir hata oluştu. Lütfen formatı kontrol edin.");
+      if (axios.isAxiosError(err)) {
+        const detail =
+          (err.response?.data as { detail?: string; message?: string } | undefined)?.detail ||
+          (err.response?.data as { detail?: string; message?: string } | undefined)?.message;
+        setError(detail || "Dosya içe aktarılırken bir hata oluştu. Lütfen formatı kontrol edin.");
+      } else {
+        setError("Dosya içe aktarılırken bir hata oluştu. Lütfen formatı kontrol edin.");
+      }
       setImportSummary(null);
     }
   };
@@ -250,7 +257,14 @@ export default function ImportExportView() {
       downloadBlob(response.data, `butce-raporu-${Date.now()}.xlsx`);
     } catch (err) {
       console.error(err);
-      setExportError("Dışa aktarma sırasında bir hata oluştu. Lütfen filtreleri kontrol edin.");
+      if (axios.isAxiosError(err)) {
+        const detail =
+          (err.response?.data as { detail?: string; message?: string } | undefined)?.detail ||
+          (err.response?.data as { detail?: string; message?: string } | undefined)?.message;
+        setExportError(detail || "Dışa aktarma sırasında bir hata oluştu. Lütfen filtreleri kontrol edin.");
+      } else {
+        setExportError("Dışa aktarma sırasında bir hata oluştu. Lütfen filtreleri kontrol edin.");
+      }
     } finally {
       setExporting(false);
     }
@@ -267,7 +281,16 @@ export default function ImportExportView() {
       downloadBlob(response.data, `butce-ucaylik-rapor-${Date.now()}.xlsx`);
     } catch (err) {
       console.error(err);
-      setExportError("Üç aylık rapor indirilirken bir hata oluştu. Lütfen filtreleri kontrol edin.");
+      if (axios.isAxiosError(err)) {
+        const detail =
+          (err.response?.data as { detail?: string; message?: string } | undefined)?.detail ||
+          (err.response?.data as { detail?: string; message?: string } | undefined)?.message;
+        setExportError(
+          detail || "Üç aylık rapor indirilirken bir hata oluştu. Lütfen filtreleri kontrol edin."
+        );
+      } else {
+        setExportError("Üç aylık rapor indirilirken bir hata oluştu. Lütfen filtreleri kontrol edin.");
+      }
     } finally {
       setExporting(false);
     }
@@ -288,7 +311,16 @@ export default function ImportExportView() {
       downloadBlob(response.data, fileName);
     } catch (err) {
       console.error(err);
-      setExportError("Seçili rapor indirilirken bir hata oluştu. Lütfen filtreleri kontrol edin.");
+      if (axios.isAxiosError(err)) {
+        const detail =
+          (err.response?.data as { detail?: string; message?: string } | undefined)?.detail ||
+          (err.response?.data as { detail?: string; message?: string } | undefined)?.message;
+        setExportError(
+          detail || "Seçili rapor indirilirken bir hata oluştu. Lütfen filtreleri kontrol edin."
+        );
+      } else {
+        setExportError("Seçili rapor indirilirken bir hata oluştu. Lütfen filtreleri kontrol edin.");
+      }
     } finally {
       setExporting(false);
     }
@@ -305,7 +337,14 @@ export default function ImportExportView() {
       downloadBlob(response.data, `satinalma_formu_hazirlanan_butceler_${year}.xlsx`);
     } catch (err) {
       console.error(err);
-      setExportError("Rapor indirilirken hata oluştu. Lütfen filtreleri kontrol edin.");
+      if (axios.isAxiosError(err)) {
+        const detail =
+          (err.response?.data as { detail?: string; message?: string } | undefined)?.detail ||
+          (err.response?.data as { detail?: string; message?: string } | undefined)?.message;
+        setExportError(detail || "Rapor indirilirken hata oluştu. Lütfen filtreleri kontrol edin.");
+      } else {
+        setExportError("Rapor indirilirken hata oluştu. Lütfen filtreleri kontrol edin.");
+      }
     } finally {
       setExporting(false);
     }

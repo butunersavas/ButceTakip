@@ -185,7 +185,7 @@ class PurchaseFormPreparedReportItem(BaseModel):
 
 class ExpenseBase(BaseModel):
     budget_item_id: int
-    scenario_id: int | None = None
+    scenario_id: int | None = Field(default=None, alias="scenario")
     expense_date: date = Field(alias="date")
     amount: float | None = None
     quantity: float = 1
@@ -215,7 +215,7 @@ class ExpenseBase(BaseModel):
                 raise ValueError("expense_date must be YYYY-MM-DD or DD.MM.YYYY") from exc
         raise ValueError("Invalid expense_date")
 
-    @validator("amount", "quantity", "unit_price")
+    @validator("amount", "quantity", "unit_price", pre=True)
     def validate_non_negative(cls, value: float | str | None) -> float | None:
         if value is None:
             return value
@@ -321,7 +321,7 @@ class WarrantyItemBase(BaseModel):
     name: str
     location: str
     domain: Optional[str] = None
-    end_date: date
+    end_date: Optional[date] = None
     note: Optional[str] = None
     issuer: Optional[str] = None
     certificate_issuer: Optional[str] = None
@@ -330,13 +330,15 @@ class WarrantyItemBase(BaseModel):
     remind_days_before: Optional[int] = Field(default=30, ge=0)
 
     @validator("end_date", pre=True)
-    def parse_end_date(cls, value: date | str) -> date:  # noqa: D417
+    def parse_end_date(cls, value: date | str | None) -> date | None:  # noqa: D417
         if isinstance(value, date):
             return value
+        if value is None:
+            return None
         if isinstance(value, str):
             raw = value.strip()
             if not raw:
-                raise ValueError("end_date is required")
+                return None
             try:
                 return datetime.strptime(raw, "%Y-%m-%d").date()
             except ValueError:

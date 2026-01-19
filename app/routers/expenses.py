@@ -3,6 +3,7 @@ import ipaddress
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func
+from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, select
 
 from app.dependencies import get_current_user, get_db_session
@@ -174,9 +175,14 @@ def create_expense(
         client_hostname=client_hostname,
         kaydi_giren_kullanici=current_user.username,
     )
-    session.add(expense)
-    session.commit()
-    session.refresh(expense)
+    try:
+        session.add(expense)
+        session.commit()
+        session.refresh(expense)
+    except SQLAlchemyError as exc:
+        session.rollback()
+        detail = str(exc.orig) if getattr(exc, "orig", None) else "DB constraint error"
+        raise HTTPException(status_code=400, detail=detail)
     _attach_user_names(session, [expense])
     return expense
 
@@ -208,9 +214,14 @@ def update_expense(
     expense.updated_by_user_id = current_user.id
     expense.updated_by_id = current_user.id
     expense.updated_at = datetime.utcnow()
-    session.add(expense)
-    session.commit()
-    session.refresh(expense)
+    try:
+        session.add(expense)
+        session.commit()
+        session.refresh(expense)
+    except SQLAlchemyError as exc:
+        session.rollback()
+        detail = str(exc.orig) if getattr(exc, "orig", None) else "DB constraint error"
+        raise HTTPException(status_code=400, detail=detail)
     _attach_user_names(session, [expense])
     return expense
 

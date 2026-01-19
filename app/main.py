@@ -1,4 +1,5 @@
 import logging
+from uuid import uuid4
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -25,6 +26,7 @@ from app.routers import (
 )
 
 logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(redirect_slashes=False)
 API_PREFIX = "/api"
@@ -51,19 +53,23 @@ def on_startup() -> None:
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    logging.exception("Unhandled error on %s", request.url.path)
-    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+    error_id = str(uuid4())
+    logger.exception("Unhandled error on %s [error_id=%s]", request.url.path, error_id)
+    response = {"detail": "Internal server error"}
+    if settings.environment.lower() != "production":
+        response["error_id"] = error_id
+    return JSONResponse(status_code=500, content=response)
 
 
 @app.exception_handler(IntegrityError)
 async def integrity_error_handler(request: Request, exc: IntegrityError) -> JSONResponse:
-    logging.exception("Integrity error on %s", request.url.path)
+    logger.exception("Integrity error on %s", request.url.path)
     return JSONResponse(status_code=400, content={"detail": str(exc.orig) if exc.orig else "Integrity error"})
 
 
 @app.exception_handler(SQLAlchemyError)
 async def sqlalchemy_error_handler(request: Request, exc: SQLAlchemyError) -> JSONResponse:
-    logging.exception("Database error on %s", request.url.path)
+    logger.exception("Database error on %s", request.url.path)
     return JSONResponse(status_code=400, content={"detail": "Database error"})
 
 
