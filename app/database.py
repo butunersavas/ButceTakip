@@ -78,6 +78,84 @@ def init_default_admin(session: Session) -> None:
     session.refresh(user)
 
 
+def ensure_warranty_schema(inspector) -> None:
+    if not inspector.has_table("warranty_items"):
+        return
+    warranty_columns = {column["name"] for column in inspector.get_columns("warranty_items")}
+    if "domain" not in warranty_columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE warranty_items ADD COLUMN domain TEXT"))
+    if "issuer" not in warranty_columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE warranty_items ADD COLUMN issuer TEXT"))
+    if "certificate_issuer" not in warranty_columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE warranty_items ADD COLUMN certificate_issuer TEXT"))
+            connection.execute(
+                text(
+                    "UPDATE warranty_items "
+                    "SET certificate_issuer = issuer "
+                    "WHERE certificate_issuer IS NULL AND issuer IS NOT NULL"
+                )
+            )
+    if "renewal_owner" not in warranty_columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE warranty_items ADD COLUMN renewal_owner TEXT"))
+    if "renewal_responsible" not in warranty_columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE warranty_items ADD COLUMN renewal_responsible TEXT"))
+    if "reminder_days" not in warranty_columns:
+        with engine.begin() as connection:
+            connection.execute(
+                text("ALTER TABLE warranty_items ADD COLUMN reminder_days INTEGER DEFAULT 30")
+            )
+    if "remind_days" not in warranty_columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE warranty_items ADD COLUMN remind_days INTEGER DEFAULT 30"))
+            connection.execute(
+                text(
+                    "UPDATE warranty_items SET remind_days = reminder_days "
+                    "WHERE remind_days IS NULL AND reminder_days IS NOT NULL"
+                )
+            )
+    if "remind_days_before" not in warranty_columns:
+        with engine.begin() as connection:
+            connection.execute(
+                text("ALTER TABLE warranty_items ADD COLUMN remind_days_before INTEGER DEFAULT 30")
+            )
+            connection.execute(
+                text(
+                    "UPDATE warranty_items "
+                    "SET remind_days_before = reminder_days "
+                    "WHERE remind_days_before IS NULL AND reminder_days IS NOT NULL"
+                )
+            )
+    if "created_by_id" not in warranty_columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE warranty_items ADD COLUMN created_by_id INTEGER"))
+            connection.execute(
+                text(
+                    "UPDATE warranty_items SET created_by_id = created_by_user_id "
+                    "WHERE created_by_id IS NULL"
+                )
+            )
+    if "updated_by_id" not in warranty_columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE warranty_items ADD COLUMN updated_by_id INTEGER"))
+            connection.execute(
+                text(
+                    "UPDATE warranty_items SET updated_by_id = COALESCE(updated_by_user_id, created_by_id) "
+                    "WHERE updated_by_id IS NULL"
+                )
+            )
+    if "created_by_user_id" not in warranty_columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE warranty_items ADD COLUMN created_by_user_id INTEGER"))
+    if "updated_by_user_id" not in warranty_columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE warranty_items ADD COLUMN updated_by_user_id INTEGER"))
+
+
 def _apply_schema_upgrades() -> None:
     inspector = inspect(engine)
     is_postgres = engine.dialect.name == "postgresql"
@@ -118,6 +196,16 @@ def _apply_schema_upgrades() -> None:
         if "kaydi_giren_kullanici" not in expense_columns:
             with engine.begin() as connection:
                 connection.execute(text("ALTER TABLE expenses ADD COLUMN kaydi_giren_kullanici TEXT"))
+        if "is_out_of_budget" not in expense_columns:
+            with engine.begin() as connection:
+                connection.execute(
+                    text(
+                        "ALTER TABLE expenses "
+                        "ADD COLUMN is_out_of_budget BOOLEAN DEFAULT 0"
+                        if is_postgres
+                        else "ALTER TABLE expenses ADD COLUMN is_out_of_budget BOOLEAN DEFAULT 0"
+                    )
+                )
         if "created_by_id" not in expense_columns:
             with engine.begin() as connection:
                 connection.execute(text("ALTER TABLE expenses ADD COLUMN created_by_id INTEGER"))
@@ -158,84 +246,7 @@ def _apply_schema_upgrades() -> None:
             with engine.begin() as connection:
                 connection.execute(text("ALTER TABLE plan_entries ADD COLUMN budget_code TEXT"))
 
-    if inspector.has_table("warranty_items"):
-        warranty_columns = {column["name"] for column in inspector.get_columns("warranty_items")}
-        if "domain" not in warranty_columns:
-            with engine.begin() as connection:
-                connection.execute(text("ALTER TABLE warranty_items ADD COLUMN domain TEXT"))
-        if "issuer" not in warranty_columns:
-            with engine.begin() as connection:
-                connection.execute(text("ALTER TABLE warranty_items ADD COLUMN issuer TEXT"))
-        if "certificate_issuer" not in warranty_columns:
-            with engine.begin() as connection:
-                connection.execute(
-                    text("ALTER TABLE warranty_items ADD COLUMN certificate_issuer TEXT")
-                )
-                connection.execute(
-                    text(
-                        "UPDATE warranty_items "
-                        "SET certificate_issuer = issuer "
-                        "WHERE certificate_issuer IS NULL AND issuer IS NOT NULL"
-                    )
-                )
-        if "renewal_owner" not in warranty_columns:
-            with engine.begin() as connection:
-                connection.execute(text("ALTER TABLE warranty_items ADD COLUMN renewal_owner TEXT"))
-        if "reminder_days" not in warranty_columns:
-            with engine.begin() as connection:
-                connection.execute(
-                    text("ALTER TABLE warranty_items ADD COLUMN reminder_days INTEGER DEFAULT 30")
-                )
-        if "remind_days" not in warranty_columns:
-            with engine.begin() as connection:
-                connection.execute(
-                    text("ALTER TABLE warranty_items ADD COLUMN remind_days INTEGER DEFAULT 30")
-                )
-                connection.execute(
-                    text(
-                        "UPDATE warranty_items SET remind_days = reminder_days "
-                        "WHERE remind_days IS NULL AND reminder_days IS NOT NULL"
-                    )
-                )
-        if "remind_days_before" not in warranty_columns:
-            with engine.begin() as connection:
-                connection.execute(
-                    text(
-                        "ALTER TABLE warranty_items "
-                        "ADD COLUMN remind_days_before INTEGER DEFAULT 30"
-                    )
-                )
-                connection.execute(
-                    text(
-                        "UPDATE warranty_items "
-                        "SET remind_days_before = reminder_days "
-                        "WHERE remind_days_before IS NULL AND reminder_days IS NOT NULL"
-                    )
-                )
-        if "created_by_id" not in warranty_columns:
-            with engine.begin() as connection:
-                connection.execute(text("ALTER TABLE warranty_items ADD COLUMN created_by_id INTEGER"))
-                connection.execute(
-                    text(
-                        "UPDATE warranty_items SET created_by_id = created_by_user_id "
-                        "WHERE created_by_id IS NULL"
-                    )
-                )
-        if "updated_by_id" not in warranty_columns:
-            with engine.begin() as connection:
-                connection.execute(text("ALTER TABLE warranty_items ADD COLUMN updated_by_id INTEGER"))
-                connection.execute(
-                    text(
-                        "UPDATE warranty_items SET updated_by_id = COALESCE(updated_by_user_id, created_by_id) "
-                        "WHERE updated_by_id IS NULL"
-                    )
-                )
-        if "created_by_user_id" not in warranty_columns:
-            with engine.begin() as connection:
-                connection.execute(text("ALTER TABLE warranty_items ADD COLUMN created_by_user_id INTEGER"))
-        if "updated_by_user_id" not in warranty_columns:
-            with engine.begin() as connection:
-                connection.execute(text("ALTER TABLE warranty_items ADD COLUMN updated_by_user_id INTEGER"))
+    ensure_warranty_schema(inspector)
 
     if inspector.has_table("users"):
         user_columns = {column["name"] for column in inspector.get_columns("users")}
