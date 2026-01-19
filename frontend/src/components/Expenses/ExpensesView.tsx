@@ -210,6 +210,21 @@ export default function ExpensesView() {
     "ALL" | "ACTIVE" | "OUT_OF_BUDGET" | "CANCELLED"
   >("ALL");
 
+  const resolveApiErrorMessage = useCallback(
+    (error: unknown, fallback: string) => {
+      if (axios.isAxiosError(error)) {
+        const detail =
+          (error.response?.data as { detail?: string; message?: string } | undefined)?.detail ||
+          (error.response?.data as { detail?: string; message?: string } | undefined)?.message;
+        if (detail) {
+          return detail;
+        }
+      }
+      return fallback;
+    },
+    []
+  );
+
   const handleRowUpdate = useCallback(
     (updatedRow: Expense, originalRow: Expense) => ({ ...originalRow, ...updatedRow }),
     []
@@ -218,16 +233,26 @@ export default function ExpensesView() {
   const { data: scenarios } = useQuery<Scenario[]>({
     queryKey: ["scenarios"],
     queryFn: async () => {
-      const { data } = await client.get<Scenario[]>("/scenarios");
-      return data;
+      try {
+        const { data } = await client.get<Scenario[]>("/scenarios");
+        return data;
+      } catch (error) {
+        setErrorMessage(resolveApiErrorMessage(error, "Senaryo verileri yüklenemedi."));
+        throw error;
+      }
     }
   });
 
   const { data: budgetItems } = useQuery<BudgetItem[]>({
     queryKey: ["budget-items"],
     queryFn: async () => {
-      const { data } = await client.get<BudgetItem[]>("/budget-items");
-      return data;
+      try {
+        const { data } = await client.get<BudgetItem[]>("/budget-items");
+        return data;
+      } catch (error) {
+        setErrorMessage(resolveApiErrorMessage(error, "Bütçe kalemleri yüklenemedi."));
+        throw error;
+      }
     }
   });
 
@@ -273,48 +298,53 @@ export default function ExpensesView() {
       todayOnly
     ],
     queryFn: async () => {
-      const params: Record<string, string | number | boolean> = {};
-      if (year) params.year = Number(year);
-      if (scenarioId) params.scenario_id = scenarioId;
-      if (budgetItemId) params.budget_item_id = budgetItemId;
-      if (statusFilter) params.status_filter = statusFilter;
-      if (startDate) params.start_date = startDate;
-      if (endDate) params.end_date = endDate;
-      if (capexOpex) params.capex_opex = capexOpex;
-      params.include_out_of_budget = includeOutOfBudget;
-      params.show_cancelled = showCancelled;
-      params.show_out_of_budget = showOutOfBudget;
-      params.mine_only = mineOnly;
-      params.today_only = todayOnly;
-      const { data } = await client.get<Expense[]>("/expenses", { params });
-      return data;
+      try {
+        const params: Record<string, string | number | boolean> = {};
+        if (year) params.year = Number(year);
+        if (scenarioId) params.scenario_id = scenarioId;
+        if (budgetItemId) params.budget_item_id = budgetItemId;
+        if (statusFilter) params.status_filter = statusFilter;
+        if (startDate) params.start_date = startDate;
+        if (endDate) params.end_date = endDate;
+        if (capexOpex) params.capex_opex = capexOpex;
+        params.include_out_of_budget = includeOutOfBudget;
+        params.show_cancelled = showCancelled;
+        params.show_out_of_budget = showOutOfBudget;
+        params.mine_only = mineOnly;
+        params.today_only = todayOnly;
+        const { data } = await client.get<Expense[]>("/expenses", { params });
+        return data;
+      } catch (error) {
+        setErrorMessage(
+          resolveApiErrorMessage(error, "Harcama verileri yüklenemedi. Lütfen tekrar deneyin.")
+        );
+        throw error;
+      }
     },
     onSuccess: () => {
       setErrorMessage(null);
     },
-    onError: (error: unknown) => {
-      if (axios.isAxiosError(error)) {
-        const detail =
-          (error.response?.data as { detail?: string; message?: string } | undefined)?.detail ||
-          (error.response?.data as { detail?: string; message?: string } | undefined)?.message;
-        if (detail) {
-          setErrorMessage(detail);
-          return;
-        }
-      }
-      setErrorMessage("Harcama verileri yüklenemedi. Lütfen tekrar deneyin.");
+    onError: () => {
+      // handled in queryFn
     }
   });
 
   const mutation = useMutation({
     mutationFn: async (payload: ExpensePayload) => {
-      if (payload.id) {
-        const { id, ...body } = payload;
-        const { data } = await client.put<Expense>(`/expenses/${id}`, body);
+      try {
+        if (payload.id) {
+          const { id, ...body } = payload;
+          const { data } = await client.put<Expense>(`/expenses/${id}`, body);
+          return data;
+        }
+        const { data } = await client.post<Expense>("/expenses", payload);
         return data;
+      } catch (error) {
+        setErrorMessage(
+          resolveApiErrorMessage(error, "Harcama kaydı kaydedilirken bir hata oluştu")
+        );
+        throw error;
       }
-      const { data } = await client.post<Expense>("/expenses", payload);
-      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
@@ -323,27 +353,28 @@ export default function ExpensesView() {
       setErrorMessage(null);
     },
     onError: (error: unknown) => {
-      if (axios.isAxiosError(error)) {
-        const detail =
-          (error.response?.data as { detail?: string; message?: string } | undefined)?.detail ||
-          (error.response?.data as { detail?: string; message?: string } | undefined)?.message;
-        if (detail) {
-          setErrorMessage(detail);
-          return;
-        }
-      }
-      setErrorMessage("Harcama kaydı kaydedilirken bir hata oluştu");
       console.error(error);
     }
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (expenseId: number) => {
-      await client.delete(`/expenses/${expenseId}`);
+      try {
+        await client.delete(`/expenses/${expenseId}`);
+      } catch (error) {
+        setErrorMessage(
+          resolveApiErrorMessage(error, "Harcama kaydı silinirken bir hata oluştu")
+        );
+        throw error;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      setErrorMessage(null);
+    },
+    onError: (error: unknown) => {
+      console.error(error);
     }
   });
 
