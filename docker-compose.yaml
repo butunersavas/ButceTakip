@@ -9,8 +9,9 @@ services:
       - .env
     environment:
       - DATABASE_URL=${DATABASE_URL:-postgresql+psycopg2://postgres:postgres@db:5432/butce_takip}
-      - ALLOWED_HOSTS=localhost,127.0.0.1,0.0.0.0,api,172.24.2.128
+      - TRUSTED_HOSTS=localhost,127.0.0.1,0.0.0.0,api,172.24.2.128
       - CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,http://172.24.2.128:5173
+      - APP_ENV=dev
     ports:
       - "8000:8000"
     depends_on:

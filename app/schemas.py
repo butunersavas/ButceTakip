@@ -326,6 +326,8 @@ class WarrantyItemBase(BaseModel):
     issuer: Optional[str] = None
     certificate_issuer: Optional[str] = None
     renewal_owner: Optional[str] = None
+    renewal_responsible: Optional[str] = None
+    reminder_days: Optional[int] = Field(default=30, ge=0)
     remind_days: Optional[int] = Field(default=30, ge=0)
     remind_days_before: Optional[int] = Field(default=30, ge=0)
 
@@ -364,6 +366,8 @@ class WarrantyItemUpdate(BaseModel):
     issuer: Optional[str] = None
     certificate_issuer: Optional[str] = None
     renewal_owner: Optional[str] = None
+    renewal_responsible: Optional[str] = None
+    reminder_days: Optional[int] = None
     remind_days: Optional[int] = None
     remind_days_before: Optional[int] = None
     is_active: Optional[bool] = None

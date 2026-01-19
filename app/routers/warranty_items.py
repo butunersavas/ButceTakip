@@ -54,7 +54,7 @@ def _user_display_name(user: User | None) -> str | None:
     return user.full_name or user.username or user.email
 
 
-def _attach_user_names(session: Session, items: list[WarrantyItem]) -> None:
+def _build_user_map(session: Session, items: list[WarrantyItem]) -> dict[int, str | None]:
     user_ids: set[int] = set()
     for item in items:
         if item.created_by_id:
@@ -66,35 +66,38 @@ def _attach_user_names(session: Session, items: list[WarrantyItem]) -> None:
         elif item.updated_by_user_id:
             user_ids.add(item.updated_by_user_id)
     if not user_ids:
-        return
+        return {}
     users = session.exec(select(User).where(User.id.in_(user_ids))).all()
-    user_map = {user.id: _user_display_name(user) for user in users}
-    for item in items:
-        created_id = item.created_by_id or item.created_by_user_id
-        updated_id = item.updated_by_id or item.updated_by_user_id
-        item.created_by_name = user_map.get(created_id) if created_id else None
-        item.updated_by_name = user_map.get(updated_id) if updated_id else None
-        item.created_by_username = item.created_by_name
-        item.updated_by_username = item.updated_by_name
+    return {user.id: _user_display_name(user) for user in users}
 
 
-def _attach_status_fields(items: list[WarrantyItem]) -> None:
-    today = date.today()
-    for item in items:
-        days_left = _calculate_days_left(item.end_date, today)
-        remind_days_before = _resolve_remind_days(item)
-        if item.remind_days_before is None:
-            item.remind_days_before = remind_days_before
-        if item.remind_days is None:
-            item.remind_days = remind_days_before
-        if item.reminder_days is None:
-            item.reminder_days = remind_days_before
-        if item.certificate_issuer is None and item.issuer:
-            item.certificate_issuer = item.issuer
-        if item.issuer is None and item.certificate_issuer:
-            item.issuer = item.certificate_issuer
-        item.days_left = days_left
-        item.status = _calculate_status(days_left)
+def _build_warranty_read(item: WarrantyItem, user_map: dict[int, str | None]) -> WarrantyItemRead:
+    read_item = WarrantyItemRead.from_orm(item)
+    created_id = item.created_by_id or item.created_by_user_id
+    updated_id = item.updated_by_id or item.updated_by_user_id
+    read_item.created_by_name = user_map.get(created_id) if created_id else None
+    read_item.updated_by_name = user_map.get(updated_id) if updated_id else None
+    read_item.created_by_username = read_item.created_by_name
+    read_item.updated_by_username = read_item.updated_by_name
+    remind_days_before = _resolve_remind_days(item)
+    if read_item.remind_days_before is None:
+        read_item.remind_days_before = remind_days_before
+    if read_item.remind_days is None:
+        read_item.remind_days = remind_days_before
+    if read_item.reminder_days is None:
+        read_item.reminder_days = remind_days_before
+    if read_item.certificate_issuer is None and read_item.issuer:
+        read_item.certificate_issuer = read_item.issuer
+    if read_item.issuer is None and read_item.certificate_issuer:
+        read_item.issuer = read_item.certificate_issuer
+    if read_item.renewal_responsible is None and read_item.renewal_owner:
+        read_item.renewal_responsible = read_item.renewal_owner
+    if read_item.renewal_owner is None and read_item.renewal_responsible:
+        read_item.renewal_owner = read_item.renewal_responsible
+    days_left = _calculate_days_left(item.end_date)
+    read_item.days_left = days_left
+    read_item.status = _calculate_status(days_left)
+    return read_item
 
 
 @router.get("", response_model=list[WarrantyItemRead])
@@ -103,14 +106,13 @@ def list_warranty_items(
     include_inactive: bool = False,
     session: Session = Depends(get_db_session),
     _: User = Depends(get_current_user),
-) -> list[WarrantyItem]:
+) -> list[WarrantyItemRead]:
     statement = select(WarrantyItem)
     if not include_inactive:
         statement = statement.where(WarrantyItem.is_active.is_(True))
     items = session.exec(statement).all()
-    _attach_user_names(session, items)
-    _attach_status_fields(items)
-    return items
+    user_map = _build_user_map(session, items)
+    return [_build_warranty_read(item, user_map) for item in items]
 
 
 @router.post("", response_model=WarrantyItemRead, status_code=status.HTTP_201_CREATED)
@@ -124,7 +126,7 @@ def create_warranty_item(
     item_in: WarrantyItemCreate,
     session: Session = Depends(get_db_session),
     current_user: User = Depends(get_admin_user),
-) -> WarrantyItem:
+) -> WarrantyItemRead:
     item_data = item_in.dict()
     logger.debug("Warranty item create payload: %s", item_data)
     if item_data.get("end_date") is None:
@@ -134,6 +136,14 @@ def create_warranty_item(
         )
     if item_data.get("certificate_issuer") and not item_data.get("issuer"):
         item_data["issuer"] = item_data["certificate_issuer"]
+    if item_data.get("renewal_responsible") and not item_data.get("renewal_owner"):
+        item_data["renewal_owner"] = item_data["renewal_responsible"]
+    if item_data.get("renewal_owner") and not item_data.get("renewal_responsible"):
+        item_data["renewal_responsible"] = item_data["renewal_owner"]
+    reminder_value = item_data.get("reminder_days")
+    if reminder_value is not None:
+        item_data.setdefault("remind_days_before", reminder_value)
+        item_data.setdefault("remind_days", reminder_value)
     remind_days_value = item_data.get("remind_days") or item_data.get("remind_days_before")
     if remind_days_value is not None:
         item_data.setdefault("remind_days_before", remind_days_value)
@@ -158,9 +168,8 @@ def create_warranty_item(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=detail,
         )
-    _attach_user_names(session, [item])
-    _attach_status_fields([item])
-    return item
+    user_map = _build_user_map(session, [item])
+    return _build_warranty_read(item, user_map)
 
 
 @router.put("/{item_id}", response_model=WarrantyItemRead)
@@ -170,13 +179,21 @@ def update_warranty_item(
     item_in: WarrantyItemUpdate,
     session: Session = Depends(get_db_session),
     current_user: User = Depends(get_admin_user),
-) -> WarrantyItem:
+) -> WarrantyItemRead:
     item = session.get(WarrantyItem, item_id)
     if not item:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Warranty item not found")
     update_data = item_in.dict(exclude_unset=True)
     if update_data.get("certificate_issuer") and not update_data.get("issuer"):
         update_data["issuer"] = update_data["certificate_issuer"]
+    if update_data.get("renewal_responsible") and not update_data.get("renewal_owner"):
+        update_data["renewal_owner"] = update_data["renewal_responsible"]
+    if update_data.get("renewal_owner") and not update_data.get("renewal_responsible"):
+        update_data["renewal_responsible"] = update_data["renewal_owner"]
+    reminder_value = update_data.get("reminder_days")
+    if reminder_value is not None:
+        update_data.setdefault("remind_days_before", reminder_value)
+        update_data.setdefault("remind_days", reminder_value)
     remind_days_value = update_data.get("remind_days") or update_data.get("remind_days_before")
     if remind_days_value is not None:
         update_data.setdefault("remind_days_before", remind_days_value)
@@ -200,9 +217,8 @@ def update_warranty_item(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Garanti kaydı güncellenemedi.",
         )
-    _attach_user_names(session, [item])
-    _attach_status_fields([item])
-    return item
+    user_map = _build_user_map(session, [item])
+    return _build_warranty_read(item, user_map)
 
 
 @router.delete("/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -239,7 +255,7 @@ def list_critical_warranty_items(
     _: User = Depends(get_current_user),
 ) -> list[WarrantyItemCriticalRead]:
     active_items = session.exec(select(WarrantyItem).where(WarrantyItem.is_active.is_(True))).all()
-    _attach_user_names(session, active_items)
+    user_map = _build_user_map(session, active_items)
     today = date.today()
     critical_items: list[WarrantyItemCriticalRead] = []
     for item in active_items:
@@ -247,7 +263,9 @@ def list_critical_warranty_items(
         if days_left is None:
             continue
         remind_days_before = _resolve_remind_days(item)
-        if 0 <= days_left <= 30:
+        if 0 <= days_left <= remind_days_before:
+            created_id = item.created_by_id or item.created_by_user_id
+            updated_id = item.updated_by_id or item.updated_by_user_id
             critical_items.append(
                 WarrantyItemCriticalRead(
                     id=item.id,
@@ -260,6 +278,8 @@ def list_critical_warranty_items(
                     issuer=item.issuer or item.certificate_issuer,
                     certificate_issuer=item.certificate_issuer or item.issuer,
                     renewal_owner=item.renewal_owner,
+                    renewal_responsible=item.renewal_responsible or item.renewal_owner,
+                    reminder_days=item.reminder_days or item.remind_days or item.remind_days_before or 30,
                     remind_days_before=item.remind_days_before
                     or item.remind_days
                     or item.reminder_days
@@ -269,10 +289,10 @@ def list_critical_warranty_items(
                     updated_by_id=item.updated_by_id,
                     created_by_user_id=item.created_by_user_id,
                     updated_by_user_id=item.updated_by_user_id,
-                    created_by_name=getattr(item, "created_by_name", None),
-                    updated_by_name=getattr(item, "updated_by_name", None),
-                    created_by_username=getattr(item, "created_by_username", None),
-                    updated_by_username=getattr(item, "updated_by_username", None),
+                    created_by_name=user_map.get(created_id) if created_id else None,
+                    updated_by_name=user_map.get(updated_id) if updated_id else None,
+                    created_by_username=user_map.get(created_id) if created_id else None,
+                    updated_by_username=user_map.get(updated_id) if updated_id else None,
                     status=_calculate_status(days_left),
                     created_at=item.created_at,
                     updated_at=item.updated_at,
