@@ -80,6 +80,26 @@ def init_default_admin(session: Session) -> None:
 
 def _apply_schema_upgrades() -> None:
     inspector = inspect(engine)
+
+    def ensure_timestamp_columns(table_name: str) -> None:
+        if not inspector.has_table(table_name):
+            return
+        existing_columns = {column["name"] for column in inspector.get_columns(table_name)}
+        column_type = "DATETIME" if is_sqlite else "TIMESTAMP"
+        for column_name in ("created_at", "updated_at"):
+            if column_name not in existing_columns:
+                with engine.begin() as connection:
+                    connection.execute(
+                        text(
+                            f"ALTER TABLE {table_name} "
+                            f"ADD COLUMN {column_name} {column_type} "
+                            "DEFAULT CURRENT_TIMESTAMP"
+                        )
+                    )
+
+    for table in ("users", "scenarios", "budget_items", "plan_entries", "expenses", "warranty_items"):
+        ensure_timestamp_columns(table)
+
     if inspector.has_table("budget_items"):
         existing_columns = {column["name"] for column in inspector.get_columns("budget_items")}
         if "map_attribute" not in existing_columns:
