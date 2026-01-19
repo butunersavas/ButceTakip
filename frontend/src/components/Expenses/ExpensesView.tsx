@@ -42,6 +42,7 @@ import {
   type GridSortModel
 } from "@mui/x-data-grid";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import axios from "axios";
 import dayjs from "dayjs";
 
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
@@ -307,6 +308,15 @@ export default function ExpensesView() {
       setErrorMessage(null);
     },
     onError: (error: unknown) => {
+      if (axios.isAxiosError(error)) {
+        const detail =
+          (error.response?.data as { detail?: string; message?: string } | undefined)?.detail ||
+          (error.response?.data as { detail?: string; message?: string } | undefined)?.message;
+        if (detail) {
+          setErrorMessage(detail);
+          return;
+        }
+      }
       setErrorMessage("Harcama kaydı kaydedilirken bir hata oluştu");
       console.error(error);
     }

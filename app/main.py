@@ -2,6 +2,7 @@ import logging
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy import text
 from sqlmodel import Session
 from fastapi.middleware.cors import CORSMiddleware
@@ -52,6 +53,18 @@ def on_startup() -> None:
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     logging.exception("Unhandled error on %s", request.url.path)
     return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+
+
+@app.exception_handler(IntegrityError)
+async def integrity_error_handler(request: Request, exc: IntegrityError) -> JSONResponse:
+    logging.exception("Integrity error on %s", request.url.path)
+    return JSONResponse(status_code=400, content={"detail": str(exc.orig) if exc.orig else "Integrity error"})
+
+
+@app.exception_handler(SQLAlchemyError)
+async def sqlalchemy_error_handler(request: Request, exc: SQLAlchemyError) -> JSONResponse:
+    logging.exception("Database error on %s", request.url.path)
+    return JSONResponse(status_code=400, content={"detail": "Database error"})
 
 
 app.include_router(auth.router, prefix=API_PREFIX)

@@ -185,7 +185,7 @@ class PurchaseFormPreparedReportItem(BaseModel):
 
 class ExpenseBase(BaseModel):
     budget_item_id: int
-    scenario_id: int
+    scenario_id: int | None = None
     expense_date: date = Field(alias="date")
     amount: float | None = None
     quantity: float = 1
@@ -258,6 +258,24 @@ class WarrantyItemBase(BaseModel):
     remind_days: Optional[int] = Field(default=30, ge=0)
     remind_days_before: Optional[int] = Field(default=30, ge=0)
 
+    @validator("end_date", pre=True)
+    def parse_end_date(cls, value: date | str) -> date:  # noqa: D417
+        if isinstance(value, date):
+            return value
+        if isinstance(value, str):
+            raw = value.strip()
+            if not raw:
+                raise ValueError("end_date is required")
+            try:
+                return datetime.strptime(raw, "%Y-%m-%d").date()
+            except ValueError:
+                pass
+            try:
+                return datetime.strptime(raw, "%d.%m.%Y").date()
+            except ValueError as exc:
+                raise ValueError("end_date must be YYYY-MM-DD or DD.MM.YYYY") from exc
+        raise ValueError("Invalid end_date")
+
 
 class WarrantyItemCreate(WarrantyItemBase):
     pass
@@ -276,6 +294,26 @@ class WarrantyItemUpdate(BaseModel):
     remind_days: Optional[int] = None
     remind_days_before: Optional[int] = None
     is_active: Optional[bool] = None
+
+    @validator("end_date", pre=True)
+    def parse_end_date(cls, value: date | str | None) -> date | None:  # noqa: D417
+        if value is None:
+            return None
+        if isinstance(value, date):
+            return value
+        if isinstance(value, str):
+            raw = value.strip()
+            if not raw:
+                return None
+            try:
+                return datetime.strptime(raw, "%Y-%m-%d").date()
+            except ValueError:
+                pass
+            try:
+                return datetime.strptime(raw, "%d.%m.%Y").date()
+            except ValueError as exc:
+                raise ValueError("end_date must be YYYY-MM-DD or DD.MM.YYYY") from exc
+        raise ValueError("Invalid end_date")
 
 
 class WarrantyItemRead(WarrantyItemBase):

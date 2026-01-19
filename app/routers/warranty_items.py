@@ -94,6 +94,7 @@ def _attach_status_fields(items: list[WarrantyItem]) -> None:
 
 
 @router.get("", response_model=list[WarrantyItemRead])
+@router.get("/", response_model=list[WarrantyItemRead], include_in_schema=False)
 def list_warranty_items(
     include_inactive: bool = False,
     session: Session = Depends(get_db_session),
@@ -109,6 +110,12 @@ def list_warranty_items(
 
 
 @router.post("", response_model=WarrantyItemRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=WarrantyItemRead,
+    status_code=status.HTTP_201_CREATED,
+    include_in_schema=False,
+)
 def create_warranty_item(
     item_in: WarrantyItemCreate,
     session: Session = Depends(get_db_session),
@@ -146,6 +153,7 @@ def create_warranty_item(
 
 
 @router.put("/{item_id}", response_model=WarrantyItemRead)
+@router.put("/{item_id}/", response_model=WarrantyItemRead, include_in_schema=False)
 def update_warranty_item(
     item_id: int,
     item_in: WarrantyItemUpdate,
@@ -187,6 +195,7 @@ def update_warranty_item(
 
 
 @router.delete("/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{item_id}/", status_code=status.HTTP_204_NO_CONTENT, include_in_schema=False)
 def delete_warranty_item(
     item_id: int,
     session: Session = Depends(get_db_session),
@@ -213,6 +222,7 @@ def delete_warranty_item(
 
 
 @router.get("/critical", response_model=list[WarrantyItemCriticalRead])
+@router.get("/critical/", response_model=list[WarrantyItemCriticalRead], include_in_schema=False)
 def list_critical_warranty_items(
     session: Session = Depends(get_db_session),
     _: User = Depends(get_current_user),
