@@ -16,6 +16,7 @@ router = APIRouter(prefix="/scenarios", tags=["Scenarios"])
 
 
 @router.get("", response_model=list[ScenarioRead])
+@router.get("/", response_model=list[ScenarioRead], include_in_schema=False)
 def list_scenarios(
     session: Session = Depends(get_db_session),
     current_user: User = Depends(get_current_user),
@@ -25,6 +26,7 @@ def list_scenarios(
 
 
 @router.post("", response_model=ScenarioRead, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=ScenarioRead, status_code=status.HTTP_201_CREATED, include_in_schema=False)
 def create_scenario(
     scenario_in: ScenarioCreate,
     session: Session = Depends(get_db_session),
@@ -39,6 +41,7 @@ def create_scenario(
 
 
 @router.put("/{scenario_id}", response_model=ScenarioRead)
+@router.put("/{scenario_id}/", response_model=ScenarioRead, include_in_schema=False)
 def update_scenario(
     scenario_id: int,
     scenario_in: ScenarioUpdate,
@@ -60,6 +63,7 @@ def update_scenario(
 
 
 @router.delete("/{scenario_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{scenario_id}/", status_code=status.HTTP_204_NO_CONTENT, include_in_schema=False)
 def delete_scenario(
     scenario_id: int,
     cascade: bool = Query(False, description="İlişkili tüm verileri de silerek kaldır"),

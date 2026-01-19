@@ -81,6 +81,7 @@ def _attach_user_names(session: Session, expenses: list[Expense]) -> None:
 
 
 @router.get("", response_model=list[ExpenseRead])
+@router.get("/", response_model=list[ExpenseRead], include_in_schema=False)
 def list_expenses(
     year: int | None = Query(default=None),
     budget_item_id: int | None = Query(default=None),
@@ -143,16 +144,19 @@ def list_expenses(
 
 
 @router.post("", response_model=ExpenseRead, status_code=201)
+@router.post("/", response_model=ExpenseRead, status_code=201, include_in_schema=False)
 def create_expense(
     expense_in: ExpenseCreate,
     request: Request,
     session: Session = Depends(get_db_session),
     current_user: User = Depends(get_current_user),
 ) -> Expense:
+    if not expense_in.scenario_id:
+        raise HTTPException(status_code=400, detail="scenario_id is required")
     if not session.get(BudgetItem, expense_in.budget_item_id):
         raise HTTPException(status_code=400, detail="Budget item not found")
     if not session.get(Scenario, expense_in.scenario_id):
-        raise HTTPException(status_code=400, detail="Scenario not found")
+        raise HTTPException(status_code=400, detail="Invalid scenario_id")
     client_hostname = expense_in.client_hostname or _extract_client_identifier(request)
 
     quantity = expense_in.quantity or 1
@@ -178,6 +182,7 @@ def create_expense(
 
 
 @router.put("/{expense_id}", response_model=ExpenseRead)
+@router.put("/{expense_id}/", response_model=ExpenseRead, include_in_schema=False)
 def update_expense(
     expense_id: int,
     expense_in: ExpenseUpdate,
@@ -211,6 +216,7 @@ def update_expense(
 
 
 @router.delete("/{expense_id}", status_code=204)
+@router.delete("/{expense_id}/", status_code=204, include_in_schema=False)
 def delete_expense(
     expense_id: int,
     session: Session = Depends(get_db_session),

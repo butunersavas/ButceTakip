@@ -60,6 +60,12 @@ def _create_user(session: Session, user_in: UserCreate) -> User:
 
 
 @router.post("/register", response_model=UserRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/register/",
+    response_model=UserRead,
+    status_code=status.HTTP_201_CREATED,
+    include_in_schema=False,
+)
 def register_user(
     user_in: UserCreate,
     session: Session = Depends(get_db_session),
@@ -75,6 +81,7 @@ def register_user(
 
 
 @router.post("/token", response_model=Token)
+@router.post("/token/", response_model=Token, include_in_schema=False)
 async def login_for_access_token(
     request: Request,
     session: Session = Depends(get_db_session),
@@ -139,8 +146,8 @@ async def login_for_access_token(
     except SQLAlchemyError:
         logger.exception("Token endpoint failed due to database error")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Database error",
         )
     except Exception:
         logger.exception("Token endpoint failed")
@@ -151,6 +158,7 @@ async def login_for_access_token(
 
 
 @router.post("/change-password")
+@router.post("/change-password/", include_in_schema=False)
 def change_password(
     data: ChangePasswordRequest,
     session: Session = Depends(get_db_session),
@@ -174,6 +182,7 @@ def change_password(
 
 
 @router.get("/me", response_model=CurrentUserResponse)
+@router.get("/me/", response_model=CurrentUserResponse, include_in_schema=False)
 def read_current_user(current_user: User = Depends(get_current_user)) -> User:
     """Return the authenticated user's profile information."""
     return current_user

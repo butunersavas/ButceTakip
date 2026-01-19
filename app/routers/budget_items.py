@@ -11,6 +11,7 @@ router = APIRouter(prefix="/budget-items", tags=["Budget Items"])
 
 
 @router.get("", response_model=list[BudgetItemRead])
+@router.get("/", response_model=list[BudgetItemRead], include_in_schema=False)
 def list_budget_items(
     session: Session = Depends(get_db_session), current_user: User = Depends(get_current_user)
 ) -> list[BudgetItem]:
@@ -18,6 +19,7 @@ def list_budget_items(
 
 
 @router.post("", response_model=BudgetItemRead, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=BudgetItemRead, status_code=status.HTTP_201_CREATED, include_in_schema=False)
 def create_budget_item(
     item_in: BudgetItemCreate,
     session: Session = Depends(get_db_session),
@@ -34,6 +36,7 @@ def create_budget_item(
 
 
 @router.put("/{item_id}", response_model=BudgetItemRead)
+@router.put("/{item_id}/", response_model=BudgetItemRead, include_in_schema=False)
 def update_budget_item(
     item_id: int,
     item_in: BudgetItemUpdate,
@@ -53,6 +56,7 @@ def update_budget_item(
 
 
 @router.delete("/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{item_id}/", status_code=status.HTTP_204_NO_CONTENT, include_in_schema=False)
 def delete_budget_item(
     item_id: int,
     session: Session = Depends(get_db_session),

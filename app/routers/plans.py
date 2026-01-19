@@ -22,6 +22,7 @@ def _normalize_capex_opex(value: str | None) -> str | None:
 
 
 @router.get("", response_model=list[PlanEntryRead])
+@router.get("/", response_model=list[PlanEntryRead], include_in_schema=False)
 def list_plans(
     year: int = Query(...),
     scenario_id: int | None = None,
@@ -64,6 +65,7 @@ def list_plans(
 
 
 @router.get("/aggregate", response_model=list[PlanAggregateRead])
+@router.get("/aggregate/", response_model=list[PlanAggregateRead], include_in_schema=False)
 def aggregate_plans(
     year: int = Query(...),
     scenario_id: int | None = None,
@@ -92,6 +94,7 @@ def aggregate_plans(
 
 
 @router.get("/departments", response_model=list[str])
+@router.get("/departments/", response_model=list[str], include_in_schema=False)
 def list_departments(
     year: int | None = None,
     scenario_id: int | None = None,
@@ -109,6 +112,7 @@ def list_departments(
 
 
 @router.post("", response_model=PlanEntryRead, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=PlanEntryRead, status_code=status.HTTP_201_CREATED, include_in_schema=False)
 def create_plan_entry(
     plan_in: PlanEntryCreate,
     session: Session = Depends(get_db_session),
@@ -126,6 +130,7 @@ def create_plan_entry(
 
 
 @router.put("/{plan_id}", response_model=PlanEntryRead)
+@router.put("/{plan_id}/", response_model=PlanEntryRead, include_in_schema=False)
 def update_plan_entry(
     plan_id: int,
     plan_in: PlanEntryUpdate,
@@ -145,6 +150,7 @@ def update_plan_entry(
 
 
 @router.delete("/{plan_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{plan_id}/", status_code=status.HTTP_204_NO_CONTENT, include_in_schema=False)
 def delete_plan_entry(
     plan_id: int,
     session: Session = Depends(get_db_session),
