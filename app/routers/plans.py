@@ -46,10 +46,7 @@ def _plan_read_query(capex_filter: str | None):
                     PlanEntry.budget_code.is_not(None),
                     BudgetItem.code == PlanEntry.budget_code,
                 ),
-                and_(
-                    PlanEntry.budget_code.is_(None),
-                    BudgetItem.id == PlanEntry.budget_item_id,
-                ),
+                BudgetItem.id == PlanEntry.budget_item_id,
             ),
         )
     )

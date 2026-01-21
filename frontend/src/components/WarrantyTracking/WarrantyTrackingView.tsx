@@ -125,6 +125,14 @@ const normalizeDateInput = (value: string | null | undefined) => {
   return value;
 };
 
+const normalizeOptionalText = (value: string | null | undefined) => {
+  if (value == null) return null;
+  if (typeof value !== "string") return value as string | null;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === "-" || trimmed === "—") return null;
+  return trimmed;
+};
+
 const normalizeWarrantyRow = (row: any): WarrantyItem => {
   const start = row?.start_date ?? row?.startDate ?? null;
   const end = normalizeDateInput(row?.end_date ?? row?.endDate ?? null) || null;
@@ -152,6 +160,13 @@ const normalizeWarrantyRow = (row: any): WarrantyItem => {
     typeof statusLabel === "string" && statusLabel.trim().length
       ? { label: statusLabel, key: mapStatusKey(statusLabel) }
       : calcStatus(days_left);
+  const certificateIssuer = normalizeOptionalText(row?.certificate_issuer ?? row?.issuer);
+  const issuer = normalizeOptionalText(row?.issuer ?? row?.certificate_issuer);
+  const domain = normalizeOptionalText(row?.domain);
+  const renewalResponsible = normalizeOptionalText(
+    row?.renewal_responsible ?? row?.renewal_owner
+  );
+  const note = normalizeOptionalText(row?.note ?? row?.notes);
   return {
     ...row,
     id,
@@ -162,10 +177,11 @@ const normalizeWarrantyRow = (row: any): WarrantyItem => {
     status_label: status.label,
     status_key: status.key,
     type_label: formatTypeLabel(row?.type),
-    certificate_issuer: row?.certificate_issuer ?? row?.issuer ?? null,
-    issuer: row?.issuer ?? row?.certificate_issuer ?? null,
-    domain: row?.domain ?? null,
-    renewal_responsible: row?.renewal_responsible ?? row?.renewal_owner ?? null,
+    certificate_issuer: certificateIssuer,
+    issuer,
+    domain,
+    renewal_responsible: renewalResponsible,
+    note,
     remind_days: remindDaysBefore,
     remind_days_before: remindDaysBefore,
     reminder_days: remindDaysBefore,
