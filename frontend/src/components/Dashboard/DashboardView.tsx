@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Component, useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import {
   Alert,
   Button,
@@ -181,6 +182,46 @@ const pieColors: Record<keyof QuarterlySummary, string> = {
   overrun: COLOR_OVER
 };
 
+type DashboardSectionBoundaryProps = {
+  children: ReactNode;
+  title?: string;
+};
+
+type DashboardSectionBoundaryState = {
+  hasError: boolean;
+};
+
+class DashboardSectionBoundary extends Component<
+  DashboardSectionBoundaryProps,
+  DashboardSectionBoundaryState
+> {
+  state: DashboardSectionBoundaryState = {
+    hasError: false
+  };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error) {
+    console.error("Dashboard section error", error);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <Alert severity="error">
+          {this.props.title
+            ? `${this.props.title} yüklenirken hata oluştu.`
+            : "Bölüm yüklenirken hata oluştu."}
+        </Alert>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
 function useDebouncedValue<T>(value: T, delayMs: number): T {
   const [debouncedValue, setDebouncedValue] = useState(value);
 
@@ -203,6 +244,11 @@ function formatCurrency(value: number) {
 
 function formatBudgetLabel(name?: string | null, code?: string | null) {
   return stripBudgetCode(name ?? "") || code || "-";
+}
+
+function toSafeNumber(value: unknown) {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : 0;
 }
 
 export default function DashboardView() {
@@ -513,15 +559,22 @@ export default function DashboardView() {
 
   const monthlyData = useMemo(() => {
     if (!trendMonths?.length) return [];
-    return trendMonths.map((entry) => ({
-      month: entry.month,
-      planned: entry.plan_total ?? 0,
-      actual: entry.actual_total ?? 0,
-      remaining: entry.remaining_total ?? 0,
-      overrun: entry.over_total ?? 0,
-      over_pct: (entry.over_total ?? 0) / Math.max(entry.plan_total ?? 0, 1),
-      monthLabel: monthLabels[entry.month - 1]
-    }));
+    return trendMonths.map((entry) => {
+      const planned = toSafeNumber(entry.plan_total);
+      const actual = toSafeNumber(entry.actual_total);
+      const remaining = toSafeNumber(entry.remaining_total);
+      const overrun = toSafeNumber(entry.over_total);
+      const monthLabel = monthLabels[entry.month - 1] ?? `Ay ${entry.month}`;
+      return {
+        month: entry.month,
+        planned,
+        actual,
+        remaining,
+        overrun,
+        over_pct: planned > 0 ? overrun / planned : 0,
+        monthLabel
+      };
+    });
   }, [trendMonths]);
 
   const quarterlyTotals = useMemo(() => {
@@ -538,22 +591,23 @@ export default function DashboardView() {
           if (!quarter.months.includes(entry.month)) {
             return acc;
           }
-          acc.planned += entry.plan_total ?? 0;
-          acc.actual += entry.within_plan_total ?? 0;
-          acc.overrun += entry.over_total ?? 0;
-          acc.remaining += entry.remaining_total ?? 0;
+          acc.planned += toSafeNumber(entry.plan_total);
+          acc.actual += toSafeNumber(entry.within_plan_total);
+          acc.overrun += toSafeNumber(entry.over_total);
+          acc.remaining += toSafeNumber(entry.remaining_total);
           return acc;
         },
         { planned: 0, actual: 0, remaining: 0, overrun: 0 }
       );
 
+      const totalValue = totals.actual + totals.overrun + totals.remaining;
       const pieData = [
         { name: "Gerçekleşen", value: totals.actual, color: pieColors.actual },
         { name: "Aşım", value: totals.overrun, color: pieColors.overrun },
         { name: "Kalan", value: totals.remaining, color: pieColors.remaining }
       ];
 
-      return { ...quarter, totals, pieData };
+      return { ...quarter, totals, pieData, totalValue };
     });
   }, [trendMonths]);
 
@@ -757,355 +811,391 @@ export default function DashboardView() {
             </TextField>
           </FiltersBar>
 
-          <Grid container spacing={2} sx={{ mb: 3 }}>
-            {[
-              {
-                title: "Toplam Plan",
-                value: formattedTotalPlan,
-                subtitle: "Planlanan bütçe",
-                icon: (
-                  <AccountBalanceWalletOutlinedIcon sx={{ fontSize: 18, color: "common.white" }} />
-                ),
-                iconColor: "primary.main",
-                filterKey: "total_plan" as const
-              },
-              {
-                title: "Gerçekleşen",
-                value: formattedActual,
-                subtitle: "Harcanan toplam",
-                icon: <CheckCircleOutlineOutlinedIcon sx={{ fontSize: 18, color: "common.white" }} />,
-                iconColor: "primary.main",
-                filterKey: "total_actual" as const
-              },
-              {
-                title: "Kalan",
-                value: formattedRemaining,
-                subtitle: "Bütçede kalan",
-                icon: <TrendingUpOutlinedIcon sx={{ fontSize: 18, color: "common.white" }} />,
-                iconColor: "warning.main",
-                filterKey: "total_remaining" as const
-              },
-              {
-                title: "Aşım",
-                value: formattedOver,
-                subtitle: overBudgetSubtitle,
-                icon: <WarningAmberOutlinedIcon sx={{ fontSize: 18, color: "common.white" }} />,
-                iconColor: "error.main",
-                filterKey: "total_overrun" as const
-              }
-            ].map((card) => (
-              <Grid item xs={12} sm={6} md={3} key={card.title}>
-                <SummaryCard
-                  {...card}
-                  isLoading={isLoading}
-                  selected={selectedKpiFilter === card.filterKey}
-                  onClick={() => handleSummaryCardClick(card.filterKey)}
-                />
-              </Grid>
-            ))}
-          </Grid>
+          <DashboardSectionBoundary title="Özet kartlar">
+            <Grid container spacing={2} sx={{ mb: 3 }}>
+              {[
+                {
+                  title: "Toplam Plan",
+                  value: formattedTotalPlan,
+                  subtitle: "Planlanan bütçe",
+                  icon: (
+                    <AccountBalanceWalletOutlinedIcon
+                      sx={{ fontSize: 18, color: "common.white" }}
+                    />
+                  ),
+                  iconColor: "primary.main",
+                  filterKey: "total_plan" as const
+                },
+                {
+                  title: "Gerçekleşen",
+                  value: formattedActual,
+                  subtitle: "Harcanan toplam",
+                  icon: (
+                    <CheckCircleOutlineOutlinedIcon
+                      sx={{ fontSize: 18, color: "common.white" }}
+                    />
+                  ),
+                  iconColor: "primary.main",
+                  filterKey: "total_actual" as const
+                },
+                {
+                  title: "Kalan",
+                  value: formattedRemaining,
+                  subtitle: "Bütçede kalan",
+                  icon: <TrendingUpOutlinedIcon sx={{ fontSize: 18, color: "common.white" }} />,
+                  iconColor: "warning.main",
+                  filterKey: "total_remaining" as const
+                },
+                {
+                  title: "Aşım",
+                  value: formattedOver,
+                  subtitle: overBudgetSubtitle,
+                  icon: <WarningAmberOutlinedIcon sx={{ fontSize: 18, color: "common.white" }} />,
+                  iconColor: "error.main",
+                  filterKey: "total_overrun" as const
+                }
+              ].map((card) => (
+                <Grid item xs={12} sm={6} md={3} key={card.title}>
+                  <SummaryCard
+                    {...card}
+                    isLoading={isLoading}
+                    selected={selectedKpiFilter === card.filterKey}
+                    onClick={() => handleSummaryCardClick(card.filterKey)}
+                  />
+                </Grid>
+              ))}
+            </Grid>
+          </DashboardSectionBoundary>
           <Stack spacing={3}>
-            <Card>
-              <CardHeader title="Riskteki Kalemler" subheader="Planın %80 ve üzeri harcananlar" />
-              <CardContent>
-                {riskyItems.length === 0 ? (
-                  <Typography variant="body2" color="text.secondary">
-                    Bu ay için kritik seviyede kalem bulunmuyor.
-                  </Typography>
-                ) : (
-                  <List dense>
-                    {riskyItems.map((item) => (
-                      <ListItem key={item.budget_item_id}>
-                        <ListItemText
-                          primary={formatBudgetLabel(item.budget_name, item.budget_code)}
-                          secondary={`Plan: ${item.plan.toLocaleString()} | Gerçekleşen: ${item.actual.toLocaleString()} | %${Math.round(item.ratio * 100)}`}
-                          primaryTypographyProps={{ variant: "body2" }}
-                        />
-                      </ListItem>
-                    ))}
-                  </List>
-                )}
-              </CardContent>
-            </Card>
+            <DashboardSectionBoundary title="Riskteki Kalemler">
+              <Card>
+                <CardHeader title="Riskteki Kalemler" subheader="Planın %80 ve üzeri harcananlar" />
+                <CardContent>
+                  {riskyItems.length === 0 ? (
+                    <Typography variant="body2" color="text.secondary">
+                      Bu ay için kritik seviyede kalem bulunmuyor.
+                    </Typography>
+                  ) : (
+                    <List dense>
+                      {riskyItems.map((item) => {
+                        const plan = toSafeNumber(item.plan);
+                        const actual = toSafeNumber(item.actual);
+                        const ratioPct = Math.round(toSafeNumber(item.ratio) * 100);
+                        return (
+                          <ListItem key={item.budget_item_id}>
+                            <ListItemText
+                              primary={formatBudgetLabel(item.budget_name, item.budget_code)}
+                              secondary={`Plan: ${plan.toLocaleString()} | Gerçekleşen: ${actual.toLocaleString()} | %${ratioPct}`}
+                              primaryTypographyProps={{ variant: "body2" }}
+                            />
+                          </ListItem>
+                        );
+                      })}
+                    </List>
+                  )}
+                </CardContent>
+              </Card>
+            </DashboardSectionBoundary>
 
             {showOverBudgetSection ? (
-              <Box ref={overBudgetRef}>
-                <Card
-                  sx={{
-                    border: highlightOverBudget ? "1px solid" : "1px solid transparent",
-                    borderColor: highlightOverBudget ? "error.main" : "transparent",
-                    boxShadow: highlightOverBudget ? "0 0 0 3px rgba(244, 67, 54, 0.2)" : "none",
-                    transition: "border-color 0.2s ease, box-shadow 0.2s ease"
-                  }}
-                >
-                  <CardContent>
-                    <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
-                      <Typography variant="h6" fontWeight={600}>
-                        Aşım Yapan Kalemler (Top 10)
-                      </Typography>
-                      {overBudgetItems.length > 10 && (
-                        <Button
-                          variant="text"
-                          size="small"
-                          onClick={() => setIsOverBudgetDialogOpen(true)}
-                        >
-                          Tümünü Gör
-                        </Button>
-                      )}
-                    </Stack>
-                    {overBudgetItems.length === 0 ? (
-                      <Typography variant="body2" color="text.secondary">
-                        Aşım yapan kalem bulunmuyor.
-                      </Typography>
-                    ) : (
-                      <Table size="small">
-                        <TableHead>
-                          <TableRow>
-                            <TableCell>Kalem</TableCell>
-                            <TableCell align="right">Plan</TableCell>
-                            <TableCell align="right">Gerçekleşen</TableCell>
-                            <TableCell align="right">Aşım</TableCell>
-                            <TableCell align="right">%</TableCell>
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {overBudgetItems.slice(0, 10).map((item) => (
-                            <TableRow key={item.budget_code}>
-                              <TableCell>
-                                {formatBudgetLabel(item.budget_name, item.budget_code)}
-                              </TableCell>
-                              <TableCell align="right">{formatCurrency(item.plan)}</TableCell>
-                              <TableCell align="right">{formatCurrency(item.actual)}</TableCell>
-                              <TableCell align="right">{formatCurrency(item.over)}</TableCell>
-                              <TableCell align="right">{item.over_pct.toFixed(1)}%</TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    )}
-                  </CardContent>
-                </Card>
-              </Box>
-            ) : null}
-
-            <Card>
-              <CardContent sx={{ height: 280, minHeight: 280 }}>
-                <Stack direction="row" justifyContent="space-between" alignItems="center" mb={3}>
-                  <Typography variant="h6" fontWeight={600}>
-                    Aylık Trend Analizi
-                  </Typography>
-                  <Chip
-                    label={
-                      selectedOverrunItem
-                        ? `Aşım: ${formatBudgetLabel(
-                            selectedOverrunItem.budget_name,
-                            selectedOverrunItem.budget_code
-                          )}`
-                        : budgetItemId
-                          ? stripBudgetCode(
-                              budgetItems?.find((item) => item.id === budgetItemId)?.name ?? ""
-                            )
-                          : "Tüm Kalemler"
-                    }
-                    color={selectedOverrunItem ? "error" : "primary"}
-                    variant={selectedOverrunItem ? "filled" : "outlined"}
-                    onClick={
-                      selectedOverrunItem ? () => setSelectedOverrunItem(null) : undefined
-                    }
+              <DashboardSectionBoundary title="Aşım Yapan Kalemler">
+                <Box ref={overBudgetRef}>
+                  <Card
                     sx={{
-                      cursor: selectedOverrunItem ? "pointer" : "default"
-                    }}
-                  />
-                </Stack>
-                {isTrendLoading ? (
-                  <Skeleton variant="rectangular" height="100%" />
-                ) : monthlyData.length === 0 ? (
-                  <Typography variant="body2" color="text.secondary">
-                    Seçili filtreler için trend verisi bulunamadı.
-                  </Typography>
-                ) : (
-                  <Box sx={{ height: 260, minHeight: 260, minWidth: 240 }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={monthlyData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
-                        <XAxis dataKey="monthLabel" tick={{ fill: "#475569" }} />
-                        <YAxis
-                          yAxisId="left"
-                          tick={{ fill: "#475569" }}
-                          tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
-                        />
-                        <YAxis
-                          yAxisId="right"
-                          orientation="right"
-                          tick={{ fill: "#475569" }}
-                          tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
-                        />
-                        <ReferenceLine y={0} stroke="#9e9e9e" strokeDasharray="3 3" />
-                        <RechartsTooltip
-                          formatter={(value: number, name: string, props: any) => {
-                            if (name === "Aşım") {
-                              const pct = props?.payload?.over_pct ?? 0;
-                              return [
-                                `${formatCurrency(value)} (%${(pct * 100).toFixed(1)})`,
-                                name
-                              ];
-                            }
-                            return [formatCurrency(value), name];
-                          }}
-                          labelFormatter={(label) => label}
-                        />
-                        <Legend />
-                        <Bar
-                          dataKey="planned"
-                          name="Planlanan"
-                          fill={pieColors.planned}
-                          radius={[6, 6, 0, 0]}
-                          yAxisId="left"
-                          hide={!showPlanned}
-                        />
-                        <Bar
-                          dataKey="actual"
-                          name="Gerçekleşen"
-                          fill={pieColors.actual}
-                          radius={[6, 6, 0, 0]}
-                          yAxisId="left"
-                          hide={!showActual}
-                        />
-                        <Bar
-                          dataKey="remaining"
-                          name="Kalan"
-                          fill={pieColors.remaining}
-                          radius={[6, 6, 0, 0]}
-                          yAxisId="left"
-                          hide={!showRemaining}
-                        />
-                        <Line
-                          dataKey="overrun"
-                          name="Aşım"
-                          stroke={pieColors.overrun}
-                          strokeWidth={2}
-                          dot={{ r: 3 }}
-                          yAxisId="right"
-                          hide={!showOverrun}
-                        />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </Box>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent>
-                <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2}>
-                  <Typography variant="h6" fontWeight={700}>
-                    Çeyreklik Harcama Dağılımı
-                  </Typography>
-                </Stack>
-
-                <Stack direction="row" spacing={3} alignItems="center" mb={2}>
-                  <Stack direction="row" spacing={1} alignItems="center">
-                    <Box
-                      sx={{
-                        width: 12,
-                        height: 12,
-                        borderRadius: "50%",
-                        bgcolor: pieColors.actual
-                      }}
-                    />
-                    <Typography variant="caption">Gerçekleşen</Typography>
-                  </Stack>
-
-                  <Stack direction="row" spacing={1} alignItems="center">
-                    <Box
-                      sx={{
-                        width: 12,
-                        height: 12,
-                        borderRadius: "50%",
-                        bgcolor: pieColors.overrun
-                      }}
-                    />
-                    <Typography variant="caption">Aşım</Typography>
-                  </Stack>
-
-                  <Stack direction="row" spacing={1} alignItems="center">
-                    <Box
-                      sx={{
-                        width: 12,
-                        height: 12,
-                        borderRadius: "50%",
-                        bgcolor: pieColors.remaining
-                      }}
-                    />
-                    <Typography variant="caption">Kalan</Typography>
-                  </Stack>
-                </Stack>
-
-                {trendMonths.length === 0 ? (
-                  <Typography variant="body2" color="text.secondary">
-                    Çeyreklik görünüm için yeterli veri bulunamadı.
-                  </Typography>
-                ) : (
-                  <Box
-                    sx={{
-                      display: "flex",
-                      justifyContent: "space-evenly",
-                      alignItems: "center",
-                      gap: "24px",
-                      flexWrap: "nowrap",
-                      overflowX: "auto",
-                      pb: 1
+                      border: highlightOverBudget ? "1px solid" : "1px solid transparent",
+                      borderColor: highlightOverBudget ? "error.main" : "transparent",
+                      boxShadow: highlightOverBudget ? "0 0 0 3px rgba(244, 67, 54, 0.2)" : "none",
+                      transition: "border-color 0.2s ease, box-shadow 0.2s ease"
                     }}
                   >
-                    {quarterlyTotals.map((quarter) => (
-                      <Box
-                        key={quarter.label}
-                        sx={{
-                          width: 260,
-                          flex: "0 0 260px",
-                          display: "flex",
-                          flexDirection: "column",
-                          alignItems: "center"
-                        }}
-                      >
-                        <Typography
-                          variant="subtitle2"
-                          fontWeight={600}
-                          mb={1}
-                          sx={{ alignSelf: "flex-start" }}
-                        >
-                          {quarter.label}
+                    <CardContent>
+                      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
+                        <Typography variant="h6" fontWeight={600}>
+                          Aşım Yapan Kalemler (Top 10)
                         </Typography>
-                        <Box sx={{ height: 260, minWidth: 240 }}>
-                          <ResponsiveContainer width="100%" height="100%">
-                            <PieChart>
-                              <RechartsTooltip
-                                formatter={(value: number, name: string) => [
-                                  formatCurrency(value),
+                        {overBudgetItems.length > 10 && (
+                          <Button
+                            variant="text"
+                            size="small"
+                            onClick={() => setIsOverBudgetDialogOpen(true)}
+                          >
+                            Tümünü Gör
+                          </Button>
+                        )}
+                      </Stack>
+                      {overBudgetItems.length === 0 ? (
+                        <Typography variant="body2" color="text.secondary">
+                          Aşım yapan kalem bulunmuyor.
+                        </Typography>
+                      ) : (
+                        <Table size="small">
+                          <TableHead>
+                            <TableRow>
+                              <TableCell>Kalem</TableCell>
+                              <TableCell align="right">Plan</TableCell>
+                              <TableCell align="right">Gerçekleşen</TableCell>
+                              <TableCell align="right">Aşım</TableCell>
+                              <TableCell align="right">%</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {overBudgetItems.slice(0, 10).map((item) => {
+                              const plan = toSafeNumber(item.plan);
+                              const actual = toSafeNumber(item.actual);
+                              const over = toSafeNumber(item.over);
+                              const overPct = toSafeNumber(item.over_pct);
+                              return (
+                                <TableRow key={item.budget_code}>
+                                  <TableCell>
+                                    {formatBudgetLabel(item.budget_name, item.budget_code)}
+                                  </TableCell>
+                                  <TableCell align="right">{formatCurrency(plan)}</TableCell>
+                                  <TableCell align="right">{formatCurrency(actual)}</TableCell>
+                                  <TableCell align="right">{formatCurrency(over)}</TableCell>
+                                  <TableCell align="right">{overPct.toFixed(1)}%</TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      )}
+                    </CardContent>
+                  </Card>
+                </Box>
+              </DashboardSectionBoundary>
+            ) : null}
+
+            <DashboardSectionBoundary title="Aylık Trend">
+              <Card>
+                <CardContent sx={{ height: 280, minHeight: 280 }}>
+                  <Stack direction="row" justifyContent="space-between" alignItems="center" mb={3}>
+                    <Typography variant="h6" fontWeight={600}>
+                      Aylık Trend Analizi
+                    </Typography>
+                    <Chip
+                      label={
+                        selectedOverrunItem
+                          ? `Aşım: ${formatBudgetLabel(
+                              selectedOverrunItem.budget_name,
+                              selectedOverrunItem.budget_code
+                            )}`
+                          : budgetItemId
+                            ? stripBudgetCode(
+                                budgetItems?.find((item) => item.id === budgetItemId)?.name ?? ""
+                              )
+                            : "Tüm Kalemler"
+                      }
+                      color={selectedOverrunItem ? "error" : "primary"}
+                      variant={selectedOverrunItem ? "filled" : "outlined"}
+                      onClick={
+                        selectedOverrunItem ? () => setSelectedOverrunItem(null) : undefined
+                      }
+                      sx={{
+                        cursor: selectedOverrunItem ? "pointer" : "default"
+                      }}
+                    />
+                  </Stack>
+                  {isTrendLoading ? (
+                    <Skeleton variant="rectangular" height="100%" />
+                  ) : monthlyData.length === 0 ? (
+                    <Typography variant="body2" color="text.secondary">
+                      Seçili filtreler için trend verisi bulunamadı.
+                    </Typography>
+                  ) : (
+                    <Box sx={{ height: 260, minHeight: 260, minWidth: 240 }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={monthlyData}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                          <XAxis dataKey="monthLabel" tick={{ fill: "#475569" }} />
+                          <YAxis
+                            yAxisId="left"
+                            tick={{ fill: "#475569" }}
+                            tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
+                          />
+                          <YAxis
+                            yAxisId="right"
+                            orientation="right"
+                            tick={{ fill: "#475569" }}
+                            tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
+                          />
+                          <ReferenceLine y={0} stroke="#9e9e9e" strokeDasharray="3 3" />
+                          <RechartsTooltip
+                            formatter={(value: number, name: string, props: any) => {
+                              if (name === "Aşım") {
+                                const pct = toSafeNumber(props?.payload?.over_pct);
+                                return [
+                                  `${formatCurrency(toSafeNumber(value))} (%${(pct * 100).toFixed(1)})`,
                                   name
-                                ]}
-                              />
-                              <Pie
-                                data={quarter.pieData}
-                                dataKey="value"
-                                nameKey="name"
-                                innerRadius={50}
-                                outerRadius={80}
-                                paddingAngle={2}
-                              >
-                                {quarter.pieData.map((entry) => (
-                                  <Cell key={`${quarter.label}-${entry.name}`} fill={entry.color} />
-                                ))}
-                              </Pie>
-                            </PieChart>
-                          </ResponsiveContainer>
+                                ];
+                              }
+                              return [formatCurrency(toSafeNumber(value)), name];
+                            }}
+                            labelFormatter={(label) => label}
+                          />
+                          <Legend />
+                          <Bar
+                            dataKey="planned"
+                            name="Planlanan"
+                            fill={pieColors.planned}
+                            radius={[6, 6, 0, 0]}
+                            yAxisId="left"
+                            hide={!showPlanned}
+                          />
+                          <Bar
+                            dataKey="actual"
+                            name="Gerçekleşen"
+                            fill={pieColors.actual}
+                            radius={[6, 6, 0, 0]}
+                            yAxisId="left"
+                            hide={!showActual}
+                          />
+                          <Bar
+                            dataKey="remaining"
+                            name="Kalan"
+                            fill={pieColors.remaining}
+                            radius={[6, 6, 0, 0]}
+                            yAxisId="left"
+                            hide={!showRemaining}
+                          />
+                          <Line
+                            dataKey="overrun"
+                            name="Aşım"
+                            stroke={pieColors.overrun}
+                            strokeWidth={2}
+                            dot={{ r: 3 }}
+                            yAxisId="right"
+                            hide={!showOverrun}
+                          />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </Box>
+                  )}
+                </CardContent>
+              </Card>
+            </DashboardSectionBoundary>
+
+            <DashboardSectionBoundary title="Çeyreklik Harcama Dağılımı">
+              <Card>
+                <CardContent>
+                  <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2}>
+                    <Typography variant="h6" fontWeight={700}>
+                      Çeyreklik Harcama Dağılımı
+                    </Typography>
+                  </Stack>
+
+                  <Stack direction="row" spacing={3} alignItems="center" mb={2}>
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <Box
+                        sx={{
+                          width: 12,
+                          height: 12,
+                          borderRadius: "50%",
+                          bgcolor: pieColors.actual
+                        }}
+                      />
+                      <Typography variant="caption">Gerçekleşen</Typography>
+                    </Stack>
+
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <Box
+                        sx={{
+                          width: 12,
+                          height: 12,
+                          borderRadius: "50%",
+                          bgcolor: pieColors.overrun
+                        }}
+                      />
+                      <Typography variant="caption">Aşım</Typography>
+                    </Stack>
+
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <Box
+                        sx={{
+                          width: 12,
+                          height: 12,
+                          borderRadius: "50%",
+                          bgcolor: pieColors.remaining
+                        }}
+                      />
+                      <Typography variant="caption">Kalan</Typography>
+                    </Stack>
+                  </Stack>
+
+                  {trendMonths.length === 0 ? (
+                    <Typography variant="body2" color="text.secondary">
+                      Çeyreklik görünüm için yeterli veri bulunamadı.
+                    </Typography>
+                  ) : (
+                    <Box
+                      sx={{
+                        display: "flex",
+                        justifyContent: "space-evenly",
+                        alignItems: "center",
+                        gap: "24px",
+                        flexWrap: "nowrap",
+                        overflowX: "auto",
+                        pb: 1
+                      }}
+                    >
+                      {quarterlyTotals.map((quarter) => (
+                        <Box
+                          key={quarter.label}
+                          sx={{
+                            width: 260,
+                            flex: "0 0 260px",
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "center"
+                          }}
+                        >
+                          <Typography
+                            variant="subtitle2"
+                            fontWeight={600}
+                            mb={1}
+                            sx={{ alignSelf: "flex-start" }}
+                          >
+                            {quarter.label}
+                          </Typography>
+                          {quarter.totalValue <= 0 ? (
+                            <Typography variant="body2" color="text.secondary">
+                              Veri yok
+                            </Typography>
+                          ) : (
+                            <Box sx={{ height: 260, minWidth: 240 }}>
+                              <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                  <RechartsTooltip
+                                    formatter={(value: number, name: string) => [
+                                      formatCurrency(toSafeNumber(value)),
+                                      name
+                                    ]}
+                                  />
+                                  <Pie
+                                    data={quarter.pieData}
+                                    dataKey="value"
+                                    nameKey="name"
+                                    innerRadius={50}
+                                    outerRadius={80}
+                                    paddingAngle={2}
+                                  >
+                                    {quarter.pieData.map((entry) => (
+                                      <Cell
+                                        key={`${quarter.label}-${entry.name}`}
+                                        fill={entry.color}
+                                      />
+                                    ))}
+                                  </Pie>
+                                </PieChart>
+                              </ResponsiveContainer>
+                            </Box>
+                          )}
                         </Box>
-                      </Box>
-                    ))}
-                  </Box>
-                )}
-              </CardContent>
-            </Card>
+                      ))}
+                    </Box>
+                  )}
+                </CardContent>
+              </Card>
+            </DashboardSectionBoundary>
           </Stack>
         </Stack>
       </Box>
@@ -1172,17 +1262,23 @@ export default function DashboardView() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {overBudgetItems.map((item) => (
-                  <TableRow key={`${item.budget_code}-${item.budget_name}`}>
-                    <TableCell>
-                      {formatBudgetLabel(item.budget_name, item.budget_code)}
-                    </TableCell>
-                    <TableCell align="right">{formatCurrency(item.plan)}</TableCell>
-                    <TableCell align="right">{formatCurrency(item.actual)}</TableCell>
-                    <TableCell align="right">{formatCurrency(item.over)}</TableCell>
-                    <TableCell align="right">{item.over_pct.toFixed(1)}%</TableCell>
-                  </TableRow>
-                ))}
+                {overBudgetItems.map((item) => {
+                  const plan = toSafeNumber(item.plan);
+                  const actual = toSafeNumber(item.actual);
+                  const over = toSafeNumber(item.over);
+                  const overPct = toSafeNumber(item.over_pct);
+                  return (
+                    <TableRow key={`${item.budget_code}-${item.budget_name}`}>
+                      <TableCell>
+                        {formatBudgetLabel(item.budget_name, item.budget_code)}
+                      </TableCell>
+                      <TableCell align="right">{formatCurrency(plan)}</TableCell>
+                      <TableCell align="right">{formatCurrency(actual)}</TableCell>
+                      <TableCell align="right">{formatCurrency(over)}</TableCell>
+                      <TableCell align="right">{overPct.toFixed(1)}%</TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           )}

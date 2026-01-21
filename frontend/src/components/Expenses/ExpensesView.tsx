@@ -115,13 +115,6 @@ interface ExpensePayload {
   kaydi_giren_kullanici?: string | null;
 }
 
-type SavedGridView = {
-  name: string;
-  filterModel: GridFilterModel;
-  sortModel: GridSortModel;
-  columnVisibilityModel: GridColumnVisibilityModel;
-};
-
 type ExpensesErrorBoundaryProps = {
   children: ReactNode;
 };
@@ -178,9 +171,6 @@ export default function ExpensesView() {
   const tableRef = useRef<HTMLDivElement | null>(null);
   const apiRef = useGridApiRef();
 
-  const currentUserId = user?.id ?? "anon";
-  const GRID_VIEWS_KEY = `expenses-grid-views-${currentUserId}`;
-
   const currentYear = new Date().getFullYear();
   const [year, setYear] = usePersistentState<number | "">("expenses:year", currentYear);
   const [scenarioId, setScenarioId] = usePersistentState<number | null>("expenses:scenarioId", null);
@@ -207,9 +197,6 @@ export default function ExpensesView() {
   const [sortModel, setSortModel] = useState<GridSortModel>([]);
   const [columnVisibilityModel, setColumnVisibilityModel] =
     useState<GridColumnVisibilityModel>({});
-  const [savedViews, setSavedViews] = useState<SavedGridView[]>([]);
-  const [selectedViewName, setSelectedViewName] = useState<string>("");
-  const [newViewName, setNewViewName] = useState<string>("");
   const [searchText, setSearchText] = useState<string>("");
   const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
   const [paginationModel, setPaginationModel] = useState<GridPaginationModel>({
@@ -280,17 +267,6 @@ export default function ExpensesView() {
       return matchingScenario ? matchingScenario.id : null;
     });
   }, [scenarios, year]);
-
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(GRID_VIEWS_KEY);
-      if (!raw) return;
-      const parsed: SavedGridView[] = JSON.parse(raw);
-      setSavedViews(parsed);
-    } catch {
-      // bozuk veri varsa sessiz geç
-    }
-  }, [GRID_VIEWS_KEY]);
 
   const { data: expenses, isFetching, refetch: refetchExpenses } = useQuery<Expense[]>({
     queryKey: [
@@ -425,45 +401,6 @@ export default function ExpensesView() {
     },
     [deleteMutation]
   );
-
-  const handleSaveCurrentView = () => {
-    const name = newViewName.trim();
-    if (!name) return;
-
-    const newView: SavedGridView = {
-      name,
-      filterModel,
-      sortModel,
-      columnVisibilityModel
-    };
-
-    const updated = [...savedViews.filter((v) => v.name !== name), newView];
-
-    setSavedViews(updated);
-    localStorage.setItem(GRID_VIEWS_KEY, JSON.stringify(updated));
-    setSelectedViewName(name);
-  };
-
-  const handleSelectView = (name: string) => {
-    setSelectedViewName(name);
-    const view = savedViews.find((v) => v.name === name);
-    if (!view) return;
-
-    setFilterModel(view.filterModel);
-    setSortModel(view.sortModel);
-    setColumnVisibilityModel(view.columnVisibilityModel);
-    setSearchText(view.filterModel.quickFilterValues?.[0] ?? "");
-  };
-
-  const handleDeleteView = (name: string) => {
-    const updated = savedViews.filter((v) => v.name !== name);
-    setSavedViews(updated);
-    localStorage.setItem(GRID_VIEWS_KEY, JSON.stringify(updated));
-
-    if (selectedViewName === name) {
-      setSelectedViewName("");
-    }
-  };
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -1043,16 +980,23 @@ export default function ExpensesView() {
                 alignItems={{ xs: "stretch", lg: "center" }}
                 justifyContent="space-between"
               >
-                <Stack
-                  direction="row"
-                  spacing={2}
-                  flexWrap="wrap"
-                  alignItems="center"
-                  sx={{ flex: 1, rowGap: 1.5 }}
-                >
-                  <Select
-                    multiple
-                    size="small"
+              <Stack
+                direction="row"
+                spacing={2}
+                flexWrap="wrap"
+                alignItems="center"
+                sx={{
+                  flex: 1,
+                  rowGap: 1.5,
+                  columnGap: 1.5,
+                  "& .MuiInputBase-root": { height: 40 },
+                  "& .MuiOutlinedInput-input": { padding: "10px 12px" },
+                  "& .MuiButton-root": { height: 40 }
+                }}
+              >
+                <Select
+                  multiple
+                  size="small"
                     value={statusSelections}
                     onChange={(event) =>
                       handleStatusSelectionsChange(
@@ -1148,11 +1092,30 @@ export default function ExpensesView() {
                       </MenuItem>
                     ))}
                   </TextField>
-                  <Button variant="text" color="inherit" onClick={handleResetFilters}>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        size="small"
+                        checked={todayOnly}
+                        onChange={(event) => setTodayOnly(event.target.checked)}
+                      />
+                    }
+                    label="Bugüne ait"
+                    sx={{ ml: 0 }}
+                  />
+                  <Button variant="text" color="inherit" size="small" onClick={handleResetFilters}>
                     Sıfırla
                   </Button>
                 </Stack>
-                <Stack direction="row" spacing={1} alignItems="center">
+                <Stack
+                  direction="row"
+                  spacing={1}
+                  alignItems="center"
+                  sx={{
+                    "& .MuiInputBase-root": { height: 40 },
+                    "& .MuiOutlinedInput-input": { padding: "10px 12px" }
+                  }}
+                >
                   <TextField
                     size="small"
                     label="Ara"
@@ -1164,6 +1127,7 @@ export default function ExpensesView() {
                     size="small"
                     onClick={handleMenuOpen}
                     aria-label="Daha Fazla"
+                    sx={{ height: 40, width: 40 }}
                   >
                     <MoreVertIcon fontSize="small" />
                   </IconButton>
@@ -1185,83 +1149,6 @@ export default function ExpensesView() {
             <MenuItem onClick={handleExportCsv}>Dışa Aktar (CSV)</MenuItem>
             <MenuItem onClick={handleExportXlsx}>Dışa Aktar (XLSX)</MenuItem>
             <MenuItem onClick={handleShowColumns}>Kolon Seçimi</MenuItem>
-            <MenuItem disableRipple onClick={(event) => event.stopPropagation()}>
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={todayOnly}
-                    onChange={(event) => setTodayOnly(event.target.checked)}
-                  />
-                }
-                label="Bugüne ait"
-              />
-            </MenuItem>
-            <Box sx={{ px: 2, py: 1 }} onClick={(event) => event.stopPropagation()}>
-              <Typography variant="caption" color="text.secondary">
-                Kayıtlı Görünümler
-              </Typography>
-              <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1 }}>
-                <TextField
-                  size="small"
-                  label="Görünüm Adı"
-                  value={newViewName}
-                  onChange={(event) => setNewViewName(event.target.value)}
-                />
-                <Button
-                  variant="outlined"
-                  size="small"
-                  onClick={() => {
-                    handleSaveCurrentView();
-                    handleMenuClose();
-                  }}
-                >
-                  Kaydet
-                </Button>
-              </Stack>
-              {savedViews.length > 0 && (
-                <Stack spacing={0.5} sx={{ mt: 1 }}>
-                  {savedViews.map((view) => (
-                    <Button
-                      key={view.name}
-                      variant={selectedViewName === view.name ? "contained" : "text"}
-                      size="small"
-                      onClick={() => {
-                        handleSelectView(view.name);
-                        handleMenuClose();
-                      }}
-                      sx={{ justifyContent: "flex-start" }}
-                    >
-                      {view.name}
-                    </Button>
-                  ))}
-                </Stack>
-              )}
-              <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
-                <Button
-                  size="small"
-                  color="inherit"
-                  disabled={!selectedViewName}
-                  onClick={() => {
-                    handleDeleteView(selectedViewName);
-                    handleMenuClose();
-                  }}
-                >
-                  Sil
-                </Button>
-                <Button
-                  size="small"
-                  color="inherit"
-                  onClick={() => {
-                    setSavedViews([]);
-                    setSelectedViewName("");
-                    localStorage.removeItem(GRID_VIEWS_KEY);
-                    handleMenuClose();
-                  }}
-                >
-                  Sıfırla
-                </Button>
-              </Stack>
-            </Box>
           </Menu>
           <Box sx={{ height: 520, width: "100%" }}>
             {showListLoadError ? (
