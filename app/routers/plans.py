@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func
+from sqlalchemy import and_, func, or_
 from sqlmodel import Session, select
 
 from app.dependencies import get_admin_user, get_current_user, get_db_session
@@ -39,7 +39,16 @@ def _plan_read_query(capex_filter: str | None):
         )
         .select_from(PlanEntry)
         .join(Scenario, Scenario.id == PlanEntry.scenario_id)
-        .join(BudgetItem, BudgetItem.id == PlanEntry.budget_item_id)
+        .outerjoin(
+            BudgetItem,
+            or_(
+                BudgetItem.id == PlanEntry.budget_item_id,
+                and_(
+                    PlanEntry.budget_code.is_not(None),
+                    BudgetItem.code == PlanEntry.budget_code,
+                ),
+            ),
+        )
     )
     if capex_filter:
         query = query.where(func.lower(BudgetItem.map_category) == capex_filter)
@@ -56,7 +65,7 @@ def _build_plan_read(row: dict) -> PlanEntryRead:
         budget_item_id=row.get("budget_item_id"),
         department=row.get("department"),
         scenario_name=row.get("scenario_name"),
-        budget_code=row.get("budget_code") or row.get("plan_budget_code") or "(boş)",
+        budget_code=row.get("budget_code") or row.get("plan_budget_code"),
         budget_name=row.get("budget_name"),
         capex_opex=row.get("capex_opex").title() if row.get("capex_opex") else None,
         asset_type=row.get("asset_type"),

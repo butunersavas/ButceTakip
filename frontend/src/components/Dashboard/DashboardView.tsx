@@ -225,6 +225,10 @@ export default function DashboardView() {
   const [selectedKpiFilter, setSelectedKpiFilter] = useState<
     "total_plan" | "total_actual" | "total_remaining" | "total_overrun" | null
   >(null);
+  const [selectedOverrunItem, setSelectedOverrunItem] = useState<{
+    budget_code: string;
+    budget_name?: string | null;
+  } | null>(null);
   const [isOverBudgetDialogOpen, setIsOverBudgetDialogOpen] = useState(false);
   const [forceShowOverBudget, setForceShowOverBudget] = useState(false);
   const [highlightOverBudget, setHighlightOverBudget] = useState(false);
@@ -412,6 +416,11 @@ export default function DashboardView() {
     return budgetItems?.find((item) => item.id === debouncedFilters.budgetItemId)?.code;
   }, [budgetItems, debouncedFilters.budgetItemId]);
 
+  const selectedOverrunBudgetItemId = useMemo(() => {
+    if (!selectedOverrunItem?.budget_code || !budgetItems?.length) return null;
+    return budgetItems.find((item) => item.code === selectedOverrunItem.budget_code)?.id ?? null;
+  }, [budgetItems, selectedOverrunItem?.budget_code]);
+
   const { data: overBudget } = useQuery<OverBudgetResponse>({
     queryKey: [
       "dashboard",
@@ -450,14 +459,17 @@ export default function DashboardView() {
       "trend",
       debouncedFilters.year,
       debouncedFilters.scenarioId,
-      debouncedFilters.budgetItemId,
+      selectedOverrunBudgetItemId ?? debouncedFilters.budgetItemId,
       debouncedFilters.department,
-      debouncedFilters.capexOpex
+      debouncedFilters.capexOpex,
+      selectedOverrunItem?.budget_code ?? null
     ],
     queryFn: async () => {
       const params: Record<string, number | string> = { year: debouncedFilters.year };
       if (debouncedFilters.scenarioId) params.scenario_id = debouncedFilters.scenarioId;
-      if (debouncedFilters.budgetItemId) params.budget_item_id = debouncedFilters.budgetItemId;
+      const trendBudgetItemId =
+        selectedOverrunBudgetItemId ?? debouncedFilters.budgetItemId;
+      if (trendBudgetItemId) params.budget_item_id = trendBudgetItemId;
       if (debouncedFilters.department) params.department = debouncedFilters.department;
       if (debouncedFilters.capexOpex) params.capex_opex = debouncedFilters.capexOpex;
       const { data } = await client.get<SpendMonthlySummary[]>("/dashboard/trend", { params });
@@ -488,6 +500,7 @@ export default function DashboardView() {
     setSelectedKpiFilter(null);
     setForceShowOverBudget(false);
     setHighlightOverBudget(false);
+    setSelectedOverrunItem(null);
   };
 
   const monthlyData = useMemo(() => {
@@ -585,10 +598,24 @@ export default function DashboardView() {
   }, []);
 
   const handleSummaryCardClick = (filterKey: string) => {
+    const isSameFilter = selectedKpiFilter === filterKey;
     setSelectedKpiFilter((prev) => (prev === filterKey ? null : filterKey));
     if (filterKey === "total_overrun") {
       setForceShowOverBudget(true);
       setHighlightOverBudget(true);
+      if (isSameFilter) {
+        setSelectedOverrunItem(null);
+      } else {
+        const top = overBudgetItems?.[0];
+        if (top) {
+          setSelectedOverrunItem({
+            budget_code: top.budget_code,
+            budget_name: top.budget_name
+          });
+        } else {
+          setSelectedOverrunItem(null);
+        }
+      }
       if (highlightTimeoutRef.current) {
         window.clearTimeout(highlightTimeoutRef.current);
       }
@@ -598,6 +625,8 @@ export default function DashboardView() {
       window.setTimeout(() => {
         overBudgetRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       }, 0);
+    } else {
+      setSelectedOverrunItem(null);
     }
   };
 
@@ -858,12 +887,18 @@ export default function DashboardView() {
                   </Typography>
                   <Chip
                     label={
-                      budgetItemId
-                        ? stripBudgetCode(budgetItems?.find((item) => item.id === budgetItemId)?.name ?? "")
-                        : "Tüm Kalemler"
+                      selectedOverrunItem
+                        ? `Aşım: ${stripBudgetCode(
+                            selectedOverrunItem.budget_name ?? selectedOverrunItem.budget_code ?? ""
+                          )}`
+                        : budgetItemId
+                          ? stripBudgetCode(
+                              budgetItems?.find((item) => item.id === budgetItemId)?.name ?? ""
+                            )
+                          : "Tüm Kalemler"
                     }
-                    color={budgetItemId ? "primary" : "default"}
-                    variant={budgetItemId ? "filled" : "outlined"}
+                    color={selectedOverrunItem ? "error" : "primary"}
+                    variant={selectedOverrunItem ? "filled" : "outlined"}
                   />
                 </Stack>
                 {isTrendLoading ? (
@@ -965,9 +1000,16 @@ export default function DashboardView() {
                   </Stack>
                 </Stack>
 
-                <Grid container spacing={2}>
+                <Box
+                  sx={{
+                    display: "flex",
+                    gap: 3,
+                    overflowX: "auto",
+                    pb: 1
+                  }}
+                >
                   {quarterlyTotals.map((quarter) => (
-                    <Grid item xs={12} md={6} key={quarter.label}>
+                    <Box key={quarter.label} sx={{ minWidth: 260, flex: "0 0 260px" }}>
                       <Typography variant="subtitle2" fontWeight={600} mb={1}>
                         {quarter.label}
                       </Typography>
@@ -994,9 +1036,9 @@ export default function DashboardView() {
                           </PieChart>
                         </ResponsiveContainer>
                       </Box>
-                    </Grid>
+                    </Box>
                   ))}
-                </Grid>
+                </Box>
               </CardContent>
             </Card>
           </Stack>
