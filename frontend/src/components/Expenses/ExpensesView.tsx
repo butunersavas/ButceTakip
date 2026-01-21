@@ -656,7 +656,7 @@ export default function ExpensesView() {
           if (row?.budget_name || row?.budget_code) {
             return formatBudgetItemLabel({
               code: row.budget_code ?? undefined,
-              name: row.budget_name ?? ""
+              name: row.budget_name ?? row.budget_code ?? ""
             });
           }
           const item = findBudgetItem(row);

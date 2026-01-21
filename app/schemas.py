@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Optional
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, root_validator, validator
 from sqlmodel import SQLModel
 
 from app.models import ExpenseStatus, WarrantyItemType
@@ -341,15 +341,35 @@ class WarrantyItemBase(BaseModel):
     name: str
     location: str
     domain: Optional[str] = None
-    end_date: Optional[date] = None
+    end_date: Optional[date] = Field(default=None, alias="endDate")
     note: Optional[str] = None
-    issuer: Optional[str] = None
-    certificate_issuer: Optional[str] = None
-    renewal_owner: Optional[str] = None
-    renewal_responsible: Optional[str] = None
+    issuer: Optional[str] = Field(default=None, alias="issuer")
+    certificate_issuer: Optional[str] = Field(default=None, alias="certificateIssuer")
+    renewal_owner: Optional[str] = Field(default=None, alias="renewal_owner")
+    renewal_responsible: Optional[str] = Field(default=None, alias="renewalResponsible")
     reminder_days: Optional[int] = Field(default=30, ge=0)
     remind_days: Optional[int] = Field(default=30, ge=0)
     remind_days_before: Optional[int] = Field(default=30, ge=0)
+
+    @root_validator(pre=True)
+    def normalize_warranty_aliases(cls, values: dict) -> dict:  # noqa: D417
+        if not isinstance(values, dict):
+            return values
+        if "certificateIssuer" in values and "certificate_issuer" not in values:
+            values["certificate_issuer"] = values.get("certificateIssuer")
+        if "issuer" in values and "certificate_issuer" not in values:
+            values.setdefault("certificate_issuer", values.get("issuer"))
+        if "renewalResponsible" in values and "renewal_responsible" not in values:
+            values["renewal_responsible"] = values.get("renewalResponsible")
+        if "renewal_owner" in values and "renewal_responsible" not in values:
+            values.setdefault("renewal_responsible", values.get("renewal_owner"))
+        if "renewal_owner" not in values and "renewal_responsible" in values:
+            values["renewal_owner"] = values.get("renewal_responsible")
+        if "endDate" in values and "end_date" not in values:
+            values["end_date"] = values.get("endDate")
+        if "expiration_date" in values and "end_date" not in values:
+            values["end_date"] = values.get("expiration_date")
+        return values
 
     @validator("end_date", pre=True)
     def parse_end_date(cls, value: date | str | None) -> date | None:  # noqa: D417
@@ -373,7 +393,8 @@ class WarrantyItemBase(BaseModel):
 
 
 class WarrantyItemCreate(WarrantyItemBase):
-    pass
+    class Config:
+        allow_population_by_field_name = True
 
 
 class WarrantyItemUpdate(BaseModel):
@@ -381,16 +402,38 @@ class WarrantyItemUpdate(BaseModel):
     name: Optional[str] = None
     location: Optional[str] = None
     domain: Optional[str] = None
-    end_date: Optional[date] = None
+    end_date: Optional[date] = Field(default=None, alias="endDate")
     note: Optional[str] = None
-    issuer: Optional[str] = None
-    certificate_issuer: Optional[str] = None
-    renewal_owner: Optional[str] = None
-    renewal_responsible: Optional[str] = None
+    issuer: Optional[str] = Field(default=None, alias="issuer")
+    certificate_issuer: Optional[str] = Field(default=None, alias="certificateIssuer")
+    renewal_owner: Optional[str] = Field(default=None, alias="renewal_owner")
+    renewal_responsible: Optional[str] = Field(default=None, alias="renewalResponsible")
     reminder_days: Optional[int] = None
     remind_days: Optional[int] = None
     remind_days_before: Optional[int] = None
     is_active: Optional[bool] = None
+
+    @root_validator(pre=True)
+    def normalize_warranty_aliases(cls, values: dict) -> dict:  # noqa: D417
+        if not isinstance(values, dict):
+            return values
+        if "certificateIssuer" in values and "certificate_issuer" not in values:
+            values["certificate_issuer"] = values.get("certificateIssuer")
+        if "issuer" in values and "certificate_issuer" not in values:
+            values.setdefault("certificate_issuer", values.get("issuer"))
+        if "renewalResponsible" in values and "renewal_responsible" not in values:
+            values["renewal_responsible"] = values.get("renewalResponsible")
+        if "renewal_owner" in values and "renewal_responsible" not in values:
+            values.setdefault("renewal_responsible", values.get("renewal_owner"))
+        if "renewal_owner" not in values and "renewal_responsible" in values:
+            values["renewal_owner"] = values.get("renewal_responsible")
+        if "endDate" in values and "end_date" not in values:
+            values["end_date"] = values.get("endDate")
+        if "expiration_date" in values and "end_date" not in values:
+            values["end_date"] = values.get("expiration_date")
+        if "renewal_owner" not in values and "renewalResponsible" in values:
+            values["renewal_owner"] = values.get("renewalResponsible")
+        return values
 
     @validator("end_date", pre=True)
     def parse_end_date(cls, value: date | str | None) -> date | None:  # noqa: D417
@@ -411,6 +454,9 @@ class WarrantyItemUpdate(BaseModel):
             except ValueError as exc:
                 raise ValueError("end_date must be YYYY-MM-DD or DD.MM.YYYY") from exc
         raise ValueError("Invalid end_date")
+
+    class Config:
+        allow_population_by_field_name = True
 
 
 class WarrantyItemRead(SQLModel, table=False):

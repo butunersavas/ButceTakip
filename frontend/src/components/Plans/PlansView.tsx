@@ -351,30 +351,28 @@ export default function PlansView() {
         valueGetter: (params) => {
           const row = params?.row;
           if (!row) {
-            return "";
+            return "-";
           }
 
           if (row.scenario_name || row.scenario) {
-            return row.scenario_name ?? row.scenario ?? "";
+            return row.scenario_name ?? row.scenario ?? "-";
           }
 
-          if (!Array.isArray(scenarios)) {
-            return "";
+          if (Array.isArray(scenarios)) {
+            const scenario = scenarios.find(
+              (item) => item && (item.scenario_id === row.scenario_id || item.id === row.scenario_id)
+            );
+
+            if (scenario) {
+              return (
+                scenario.name ??
+                scenario.scenario_name ??
+                `${scenario.code ?? ""} ${scenario.description ?? ""}`.trim()
+              );
+            }
           }
 
-          const scenario = scenarios.find(
-            (item) => item && (item.scenario_id === row.scenario_id || item.id === row.scenario_id)
-          );
-
-          if (!scenario) {
-            return "";
-          }
-
-          return (
-            scenario.name ??
-            scenario.scenario_name ??
-            `${scenario.code ?? ""} ${scenario.description ?? ""}`.trim()
-          );
+          return "-";
         }
       },
       {
@@ -383,13 +381,15 @@ export default function PlansView() {
         flex: 1,
         valueGetter: (params) => {
           const row = params?.row;
-          if (row?.budget_name || row?.budget_code) {
+          const label = row?.budget_name ?? row?.budget_code ?? null;
+          if (label) {
             return formatBudgetItemLabel({
               code: row.budget_code ?? undefined,
               name: row.budget_name ?? row.budget_code ?? ""
             });
           }
-          return formatBudgetItemLabel(findBudgetItem(row)) || row?.budget_code || "-";
+          const item = findBudgetItem(row);
+          return item ? formatBudgetItemLabel(item) || "-" : "-";
         }
       },
       {

@@ -518,7 +518,13 @@ export default function WarrantyTrackingView() {
           params?.row?.updated_by_username ??
           "-",
       },
-      { field: "note", headerName: "Not", flex: 1.2, sortable: false },
+      {
+        field: "note",
+        headerName: "Not",
+        flex: 1.2,
+        sortable: false,
+        valueGetter: (params) => params?.row?.note ?? "-",
+      },
       {
         field: "actions",
         headerName: "İşlemler",
