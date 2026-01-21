@@ -378,6 +378,19 @@ def get_overbudget(
     )
     if scenario_id is not None:
         expense_query = expense_query.where(Expense.scenario_id == scenario_id)
+    if department is not None:
+        department_budget_items_query = (
+            select(PlanEntry.budget_item_id)
+            .where(PlanEntry.year == resolved_year)
+            .where(PlanEntry.department == department)
+        )
+        if scenario_id is not None:
+            department_budget_items_query = department_budget_items_query.where(
+                PlanEntry.scenario_id == scenario_id
+            )
+        expense_query = expense_query.where(
+            Expense.budget_item_id.in_(department_budget_items_query)
+        )
     expense_query = expense_query.group_by(Expense.budget_item_id).subquery()
 
     query = (
