@@ -3,7 +3,9 @@ from datetime import date, datetime
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import aliased
 from sqlmodel import Session, select
 
 from app.dependencies import get_admin_user, get_current_user, get_db_session
@@ -71,12 +73,14 @@ def _build_user_map(session: Session, items: list[WarrantyItem]) -> dict[int, st
     return {user.id: _user_display_name(user) for user in users}
 
 
-def _build_warranty_read(item: WarrantyItem, user_map: dict[int, str | None]) -> WarrantyItemRead:
+def _build_warranty_read(
+    item: WarrantyItem,
+    created_name: str | None,
+    updated_name: str | None,
+) -> WarrantyItemRead:
     read_item = WarrantyItemRead.from_orm(item)
-    created_id = item.created_by_id or item.created_by_user_id
-    updated_id = item.updated_by_id or item.updated_by_user_id
-    read_item.created_by_name = user_map.get(created_id) if created_id else None
-    read_item.updated_by_name = user_map.get(updated_id) if updated_id else None
+    read_item.created_by_name = created_name
+    read_item.updated_by_name = updated_name
     read_item.created_by_username = read_item.created_by_name
     read_item.updated_by_username = read_item.updated_by_name
     remind_days_before = _resolve_remind_days(item)
@@ -107,12 +111,38 @@ def list_warranty_items(
     session: Session = Depends(get_db_session),
     _: User = Depends(get_current_user),
 ) -> list[WarrantyItemRead]:
-    statement = select(WarrantyItem)
+    created_user = aliased(User)
+    updated_user = aliased(User)
+    statement = (
+        select(
+            WarrantyItem,
+            created_user.full_name.label("created_full_name"),
+            created_user.username.label("created_username"),
+            created_user.email.label("created_email"),
+            updated_user.full_name.label("updated_full_name"),
+            updated_user.username.label("updated_username"),
+            updated_user.email.label("updated_email"),
+        )
+        .select_from(WarrantyItem)
+        .outerjoin(
+            created_user,
+            created_user.id == func.coalesce(WarrantyItem.created_by_user_id, WarrantyItem.created_by_id),
+        )
+        .outerjoin(
+            updated_user,
+            updated_user.id == func.coalesce(WarrantyItem.updated_by_user_id, WarrantyItem.updated_by_id),
+        )
+    )
     if not include_inactive:
         statement = statement.where(WarrantyItem.is_active.is_(True))
-    items = session.exec(statement).all()
-    user_map = _build_user_map(session, items)
-    return [_build_warranty_read(item, user_map) for item in items]
+    rows = session.exec(statement).all()
+    items: list[WarrantyItemRead] = []
+    for row in rows:
+        item = row[0]
+        created_name = row.created_full_name or row.created_username or row.created_email
+        updated_name = row.updated_full_name or row.updated_username or row.updated_email
+        items.append(_build_warranty_read(item, created_name, updated_name))
+    return items
 
 
 @router.post("", response_model=WarrantyItemRead, status_code=status.HTTP_201_CREATED)
@@ -169,7 +199,13 @@ def create_warranty_item(
             detail=detail,
         )
     user_map = _build_user_map(session, [item])
-    return _build_warranty_read(item, user_map)
+    created_id = item.created_by_id or item.created_by_user_id
+    updated_id = item.updated_by_id or item.updated_by_user_id
+    return _build_warranty_read(
+        item,
+        user_map.get(created_id) if created_id else None,
+        user_map.get(updated_id) if updated_id else None,
+    )
 
 
 @router.put("/{item_id}", response_model=WarrantyItemRead)
@@ -218,7 +254,13 @@ def update_warranty_item(
             detail="Garanti kaydı güncellenemedi.",
         )
     user_map = _build_user_map(session, [item])
-    return _build_warranty_read(item, user_map)
+    created_id = item.created_by_id or item.created_by_user_id
+    updated_id = item.updated_by_id or item.updated_by_user_id
+    return _build_warranty_read(
+        item,
+        user_map.get(created_id) if created_id else None,
+        user_map.get(updated_id) if updated_id else None,
+    )
 
 
 @router.delete("/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
