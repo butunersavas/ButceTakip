@@ -199,23 +199,21 @@ def hard_delete_scenario(
     }
 
     try:
-        with session.begin():
-            deleted_counts["expenses"] = (
-                session.exec(delete(Expense).where(Expense.scenario_id == scenario_id)).rowcount or 0
-            )
-            deleted_counts["plan_entries"] = (
-                session.exec(delete(PlanEntry).where(PlanEntry.scenario_id == scenario_id)).rowcount
+        deleted_counts["expenses"] = (
+            session.exec(delete(Expense).where(Expense.scenario_id == scenario_id)).rowcount or 0
+        )
+        deleted_counts["plan_entries"] = (
+            session.exec(delete(PlanEntry).where(PlanEntry.scenario_id == scenario_id)).rowcount
+            or 0
+        )
+        if hasattr(WarrantyItem, "scenario_id"):
+            deleted_counts["warranty_items"] = (
+                session.exec(delete(WarrantyItem).where(WarrantyItem.scenario_id == scenario_id)).rowcount
                 or 0
             )
-            if hasattr(WarrantyItem, "scenario_id"):
-                deleted_counts["warranty_items"] = (
-                    session.exec(
-                        delete(WarrantyItem).where(WarrantyItem.scenario_id == scenario_id)
-                    ).rowcount
-                    or 0
-                )
-            session.delete(scenario)
-            deleted_counts["scenario"] = 1
+        session.delete(scenario)
+        deleted_counts["scenario"] = 1
+        session.commit()
     except IntegrityError as exc:
         logger.exception("Hard delete failed due to integrity error", extra={"scenario_id": scenario_id})
         session.rollback()

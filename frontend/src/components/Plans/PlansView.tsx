@@ -389,28 +389,28 @@ export default function PlansView() {
         }
       },
       {
-        field: "map_category",
+        field: "capex_opex",
         headerName: "Map Capex/Opex",
         flex: 1,
-        valueGetter: (params) =>
-          params?.row?.capex_opex ??
-          findBudgetItem(params?.row)?.map_category ??
-          ""
+        valueGetter: (params) => {
+          const value = params?.row?.capex_opex ?? findBudgetItem(params?.row)?.map_category;
+          return value ?? "-";
+        }
       },
       {
-        field: "map_attribute",
+        field: "asset_type",
         headerName: "Map Nitelik",
         flex: 1,
-        valueGetter: (params) =>
-          params?.row?.asset_type ??
-          findBudgetItem(params?.row)?.map_attribute ??
-          ""
+        valueGetter: (params) => {
+          const value = params?.row?.asset_type ?? findBudgetItem(params?.row)?.map_attribute;
+          return value ?? "-";
+        }
       },
       {
         field: "department",
         headerName: "Departman",
         flex: 1,
-        valueGetter: (params) => params?.row?.department ?? "",
+        valueGetter: (params) => params?.row?.department ?? "-",
       },
       { field: "year", headerName: "Yıl", width: 110 },
       {

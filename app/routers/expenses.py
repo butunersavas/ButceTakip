@@ -96,7 +96,7 @@ def _build_expense_read(
         created_by_username=created_name,
         updated_by_username=updated_name,
         scenario_name=row.get("scenario_name"),
-        budget_code=row.get("budget_code"),
+        budget_code=row.get("budget_code") or "",
         budget_name=row.get("budget_name"),
         capex_opex=capex_opex,
         department=department,
