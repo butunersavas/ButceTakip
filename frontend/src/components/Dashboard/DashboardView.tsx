@@ -37,6 +37,7 @@ import {
   CartesianGrid,
   Cell,
   Legend,
+  Line,
   Pie,
   PieChart,
   ReferenceLine,
@@ -511,6 +512,7 @@ export default function DashboardView() {
       actual: entry.actual_total ?? 0,
       remaining: entry.remaining_total ?? 0,
       overrun: entry.over_total ?? 0,
+      over_pct: (entry.over_total ?? 0) / Math.max(entry.plan_total ?? 0, 1),
       monthLabel: monthLabels[entry.month - 1]
     }));
   }, [trendMonths]);
@@ -910,12 +912,25 @@ export default function DashboardView() {
                         <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
                         <XAxis dataKey="monthLabel" tick={{ fill: "#475569" }} />
                         <YAxis
+                          yAxisId="left"
+                          tick={{ fill: "#475569" }}
+                          tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
+                        />
+                        <YAxis
+                          yAxisId="right"
+                          orientation="right"
                           tick={{ fill: "#475569" }}
                           tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
                         />
                         <ReferenceLine y={0} stroke="#9e9e9e" strokeDasharray="3 3" />
                         <RechartsTooltip
-                          formatter={(value: number) => formatCurrency(value)}
+                          formatter={(value: number, name: string, props: any) => {
+                            if (name === "Aşım") {
+                              const pct = props?.payload?.over_pct ?? 0;
+                              return [`${formatCurrency(value)} (%${(pct * 100).toFixed(1)})`, name];
+                            }
+                            return [formatCurrency(value), name];
+                          }}
                           labelFormatter={(label) => label}
                         />
                         <Legend />
@@ -924,6 +939,7 @@ export default function DashboardView() {
                           name="Planlanan"
                           fill={pieColors.planned}
                           radius={[6, 6, 0, 0]}
+                          yAxisId="left"
                           hide={!showPlanned}
                         />
                         <Bar
@@ -931,6 +947,7 @@ export default function DashboardView() {
                           name="Gerçekleşen"
                           fill={pieColors.actual}
                           radius={[6, 6, 0, 0]}
+                          yAxisId="left"
                           hide={!showActual}
                         />
                         <Bar
@@ -938,13 +955,16 @@ export default function DashboardView() {
                           name="Kalan"
                           fill={pieColors.remaining}
                           radius={[6, 6, 0, 0]}
+                          yAxisId="left"
                           hide={!showRemaining}
                         />
-                        <Bar
+                        <Line
                           dataKey="overrun"
                           name="Aşım"
-                          fill={pieColors.overrun}
-                          radius={[6, 6, 0, 0]}
+                          stroke={pieColors.overrun}
+                          strokeWidth={2}
+                          dot={{ r: 3 }}
+                          yAxisId="right"
                           hide={!showOverrun}
                         />
                       </BarChart>
@@ -1003,14 +1023,31 @@ export default function DashboardView() {
                 <Box
                   sx={{
                     display: "flex",
+                    justifyContent: "space-evenly",
+                    alignItems: "center",
                     gap: 3,
+                    flexWrap: "nowrap",
                     overflowX: "auto",
                     pb: 1
                   }}
                 >
                   {quarterlyTotals.map((quarter) => (
-                    <Box key={quarter.label} sx={{ minWidth: 260, flex: "0 0 260px" }}>
-                      <Typography variant="subtitle2" fontWeight={600} mb={1}>
+                    <Box
+                      key={quarter.label}
+                      sx={{
+                        width: 250,
+                        flex: "0 0 250px",
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center"
+                      }}
+                    >
+                      <Typography
+                        variant="subtitle2"
+                        fontWeight={600}
+                        mb={1}
+                        sx={{ alignSelf: "flex-start" }}
+                      >
                         {quarter.label}
                       </Typography>
                       <Box sx={{ height: 220 }}>

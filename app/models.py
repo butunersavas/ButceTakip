@@ -113,6 +113,7 @@ class Expense(TimestampMixin, SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     budget_item_id: int = Field(foreign_key="budget_items.id", nullable=False, index=True)
     scenario_id: Optional[int] = Field(default=None, foreign_key="scenarios.id")
+    budget_code: Optional[str] = Field(default=None, nullable=True)
     expense_date: date = Field(nullable=False, index=True)
     amount: float = Field(nullable=False)
     quantity: float = Field(default=1, nullable=False)

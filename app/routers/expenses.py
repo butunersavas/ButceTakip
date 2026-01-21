@@ -3,7 +3,7 @@ import ipaddress
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy import func
+from sqlalchemy import and_, func, or_
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import aliased
 from sqlmodel import Session, select
@@ -96,7 +96,7 @@ def _build_expense_read(
         created_by_username=created_name,
         updated_by_username=updated_name,
         scenario_name=row.get("scenario_name"),
-        budget_code=row.get("budget_code") or "",
+        budget_code=row.get("expense_budget_code") or row.get("budget_code"),
         budget_name=row.get("budget_name"),
         capex_opex=capex_opex,
         department=department,
@@ -149,6 +149,7 @@ def _expense_read_query(
             Expense.description,
             Expense.status,
             Expense.is_out_of_budget,
+            Expense.budget_code.label("expense_budget_code"),
             Expense.created_at,
             Expense.updated_at,
             Expense.created_by_id,
@@ -170,7 +171,13 @@ def _expense_read_query(
             updated_user.email.label("updated_email"),
         )
         .select_from(Expense)
-        .join(BudgetItem, BudgetItem.id == Expense.budget_item_id)
+        .outerjoin(
+            BudgetItem,
+            or_(
+                and_(Expense.budget_code.is_not(None), BudgetItem.code == Expense.budget_code),
+                and_(Expense.budget_code.is_(None), BudgetItem.id == Expense.budget_item_id),
+            ),
+        )
         .outerjoin(Scenario, Scenario.id == Expense.scenario_id)
         .outerjoin(
             created_user,
@@ -285,7 +292,8 @@ def create_expense(
 ) -> ExpenseRead:
     if not expense_in.scenario_id:
         raise HTTPException(status_code=400, detail="scenario_id is required")
-    if not session.get(BudgetItem, expense_in.budget_item_id):
+    budget_item = session.get(BudgetItem, expense_in.budget_item_id)
+    if not budget_item:
         raise HTTPException(status_code=400, detail="Budget item not found")
     if not session.get(Scenario, expense_in.scenario_id):
         raise HTTPException(status_code=400, detail="Invalid scenario_id")
@@ -299,6 +307,7 @@ def create_expense(
     expense_data = expense_in.dict(exclude={"client_hostname", "kaydi_giren_kullanici"})
     expense = Expense(
         **expense_data,
+        budget_code=budget_item.code,
         created_by_id=current_user.id,
         updated_by_id=current_user.id,
         created_by_user_id=current_user.id,
@@ -331,7 +340,18 @@ def update_expense(
     owner_id = expense.created_by_user_id or expense.created_by_id
     if owner_id not in (None, current_user.id) and not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Not allowed")
-    for field, value in expense_in.dict(exclude_unset=True).items():
+    update_data = expense_in.dict(exclude_unset=True)
+    if "budget_item_id" in update_data:
+        budget_item = session.get(BudgetItem, update_data["budget_item_id"])
+        if not budget_item:
+            raise HTTPException(status_code=400, detail="Budget item not found")
+        update_data["budget_code"] = budget_item.code
+    elif expense.budget_code is None:
+        budget_item = session.get(BudgetItem, expense.budget_item_id)
+        if budget_item:
+            update_data["budget_code"] = budget_item.code
+
+    for field, value in update_data.items():
         if field == "kaydi_giren_kullanici":
             continue
         setattr(expense, field, value)

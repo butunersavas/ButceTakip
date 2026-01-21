@@ -342,7 +342,7 @@ class WarrantyItemBase(BaseModel):
     location: str
     domain: Optional[str] = None
     end_date: Optional[date] = Field(default=None, alias="endDate")
-    note: Optional[str] = None
+    note: Optional[str] = Field(default=None, alias="notes")
     issuer: Optional[str] = Field(default=None, alias="issuer")
     certificate_issuer: Optional[str] = Field(default=None, alias="certificateIssuer")
     renewal_owner: Optional[str] = Field(default=None, alias="renewal_owner")
@@ -355,6 +355,8 @@ class WarrantyItemBase(BaseModel):
     def normalize_warranty_aliases(cls, values: dict) -> dict:  # noqa: D417
         if not isinstance(values, dict):
             return values
+        if "notes" in values and "note" not in values:
+            values["note"] = values.get("notes")
         if "certificateIssuer" in values and "certificate_issuer" not in values:
             values["certificate_issuer"] = values.get("certificateIssuer")
         if "issuer" in values and "certificate_issuer" not in values:
@@ -403,7 +405,7 @@ class WarrantyItemUpdate(BaseModel):
     location: Optional[str] = None
     domain: Optional[str] = None
     end_date: Optional[date] = Field(default=None, alias="endDate")
-    note: Optional[str] = None
+    note: Optional[str] = Field(default=None, alias="notes")
     issuer: Optional[str] = Field(default=None, alias="issuer")
     certificate_issuer: Optional[str] = Field(default=None, alias="certificateIssuer")
     renewal_owner: Optional[str] = Field(default=None, alias="renewal_owner")
@@ -417,6 +419,8 @@ class WarrantyItemUpdate(BaseModel):
     def normalize_warranty_aliases(cls, values: dict) -> dict:  # noqa: D417
         if not isinstance(values, dict):
             return values
+        if "notes" in values and "note" not in values:
+            values["note"] = values.get("notes")
         if "certificateIssuer" in values and "certificate_issuer" not in values:
             values["certificate_issuer"] = values.get("certificateIssuer")
         if "issuer" in values and "certificate_issuer" not in values:

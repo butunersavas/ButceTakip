@@ -265,26 +265,6 @@ export default function PlansView() {
     }
   }, [deleteMutation, user?.is_admin]);
 
-  const findBudgetItem = useCallback(
-    (row: unknown) => {
-      if (!row || typeof row !== "object") {
-        return undefined;
-      }
-
-      const budgetItemId = (row as { budget_item_id?: number | null }).budget_item_id;
-      if (budgetItemId == null || !Array.isArray(budgetItems)) {
-        return undefined;
-      }
-
-      return budgetItems.find(
-        (budget) =>
-          budget?.id === budgetItemId ||
-          ("budget_item_id" in budget && (budget as { budget_item_id?: number | null }).budget_item_id === budgetItemId)
-      );
-    },
-    [budgetItems]
-  );
-
   const rows = useMemo(() => {
     const mapped =
       plansQuery.data?.map((plan) => ({
@@ -354,25 +334,7 @@ export default function PlansView() {
             return "-";
           }
 
-          if (row.scenario_name || row.scenario) {
-            return row.scenario_name ?? row.scenario ?? "-";
-          }
-
-          if (Array.isArray(scenarios)) {
-            const scenario = scenarios.find(
-              (item) => item && (item.scenario_id === row.scenario_id || item.id === row.scenario_id)
-            );
-
-            if (scenario) {
-              return (
-                scenario.name ??
-                scenario.scenario_name ??
-                `${scenario.code ?? ""} ${scenario.description ?? ""}`.trim()
-              );
-            }
-          }
-
-          return "-";
+          return row.scenario_name ?? "-";
         }
       },
       {
@@ -381,15 +343,14 @@ export default function PlansView() {
         flex: 1,
         valueGetter: (params) => {
           const row = params?.row;
-          const label = row?.budget_name ?? row?.budget_code ?? null;
-          if (label) {
-            return formatBudgetItemLabel({
-              code: row.budget_code ?? undefined,
-              name: row.budget_name ?? row.budget_code ?? ""
-            });
+          const label = row?.budget_name ?? row?.budget_code ?? "-";
+          if (label === "-") {
+            return "-";
           }
-          const item = findBudgetItem(row);
-          return item ? formatBudgetItemLabel(item) || "-" : "-";
+          return formatBudgetItemLabel({
+            code: row?.budget_code ?? undefined,
+            name: row?.budget_name ?? row?.budget_code ?? ""
+          });
         }
       },
       {
@@ -397,11 +358,7 @@ export default function PlansView() {
         headerName: "Map Capex/Opex",
         flex: 1,
         valueGetter: (params) => {
-          const value =
-            params?.row?.capex_opex ??
-            params?.row?.map_capex_opex ??
-            findBudgetItem(params?.row)?.map_category;
-          return value ?? "-";
+          return params?.row?.capex_opex ?? "-";
         }
       },
       {
@@ -409,11 +366,7 @@ export default function PlansView() {
         headerName: "Map Nitelik",
         flex: 1,
         valueGetter: (params) => {
-          const value =
-            params?.row?.asset_type ??
-            params?.row?.map_nitelik ??
-            findBudgetItem(params?.row)?.map_attribute;
-          return value ?? "-";
+          return params?.row?.asset_type ?? "-";
         }
       },
       {
@@ -507,7 +460,7 @@ export default function PlansView() {
         )
       }
     ];
-  }, [findBudgetItem, handleDelete, handleEdit, scenarios, user?.is_admin]);
+  }, [handleDelete, handleEdit, scenarios, user?.is_admin]);
 
   const monthlyTotals = useMemo(() => {
     const totals = Array(12).fill(0);

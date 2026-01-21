@@ -42,10 +42,13 @@ def _plan_read_query(capex_filter: str | None):
         .outerjoin(
             BudgetItem,
             or_(
-                BudgetItem.id == PlanEntry.budget_item_id,
                 and_(
                     PlanEntry.budget_code.is_not(None),
                     BudgetItem.code == PlanEntry.budget_code,
+                ),
+                and_(
+                    PlanEntry.budget_code.is_(None),
+                    BudgetItem.id == PlanEntry.budget_item_id,
                 ),
             ),
         )
@@ -65,7 +68,7 @@ def _build_plan_read(row: dict) -> PlanEntryRead:
         budget_item_id=row.get("budget_item_id"),
         department=row.get("department"),
         scenario_name=row.get("scenario_name"),
-        budget_code=row.get("budget_code") or row.get("plan_budget_code"),
+        budget_code=row.get("plan_budget_code") or row.get("budget_code"),
         budget_name=row.get("budget_name"),
         capex_opex=row.get("capex_opex").title() if row.get("capex_opex") else None,
         asset_type=row.get("asset_type"),

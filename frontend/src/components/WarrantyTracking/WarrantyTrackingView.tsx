@@ -420,8 +420,8 @@ export default function WarrantyTrackingView() {
         flex: 1,
         valueGetter: (params) =>
           params?.row?.renewal_responsible ??
-          params?.row?.renewalResponsible ??
           params?.row?.renewal_owner ??
+          params?.row?.renewalResponsible ??
           "-",
       },
       {
@@ -505,7 +505,6 @@ export default function WarrantyTrackingView() {
         valueGetter: (params) =>
           params?.row?.created_by_name ??
           params?.row?.createdByName ??
-          params?.row?.created_by_username ??
           "-",
       },
       {
@@ -515,7 +514,6 @@ export default function WarrantyTrackingView() {
         valueGetter: (params) =>
           params?.row?.updated_by_name ??
           params?.row?.updatedByName ??
-          params?.row?.updated_by_username ??
           "-",
       },
       {

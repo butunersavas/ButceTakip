@@ -8,7 +8,6 @@ import {
   CardActionArea,
   CardContent,
   Chip,
-  Checkbox,
   Dialog,
   DialogActions,
   DialogContent,
@@ -16,7 +15,9 @@ import {
   FormControlLabel,
   Grid,
   IconButton,
+  Menu,
   MenuItem,
+  OutlinedInput,
   Select,
   Snackbar,
   Stack,
@@ -32,9 +33,10 @@ import DeleteIcon from "@mui/icons-material/DeleteOutline";
 import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
 import CheckCircleOutlineOutlinedIcon from "@mui/icons-material/CheckCircleOutlineOutlined";
 import ReportGmailerrorredOutlinedIcon from "@mui/icons-material/ReportGmailerrorredOutlined";
+import MoreVertIcon from "@mui/icons-material/MoreVert";
 import {
   DataGrid,
-  GridToolbar,
+  useGridApiRef,
   type GridColDef,
   type GridColumnVisibilityModel,
   type GridFilterModel,
@@ -50,7 +52,6 @@ import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import usePersistentState from "../../hooks/usePersistentState";
 import { useAuth } from "../../context/AuthContext";
 import { formatBudgetItemLabel, stripBudgetCode } from "../../utils/budgetLabel";
-import FiltersBar from "../Filters/FiltersBar";
 
 interface Scenario {
   id: number;
@@ -175,6 +176,7 @@ export default function ExpensesView() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const tableRef = useRef<HTMLDivElement | null>(null);
+  const apiRef = useGridApiRef();
 
   const currentUserId = user?.id ?? "anon";
   const GRID_VIEWS_KEY = `expenses-grid-views-${currentUserId}`;
@@ -183,18 +185,15 @@ export default function ExpensesView() {
   const [year, setYear] = usePersistentState<number | "">("expenses:year", currentYear);
   const [scenarioId, setScenarioId] = usePersistentState<number | null>("expenses:scenarioId", null);
   const [budgetItemId, setBudgetItemId] = usePersistentState<number | null>("expenses:budgetItemId", null);
-  const [statusFilter, setStatusFilter] = usePersistentState<"" | Expense["status"]>("expenses:status", "");
   const [startDate, setStartDate] = usePersistentState<string>("expenses:startDate", "");
   const [endDate, setEndDate] = usePersistentState<string>("expenses:endDate", "");
   const [capexOpex, setCapexOpex] = usePersistentState<"" | "capex" | "opex">(
     "expenses:capexOpex",
     ""
   );
-  const [includeOutOfBudget, setIncludeOutOfBudget] = usePersistentState<boolean>("expenses:includeOutOfBudget", true);
-  const [includeCancelled, setIncludeCancelled] = useState(false);
-  const [showCancelled, setShowCancelled] = usePersistentState<boolean>("expenses:showCancelled", false);
-  const [showOutOfBudget, setShowOutOfBudget] = usePersistentState<boolean>("expenses:showOutOfBudget", false);
-  const [mineOnly, setMineOnly] = usePersistentState<boolean>("expenses:mineOnly", false);
+  const [statusSelections, setStatusSelections] = usePersistentState<
+    Array<"ACTIVE" | "CANCELLED" | "OUT_OF_BUDGET" | "MINE">
+  >("expenses:statusSelections", ["ACTIVE"]);
   const [todayOnly, setTodayOnly] = usePersistentState<boolean>("expenses:todayOnly", false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
@@ -211,7 +210,8 @@ export default function ExpensesView() {
   const [savedViews, setSavedViews] = useState<SavedGridView[]>([]);
   const [selectedViewName, setSelectedViewName] = useState<string>("");
   const [newViewName, setNewViewName] = useState<string>("");
-  const [renderVersion, setRenderVersion] = useState(0);
+  const [searchText, setSearchText] = useState<string>("");
+  const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
   const [paginationModel, setPaginationModel] = useState<GridPaginationModel>({
     page: 0,
     pageSize: 10
@@ -298,29 +298,27 @@ export default function ExpensesView() {
       year,
       scenarioId,
       budgetItemId,
-      statusFilter,
       startDate,
       endDate,
       capexOpex,
-      includeOutOfBudget,
-      showCancelled,
-      showOutOfBudget,
-      mineOnly,
+      statusSelections,
       todayOnly
     ],
     queryFn: async () => {
       try {
+        const includeOutOfBudget = statusSelections.includes("OUT_OF_BUDGET");
+        const showCancelled = statusSelections.includes("CANCELLED");
+        const mineOnly = statusSelections.includes("MINE");
         const params: Record<string, string | number | boolean> = {};
         if (year) params.year = Number(year);
         if (scenarioId) params.scenario_id = scenarioId;
         if (budgetItemId) params.budget_item_id = budgetItemId;
-        if (statusFilter) params.status_filter = statusFilter;
         if (startDate) params.start_date = startDate;
         if (endDate) params.end_date = endDate;
         if (capexOpex) params.capex_opex = capexOpex;
         params.include_out_of_budget = includeOutOfBudget;
         params.show_cancelled = showCancelled;
-        params.show_out_of_budget = showOutOfBudget;
+        params.show_out_of_budget = includeOutOfBudget;
         params.mine_only = mineOnly;
         params.today_only = todayOnly;
         const { data } = await client.get<Expense[]>("/expenses", { params });
@@ -454,6 +452,7 @@ export default function ExpensesView() {
     setFilterModel(view.filterModel);
     setSortModel(view.sortModel);
     setColumnVisibilityModel(view.columnVisibilityModel);
+    setSearchText(view.filterModel.quickFilterValues?.[0] ?? "");
   };
 
   const handleDeleteView = (name: string) => {
@@ -612,26 +611,6 @@ export default function ExpensesView() {
     []
   );
 
-  const findBudgetItem = useCallback(
-    (row: unknown) => {
-      if (!row || typeof row !== "object") {
-        return undefined;
-      }
-
-      const budgetItemId = (row as { budget_item_id?: number | null }).budget_item_id;
-      if (budgetItemId == null || !Array.isArray(budgetItems)) {
-        return undefined;
-      }
-
-      return budgetItems.find(
-        (budget) =>
-          budget?.id === budgetItemId ||
-          ("budget_item_id" in budget && (budget as { budget_item_id?: number | null }).budget_item_id === budgetItemId)
-      );
-    },
-    [budgetItems]
-  );
-
   const rows = useMemo(() => {
     return safeExpenses.map((expense) => ({
       ...expense,
@@ -653,14 +632,14 @@ export default function ExpensesView() {
         width: 240,
         valueGetter: (params) => {
           const row = params?.row;
-          if (row?.budget_name || row?.budget_code) {
-            return formatBudgetItemLabel({
-              code: row.budget_code ?? undefined,
-              name: row.budget_name ?? row.budget_code ?? ""
-            });
+          const label = row?.budget_name ?? row?.budget_code ?? "-";
+          if (label === "-") {
+            return "-";
           }
-          const item = findBudgetItem(row);
-          return item ? formatBudgetItemLabel(item) : "-";
+          return formatBudgetItemLabel({
+            code: row?.budget_code ?? undefined,
+            name: row?.budget_name ?? row?.budget_code ?? ""
+          });
         }
       },
       {
@@ -668,8 +647,7 @@ export default function ExpensesView() {
         headerName: "Map Capex/Opex",
         width: 180,
         valueGetter: (params) => {
-          const value = params?.row?.capex_opex ?? findBudgetItem(params?.row)?.map_category;
-          return value ?? "-";
+          return params?.row?.capex_opex ?? "-";
         }
       },
       {
@@ -677,8 +655,7 @@ export default function ExpensesView() {
         headerName: "Map Nitelik",
         width: 180,
         valueGetter: (params) => {
-          const value = params?.row?.asset_type ?? findBudgetItem(params?.row)?.map_attribute;
-          return value ?? "-";
+          return params?.row?.asset_type ?? "-";
         }
       },
       {
@@ -830,7 +807,7 @@ export default function ExpensesView() {
         )
       }
     ];
-  }, [findBudgetItem, handleDelete, handleEdit, scenarios, renderTextWithTooltip]);
+  }, [handleDelete, handleEdit, scenarios, renderTextWithTooltip]);
 
   const columns = useMemo<GridColDef[]>(
     () =>
@@ -847,29 +824,68 @@ export default function ExpensesView() {
   const formattedOutOfBudget = formatCurrency(outOfBudgetTotal);
   const formattedCanceled = formatCurrency(cancelledTotal);
 
-  const handleApplyFilters = () => {
-    refetchExpenses();
-  };
-
   const handleResetFilters = () => {
     setYear(currentYear);
     setScenarioId(null);
     setBudgetItemId(null);
-    setStatusFilter("");
     setStartDate("");
     setEndDate("");
     setCapexOpex("");
-    setIncludeOutOfBudget(true);
-    setShowCancelled(false);
-    setShowOutOfBudget(false);
-    setMineOnly(false);
+    setStatusSelections(["ACTIVE"]);
     setTodayOnly(false);
     setSelectedExpenseFilter("ALL");
-    setFilterModel({ items: [] });
+    setSearchText("");
+    setFilterModel({ items: [], quickFilterValues: [] });
     setSortModel([]);
     setTimeout(() => {
       refetchExpenses();
     }, 0);
+  };
+
+  const statusOptions = [
+    { value: "ACTIVE", label: "Aktif" },
+    { value: "CANCELLED", label: "İptal Edilenler" },
+    { value: "OUT_OF_BUDGET", label: "Bütçe Dışı" },
+    { value: "MINE", label: "Sadece Benim" }
+  ] as const;
+
+  const handleStatusSelectionsChange = (value: string[]) => {
+    const nextSelections = value.length ? value : ["ACTIVE"];
+    setStatusSelections(nextSelections as Array<"ACTIVE" | "CANCELLED" | "OUT_OF_BUDGET" | "MINE">);
+  };
+
+  const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const value = event.target.value;
+    setSearchText(value);
+    setFilterModel((prev) => ({
+      ...prev,
+      quickFilterValues: value ? [value] : []
+    }));
+  };
+
+  const menuOpen = Boolean(menuAnchorEl);
+
+  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
+    setMenuAnchorEl(event.currentTarget);
+  };
+
+  const handleMenuClose = () => {
+    setMenuAnchorEl(null);
+  };
+
+  const handleExportCsv = () => {
+    apiRef.current.exportDataAsCsv?.();
+    handleMenuClose();
+  };
+
+  const handleExportXlsx = () => {
+    (apiRef.current as { exportDataAsExcel?: () => void }).exportDataAsExcel?.();
+    handleMenuClose();
+  };
+
+  const handleShowColumns = () => {
+    (apiRef.current as { showPreferences?: (panel?: string) => void }).showPreferences?.("columns");
+    handleMenuClose();
   };
 
   const summaryCards = [
@@ -1011,245 +1027,248 @@ export default function ExpensesView() {
             overflow: "visible"
           }}
         >
-          <Box sx={{ mb: 3, display: "flex", flexDirection: "column", gap: 2 }}>
-            <FiltersBar title="Harcama Filtreleri" onApply={handleApplyFilters} onReset={handleResetFilters}>
-              <TextField
-                label="Yıl"
-                type="number"
-                size="small"
-                value={year}
-                onChange={(event) => setYear(event.target.value ? Number(event.target.value) : "")}
-                sx={{ minWidth: 110, "& .MuiInputBase-root": { height: 40 } }}
-              />
-              <TextField
-                select
-                label="Senaryo"
-                size="small"
-                value={scenarioId ?? ""}
-                onChange={(event) =>
-                  setScenarioId(event.target.value ? Number(event.target.value) : null)
-                }
-                sx={{ minWidth: 260, "& .MuiInputBase-root": { height: 40 } }}
+          <Box sx={{ mb: 3 }}>
+            <Box
+              sx={{
+                border: "1px solid",
+                borderColor: "divider",
+                borderRadius: 2,
+                px: 2,
+                py: 2
+              }}
+            >
+              <Stack
+                direction={{ xs: "column", lg: "row" }}
+                spacing={2}
+                alignItems={{ xs: "stretch", lg: "center" }}
+                justifyContent="space-between"
               >
-                <MenuItem value="">Tümü</MenuItem>
-                {scenarios?.map((scenario) => (
-                  <MenuItem key={scenario.id} value={scenario.id}>
-                    {scenario.name} ({scenario.year})
-                  </MenuItem>
-                ))}
-              </TextField>
-              <Autocomplete
-                size="small"
-                options={budgetItems ?? []}
-                value={budgetItems?.find((item) => item.id === budgetItemId) ?? null}
-                onChange={(_, value) => setBudgetItemId(value?.id ?? null)}
-                getOptionLabel={(option) => formatBudgetItemLabel(option) || "-"}
-                filterOptions={budgetFilterOptions}
-                isOptionEqualToValue={(option, value) => option.id === value.id}
-                sx={{ minWidth: 320, flex: 1, "& .MuiInputBase-root": { height: 40 } }}
-                renderInput={(params) => (
-                  <TextField {...params} label="Bütçe Kalemi" placeholder="Tümü" size="small" />
-                )}
-              />
-              <TextField
-                select
-                label="Capex/Opex"
-                size="small"
-                value={capexOpex}
-                onChange={(event) => setCapexOpex(event.target.value as "" | "capex" | "opex")}
-                sx={{ minWidth: 170, "& .MuiInputBase-root": { height: 40 } }}
-              >
-                <MenuItem value="">Tümü</MenuItem>
-                <MenuItem value="capex">Capex</MenuItem>
-                <MenuItem value="opex">Opex</MenuItem>
-              </TextField>
-            </FiltersBar>
-
-            <Grid container spacing={3} disableEqualOverflow>
-              <Grid item xs={12} md={3}>
-                <TextField
-                  select
-                  label="Durum"
-                  size="small"
-                  value={statusFilter}
-                  onChange={(event) => setStatusFilter(event.target.value as Expense["status"] | "")}
-                  fullWidth
-                >
-                  <MenuItem value="">Tümü</MenuItem>
-                  <MenuItem value="recorded">Kaydedildi</MenuItem>
-                  <MenuItem value="cancelled">İptal Edildi</MenuItem>
-                </TextField>
-              </Grid>
-              <Grid item xs={12} md={3}>
-                <TextField
-                  label="Başlangıç Tarihi"
-                  type="date"
-                  size="small"
-                  value={startDate}
-                  onChange={(event) => setStartDate(event.target.value)}
-                  fullWidth
-                  InputLabelProps={{ shrink: true }}
-                />
-              </Grid>
-              <Grid item xs={12} md={3}>
-                <TextField
-                  label="Bitiş Tarihi"
-                  type="date"
-                  size="small"
-                  value={endDate}
-                  onChange={(event) => setEndDate(event.target.value)}
-                  fullWidth
-                  InputLabelProps={{ shrink: true }}
-                />
-              </Grid>
-              <Grid item xs={12} md={6}>
                 <Stack
-                  direction={{ xs: "column", sm: "row" }}
+                  direction="row"
                   spacing={2}
-                  flexWrap={{ sm: "wrap" }}
-                  sx={{
-                    rowGap: { sm: 1.5 },
-                    columnGap: { sm: 2 },
-                    "& .MuiFormControlLabel-root": {
-                      flex: { sm: "1 1 220px" }
-                    }
-                  }}
+                  flexWrap="wrap"
+                  alignItems="center"
+                  sx={{ flex: 1, rowGap: 1.5 }}
                 >
-                  <FormControlLabel
-                    control={
-                      <Checkbox
-                        checked={showCancelled}
-                        onChange={(event) => setShowCancelled(event.target.checked)}
-                      />
+                  <Select
+                    multiple
+                    size="small"
+                    value={statusSelections}
+                    onChange={(event) =>
+                      handleStatusSelectionsChange(
+                        typeof event.target.value === "string"
+                          ? event.target.value.split(",")
+                          : (event.target.value as string[])
+                      )
                     }
-                    label="İptal Edilenleri Göster"
+                    input={<OutlinedInput label="Durum" />}
+                    displayEmpty
+                    renderValue={(selected) => {
+                      if (!selected.length) {
+                        return "Durum";
+                      }
+                      return statusOptions
+                        .filter((option) => selected.includes(option.value))
+                        .map((option) => option.label)
+                        .join(", ");
+                    }}
+                    sx={{ minWidth: 200 }}
+                  >
+                    {statusOptions.map((option) => (
+                      <MenuItem key={option.value} value={option.value}>
+                        {option.label}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                  <TextField
+                    label="Başlangıç Tarihi"
+                    type="date"
+                    size="small"
+                    value={startDate}
+                    onChange={(event) => setStartDate(event.target.value)}
+                    InputLabelProps={{ shrink: true }}
+                    sx={{ minWidth: 170 }}
                   />
-                  <FormControlLabel
-                    control={
-                      <Checkbox
-                        checked={showOutOfBudget}
-                        onChange={(event) => setShowOutOfBudget(event.target.checked)}
-                      />
+                  <TextField
+                    label="Bitiş Tarihi"
+                    type="date"
+                    size="small"
+                    value={endDate}
+                    onChange={(event) => setEndDate(event.target.value)}
+                    InputLabelProps={{ shrink: true }}
+                    sx={{ minWidth: 170 }}
+                  />
+                  <Autocomplete
+                    size="small"
+                    options={budgetItems ?? []}
+                    value={budgetItems?.find((item) => item.id === budgetItemId) ?? null}
+                    onChange={(_, value) => setBudgetItemId(value?.id ?? null)}
+                    getOptionLabel={(option) => formatBudgetItemLabel(option) || "-"}
+                    filterOptions={budgetFilterOptions}
+                    isOptionEqualToValue={(option, value) => option.id === value.id}
+                    sx={{ minWidth: 320, flex: 1 }}
+                    renderInput={(params) => (
+                      <TextField {...params} label="Bütçe Kalemi" placeholder="Tümü" size="small" />
+                    )}
+                  />
+                  <TextField
+                    select
+                    label="Capex/Opex"
+                    size="small"
+                    value={capexOpex}
+                    onChange={(event) => setCapexOpex(event.target.value as "" | "capex" | "opex")}
+                    sx={{ minWidth: 170 }}
+                  >
+                    <MenuItem value="">Tümü</MenuItem>
+                    <MenuItem value="capex">Capex</MenuItem>
+                    <MenuItem value="opex">Opex</MenuItem>
+                  </TextField>
+                  <TextField
+                    label="Yıl"
+                    type="number"
+                    size="small"
+                    value={year}
+                    onChange={(event) => setYear(event.target.value ? Number(event.target.value) : "")}
+                    sx={{ minWidth: 110 }}
+                  />
+                  <TextField
+                    select
+                    label="Senaryo"
+                    size="small"
+                    value={scenarioId ?? ""}
+                    onChange={(event) =>
+                      setScenarioId(event.target.value ? Number(event.target.value) : null)
                     }
-                    label="Bütçe Dışı Alımları Göster"
-                  />
-                  <FormControlLabel
-                    control={
-                      <Switch
-                        checked={includeOutOfBudget}
-                        onChange={(event) => setIncludeOutOfBudget(event.target.checked)}
-                      />
-                    }
-                    label="Bütçe dışı kayıtları dahil et"
-                  />
-                  <FormControlLabel
-                    control={<Switch checked={mineOnly} onChange={(event) => setMineOnly(event.target.checked)} />}
-                    label="Sadece benim kayıtlarım"
-                  />
-                  <FormControlLabel
-                    control={<Switch checked={todayOnly} onChange={(event) => setTodayOnly(event.target.checked)} />}
-                    label="Bugüne ait"
-                  />
+                    sx={{ minWidth: 220 }}
+                  >
+                    <MenuItem value="">Tümü</MenuItem>
+                    {scenarios?.map((scenario) => (
+                      <MenuItem key={scenario.id} value={scenario.id}>
+                        {scenario.name} ({scenario.year})
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                  <Button variant="text" color="inherit" onClick={handleResetFilters}>
+                    Sıfırla
+                  </Button>
                 </Stack>
-              </Grid>
-            </Grid>
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <TextField
+                    size="small"
+                    label="Ara"
+                    value={searchText}
+                    onChange={handleSearchChange}
+                    sx={{ minWidth: 200 }}
+                  />
+                  <IconButton
+                    size="small"
+                    onClick={handleMenuOpen}
+                    aria-label="Daha Fazla"
+                  >
+                    <MoreVertIcon fontSize="small" />
+                  </IconButton>
+                </Stack>
+              </Stack>
+            </Box>
           </Box>
 
           <Typography variant="subtitle1" fontWeight={600} gutterBottom>
             Harcamalar
           </Typography>
-          <Box
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              gap: 1,
-              justifyContent: "space-between",
-              mb: 1,
-            }}
+          <Menu
+            anchorEl={menuAnchorEl}
+            open={menuOpen}
+            onClose={handleMenuClose}
+            anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+            transformOrigin={{ vertical: "top", horizontal: "right" }}
           >
-            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-              <TextField
-                select
-                size="small"
-                label="Kayıtları Göster"
-                value={includeCancelled ? "all" : "active"}
-                onChange={(event) =>
-                  setIncludeCancelled(event.target.value === "all")
+            <MenuItem onClick={handleExportCsv}>Dışa Aktar (CSV)</MenuItem>
+            <MenuItem onClick={handleExportXlsx}>Dışa Aktar (XLSX)</MenuItem>
+            <MenuItem onClick={handleShowColumns}>Kolon Seçimi</MenuItem>
+            <MenuItem disableRipple onClick={(event) => event.stopPropagation()}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={todayOnly}
+                    onChange={(event) => setTodayOnly(event.target.checked)}
+                  />
                 }
-              >
-                <MenuItem value="active">Aktif Kayıtlar</MenuItem>
-                <MenuItem value="all">Tüm Kayıtlar</MenuItem>
-              </TextField>
-              <Button
-                color="inherit"
-                onClick={() => setRenderVersion((prev) => prev + 1)}
-              >
-                Listeyi Yenile
-              </Button>
-            </Box>
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems="center">
-              <TextField
-                size="small"
-                label="Görünüm Adı"
-                value={newViewName}
-                onChange={(event) => setNewViewName(event.target.value)}
-                sx={{ minWidth: 160 }}
+                label="Bugüne ait"
               />
-              <Select
-                value={selectedViewName}
-                size="small"
-                displayEmpty
-                onChange={(event) => handleSelectView(event.target.value)}
-                sx={{ minWidth: 220 }}
-              >
-                <MenuItem value="" disabled>
-                  Kayıtlı Görünümler
-                </MenuItem>
-                {savedViews.map((view) => (
-                  <MenuItem key={view.name} value={view.name}>
-                    {view.name}
-                  </MenuItem>
-                ))}
-              </Select>
-              <Stack direction="row" spacing={1}>
+            </MenuItem>
+            <Box sx={{ px: 2, py: 1 }} onClick={(event) => event.stopPropagation()}>
+              <Typography variant="caption" color="text.secondary">
+                Kayıtlı Görünümler
+              </Typography>
+              <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1 }}>
+                <TextField
+                  size="small"
+                  label="Görünüm Adı"
+                  value={newViewName}
+                  onChange={(event) => setNewViewName(event.target.value)}
+                />
                 <Button
                   variant="outlined"
-                  color="inherit"
                   size="small"
-                  onClick={handleSaveCurrentView}
+                  onClick={() => {
+                    handleSaveCurrentView();
+                    handleMenuClose();
+                  }}
                 >
                   Kaydet
                 </Button>
+              </Stack>
+              {savedViews.length > 0 && (
+                <Stack spacing={0.5} sx={{ mt: 1 }}>
+                  {savedViews.map((view) => (
+                    <Button
+                      key={view.name}
+                      variant={selectedViewName === view.name ? "contained" : "text"}
+                      size="small"
+                      onClick={() => {
+                        handleSelectView(view.name);
+                        handleMenuClose();
+                      }}
+                      sx={{ justifyContent: "flex-start" }}
+                    >
+                      {view.name}
+                    </Button>
+                  ))}
+                </Stack>
+              )}
+              <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
                 <Button
-                  variant="text"
-                  color="inherit"
                   size="small"
+                  color="inherit"
                   disabled={!selectedViewName}
-                  onClick={() => handleDeleteView(selectedViewName)}
+                  onClick={() => {
+                    handleDeleteView(selectedViewName);
+                    handleMenuClose();
+                  }}
                 >
                   Sil
                 </Button>
                 <Button
-                  variant="text"
-                  color="inherit"
                   size="small"
+                  color="inherit"
                   onClick={() => {
                     setSavedViews([]);
                     setSelectedViewName("");
                     localStorage.removeItem(GRID_VIEWS_KEY);
+                    handleMenuClose();
                   }}
                 >
                   Sıfırla
                 </Button>
               </Stack>
-            </Stack>
-          </Box>
+            </Box>
+          </Menu>
           <Box sx={{ height: 520, width: "100%" }}>
             {showListLoadError ? (
               <Alert severity="error">Liste yüklenemedi.</Alert>
             ) : (
               <DataGrid
-                key={renderVersion}
+                apiRef={apiRef}
                 rows={rows ?? []}
                 columns={columns}
                 getRowId={(row) => row.id ?? `${row.budget_item_id}-${row.expense_date}-${row.amount}`}
@@ -1268,13 +1287,6 @@ export default function ExpensesView() {
                   },
                   columns: {
                     columnVisibilityModel,
-                  },
-                }}
-                slots={{ toolbar: GridToolbar }}
-                slotProps={{
-                  toolbar: {
-                    showQuickFilter: true,
-                    quickFilterProps: { debounceMs: 500 },
                   },
                 }}
                 onRowSelectionModelChange={(newSelection) =>
