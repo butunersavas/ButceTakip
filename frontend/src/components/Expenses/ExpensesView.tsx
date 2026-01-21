@@ -72,6 +72,12 @@ export interface Expense {
   scenario_id: number | null;
   expense_date: string;
   date?: string;
+  scenario_name?: string | null;
+  budget_code?: string | null;
+  budget_name?: string | null;
+  capex_opex?: string | null;
+  asset_type?: string | null;
+  department?: string | null;
   amount: number;
   quantity: number;
   unit_price: number;
@@ -642,35 +648,44 @@ export default function ExpensesView() {
         valueFormatter: ({ value }) => dayjs(value as string).format("DD MMMM YYYY")
       },
       {
-        field: "budget_item_id",
+        field: "budget_name",
         headerName: "Bütçe Kalemi",
         width: 240,
         valueGetter: (params) => {
-          const item = findBudgetItem(params?.row);
-          if (!item) {
-            return "";
+          const row = params?.row;
+          if (row?.budget_name || row?.budget_code) {
+            return formatBudgetItemLabel({
+              code: row.budget_code ?? undefined,
+              name: row.budget_name ?? ""
+            });
           }
-
-          return formatBudgetItemLabel(item);
+          const item = findBudgetItem(row);
+          return item ? formatBudgetItemLabel(item) : "-";
         }
       },
       {
-        field: "map_category",
+        field: "capex_opex",
         headerName: "Map Capex/Opex",
         width: 180,
         valueGetter: (params) => {
-          const item = findBudgetItem(params?.row);
-          return item?.map_category ?? "-";
+          const value = params?.row?.capex_opex ?? findBudgetItem(params?.row)?.map_category;
+          return value ?? "-";
         }
       },
       {
-        field: "map_attribute",
+        field: "asset_type",
         headerName: "Map Nitelik",
         width: 180,
         valueGetter: (params) => {
-          const item = findBudgetItem(params?.row);
-          return item?.map_attribute ?? "-";
+          const value = params?.row?.asset_type ?? findBudgetItem(params?.row)?.map_attribute;
+          return value ?? "-";
         }
+      },
+      {
+        field: "department",
+        headerName: "Departman",
+        width: 160,
+        valueGetter: (params) => params?.row?.department ?? "-"
       },
       {
         field: "scenario_id",
