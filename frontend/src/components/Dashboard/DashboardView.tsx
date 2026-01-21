@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Button,
@@ -226,6 +226,10 @@ export default function DashboardView() {
     "total_plan" | "total_actual" | "total_remaining" | "total_overrun" | null
   >(null);
   const [isOverBudgetDialogOpen, setIsOverBudgetDialogOpen] = useState(false);
+  const [forceShowOverBudget, setForceShowOverBudget] = useState(false);
+  const [highlightOverBudget, setHighlightOverBudget] = useState(false);
+  const overBudgetRef = useRef<HTMLDivElement | null>(null);
+  const highlightTimeoutRef = useRef<number | null>(null);
 
   const monthOptions = [
     { value: 1, label: "Ocak" },
@@ -440,36 +444,6 @@ export default function DashboardView() {
     enabled: Boolean(debouncedFilters.year)
   });
 
-  const { data: spendLastMonths = [] } = useQuery<SpendMonthlySummary[]>({
-    queryKey: [
-      "dashboard",
-      "spend-last-months",
-      debouncedFilters.year,
-      debouncedFilters.scenarioId,
-      debouncedFilters.month,
-      debouncedFilters.budgetItemId,
-      debouncedFilters.department,
-      debouncedFilters.capexOpex
-    ],
-    queryFn: async () => {
-      const params: Record<string, number | string> = {
-        year: debouncedFilters.year,
-        months: 3
-      };
-      if (debouncedFilters.scenarioId) params.scenario_id = debouncedFilters.scenarioId;
-      if (debouncedFilters.month) params.month = debouncedFilters.month;
-      if (debouncedFilters.budgetItemId) params.budget_item_id = debouncedFilters.budgetItemId;
-      if (debouncedFilters.department) params.department = debouncedFilters.department;
-      if (debouncedFilters.capexOpex) params.capex_opex = debouncedFilters.capexOpex;
-      const { data } = await client.get<SpendMonthlySummary[]>(
-        "/dashboard/spend_last_months",
-        { params }
-      );
-      return data ?? [];
-    },
-    enabled: Boolean(debouncedFilters.year)
-  });
-
   const { data: trendMonths = [], isLoading: isTrendLoading } = useQuery<SpendMonthlySummary[]>({
     queryKey: [
       "dashboard",
@@ -512,6 +486,8 @@ export default function DashboardView() {
     setCapexOpex("");
     setDepartment("");
     setSelectedKpiFilter(null);
+    setForceShowOverBudget(false);
+    setHighlightOverBudget(false);
   };
 
   const monthlyData = useMemo(() => {
@@ -526,19 +502,38 @@ export default function DashboardView() {
     }));
   }, [trendMonths]);
 
-  const pieTotals = useMemo(() => {
-    const planned = spendLastMonths.reduce((sum, item) => sum + (item.plan_total ?? 0), 0);
-    const withinPlan = spendLastMonths.reduce(
-      (sum, item) => sum + (item.within_plan_total ?? 0),
-      0
-    );
-    const overrun = spendLastMonths.reduce((sum, item) => sum + (item.over_total ?? 0), 0);
-    return [
-      { name: "Planlanan", value: planned, color: pieColors.planned },
-      { name: "Plan içi gerçekleşen", value: withinPlan, color: pieColors.actual },
-      { name: "Aşım", value: overrun, color: pieColors.overrun }
+  const quarterlyTotals = useMemo(() => {
+    const quarters = [
+      { label: "Q1", months: [1, 2, 3] },
+      { label: "Q2", months: [4, 5, 6] },
+      { label: "Q3", months: [7, 8, 9] },
+      { label: "Q4", months: [10, 11, 12] }
     ];
-  }, [spendLastMonths]);
+
+    return quarters.map((quarter) => {
+      const totals = trendMonths.reduce<QuarterlySummary>(
+        (acc, entry) => {
+          if (!quarter.months.includes(entry.month)) {
+            return acc;
+          }
+          acc.planned += entry.plan_total ?? 0;
+          acc.actual += entry.within_plan_total ?? 0;
+          acc.overrun += entry.over_total ?? 0;
+          acc.remaining += entry.remaining_total ?? 0;
+          return acc;
+        },
+        { planned: 0, actual: 0, remaining: 0, overrun: 0 }
+      );
+
+      const pieData = [
+        { name: "Gerçekleşen", value: totals.actual, color: pieColors.actual },
+        { name: "Aşım", value: totals.overrun, color: pieColors.overrun },
+        { name: "Kalan", value: totals.remaining, color: pieColors.remaining }
+      ];
+
+      return { ...quarter, totals, pieData };
+    });
+  }, [trendMonths]);
 
   const normalizedKpi = useMemo(() => {
     const totalPlan = dashboard?.kpi.total_plan ?? 0;
@@ -579,6 +574,32 @@ export default function DashboardView() {
   const showActual = !selectedKpiFilter || selectedKpiFilter === "total_actual";
   const showRemaining = !selectedKpiFilter || selectedKpiFilter === "total_remaining";
   const showOverrun = !selectedKpiFilter || selectedKpiFilter === "total_overrun";
+  const showOverBudgetSection = !budgetItemId || forceShowOverBudget;
+
+  useEffect(() => {
+    return () => {
+      if (highlightTimeoutRef.current) {
+        window.clearTimeout(highlightTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const handleSummaryCardClick = (filterKey: string) => {
+    setSelectedKpiFilter((prev) => (prev === filterKey ? null : filterKey));
+    if (filterKey === "total_overrun") {
+      setForceShowOverBudget(true);
+      setHighlightOverBudget(true);
+      if (highlightTimeoutRef.current) {
+        window.clearTimeout(highlightTimeoutRef.current);
+      }
+      highlightTimeoutRef.current = window.setTimeout(() => {
+        setHighlightOverBudget(false);
+      }, 2000);
+      window.setTimeout(() => {
+        overBudgetRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 0);
+    }
+  };
 
   return (
     <>
@@ -740,16 +761,95 @@ export default function DashboardView() {
                   {...card}
                   isLoading={isLoading}
                   selected={selectedKpiFilter === card.filterKey}
-                  onClick={() =>
-                    setSelectedKpiFilter((prev) =>
-                      prev === card.filterKey ? null : card.filterKey
-                    )
-                  }
+                  onClick={() => handleSummaryCardClick(card.filterKey)}
                 />
               </Grid>
             ))}
           </Grid>
           <Stack spacing={3}>
+            <Card>
+              <CardHeader title="Riskteki Kalemler" subheader="Planın %80 ve üzeri harcananlar" />
+              <CardContent>
+                {riskyItems.length === 0 ? (
+                  <Typography variant="body2" color="text.secondary">
+                    Bu ay için kritik seviyede kalem bulunmuyor.
+                  </Typography>
+                ) : (
+                  <List dense>
+                    {riskyItems.map((item) => (
+                      <ListItem key={item.budget_item_id}>
+                        <ListItemText
+                          primary={stripBudgetCode(item.budget_name) || "-"}
+                          secondary={`Plan: ${item.plan.toLocaleString()} | Gerçekleşen: ${item.actual.toLocaleString()} | %${Math.round(item.ratio * 100)}`}
+                          primaryTypographyProps={{ variant: "body2" }}
+                        />
+                      </ListItem>
+                    ))}
+                  </List>
+                )}
+              </CardContent>
+            </Card>
+
+            {showOverBudgetSection ? (
+              <Box ref={overBudgetRef}>
+                <Card
+                  sx={{
+                    border: highlightOverBudget ? "1px solid" : "1px solid transparent",
+                    borderColor: highlightOverBudget ? "error.main" : "transparent",
+                    boxShadow: highlightOverBudget ? "0 0 0 3px rgba(244, 67, 54, 0.2)" : "none",
+                    transition: "border-color 0.2s ease, box-shadow 0.2s ease"
+                  }}
+                >
+                  <CardContent>
+                    <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
+                      <Typography variant="h6" fontWeight={600}>
+                        Aşım Yapan Kalemler (Top 10)
+                      </Typography>
+                      {overBudgetItems.length > 10 && (
+                        <Button
+                          variant="text"
+                          size="small"
+                          onClick={() => setIsOverBudgetDialogOpen(true)}
+                        >
+                          Tümünü Gör
+                        </Button>
+                      )}
+                    </Stack>
+                    {overBudgetItems.length === 0 ? (
+                      <Typography variant="body2" color="text.secondary">
+                        Aşım yapan kalem bulunmuyor.
+                      </Typography>
+                    ) : (
+                      <Table size="small">
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>Kalem</TableCell>
+                            <TableCell align="right">Plan</TableCell>
+                            <TableCell align="right">Gerçekleşen</TableCell>
+                            <TableCell align="right">Aşım</TableCell>
+                            <TableCell align="right">%</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {overBudgetItems.slice(0, 10).map((item) => (
+                            <TableRow key={item.budget_code}>
+                              <TableCell>
+                                {stripBudgetCode(item.budget_name) || item.budget_code}
+                              </TableCell>
+                              <TableCell align="right">{formatCurrency(item.plan)}</TableCell>
+                              <TableCell align="right">{formatCurrency(item.actual)}</TableCell>
+                              <TableCell align="right">{formatCurrency(item.over)}</TableCell>
+                              <TableCell align="right">{item.over_pct.toFixed(1)}%</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    )}
+                  </CardContent>
+                </Card>
+              </Box>
+            ) : null}
+
             <Card>
               <CardContent sx={{ height: 280, minHeight: 280 }}>
                 <Stack direction="row" justifyContent="space-between" alignItems="center" mb={3}>
@@ -813,168 +913,92 @@ export default function DashboardView() {
                           hide={!showOverrun}
                         />
                       </BarChart>
-                  </ResponsiveContainer>
-                </Box>
-              )}
+                    </ResponsiveContainer>
+                  </Box>
+                )}
               </CardContent>
             </Card>
 
             <Card>
               <CardContent>
-                <Stack
-                  direction="row"
-                  alignItems="center"
-                  justifyContent="space-between"
-                  mb={2}
-                >
+                <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2}>
                   <Typography variant="h6" fontWeight={700}>
-                    3 Aylık Harcama Dağılımı
+                    Çeyreklik Harcama Dağılımı
                   </Typography>
                 </Stack>
 
-                <Stack
-                  direction="row"
-                  spacing={3}
-                  alignItems="center"
-                  mb={2}
-                >
+                <Stack direction="row" spacing={3} alignItems="center" mb={2}>
                   <Stack direction="row" spacing={1} alignItems="center">
                     <Box
                       sx={{
                         width: 12,
                         height: 12,
                         borderRadius: "50%",
-                      bgcolor: pieColors.planned
-                    }}
-                  />
-                  <Typography variant="caption">Planlanan</Typography>
-                </Stack>
-
-                <Stack direction="row" spacing={1} alignItems="center">
-                  <Box
-                    sx={{
-                      width: 12,
-                      height: 12,
-                      borderRadius: "50%",
-                      bgcolor: pieColors.actual
-                    }}
-                  />
-                  <Typography variant="caption">Plan içi gerçekleşen</Typography>
-                </Stack>
-
-                <Stack direction="row" spacing={1} alignItems="center">
-                  <Box
-                    sx={{
-                      width: 12,
-                      height: 12,
-                      borderRadius: "50%",
-                      bgcolor: pieColors.overrun
-                    }}
-                  />
-                  <Typography variant="caption">Aşım</Typography>
-                </Stack>
-              </Stack>
-
-                <Box sx={{ height: 240 }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <RechartsTooltip
-                        formatter={(value: number, name: string) =>
-                          [formatCurrency(value), name]
-                        }
-                      />
-                      <Legend />
-                      <Pie
-                        data={pieTotals}
-                        dataKey="value"
-                        nameKey="name"
-                        innerRadius={60}
-                        outerRadius={90}
-                        paddingAngle={2}
-                      >
-                        {pieTotals.map((entry) => (
-                          <Cell key={entry.name} fill={entry.color} />
-                        ))}
-                      </Pie>
-                    </PieChart>
-                  </ResponsiveContainer>
-                </Box>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader title="Riskteki Kalemler" subheader="Planın %80 ve üzeri harcananlar" />
-              <CardContent>
-                {riskyItems.length === 0 ? (
-                  <Typography variant="body2" color="text.secondary">
-                    Bu ay için kritik seviyede kalem bulunmuyor.
-                  </Typography>
-                ) : (
-                  <List dense>
-                    {riskyItems.map((item) => (
-                      <ListItem key={item.budget_item_id}>
-                        <ListItemText
-                          primary={stripBudgetCode(item.budget_name) || "-"}
-                          secondary={`Plan: ${item.plan.toLocaleString()} | Gerçekleşen: ${item.actual.toLocaleString()} | %${Math.round(item.ratio * 100)}`}
-                          primaryTypographyProps={{ variant: "body2" }}
-                        />
-                      </ListItem>
-                    ))}
-                  </List>
-                )}
-              </CardContent>
-            </Card>
-
-            {budgetItemId ? null : (
-              <Card>
-                <CardContent>
-                  <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
-                    <Typography variant="h6" fontWeight={600}>
-                      Aşım Yapan Kalemler (Top 10)
-                    </Typography>
-                    {overBudgetItems.length > 10 && (
-                      <Button
-                        variant="text"
-                        size="small"
-                        onClick={() => setIsOverBudgetDialogOpen(true)}
-                      >
-                        Tümünü Gör
-                      </Button>
-                    )}
+                        bgcolor: pieColors.actual
+                      }}
+                    />
+                    <Typography variant="caption">Gerçekleşen</Typography>
                   </Stack>
-                  {overBudgetItems.length === 0 ? (
-                    <Typography variant="body2" color="text.secondary">
-                      Aşım yapan kalem bulunmuyor.
-                    </Typography>
-                  ) : (
-                    <Table size="small">
-                      <TableHead>
-                        <TableRow>
-                          <TableCell>Kalem</TableCell>
-                          <TableCell align="right">Plan</TableCell>
-                          <TableCell align="right">Gerçekleşen</TableCell>
-                          <TableCell align="right">Aşım</TableCell>
-                          <TableCell align="right">%</TableCell>
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {overBudgetItems.slice(0, 10).map((item) => (
-                          <TableRow key={item.budget_code}>
-                            <TableCell>
-                              {stripBudgetCode(item.budget_name) || item.budget_code}
-                            </TableCell>
-                            <TableCell align="right">{formatCurrency(item.plan)}</TableCell>
-                            <TableCell align="right">{formatCurrency(item.actual)}</TableCell>
-                            <TableCell align="right">{formatCurrency(item.over)}</TableCell>
-                            <TableCell align="right">{item.over_pct.toFixed(1)}%</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  )}
-                </CardContent>
-              </Card>
-            )}
+
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <Box
+                      sx={{
+                        width: 12,
+                        height: 12,
+                        borderRadius: "50%",
+                        bgcolor: pieColors.overrun
+                      }}
+                    />
+                    <Typography variant="caption">Aşım</Typography>
+                  </Stack>
+
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <Box
+                      sx={{
+                        width: 12,
+                        height: 12,
+                        borderRadius: "50%",
+                        bgcolor: pieColors.remaining
+                      }}
+                    />
+                    <Typography variant="caption">Kalan</Typography>
+                  </Stack>
+                </Stack>
+
+                <Grid container spacing={2}>
+                  {quarterlyTotals.map((quarter) => (
+                    <Grid item xs={12} md={6} key={quarter.label}>
+                      <Typography variant="subtitle2" fontWeight={600} mb={1}>
+                        {quarter.label}
+                      </Typography>
+                      <Box sx={{ height: 220 }}>
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <RechartsTooltip
+                              formatter={(value: number, name: string) =>
+                                [formatCurrency(value), name]
+                              }
+                            />
+                            <Pie
+                              data={quarter.pieData}
+                              dataKey="value"
+                              nameKey="name"
+                              innerRadius={50}
+                              outerRadius={80}
+                              paddingAngle={2}
+                            >
+                              {quarter.pieData.map((entry) => (
+                                <Cell key={`${quarter.label}-${entry.name}`} fill={entry.color} />
+                              ))}
+                            </Pie>
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </Box>
+                    </Grid>
+                  ))}
+                </Grid>
+              </CardContent>
+            </Card>
           </Stack>
         </Stack>
       </Box>

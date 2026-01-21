@@ -403,7 +403,10 @@ export default function WarrantyTrackingView() {
         headerName: "Sertifika Sağlayıcı",
         flex: 1,
         valueGetter: (params) =>
-          params?.row?.issuer ?? params?.row?.certificate_issuer ?? "-",
+          params?.row?.certificate_issuer ??
+          params?.row?.issuer ??
+          params?.row?.certificateIssuer ??
+          "-",
       },
       {
         field: "domain",
@@ -416,19 +419,29 @@ export default function WarrantyTrackingView() {
         headerName: "Yenileme Sorumlusu",
         flex: 1,
         valueGetter: (params) =>
-          params?.row?.renewal_responsible ?? params?.row?.renewal_owner ?? "-",
+          params?.row?.renewal_responsible ??
+          params?.row?.renewalResponsible ??
+          params?.row?.renewal_owner ??
+          "-",
       },
       {
         field: "end_date",
         headerName: "Bitiş Tarihi",
         flex: 0.9,
-        valueGetter: (params) => formatDate(params?.row?.end_date ?? null),
+        valueGetter: (params) =>
+          formatDate(
+            params?.row?.end_date ??
+              params?.row?.endDate ??
+              params?.row?.expiration_date ??
+              null
+          ),
       },
       {
         field: "updated_at",
         headerName: "Son Güncelleme",
         flex: 0.9,
-        valueGetter: (params) => formatDate(params?.row?.updated_at ?? null),
+        valueGetter: (params) =>
+          formatDate(params?.row?.updated_at ?? params?.row?.updatedAt ?? null),
       },
       {
         field: "days_left",
@@ -490,8 +503,9 @@ export default function WarrantyTrackingView() {
         headerName: "Kaydı Giren",
         flex: 1,
         valueGetter: (params) =>
-          params?.row?.created_by_username ??
           params?.row?.created_by_name ??
+          params?.row?.createdByName ??
+          params?.row?.created_by_username ??
           "-",
       },
       {
@@ -499,8 +513,9 @@ export default function WarrantyTrackingView() {
         headerName: "Son Güncelleyen",
         flex: 1,
         valueGetter: (params) =>
-          params?.row?.updated_by_username ??
           params?.row?.updated_by_name ??
+          params?.row?.updatedByName ??
+          params?.row?.updated_by_username ??
           "-",
       },
       { field: "note", headerName: "Not", flex: 1.2, sortable: false },

@@ -48,12 +48,17 @@ def _calculate_item_based_monthly_totals(
     department: str | None = None,
     capex_opex: str | None = None,
 ) -> list[SpendMonthlySummary]:
+    plan_budget_code = func.coalesce(PlanEntry.budget_code, BudgetItem.code).label(
+        "budget_code"
+    )
     plan_query = (
         select(
             PlanEntry.month,
-            PlanEntry.budget_item_id,
+            plan_budget_code,
             func.sum(PlanEntry.amount).label("plan_total"),
         )
+        .select_from(PlanEntry)
+        .join(BudgetItem, BudgetItem.id == PlanEntry.budget_item_id)
         .where(PlanEntry.year == year)
         .where(PlanEntry.month.in_(month_range))
     )
@@ -64,17 +69,17 @@ def _calculate_item_based_monthly_totals(
     if department is not None:
         plan_query = plan_query.where(PlanEntry.department == department)
     if capex_opex:
-        plan_query = plan_query.join(
-            BudgetItem, BudgetItem.id == PlanEntry.budget_item_id
-        ).where(func.lower(BudgetItem.map_category) == capex_opex)
-    plan_rows = session.exec(plan_query.group_by(PlanEntry.month, PlanEntry.budget_item_id)).all()
+        plan_query = plan_query.where(func.lower(BudgetItem.map_category) == capex_opex)
+    plan_rows = session.exec(plan_query.group_by(PlanEntry.month, plan_budget_code)).all()
 
     expense_query = (
         select(
             func.extract("month", Expense.expense_date).label("month"),
-            Expense.budget_item_id,
+            BudgetItem.code.label("budget_code"),
             func.sum(Expense.amount).label("actual_total"),
         )
+        .select_from(Expense)
+        .join(BudgetItem, BudgetItem.id == Expense.budget_item_id)
         .where(func.extract("year", Expense.expense_date) == year)
         .where(func.extract("month", Expense.expense_date).in_(month_range))
         .where(Expense.status == ExpenseStatus.RECORDED)
@@ -85,9 +90,7 @@ def _calculate_item_based_monthly_totals(
     if budget_item_id is not None:
         expense_query = expense_query.where(Expense.budget_item_id == budget_item_id)
     if capex_opex:
-        expense_query = expense_query.join(
-            BudgetItem, BudgetItem.id == Expense.budget_item_id
-        ).where(func.lower(BudgetItem.map_category) == capex_opex)
+        expense_query = expense_query.where(func.lower(BudgetItem.map_category) == capex_opex)
     if department is not None:
         department_budget_items_query = (
             select(PlanEntry.budget_item_id)
@@ -102,15 +105,15 @@ def _calculate_item_based_monthly_totals(
             Expense.budget_item_id.in_(department_budget_items_query)
         )
     expense_rows = session.exec(
-        expense_query.group_by(func.extract("month", Expense.expense_date), Expense.budget_item_id)
+        expense_query.group_by(func.extract("month", Expense.expense_date), BudgetItem.code)
     ).all()
 
-    plan_map: dict[tuple[int, int], float] = {
-        (int(row.month), row.budget_item_id): float(row.plan_total or 0)
+    plan_map: dict[tuple[int, str], float] = {
+        (int(row.month), row.budget_code or "(boş)"): float(row.plan_total or 0)
         for row in plan_rows
     }
-    expense_map: dict[tuple[int, int], float] = {
-        (int(row.month), row.budget_item_id): float(row.actual_total or 0)
+    expense_map: dict[tuple[int, str], float] = {
+        (int(row.month), row.budget_code or "(boş)"): float(row.actual_total or 0)
         for row in expense_rows
     }
 
@@ -121,14 +124,14 @@ def _calculate_item_based_monthly_totals(
         over_total = 0.0
         remaining_total = 0.0
         within_plan_total = 0.0
-        item_ids = {
-            budget_id
-            for (month_key, budget_id) in plan_map.keys() | expense_map.keys()
+        item_codes = {
+            budget_code
+            for (month_key, budget_code) in plan_map.keys() | expense_map.keys()
             if month_key == month_value
         }
-        for budget_id in item_ids:
-            plan_item = plan_map.get((month_value, budget_id), 0.0)
-            actual_item = expense_map.get((month_value, budget_id), 0.0)
+        for budget_code in item_codes:
+            plan_item = plan_map.get((month_value, budget_code), 0.0)
+            actual_item = expense_map.get((month_value, budget_code), 0.0)
             plan_total += plan_item
             actual_total += actual_item
             over_total += max(actual_item - plan_item, 0)
