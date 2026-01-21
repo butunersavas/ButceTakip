@@ -45,12 +45,19 @@ MONTH_ALIASES = {
 }
 
 EXPENSE_COLUMN_KEYWORDS = {"actual", "expense", "spend", "spent", "harcama", "gerçekleşen"}
+PLACEHOLDER_VALUES = {"-", "—"}
 
 
 def _normalize_header_key(key: str) -> str:
     """Return a simplified, comparable representation of a column name."""
 
     return re.sub(r"[^a-z0-9]+", "_", key.strip().lower())
+
+
+def _normalize_placeholder(value: Any) -> Any:
+    if isinstance(value, str) and value.strip() in PLACEHOLDER_VALUES:
+        return None
+    return value
 
 
 def _extract_column_value(data: dict[str, Any], *candidates: str) -> str | None:
@@ -79,7 +86,7 @@ def _extract_column_value(data: dict[str, Any], *candidates: str) -> str | None:
         normalized_candidate = _normalize_header_key(candidate)
         if normalized_candidate not in normalized_data:
             continue
-        raw_value = normalized_data[normalized_candidate]
+        raw_value = _normalize_placeholder(normalized_data[normalized_candidate])
         if raw_value in (None, ""):
             continue
         return str(raw_value).strip()
@@ -159,7 +166,10 @@ def _extract_department(data: dict[str, Any]) -> str | None:
     dept_raw = _extract_column_value(data, "departman", "department", "Departman")
     if dept_raw is None:
         return None
-    department = str(dept_raw).strip()
+    normalized = _normalize_placeholder(dept_raw)
+    if normalized is None:
+        return None
+    department = str(normalized).strip()
     return department or None
 
 
@@ -216,6 +226,7 @@ def _find_header_index(headers: list[str], *candidates: str) -> int | None:
 
 
 def _coerce_str(value: Any, field: str) -> str:
+    value = _normalize_placeholder(value)
     if value is None:
         raise ValueError(f"Missing value for {field}")
     if isinstance(value, str):
@@ -228,6 +239,7 @@ def _coerce_str(value: Any, field: str) -> str:
 
 
 def _coerce_int(value: Any, field: str) -> int:
+    value = _normalize_placeholder(value)
     if value is None:
         raise ValueError(f"Missing value for {field}")
     if isinstance(value, (int, float)):
@@ -239,6 +251,7 @@ def _coerce_int(value: Any, field: str) -> int:
 
 
 def _coerce_float(value: Any, field: str) -> float:
+    value = _normalize_placeholder(value)
     if value is None:
         raise ValueError(f"Missing value for {field}")
     if isinstance(value, (int, float)):
@@ -250,6 +263,7 @@ def _coerce_float(value: Any, field: str) -> float:
 
 
 def _coerce_date(value: Any, field: str) -> date:
+    value = _normalize_placeholder(value)
     if value is None:
         raise ValueError(f"Missing value for {field}")
     if isinstance(value, datetime):
@@ -264,8 +278,10 @@ def _coerce_date(value: Any, field: str) -> date:
 
 def _get_value(data: dict[str, Any], *keys: str) -> Any:
     for key in keys:
-        if key in data and data[key] not in (None, ""):
-            return data[key]
+        if key in data:
+            value = _normalize_placeholder(data[key])
+            if value not in (None, ""):
+                return value
     return None
 
 

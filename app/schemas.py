@@ -6,6 +6,27 @@ from sqlmodel import SQLModel
 
 from app.models import ExpenseStatus, WarrantyItemType
 
+PLACEHOLDER_VALUES = {"-", "—"}
+
+
+def _normalize_placeholder(value: str | None) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped or stripped in PLACEHOLDER_VALUES:
+            return None
+        return stripped
+    return value
+
+
+def _reject_placeholder(value: str | None, field: str) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str) and value.strip() in PLACEHOLDER_VALUES:
+        raise ValueError(f"{field} is required")
+    return value
+
 
 class Token(BaseModel):
     access_token: str
@@ -92,6 +113,17 @@ class BudgetItemBase(BaseModel):
     map_attribute: Optional[str] = None
     map_category: Optional[str] = None
 
+    @validator("code", "name", pre=True)
+    def validate_required_text(cls, value: str | None, field) -> str:  # noqa: D417
+        value = _reject_placeholder(value, field.name)
+        if value is None or (isinstance(value, str) and not value.strip()):
+            raise ValueError(f"{field.name} is required")
+        return value.strip() if isinstance(value, str) else value
+
+    @validator("description", "map_attribute", "map_category", pre=True)
+    def normalize_optional_text(cls, value: str | None) -> str | None:  # noqa: D417
+        return _normalize_placeholder(value)
+
 
 class BudgetItemCreate(BudgetItemBase):
     pass
@@ -103,6 +135,17 @@ class BudgetItemUpdate(BaseModel):
     description: Optional[str] = None
     map_attribute: Optional[str] = None
     map_category: Optional[str] = None
+
+    @validator("code", "name", pre=True)
+    def validate_update_text(cls, value: str | None, field) -> str | None:  # noqa: D417
+        value = _reject_placeholder(value, field.name)
+        if value is None:
+            return None
+        return value.strip() if isinstance(value, str) else value
+
+    @validator("description", "map_attribute", "map_category", pre=True)
+    def normalize_update_optional_text(cls, value: str | None) -> str | None:  # noqa: D417
+        return _normalize_placeholder(value)
 
 
 class BudgetItemRead(BudgetItemBase):
@@ -126,6 +169,10 @@ class PlanEntryBase(BaseModel):
             raise ValueError("Month must be between 1 and 12")
         return value
 
+    @validator("department", pre=True)
+    def normalize_department(cls, value: str | None) -> str | None:  # noqa: D417
+        return _normalize_placeholder(value)
+
 
 class PlanEntryCreate(PlanEntryBase):
     pass
@@ -138,6 +185,10 @@ class PlanEntryUpdate(BaseModel):
     scenario_id: Optional[int] = None
     budget_item_id: Optional[int] = None
     department: str | None = Field(default=None, max_length=100)
+
+    @validator("department", pre=True)
+    def normalize_update_department(cls, value: str | None) -> str | None:  # noqa: D417
+        return _normalize_placeholder(value)
 
 
 class PlanEntryRead(SQLModel, table=False):
@@ -241,6 +292,10 @@ class ExpenseBase(BaseModel):
             raise ValueError("Value must be non-negative")
         return value
 
+    @validator("vendor", "description", "client_hostname", "kaydi_giren_kullanici", pre=True)
+    def normalize_expense_text(cls, value: str | None) -> str | None:  # noqa: D417
+        return _normalize_placeholder(value)
+
     class Config:
         allow_population_by_field_name = True
 
@@ -283,6 +338,10 @@ class ExpenseUpdate(BaseModel):
             except ValueError as exc:
                 raise ValueError("expense_date must be YYYY-MM-DD or DD.MM.YYYY") from exc
         raise ValueError("Invalid expense_date")
+
+    @validator("vendor", "description", "client_hostname", "kaydi_giren_kullanici", pre=True)
+    def normalize_update_expense_text(cls, value: str | None) -> str | None:  # noqa: D417
+        return _normalize_placeholder(value)
 
     @validator("amount", "quantity", "unit_price", pre=True)
     def normalize_numeric_fields(cls, value: float | str | None) -> float | None:  # noqa: D417
@@ -351,6 +410,25 @@ class WarrantyItemBase(BaseModel):
     remind_days: Optional[int] = Field(default=30, ge=0)
     remind_days_before: Optional[int] = Field(default=30, ge=0)
 
+    @validator("name", "location", pre=True)
+    def validate_required_warranty_text(cls, value: str | None, field) -> str:  # noqa: D417
+        value = _reject_placeholder(value, field.name)
+        if value is None or (isinstance(value, str) and not value.strip()):
+            raise ValueError(f"{field.name} is required")
+        return value.strip() if isinstance(value, str) else value
+
+    @validator(
+        "domain",
+        "note",
+        "issuer",
+        "certificate_issuer",
+        "renewal_owner",
+        "renewal_responsible",
+        pre=True,
+    )
+    def normalize_warranty_text(cls, value: str | None) -> str | None:  # noqa: D417
+        return _normalize_placeholder(value)
+
     @root_validator(pre=True)
     def normalize_warranty_aliases(cls, values: dict) -> dict:  # noqa: D417
         if not isinstance(values, dict):
@@ -414,6 +492,25 @@ class WarrantyItemUpdate(BaseModel):
     remind_days: Optional[int] = None
     remind_days_before: Optional[int] = None
     is_active: Optional[bool] = None
+
+    @validator("name", "location", pre=True)
+    def validate_update_warranty_text(cls, value: str | None, field) -> str | None:  # noqa: D417
+        value = _reject_placeholder(value, field.name)
+        if value is None:
+            return None
+        return value.strip() if isinstance(value, str) else value
+
+    @validator(
+        "domain",
+        "note",
+        "issuer",
+        "certificate_issuer",
+        "renewal_owner",
+        "renewal_responsible",
+        pre=True,
+    )
+    def normalize_update_warranty_text(cls, value: str | None) -> str | None:  # noqa: D417
+        return _normalize_placeholder(value)
 
     @root_validator(pre=True)
     def normalize_warranty_aliases(cls, values: dict) -> dict:  # noqa: D417
