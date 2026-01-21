@@ -166,9 +166,10 @@ def create_plan_entry(
 ) -> PlanEntryRead:
     if not session.get(Scenario, plan_in.scenario_id):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Scenario not found")
-    if not session.get(BudgetItem, plan_in.budget_item_id):
+    budget_item = session.get(BudgetItem, plan_in.budget_item_id)
+    if not budget_item:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Budget item not found")
-    plan = PlanEntry(**plan_in.dict())
+    plan = PlanEntry(**plan_in.dict(), budget_code=budget_item.code)
     session.add(plan)
     session.commit()
     session.refresh(plan)
@@ -186,7 +187,16 @@ def update_plan_entry(
     plan = session.get(PlanEntry, plan_id)
     if not plan:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan not found")
-    for field, value in plan_in.dict(exclude_unset=True).items():
+    update_data = plan_in.dict(exclude_unset=True)
+    if "budget_item_id" in update_data:
+        budget_item = session.get(BudgetItem, update_data["budget_item_id"])
+        if not budget_item:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Budget item not found",
+            )
+        update_data["budget_code"] = budget_item.code
+    for field, value in update_data.items():
         setattr(plan, field, value)
     plan.updated_at = datetime.utcnow()
     session.add(plan)

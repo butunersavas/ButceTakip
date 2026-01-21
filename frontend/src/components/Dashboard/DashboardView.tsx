@@ -201,6 +201,10 @@ function formatCurrency(value: number) {
   }).format(value ?? 0);
 }
 
+function formatBudgetLabel(name?: string | null, code?: string | null) {
+  return stripBudgetCode(name ?? "") || code || "-";
+}
+
 export default function DashboardView() {
   const client = useAuthorizedClient();
   const navigate = useNavigate();
@@ -386,7 +390,10 @@ export default function DashboardView() {
       ) {
         return previous;
       }
-      return matchingScenario ? matchingScenario.id : null;
+      if (matchingScenario) {
+        return matchingScenario.id;
+      }
+      return scenarios[0]?.id ?? null;
     });
   }, [scenarios, year]);
 
@@ -810,7 +817,7 @@ export default function DashboardView() {
                     {riskyItems.map((item) => (
                       <ListItem key={item.budget_item_id}>
                         <ListItemText
-                          primary={stripBudgetCode(item.budget_name) || "-"}
+                          primary={formatBudgetLabel(item.budget_name, item.budget_code)}
                           secondary={`Plan: ${item.plan.toLocaleString()} | Gerçekleşen: ${item.actual.toLocaleString()} | %${Math.round(item.ratio * 100)}`}
                           primaryTypographyProps={{ variant: "body2" }}
                         />
@@ -865,7 +872,7 @@ export default function DashboardView() {
                           {overBudgetItems.slice(0, 10).map((item) => (
                             <TableRow key={item.budget_code}>
                               <TableCell>
-                                {stripBudgetCode(item.budget_name) || item.budget_code}
+                                {formatBudgetLabel(item.budget_name, item.budget_code)}
                               </TableCell>
                               <TableCell align="right">{formatCurrency(item.plan)}</TableCell>
                               <TableCell align="right">{formatCurrency(item.actual)}</TableCell>
@@ -890,8 +897,9 @@ export default function DashboardView() {
                   <Chip
                     label={
                       selectedOverrunItem
-                        ? `Aşım: ${stripBudgetCode(
-                            selectedOverrunItem.budget_name ?? selectedOverrunItem.budget_code ?? ""
+                        ? `Aşım: ${formatBudgetLabel(
+                            selectedOverrunItem.budget_name,
+                            selectedOverrunItem.budget_code
                           )}`
                         : budgetItemId
                           ? stripBudgetCode(
@@ -901,12 +909,22 @@ export default function DashboardView() {
                     }
                     color={selectedOverrunItem ? "error" : "primary"}
                     variant={selectedOverrunItem ? "filled" : "outlined"}
+                    onClick={
+                      selectedOverrunItem ? () => setSelectedOverrunItem(null) : undefined
+                    }
+                    sx={{
+                      cursor: selectedOverrunItem ? "pointer" : "default"
+                    }}
                   />
                 </Stack>
                 {isTrendLoading ? (
                   <Skeleton variant="rectangular" height="100%" />
+                ) : monthlyData.length === 0 ? (
+                  <Typography variant="body2" color="text.secondary">
+                    Seçili filtreler için trend verisi bulunamadı.
+                  </Typography>
                 ) : (
-                  <Box sx={{ height: 200, minHeight: 200 }}>
+                  <Box sx={{ height: 260, minHeight: 260, minWidth: 240 }}>
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={monthlyData}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
@@ -927,7 +945,10 @@ export default function DashboardView() {
                           formatter={(value: number, name: string, props: any) => {
                             if (name === "Aşım") {
                               const pct = props?.payload?.over_pct ?? 0;
-                              return [`${formatCurrency(value)} (%${(pct * 100).toFixed(1)})`, name];
+                              return [
+                                `${formatCurrency(value)} (%${(pct * 100).toFixed(1)})`,
+                                name
+                              ];
                             }
                             return [formatCurrency(value), name];
                           }}
@@ -1020,62 +1041,69 @@ export default function DashboardView() {
                   </Stack>
                 </Stack>
 
-                <Box
-                  sx={{
-                    display: "flex",
-                    justifyContent: "space-evenly",
-                    alignItems: "center",
-                    gap: 3,
-                    flexWrap: "nowrap",
-                    overflowX: "auto",
-                    pb: 1
-                  }}
-                >
-                  {quarterlyTotals.map((quarter) => (
-                    <Box
-                      key={quarter.label}
-                      sx={{
-                        width: 250,
-                        flex: "0 0 250px",
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "center"
-                      }}
-                    >
-                      <Typography
-                        variant="subtitle2"
-                        fontWeight={600}
-                        mb={1}
-                        sx={{ alignSelf: "flex-start" }}
+                {trendMonths.length === 0 ? (
+                  <Typography variant="body2" color="text.secondary">
+                    Çeyreklik görünüm için yeterli veri bulunamadı.
+                  </Typography>
+                ) : (
+                  <Box
+                    sx={{
+                      display: "flex",
+                      justifyContent: "space-evenly",
+                      alignItems: "center",
+                      gap: "24px",
+                      flexWrap: "nowrap",
+                      overflowX: "auto",
+                      pb: 1
+                    }}
+                  >
+                    {quarterlyTotals.map((quarter) => (
+                      <Box
+                        key={quarter.label}
+                        sx={{
+                          width: 260,
+                          flex: "0 0 260px",
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "center"
+                        }}
                       >
-                        {quarter.label}
-                      </Typography>
-                      <Box sx={{ height: 220 }}>
-                        <ResponsiveContainer width="100%" height="100%">
-                          <PieChart>
-                            <RechartsTooltip
-                              formatter={(value: number, name: string) =>
-                                [formatCurrency(value), name]
-                              }
-                            />
-                            <Pie
-                              data={quarter.pieData}
-                              dataKey="value"
-                              nameKey="name"
-                              innerRadius={50}
-                              outerRadius={80}
-                              paddingAngle={2}
-                            >
-                              {quarter.pieData.map((entry) => (
-                                <Cell key={`${quarter.label}-${entry.name}`} fill={entry.color} />
-                              ))}
-                            </Pie>
-                          </PieChart>
-                        </ResponsiveContainer>
+                        <Typography
+                          variant="subtitle2"
+                          fontWeight={600}
+                          mb={1}
+                          sx={{ alignSelf: "flex-start" }}
+                        >
+                          {quarter.label}
+                        </Typography>
+                        <Box sx={{ height: 260, minWidth: 240 }}>
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <RechartsTooltip
+                                formatter={(value: number, name: string) => [
+                                  formatCurrency(value),
+                                  name
+                                ]}
+                              />
+                              <Pie
+                                data={quarter.pieData}
+                                dataKey="value"
+                                nameKey="name"
+                                innerRadius={50}
+                                outerRadius={80}
+                                paddingAngle={2}
+                              >
+                                {quarter.pieData.map((entry) => (
+                                  <Cell key={`${quarter.label}-${entry.name}`} fill={entry.color} />
+                                ))}
+                              </Pie>
+                            </PieChart>
+                          </ResponsiveContainer>
+                        </Box>
                       </Box>
-                    </Box>
-                  ))}
-                </Box>
+                    ))}
+                  </Box>
+                )}
               </CardContent>
             </Card>
           </Stack>
@@ -1147,7 +1175,7 @@ export default function DashboardView() {
                 {overBudgetItems.map((item) => (
                   <TableRow key={`${item.budget_code}-${item.budget_name}`}>
                     <TableCell>
-                      {stripBudgetCode(item.budget_name) || item.budget_code}
+                      {formatBudgetLabel(item.budget_name, item.budget_code)}
                     </TableCell>
                     <TableCell align="right">{formatCurrency(item.plan)}</TableCell>
                     <TableCell align="right">{formatCurrency(item.actual)}</TableCell>

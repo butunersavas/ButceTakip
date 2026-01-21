@@ -2,6 +2,7 @@ import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { Box, CircularProgress } from "@mui/material";
 
 import DashboardView from "./components/Dashboard/DashboardView";
+import DashboardErrorBoundary from "./components/Dashboard/DashboardErrorBoundary";
 import PlansView from "./components/Plans/PlansView";
 import ExpensesView from "./components/Expenses/ExpensesView";
 import ImportExportView from "./components/ImportExport/ImportExportView";
@@ -56,7 +57,16 @@ export default function App() {
         element={token ? <Navigate to="/dashboard" replace /> : <LoginPage />}
       />
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
-      <Route path="/dashboard" element={<LayoutRoute><DashboardView /></LayoutRoute>} />
+      <Route
+        path="/dashboard"
+        element={
+          <LayoutRoute>
+            <DashboardErrorBoundary>
+              <DashboardView />
+            </DashboardErrorBoundary>
+          </LayoutRoute>
+        }
+      />
       <Route path="/plans" element={<LayoutRoute><PlansView /></LayoutRoute>} />
       <Route path="/expenses" element={<LayoutRoute><ExpensesView /></LayoutRoute>} />
       <Route path="/reports" element={<LayoutRoute><ImportExportView /></LayoutRoute>} />
