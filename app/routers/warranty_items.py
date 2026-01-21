@@ -56,6 +56,17 @@ def _user_display_name(user: User | None) -> str | None:
     return user.full_name or user.username or user.email
 
 
+def _normalize_output_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        return value
+    cleaned = value.strip()
+    if not cleaned or cleaned in {"-", "—"}:
+        return None
+    return cleaned
+
+
 def _build_user_map(session: Session, items: list[WarrantyItem]) -> dict[int, str | None]:
     user_ids: set[int] = set()
     for item in items:
@@ -79,10 +90,16 @@ def _build_warranty_read(
     updated_name: str | None,
 ) -> WarrantyItemRead:
     read_item = WarrantyItemRead.from_orm(item)
-    read_item.created_by_name = created_name
-    read_item.updated_by_name = updated_name
+    read_item.created_by_name = _normalize_output_text(created_name)
+    read_item.updated_by_name = _normalize_output_text(updated_name)
     read_item.created_by_username = read_item.created_by_name
     read_item.updated_by_username = read_item.updated_by_name
+    read_item.domain = _normalize_output_text(read_item.domain)
+    read_item.note = _normalize_output_text(read_item.note)
+    read_item.issuer = _normalize_output_text(read_item.issuer)
+    read_item.certificate_issuer = _normalize_output_text(read_item.certificate_issuer)
+    read_item.renewal_owner = _normalize_output_text(read_item.renewal_owner)
+    read_item.renewal_responsible = _normalize_output_text(read_item.renewal_responsible)
     remind_days_before = _resolve_remind_days(item)
     if read_item.remind_days_before is None:
         read_item.remind_days_before = remind_days_before

@@ -507,7 +507,11 @@ export default function DashboardView() {
     enabled: Boolean(debouncedFilters.year)
   });
 
-  const { data: trendMonths = [], isLoading: isTrendLoading } = useQuery<SpendMonthlySummary[]>({
+  const {
+    data: trendMonths = [],
+    isLoading: isTrendLoading,
+    isError: isTrendError
+  } = useQuery<SpendMonthlySummary[]>({
     queryKey: [
       "dashboard",
       "trend",
@@ -521,9 +525,11 @@ export default function DashboardView() {
     queryFn: async () => {
       const params: Record<string, number | string> = { year: debouncedFilters.year };
       if (debouncedFilters.scenarioId) params.scenario_id = debouncedFilters.scenarioId;
-      const trendBudgetItemId =
-        selectedOverrunBudgetItemId ?? debouncedFilters.budgetItemId;
+      const trendBudgetItemId = selectedOverrunBudgetItemId ?? debouncedFilters.budgetItemId;
       if (trendBudgetItemId) params.budget_item_id = trendBudgetItemId;
+      if (selectedOverrunItem?.budget_code) {
+        params.budget_code = selectedOverrunItem.budget_code;
+      }
       if (debouncedFilters.department) params.department = debouncedFilters.department;
       if (debouncedFilters.capexOpex) params.capex_opex = debouncedFilters.capexOpex;
       const { data } = await client.get<SpendMonthlySummary[]>("/dashboard/trend", { params });
@@ -558,15 +564,27 @@ export default function DashboardView() {
   };
 
   const monthlyData = useMemo(() => {
-    if (!trendMonths?.length) return [];
-    return trendMonths.map((entry) => {
-      const planned = toSafeNumber(entry.plan_total);
-      const actual = toSafeNumber(entry.actual_total);
-      const remaining = toSafeNumber(entry.remaining_total);
-      const overrun = toSafeNumber(entry.over_total);
-      const monthLabel = monthLabels[entry.month - 1] ?? `Ay ${entry.month}`;
+    const months = Array.from({ length: 12 }, (_, index) => index + 1);
+    const byMonth = new Map(
+      (trendMonths ?? [])
+        .map((entry) => ({ ...entry, month: Number(entry.month) }))
+        .filter((entry) => entry.month >= 1 && entry.month <= 12)
+        .map((entry) => [entry.month, entry] as const)
+    );
+
+    return months.map((month) => {
+      const entry = byMonth.get(month) ?? ({} as Partial<SpendMonthlySummary>);
+      const planned = toSafeNumber(entry.plan_total ?? (entry as any).planned ?? (entry as any).plan);
+      const actual = toSafeNumber(entry.actual_total ?? (entry as any).actual ?? (entry as any).spent);
+      const remainingRaw =
+        entry.remaining_total ?? Math.max(planned - actual, 0);
+      const overRaw =
+        entry.over_total ?? (entry as any).overrun_total ?? Math.max(actual - planned, 0);
+      const remaining = Math.max(toSafeNumber(remainingRaw), 0);
+      const overrun = Math.max(toSafeNumber(overRaw), 0);
+      const monthLabel = monthLabels[month - 1] ?? `Ay ${month}`;
       return {
-        month: entry.month,
+        month,
         planned,
         actual,
         remaining,
@@ -586,15 +604,15 @@ export default function DashboardView() {
     ];
 
     return quarters.map((quarter) => {
-      const totals = trendMonths.reduce<QuarterlySummary>(
+      const totals = monthlyData.reduce<QuarterlySummary>(
         (acc, entry) => {
           if (!quarter.months.includes(entry.month)) {
             return acc;
           }
-          acc.planned += toSafeNumber(entry.plan_total);
-          acc.actual += toSafeNumber(entry.within_plan_total);
-          acc.overrun += toSafeNumber(entry.over_total);
-          acc.remaining += toSafeNumber(entry.remaining_total);
+          acc.planned += toSafeNumber(entry.planned);
+          acc.actual += toSafeNumber(entry.actual);
+          acc.overrun += toSafeNumber(entry.overrun);
+          acc.remaining += toSafeNumber(entry.remaining);
           return acc;
         },
         { planned: 0, actual: 0, remaining: 0, overrun: 0 }
@@ -609,7 +627,7 @@ export default function DashboardView() {
 
       return { ...quarter, totals, pieData, totalValue };
     });
-  }, [trendMonths]);
+  }, [monthlyData]);
 
   const normalizedKpi = useMemo(() => {
     const totalPlan = dashboard?.kpi.total_plan ?? 0;
@@ -651,6 +669,9 @@ export default function DashboardView() {
   const showRemaining = !selectedKpiFilter || selectedKpiFilter === "total_remaining";
   const showOverrun = !selectedKpiFilter || selectedKpiFilter === "total_overrun";
   const showOverBudgetSection = !budgetItemId || forceShowOverBudget;
+  const hasTrendData = monthlyData.some(
+    (entry) => entry.planned > 0 || entry.actual > 0 || entry.remaining > 0 || entry.overrun > 0
+  );
 
   useEffect(() => {
     return () => {
@@ -967,7 +988,7 @@ export default function DashboardView() {
 
             <DashboardSectionBoundary title="Aylık Trend">
               <Card>
-                <CardContent sx={{ height: 280, minHeight: 280 }}>
+                <CardContent sx={{ minHeight: 280 }}>
                   <Stack direction="row" justifyContent="space-between" alignItems="center" mb={3}>
                     <Typography variant="h6" fontWeight={600}>
                       Aylık Trend Analizi
@@ -979,11 +1000,7 @@ export default function DashboardView() {
                               selectedOverrunItem.budget_name,
                               selectedOverrunItem.budget_code
                             )}`
-                          : budgetItemId
-                            ? stripBudgetCode(
-                                budgetItems?.find((item) => item.id === budgetItemId)?.name ?? ""
-                              )
-                            : "Tüm Kalemler"
+                          : "Tüm Kalemler"
                       }
                       color={selectedOverrunItem ? "error" : "primary"}
                       variant={selectedOverrunItem ? "filled" : "outlined"}
@@ -997,12 +1014,12 @@ export default function DashboardView() {
                   </Stack>
                   {isTrendLoading ? (
                     <Skeleton variant="rectangular" height="100%" />
-                  ) : monthlyData.length === 0 ? (
-                    <Typography variant="body2" color="text.secondary">
-                      Seçili filtreler için trend verisi bulunamadı.
-                    </Typography>
+                  ) : isTrendError ? (
+                    <Alert severity="error">Aylık Trend yüklenirken hata oluştu.</Alert>
+                  ) : !hasTrendData ? (
+                    <Alert severity="info">Trend verisi yok.</Alert>
                   ) : (
-                    <Box sx={{ height: 260, minHeight: 260, minWidth: 240 }}>
+                    <Box sx={{ width: "100%", height: 280, minHeight: 280, minWidth: 240 }}>
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={monthlyData}>
                           <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
@@ -1121,7 +1138,7 @@ export default function DashboardView() {
                     </Stack>
                   </Stack>
 
-                  {trendMonths.length === 0 ? (
+                  {!hasTrendData ? (
                     <Typography variant="body2" color="text.secondary">
                       Çeyreklik görünüm için yeterli veri bulunamadı.
                     </Typography>

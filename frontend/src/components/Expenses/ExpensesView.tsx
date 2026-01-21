@@ -8,11 +8,11 @@ import {
   CardActionArea,
   CardContent,
   Chip,
+  Checkbox,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
-  FormControlLabel,
   Grid,
   IconButton,
   Menu,
@@ -21,7 +21,6 @@ import {
   Select,
   Snackbar,
   Stack,
-  Switch,
   TextField,
   Tooltip,
   Typography
@@ -182,9 +181,8 @@ export default function ExpensesView() {
     ""
   );
   const [statusSelections, setStatusSelections] = usePersistentState<
-    Array<"ACTIVE" | "CANCELLED" | "OUT_OF_BUDGET" | "MINE">
+    Array<"ACTIVE" | "CANCELLED" | "OUT_OF_BUDGET" | "MINE" | "TODAY">
   >("expenses:statusSelections", ["ACTIVE"]);
-  const [todayOnly, setTodayOnly] = usePersistentState<boolean>("expenses:todayOnly", false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -277,14 +275,14 @@ export default function ExpensesView() {
       startDate,
       endDate,
       capexOpex,
-      statusSelections,
-      todayOnly
+      statusSelections
     ],
     queryFn: async () => {
       try {
         const includeOutOfBudget = statusSelections.includes("OUT_OF_BUDGET");
         const showCancelled = statusSelections.includes("CANCELLED");
         const mineOnly = statusSelections.includes("MINE");
+        const todayOnly = statusSelections.includes("TODAY");
         const params: Record<string, string | number | boolean> = {};
         if (year) params.year = Number(year);
         if (scenarioId) params.scenario_id = scenarioId;
@@ -769,7 +767,6 @@ export default function ExpensesView() {
     setEndDate("");
     setCapexOpex("");
     setStatusSelections(["ACTIVE"]);
-    setTodayOnly(false);
     setSelectedExpenseFilter("ALL");
     setSearchText("");
     setFilterModel({ items: [], quickFilterValues: [] });
@@ -781,14 +778,17 @@ export default function ExpensesView() {
 
   const statusOptions = [
     { value: "ACTIVE", label: "Aktif" },
-    { value: "CANCELLED", label: "İptal Edilenler" },
+    { value: "CANCELLED", label: "İptal Edildi" },
     { value: "OUT_OF_BUDGET", label: "Bütçe Dışı" },
-    { value: "MINE", label: "Sadece Benim" }
+    { value: "TODAY", label: "Bugüne ait" },
+    { value: "MINE", label: "Sadece benim" }
   ] as const;
 
   const handleStatusSelectionsChange = (value: string[]) => {
     const nextSelections = value.length ? value : ["ACTIVE"];
-    setStatusSelections(nextSelections as Array<"ACTIVE" | "CANCELLED" | "OUT_OF_BUDGET" | "MINE">);
+    setStatusSelections(
+      nextSelections as Array<"ACTIVE" | "CANCELLED" | "OUT_OF_BUDGET" | "MINE" | "TODAY">
+    );
   };
 
   const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -974,21 +974,12 @@ export default function ExpensesView() {
                 py: 2
               }}
             >
-              <Stack
-                direction={{ xs: "column", lg: "row" }}
-                spacing={2}
-                alignItems={{ xs: "stretch", lg: "center" }}
-                justifyContent="space-between"
-              >
-              <Stack
-                direction="row"
-                spacing={2}
-                flexWrap="wrap"
-                alignItems="center"
+              <Box
                 sx={{
-                  flex: 1,
-                  rowGap: 1.5,
-                  columnGap: 1.5,
+                  display: "flex",
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  gap: 1.5,
                   "& .MuiInputBase-root": { height: 40 },
                   "& .MuiOutlinedInput-input": { padding: "10px 12px" },
                   "& .MuiButton-root": { height: 40 }
@@ -997,142 +988,124 @@ export default function ExpensesView() {
                 <Select
                   multiple
                   size="small"
-                    value={statusSelections}
-                    onChange={(event) =>
-                      handleStatusSelectionsChange(
-                        typeof event.target.value === "string"
-                          ? event.target.value.split(",")
-                          : (event.target.value as string[])
-                      )
+                  value={statusSelections}
+                  onChange={(event) =>
+                    handleStatusSelectionsChange(
+                      typeof event.target.value === "string"
+                        ? event.target.value.split(",")
+                        : (event.target.value as string[])
+                    )
+                  }
+                  input={<OutlinedInput label="Durum" />}
+                  displayEmpty
+                  renderValue={(selected) => {
+                    if (!selected.length) {
+                      return "Durum";
                     }
-                    input={<OutlinedInput label="Durum" />}
-                    displayEmpty
-                    renderValue={(selected) => {
-                      if (!selected.length) {
-                        return "Durum";
-                      }
-                      return statusOptions
-                        .filter((option) => selected.includes(option.value))
-                        .map((option) => option.label)
-                        .join(", ");
-                    }}
-                    sx={{ minWidth: 200 }}
-                  >
-                    {statusOptions.map((option) => (
-                      <MenuItem key={option.value} value={option.value}>
-                        {option.label}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                  <TextField
-                    label="Başlangıç Tarihi"
-                    type="date"
-                    size="small"
-                    value={startDate}
-                    onChange={(event) => setStartDate(event.target.value)}
-                    InputLabelProps={{ shrink: true }}
-                    sx={{ minWidth: 170 }}
-                  />
-                  <TextField
-                    label="Bitiş Tarihi"
-                    type="date"
-                    size="small"
-                    value={endDate}
-                    onChange={(event) => setEndDate(event.target.value)}
-                    InputLabelProps={{ shrink: true }}
-                    sx={{ minWidth: 170 }}
-                  />
-                  <Autocomplete
-                    size="small"
-                    options={budgetItems ?? []}
-                    value={budgetItems?.find((item) => item.id === budgetItemId) ?? null}
-                    onChange={(_, value) => setBudgetItemId(value?.id ?? null)}
-                    getOptionLabel={(option) => formatBudgetItemLabel(option) || "-"}
-                    filterOptions={budgetFilterOptions}
-                    isOptionEqualToValue={(option, value) => option.id === value.id}
-                    sx={{ minWidth: 320, flex: 1 }}
-                    renderInput={(params) => (
-                      <TextField {...params} label="Bütçe Kalemi" placeholder="Tümü" size="small" />
-                    )}
-                  />
-                  <TextField
-                    select
-                    label="Capex/Opex"
-                    size="small"
-                    value={capexOpex}
-                    onChange={(event) => setCapexOpex(event.target.value as "" | "capex" | "opex")}
-                    sx={{ minWidth: 170 }}
-                  >
-                    <MenuItem value="">Tümü</MenuItem>
-                    <MenuItem value="capex">Capex</MenuItem>
-                    <MenuItem value="opex">Opex</MenuItem>
-                  </TextField>
-                  <TextField
-                    label="Yıl"
-                    type="number"
-                    size="small"
-                    value={year}
-                    onChange={(event) => setYear(event.target.value ? Number(event.target.value) : "")}
-                    sx={{ minWidth: 110 }}
-                  />
-                  <TextField
-                    select
-                    label="Senaryo"
-                    size="small"
-                    value={scenarioId ?? ""}
-                    onChange={(event) =>
-                      setScenarioId(event.target.value ? Number(event.target.value) : null)
-                    }
-                    sx={{ minWidth: 220 }}
-                  >
-                    <MenuItem value="">Tümü</MenuItem>
-                    {scenarios?.map((scenario) => (
-                      <MenuItem key={scenario.id} value={scenario.id}>
-                        {scenario.name} ({scenario.year})
-                      </MenuItem>
-                    ))}
-                  </TextField>
-                  <FormControlLabel
-                    control={
-                      <Switch
-                        size="small"
-                        checked={todayOnly}
-                        onChange={(event) => setTodayOnly(event.target.checked)}
-                      />
-                    }
-                    label="Bugüne ait"
-                    sx={{ ml: 0 }}
-                  />
-                  <Button variant="text" color="inherit" size="small" onClick={handleResetFilters}>
-                    Sıfırla
-                  </Button>
-                </Stack>
-                <Stack
-                  direction="row"
-                  spacing={1}
-                  alignItems="center"
-                  sx={{
-                    "& .MuiInputBase-root": { height: 40 },
-                    "& .MuiOutlinedInput-input": { padding: "10px 12px" }
+                    return statusOptions
+                      .filter((option) => selected.includes(option.value))
+                      .map((option) => option.label)
+                      .join(", ");
                   }}
+                  sx={{ minWidth: 200 }}
                 >
-                  <TextField
-                    size="small"
-                    label="Ara"
-                    value={searchText}
-                    onChange={handleSearchChange}
-                    sx={{ minWidth: 200 }}
-                  />
-                  <IconButton
-                    size="small"
-                    onClick={handleMenuOpen}
-                    aria-label="Daha Fazla"
-                    sx={{ height: 40, width: 40 }}
-                  >
-                    <MoreVertIcon fontSize="small" />
-                  </IconButton>
-                </Stack>
-              </Stack>
+                  {statusOptions.map((option) => (
+                    <MenuItem key={option.value} value={option.value}>
+                      <Checkbox
+                        size="small"
+                        checked={statusSelections.includes(option.value)}
+                      />
+                      <Typography variant="body2">{option.label}</Typography>
+                    </MenuItem>
+                  ))}
+                </Select>
+                <TextField
+                  label="Başlangıç Tarihi"
+                  type="date"
+                  size="small"
+                  value={startDate}
+                  onChange={(event) => setStartDate(event.target.value)}
+                  InputLabelProps={{ shrink: true }}
+                  sx={{ minWidth: 170 }}
+                />
+                <TextField
+                  label="Bitiş Tarihi"
+                  type="date"
+                  size="small"
+                  value={endDate}
+                  onChange={(event) => setEndDate(event.target.value)}
+                  InputLabelProps={{ shrink: true }}
+                  sx={{ minWidth: 170 }}
+                />
+                <Autocomplete
+                  size="small"
+                  options={budgetItems ?? []}
+                  value={budgetItems?.find((item) => item.id === budgetItemId) ?? null}
+                  onChange={(_, value) => setBudgetItemId(value?.id ?? null)}
+                  getOptionLabel={(option) => formatBudgetItemLabel(option) || "-"}
+                  filterOptions={budgetFilterOptions}
+                  isOptionEqualToValue={(option, value) => option.id === value.id}
+                  sx={{ minWidth: 320, flex: 1 }}
+                  renderInput={(params) => (
+                    <TextField {...params} label="Bütçe Kalemi" placeholder="Tümü" size="small" />
+                  )}
+                />
+                <TextField
+                  select
+                  label="Capex/Opex"
+                  size="small"
+                  value={capexOpex}
+                  onChange={(event) => setCapexOpex(event.target.value as "" | "capex" | "opex")}
+                  sx={{ minWidth: 170 }}
+                >
+                  <MenuItem value="">Tümü</MenuItem>
+                  <MenuItem value="capex">Capex</MenuItem>
+                  <MenuItem value="opex">Opex</MenuItem>
+                </TextField>
+                <TextField
+                  label="Yıl"
+                  type="number"
+                  size="small"
+                  value={year}
+                  onChange={(event) => setYear(event.target.value ? Number(event.target.value) : "")}
+                  sx={{ minWidth: 110 }}
+                />
+                <TextField
+                  select
+                  label="Senaryo"
+                  size="small"
+                  value={scenarioId ?? ""}
+                  onChange={(event) =>
+                    setScenarioId(event.target.value ? Number(event.target.value) : null)
+                  }
+                  sx={{ minWidth: 220 }}
+                >
+                  <MenuItem value="">Tümü</MenuItem>
+                  {scenarios?.map((scenario) => (
+                    <MenuItem key={scenario.id} value={scenario.id}>
+                      {scenario.name} ({scenario.year})
+                    </MenuItem>
+                  ))}
+                </TextField>
+                <TextField
+                  size="small"
+                  label="Ara"
+                  value={searchText}
+                  onChange={handleSearchChange}
+                  sx={{ minWidth: 200 }}
+                />
+                <IconButton
+                  size="small"
+                  onClick={handleMenuOpen}
+                  aria-label="Daha Fazla"
+                  sx={{ height: 40, width: 40 }}
+                >
+                  <MoreVertIcon fontSize="small" />
+                </IconButton>
+                <Button variant="text" color="inherit" size="small" onClick={handleResetFilters}>
+                  Sıfırla
+                </Button>
+              </Box>
             </Box>
           </Box>
 
@@ -1159,6 +1132,7 @@ export default function ExpensesView() {
                 rows={rows ?? []}
                 columns={columns}
                 getRowId={(row) => row.id ?? `${row.budget_item_id}-${row.expense_date}-${row.amount}`}
+                slots={{ toolbar: null }}
                 paginationModel={paginationModel}
                 onPaginationModelChange={setPaginationModel}
                 filterModel={combinedFilterModel}
