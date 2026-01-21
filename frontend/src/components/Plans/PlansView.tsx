@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Button,
@@ -53,11 +53,14 @@ interface PlanEntry {
   scenario_id: number;
   budget_item_id: number;
   department?: string | null;
+  scenario?: string | null;
   scenario_name?: string | null;
   budget_code?: string | null;
   budget_name?: string | null;
   capex_opex?: string | null;
   asset_type?: string | null;
+  map_capex_opex?: string | null;
+  map_nitelik?: string | null;
 }
 
 type PlanMutationPayload = {
@@ -115,6 +118,7 @@ export default function PlansView() {
   const [formError, setFormError] = useState<string | null>(null);
   const [formBudgetItemId, setFormBudgetItemId] = useState<number | null>(null);
   const [listError, setListError] = useState<string | null>(null);
+  const planTableRef = useRef<HTMLDivElement | null>(null);
 
   const { data: scenarios } = useQuery<Scenario[]>({
     queryKey: ["scenarios"],
@@ -350,8 +354,8 @@ export default function PlansView() {
             return "";
           }
 
-          if (row.scenario_name) {
-            return row.scenario_name ?? "";
+          if (row.scenario_name || row.scenario) {
+            return row.scenario_name ?? row.scenario ?? "";
           }
 
           if (!Array.isArray(scenarios)) {
@@ -382,10 +386,10 @@ export default function PlansView() {
           if (row?.budget_name || row?.budget_code) {
             return formatBudgetItemLabel({
               code: row.budget_code ?? undefined,
-              name: row.budget_name ?? ""
+              name: row.budget_name ?? row.budget_code ?? ""
             });
           }
-          return formatBudgetItemLabel(findBudgetItem(row)) || "";
+          return formatBudgetItemLabel(findBudgetItem(row)) || row?.budget_code || "-";
         }
       },
       {
@@ -393,7 +397,10 @@ export default function PlansView() {
         headerName: "Map Capex/Opex",
         flex: 1,
         valueGetter: (params) => {
-          const value = params?.row?.capex_opex ?? findBudgetItem(params?.row)?.map_category;
+          const value =
+            params?.row?.capex_opex ??
+            params?.row?.map_capex_opex ??
+            findBudgetItem(params?.row)?.map_category;
           return value ?? "-";
         }
       },
@@ -402,7 +409,10 @@ export default function PlansView() {
         headerName: "Map Nitelik",
         flex: 1,
         valueGetter: (params) => {
-          const value = params?.row?.asset_type ?? findBudgetItem(params?.row)?.map_attribute;
+          const value =
+            params?.row?.asset_type ??
+            params?.row?.map_nitelik ??
+            findBudgetItem(params?.row)?.map_attribute;
           return value ?? "-";
         }
       },
@@ -512,6 +522,14 @@ export default function PlansView() {
   }, [rows]);
 
   const formattedFilteredTotal = formatCurrency(filteredTotal);
+
+  const handleMonthlyTotalClick = (selectedMonth: number) => {
+    setMonthFilter(selectedMonth);
+    plansQuery.refetch();
+    window.setTimeout(() => {
+      planTableRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 0);
+  };
 
   const handleApplyFilters = () => {
     plansQuery.refetch();
@@ -656,8 +674,12 @@ export default function PlansView() {
                     sx={{
                       p: 1.2,
                       borderRadius: 2,
-                      backgroundColor: total > 0 ? "rgba(13, 71, 161, 0.06)" : "background.default"
+                      backgroundColor: total > 0 ? "rgba(13, 71, 161, 0.06)" : "background.default",
+                      border:
+                        monthFilter === index + 1 ? "1px solid rgba(13, 71, 161, 0.35)" : "1px solid transparent",
+                      cursor: "pointer"
                     }}
+                    onClick={() => handleMonthlyTotalClick(index + 1)}
                   >
                     <Typography variant="body2" color="text.secondary">
                       {monthOptions[index]}
@@ -691,7 +713,7 @@ export default function PlansView() {
                   </Box>
                 </Typography>
               </Stack>
-              <Box sx={{ width: "100%", overflowX: "auto" }}>
+              <Box ref={planTableRef} sx={{ width: "100%", overflowX: "auto" }}>
                 <DataGrid
                   autoHeight
                   rows={rows ?? []}
