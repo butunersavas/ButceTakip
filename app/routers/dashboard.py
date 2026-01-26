@@ -45,6 +45,7 @@ def _calculate_item_based_monthly_totals(
     month_range: list[int],
     scenario_id: int | None = None,
     budget_item_id: int | None = None,
+    budget_code: str | None = None,
     department: str | None = None,
     capex_opex: str | None = None,
 ) -> list[SpendMonthlySummary]:
@@ -58,7 +59,7 @@ def _calculate_item_based_monthly_totals(
             func.sum(PlanEntry.amount).label("plan_total"),
         )
         .select_from(PlanEntry)
-        .join(BudgetItem, BudgetItem.id == PlanEntry.budget_item_id)
+        .outerjoin(BudgetItem, BudgetItem.id == PlanEntry.budget_item_id)
         .where(PlanEntry.year == year)
         .where(PlanEntry.month.in_(month_range))
     )
@@ -66,6 +67,8 @@ def _calculate_item_based_monthly_totals(
         plan_query = plan_query.where(PlanEntry.scenario_id == scenario_id)
     if budget_item_id is not None:
         plan_query = plan_query.where(PlanEntry.budget_item_id == budget_item_id)
+    if budget_code is not None:
+        plan_query = plan_query.where(plan_budget_code == budget_code)
     if department is not None:
         plan_query = plan_query.where(PlanEntry.department == department)
     if capex_opex:
@@ -89,6 +92,8 @@ def _calculate_item_based_monthly_totals(
         expense_query = expense_query.where(Expense.scenario_id == scenario_id)
     if budget_item_id is not None:
         expense_query = expense_query.where(Expense.budget_item_id == budget_item_id)
+    if budget_code is not None:
+        expense_query = expense_query.where(BudgetItem.code == budget_code)
     if capex_opex:
         expense_query = expense_query.where(func.lower(BudgetItem.map_category) == capex_opex)
     if department is not None:
@@ -479,6 +484,7 @@ def get_spend_trend(
     year: int | None = Query(default=None),
     scenario_id: int | None = Query(default=None),
     budget_item_id: int | None = Query(default=None),
+    budget_code: str | None = Query(default=None),
     department: str | None = Query(default=None),
     capex_opex: str | None = Query(default=None),
     session: Session = Depends(get_db_session),
@@ -499,6 +505,7 @@ def get_spend_trend(
         month_range=month_range,
         scenario_id=scenario_id,
         budget_item_id=budget_item_id,
+        budget_code=budget_code,
         department=department,
         capex_opex=capex_filter,
     )

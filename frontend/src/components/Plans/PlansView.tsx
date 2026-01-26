@@ -101,6 +101,13 @@ function formatCurrency(value: number) {
   }).format(value ?? 0);
 }
 
+function formatCapexLabel(value?: string | null) {
+  if (!value) return null;
+  const normalized = value.toString().trim();
+  if (!normalized) return null;
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1).toLowerCase();
+}
+
 export default function PlansView() {
   const client = useAuthorizedClient();
   const queryClient = useQueryClient();
@@ -127,6 +134,14 @@ export default function PlansView() {
       return data;
     }
   });
+
+  const scenarioById = useMemo(() => {
+    const map = new Map<number, Scenario>();
+    (scenarios ?? []).forEach((scenario) => {
+      map.set(scenario.id, scenario);
+    });
+    return map;
+  }, [scenarios]);
 
   useEffect(() => {
     if (!scenarios?.length) return;
@@ -296,6 +311,40 @@ export default function PlansView() {
     []
   );
 
+  const budgetItemById = useMemo(() => {
+    const map = new Map<number, BudgetItem>();
+    (budgetItems ?? []).forEach((item) => {
+      map.set(item.id, item);
+    });
+    return map;
+  }, [budgetItems]);
+
+  const budgetItemByCode = useMemo(() => {
+    const map = new Map<string, BudgetItem>();
+    (budgetItems ?? []).forEach((item) => {
+      const normalized = stripBudgetCode(item.code ?? "").toLowerCase();
+      if (normalized) {
+        map.set(normalized, item);
+      }
+    });
+    return map;
+  }, [budgetItems]);
+
+  const findBudgetItem = useCallback(
+    (row?: PlanEntry | null) => {
+      if (!row) return null;
+      if (row.budget_item_id) {
+        return budgetItemById.get(row.budget_item_id) ?? null;
+      }
+      const code = stripBudgetCode(row.budget_code ?? "").toLowerCase();
+      if (code) {
+        return budgetItemByCode.get(code) ?? null;
+      }
+      return null;
+    },
+    [budgetItemByCode, budgetItemById]
+  );
+
   const departmentOptions = useMemo(() => {
     const options = new Set<string>();
     plansQuery.data?.forEach((plan) => {
@@ -333,8 +382,7 @@ export default function PlansView() {
           if (!row) {
             return "-";
           }
-
-          return row.scenario_name ?? "-";
+          return row.scenario_name ?? scenarioById.get(row.scenario_id)?.name ?? "-";
         }
       },
       {
@@ -343,13 +391,19 @@ export default function PlansView() {
         flex: 1,
         valueGetter: (params) => {
           const row = params?.row;
-          const label = row?.budget_name ?? row?.budget_code ?? "-";
+          const fallbackItem = findBudgetItem(row);
+          const label =
+            row?.budget_name ??
+            fallbackItem?.name ??
+            row?.budget_code ??
+            fallbackItem?.code ??
+            "-";
           if (label === "-") {
             return "-";
           }
           return formatBudgetItemLabel({
-            code: row?.budget_code ?? undefined,
-            name: row?.budget_name ?? row?.budget_code ?? ""
+            code: row?.budget_code ?? fallbackItem?.code ?? undefined,
+            name: row?.budget_name ?? fallbackItem?.name ?? row?.budget_code ?? ""
           });
         }
       },
@@ -358,7 +412,14 @@ export default function PlansView() {
         headerName: "Map Capex/Opex",
         flex: 1,
         valueGetter: (params) => {
-          return params?.row?.capex_opex ?? "-";
+          const row = params?.row;
+          const fallbackItem = findBudgetItem(row);
+          return (
+            row?.capex_opex ??
+            row?.map_capex_opex ??
+            formatCapexLabel(fallbackItem?.map_category) ??
+            "-"
+          );
         }
       },
       {
@@ -366,7 +427,9 @@ export default function PlansView() {
         headerName: "Map Nitelik",
         flex: 1,
         valueGetter: (params) => {
-          return params?.row?.asset_type ?? "-";
+          const row = params?.row;
+          const fallbackItem = findBudgetItem(row);
+          return row?.asset_type ?? row?.map_nitelik ?? fallbackItem?.map_attribute ?? "-";
         }
       },
       {
@@ -460,7 +523,7 @@ export default function PlansView() {
         )
       }
     ];
-  }, [handleDelete, handleEdit, scenarios, user?.is_admin]);
+  }, [findBudgetItem, handleDelete, handleEdit, scenarioById, user?.is_admin]);
 
   const monthlyTotals = useMemo(() => {
     const totals = Array(12).fill(0);

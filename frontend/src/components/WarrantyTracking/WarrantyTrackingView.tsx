@@ -135,7 +135,8 @@ const normalizeOptionalText = (value: string | null | undefined) => {
 
 const normalizeWarrantyRow = (row: any): WarrantyItem => {
   const start = row?.start_date ?? row?.startDate ?? null;
-  const end = normalizeDateInput(row?.end_date ?? row?.endDate ?? null) || null;
+  const end =
+    normalizeDateInput(row?.end_date ?? row?.endDate ?? row?.expiration_date ?? null) || null;
   const remindDaysBefore =
     typeof row?.remind_days === "number"
       ? row.remind_days
@@ -160,13 +161,23 @@ const normalizeWarrantyRow = (row: any): WarrantyItem => {
     typeof statusLabel === "string" && statusLabel.trim().length
       ? { label: statusLabel, key: mapStatusKey(statusLabel) }
       : calcStatus(days_left);
-  const certificateIssuer = normalizeOptionalText(row?.certificate_issuer ?? row?.issuer);
-  const issuer = normalizeOptionalText(row?.issuer ?? row?.certificate_issuer);
+  const certificateIssuer = normalizeOptionalText(
+    row?.certificate_issuer ?? row?.issuer ?? row?.certificateIssuer
+  );
+  const issuer = normalizeOptionalText(
+    row?.issuer ?? row?.certificate_issuer ?? row?.certificateIssuer
+  );
   const domain = normalizeOptionalText(row?.domain);
   const renewalResponsible = normalizeOptionalText(
-    row?.renewal_responsible ?? row?.renewal_owner
+    row?.renewal_responsible ?? row?.renewal_owner ?? row?.renewalResponsible ?? row?.renewalOwner
   );
   const note = normalizeOptionalText(row?.note ?? row?.notes);
+  const createdByName = normalizeOptionalText(
+    row?.created_by_name ?? row?.createdByName ?? row?.created_by_username
+  );
+  const updatedByName = normalizeOptionalText(
+    row?.updated_by_name ?? row?.updatedByName ?? row?.updated_by_username
+  );
   return {
     ...row,
     id,
@@ -182,6 +193,8 @@ const normalizeWarrantyRow = (row: any): WarrantyItem => {
     domain,
     renewal_responsible: renewalResponsible,
     note,
+    created_by_name: createdByName,
+    updated_by_name: updatedByName,
     remind_days: remindDaysBefore,
     remind_days_before: remindDaysBefore,
     reminder_days: remindDaysBefore,
@@ -438,6 +451,7 @@ export default function WarrantyTrackingView() {
           params?.row?.renewal_responsible ??
           params?.row?.renewal_owner ??
           params?.row?.renewalResponsible ??
+          params?.row?.renewalOwner ??
           "-",
       },
       {
@@ -521,6 +535,7 @@ export default function WarrantyTrackingView() {
         valueGetter: (params) =>
           params?.row?.created_by_name ??
           params?.row?.createdByName ??
+          params?.row?.created_by_username ??
           "-",
       },
       {
@@ -530,6 +545,7 @@ export default function WarrantyTrackingView() {
         valueGetter: (params) =>
           params?.row?.updated_by_name ??
           params?.row?.updatedByName ??
+          params?.row?.updated_by_username ??
           "-",
       },
       {
@@ -537,7 +553,7 @@ export default function WarrantyTrackingView() {
         headerName: "Not",
         flex: 1.2,
         sortable: false,
-        valueGetter: (params) => params?.row?.note ?? "-",
+        valueGetter: (params) => params?.row?.note ?? params?.row?.notes ?? "-",
       },
       {
         field: "actions",

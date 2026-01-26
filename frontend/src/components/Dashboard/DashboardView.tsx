@@ -7,7 +7,6 @@ import {
   CardContent,
   CardHeader,
   Box,
-  Checkbox,
   Chip,
   Dialog,
   DialogActions,
@@ -34,9 +33,9 @@ import Autocomplete, { createFilterOptions } from "@mui/material/Autocomplete";
 import { useQuery } from "@tanstack/react-query";
 import {
   Bar,
-  BarChart,
   CartesianGrid,
   Cell,
+  ComposedChart,
   Legend,
   Line,
   Pie,
@@ -65,6 +64,7 @@ import {
   COLOR_REMAINING
 } from "../../theme/chartColors";
 import FiltersBar from "../Filters/FiltersBar";
+import SafeChartContainer from "../common/SafeChartContainer";
 
 interface DashboardSummary {
   month: number;
@@ -284,6 +284,7 @@ export default function DashboardView() {
   const [forceShowOverBudget, setForceShowOverBudget] = useState(false);
   const [highlightOverBudget, setHighlightOverBudget] = useState(false);
   const overBudgetRef = useRef<HTMLDivElement | null>(null);
+  const trendSectionRef = useRef<HTMLDivElement | null>(null);
   const highlightTimeoutRef = useRef<number | null>(null);
 
   const monthOptions = [
@@ -672,6 +673,9 @@ export default function DashboardView() {
   const hasTrendData = monthlyData.some(
     (entry) => entry.planned > 0 || entry.actual > 0 || entry.remaining > 0 || entry.overrun > 0
   );
+  const maxOverrun = useMemo(() => {
+    return monthlyData.reduce((maxValue, entry) => Math.max(maxValue, entry.overrun), 0);
+  }, [monthlyData]);
 
   useEffect(() => {
     return () => {
@@ -708,10 +712,21 @@ export default function DashboardView() {
       }, 2000);
       window.setTimeout(() => {
         overBudgetRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        trendSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       }, 0);
     } else {
       setSelectedOverrunItem(null);
     }
+  };
+
+  const handleOverBudgetRowClick = (item: OverBudgetItem) => {
+    setSelectedOverrunItem({
+      budget_code: item.budget_code,
+      budget_name: item.budget_name
+    });
+    window.setTimeout(() => {
+      trendSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 0);
   };
 
   return (
@@ -966,7 +981,12 @@ export default function DashboardView() {
                               const over = toSafeNumber(item.over);
                               const overPct = toSafeNumber(item.over_pct);
                               return (
-                                <TableRow key={item.budget_code}>
+                                <TableRow
+                                  key={item.budget_code}
+                                  hover
+                                  sx={{ cursor: "pointer" }}
+                                  onClick={() => handleOverBudgetRowClick(item)}
+                                >
                                   <TableCell>
                                     {formatBudgetLabel(item.budget_name, item.budget_code)}
                                   </TableCell>
@@ -987,7 +1007,7 @@ export default function DashboardView() {
             ) : null}
 
             <DashboardSectionBoundary title="Aylık Trend">
-              <Card>
+              <Card ref={trendSectionRef}>
                 <CardContent sx={{ minHeight: 280 }}>
                   <Stack direction="row" justifyContent="space-between" alignItems="center" mb={3}>
                     <Typography variant="h6" fontWeight={600}>
@@ -1019,72 +1039,76 @@ export default function DashboardView() {
                   ) : !hasTrendData ? (
                     <Alert severity="info">Trend verisi yok.</Alert>
                   ) : (
-                    <Box sx={{ width: "100%", height: 280, minHeight: 280, minWidth: 240 }}>
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={monthlyData}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
-                          <XAxis dataKey="monthLabel" tick={{ fill: "#475569" }} />
-                          <YAxis
-                            yAxisId="left"
-                            tick={{ fill: "#475569" }}
-                            tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
-                          />
-                          <YAxis
-                            yAxisId="right"
-                            orientation="right"
-                            tick={{ fill: "#475569" }}
-                            tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
-                          />
-                          <ReferenceLine y={0} stroke="#9e9e9e" strokeDasharray="3 3" />
-                          <RechartsTooltip
-                            formatter={(value: number, name: string, props: any) => {
-                              if (name === "Aşım") {
-                                const pct = toSafeNumber(props?.payload?.over_pct);
-                                return [
-                                  `${formatCurrency(toSafeNumber(value))} (%${(pct * 100).toFixed(1)})`,
-                                  name
-                                ];
-                              }
-                              return [formatCurrency(toSafeNumber(value)), name];
-                            }}
-                            labelFormatter={(label) => label}
-                          />
-                          <Legend />
-                          <Bar
-                            dataKey="planned"
-                            name="Planlanan"
-                            fill={pieColors.planned}
-                            radius={[6, 6, 0, 0]}
-                            yAxisId="left"
-                            hide={!showPlanned}
-                          />
-                          <Bar
-                            dataKey="actual"
-                            name="Gerçekleşen"
-                            fill={pieColors.actual}
-                            radius={[6, 6, 0, 0]}
-                            yAxisId="left"
-                            hide={!showActual}
-                          />
-                          <Bar
-                            dataKey="remaining"
-                            name="Kalan"
-                            fill={pieColors.remaining}
-                            radius={[6, 6, 0, 0]}
-                            yAxisId="left"
-                            hide={!showRemaining}
-                          />
-                          <Line
-                            dataKey="overrun"
-                            name="Aşım"
-                            stroke={pieColors.overrun}
-                            strokeWidth={2}
-                            dot={{ r: 3 }}
-                            yAxisId="right"
-                            hide={!showOverrun}
-                          />
-                        </BarChart>
-                      </ResponsiveContainer>
+                    <Box sx={{ width: "100%", height: 260, minWidth: 240 }}>
+                      <SafeChartContainer minHeight={260}>
+                        <ResponsiveContainer width="100%" height="100%">
+                          <ComposedChart data={monthlyData}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                            <XAxis dataKey="monthLabel" tick={{ fill: "#475569" }} />
+                            <YAxis
+                              yAxisId="left"
+                              tick={{ fill: "#475569" }}
+                              tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
+                            />
+                            <YAxis
+                              yAxisId="right"
+                              orientation="right"
+                              hide={maxOverrun <= 0 || !showOverrun}
+                              domain={[0, Math.max(maxOverrun * 1.2, 1)]}
+                              tick={{ fill: "#475569" }}
+                              tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
+                            />
+                            <ReferenceLine y={0} stroke="#9e9e9e" strokeDasharray="3 3" />
+                            <RechartsTooltip
+                              formatter={(value: number, name: string, props: any) => {
+                                if (name === "Aşım") {
+                                  const pct = toSafeNumber(props?.payload?.over_pct);
+                                  return [
+                                    `${formatCurrency(toSafeNumber(value))} (%${(pct * 100).toFixed(1)})`,
+                                    name
+                                  ];
+                                }
+                                return [formatCurrency(toSafeNumber(value)), name];
+                              }}
+                              labelFormatter={(label) => label}
+                            />
+                            <Legend />
+                            <Bar
+                              dataKey="planned"
+                              name="Planlanan"
+                              fill={pieColors.planned}
+                              radius={[6, 6, 0, 0]}
+                              yAxisId="left"
+                              hide={!showPlanned}
+                            />
+                            <Bar
+                              dataKey="actual"
+                              name="Gerçekleşen"
+                              fill={pieColors.actual}
+                              radius={[6, 6, 0, 0]}
+                              yAxisId="left"
+                              hide={!showActual}
+                            />
+                            <Bar
+                              dataKey="remaining"
+                              name="Kalan"
+                              fill={pieColors.remaining}
+                              radius={[6, 6, 0, 0]}
+                              yAxisId="left"
+                              hide={!showRemaining}
+                            />
+                            <Line
+                              dataKey="overrun"
+                              name="Aşım"
+                              stroke={pieColors.overrun}
+                              strokeWidth={2}
+                              dot={{ r: 3 }}
+                              yAxisId="right"
+                              hide={!showOverrun || maxOverrun <= 0}
+                            />
+                          </ComposedChart>
+                        </ResponsiveContainer>
+                      </SafeChartContainer>
                     </Box>
                   )}
                 </CardContent>
@@ -1143,72 +1167,64 @@ export default function DashboardView() {
                       Çeyreklik görünüm için yeterli veri bulunamadı.
                     </Typography>
                   ) : (
-                    <Box
-                      sx={{
-                        display: "flex",
-                        justifyContent: "space-evenly",
-                        alignItems: "center",
-                        gap: "24px",
-                        flexWrap: "nowrap",
-                        overflowX: "auto",
-                        pb: 1
-                      }}
-                    >
+                    <Grid container spacing={2} justifyContent="space-between" alignItems="center">
                       {quarterlyTotals.map((quarter) => (
-                        <Box
-                          key={quarter.label}
-                          sx={{
-                            width: 260,
-                            flex: "0 0 260px",
-                            display: "flex",
-                            flexDirection: "column",
-                            alignItems: "center"
-                          }}
-                        >
-                          <Typography
-                            variant="subtitle2"
-                            fontWeight={600}
-                            mb={1}
-                            sx={{ alignSelf: "flex-start" }}
+                        <Grid item xs={12} sm={6} md={3} key={quarter.label}>
+                          <Box
+                            sx={{
+                              width: "100%",
+                              display: "flex",
+                              flexDirection: "column",
+                              alignItems: "center"
+                            }}
                           >
-                            {quarter.label}
-                          </Typography>
-                          {quarter.totalValue <= 0 ? (
-                            <Typography variant="body2" color="text.secondary">
-                              Veri yok
+                            <Typography
+                              variant="subtitle2"
+                              fontWeight={600}
+                              mb={1}
+                              sx={{ alignSelf: "flex-start" }}
+                            >
+                              {quarter.label}
                             </Typography>
-                          ) : (
-                            <Box sx={{ height: 260, minWidth: 240 }}>
-                              <ResponsiveContainer width="100%" height="100%">
-                                <PieChart>
-                                  <RechartsTooltip
-                                    formatter={(value: number, name: string) => [
-                                      formatCurrency(toSafeNumber(value)),
-                                      name
-                                    ]}
-                                  />
-                                  <Pie
-                                    data={quarter.pieData}
-                                    dataKey="value"
-                                    nameKey="name"
-                                    innerRadius={50}
-                                    outerRadius={80}
-                                    paddingAngle={2}
-                                  >
-                                    {quarter.pieData.map((entry) => (
-                                      <Cell
-                                        key={`${quarter.label}-${entry.name}`}
-                                        fill={entry.color}
+                            {quarter.totalValue <= 0 ? (
+                              <Typography variant="body2" color="text.secondary">
+                                Veri yok
+                              </Typography>
+                            ) : (
+                              <Box sx={{ height: 240, width: "100%" }}>
+                                <SafeChartContainer minHeight={240}>
+                                  <ResponsiveContainer width="100%" height="100%">
+                                    <PieChart>
+                                      <RechartsTooltip
+                                        formatter={(value: number, name: string) => [
+                                          formatCurrency(toSafeNumber(value)),
+                                          name
+                                        ]}
                                       />
-                                    ))}
-                                  </Pie>
-                                </PieChart>
-                              </ResponsiveContainer>
-                            </Box>
-                          )}
-                        </Box>
+                                      <Pie
+                                        data={quarter.pieData}
+                                        dataKey="value"
+                                        nameKey="name"
+                                        innerRadius={50}
+                                        outerRadius={80}
+                                        paddingAngle={2}
+                                      >
+                                        {quarter.pieData.map((entry) => (
+                                          <Cell
+                                            key={`${quarter.label}-${entry.name}`}
+                                            fill={entry.color}
+                                          />
+                                        ))}
+                                      </Pie>
+                                    </PieChart>
+                                  </ResponsiveContainer>
+                                </SafeChartContainer>
+                              </Box>
+                            )}
+                          </Box>
+                        </Grid>
                       ))}
-                    </Box>
+                    </Grid>
                   )}
                 </CardContent>
               </Card>
