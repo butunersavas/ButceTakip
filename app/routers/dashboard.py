@@ -16,6 +16,8 @@ from app.schemas import (
     OverBudgetSummary,
     RiskyItem,
     SpendMonthlySummary,
+    SpendTrendMonth,
+    SpendTrendResponse,
 )
 from app.services.analytics import compute_monthly_summary, totalize
 
@@ -479,7 +481,7 @@ def get_spend_last_months(
     )
 
 
-@router.get("/trend", response_model=list[SpendMonthlySummary])
+@router.get("/trend", response_model=SpendTrendResponse)
 def get_spend_trend(
     year: int | None = Query(default=None),
     scenario_id: int | None = Query(default=None),
@@ -489,7 +491,7 @@ def get_spend_trend(
     capex_opex: str | None = Query(default=None),
     session: Session = Depends(get_db_session),
     _ = Depends(get_current_user),
-) -> list[SpendMonthlySummary]:
+) -> SpendTrendResponse:
     resolved_year = year
     if resolved_year is None and scenario_id is not None:
         scenario = session.get(Scenario, scenario_id)
@@ -499,7 +501,7 @@ def get_spend_trend(
 
     capex_filter = _normalize_capex_opex(capex_opex)
     month_range = list(range(1, 13))
-    return _calculate_item_based_monthly_totals(
+    raw_months = _calculate_item_based_monthly_totals(
         session,
         year=resolved_year,
         month_range=month_range,
@@ -508,4 +510,46 @@ def get_spend_trend(
         budget_code=budget_code,
         department=department,
         capex_opex=capex_filter,
+    )
+    month_map = {entry.month: entry for entry in raw_months}
+    normalized_months: list[SpendTrendMonth] = []
+    for month in range(1, 13):
+        entry = month_map.get(
+            month,
+            SpendMonthlySummary(
+                month=month,
+                plan_total=0,
+                actual_total=0,
+                within_plan_total=0,
+                over_total=0,
+                remaining_total=0,
+            ),
+        )
+        planned = float(entry.plan_total or 0)
+        actual = float(entry.actual_total or 0)
+        remaining = float(entry.remaining_total or 0)
+        overrun = float(entry.over_total or 0)
+        overrun_pct = (overrun / planned * 100) if planned > 0 else 0.0
+        normalized_months.append(
+            SpendTrendMonth(
+                month=month,
+                planned=planned,
+                actual=actual,
+                remaining=remaining,
+                overrun=overrun,
+                overrun_pct=overrun_pct,
+            )
+        )
+
+    selected_budget_code = budget_code
+    if not selected_budget_code and budget_item_id is not None:
+        budget_item = session.get(BudgetItem, budget_item_id)
+        selected_budget_code = budget_item.code if budget_item else None
+    scope = "item" if (budget_code or budget_item_id) else "all"
+    return SpendTrendResponse(
+        year=resolved_year,
+        scenario_id=scenario_id,
+        scope=scope,
+        selected_budget_code=selected_budget_code,
+        months=normalized_months,
     )

@@ -21,6 +21,8 @@ def _normalize_capex_opex(value: str | None) -> str | None:
 
 
 def _plan_read_query(capex_filter: str | None):
+    normalized_plan_code = func.upper(func.trim(PlanEntry.budget_code))
+    normalized_item_code = func.upper(func.trim(BudgetItem.code))
     query = (
         select(
             PlanEntry.id,
@@ -30,9 +32,11 @@ def _plan_read_query(capex_filter: str | None):
             PlanEntry.scenario_id,
             PlanEntry.budget_item_id,
             PlanEntry.department,
-            PlanEntry.budget_code.label("plan_budget_code"),
+            func.nullif(func.trim(PlanEntry.budget_code), "").label("plan_budget_code"),
             Scenario.name.label("scenario_name"),
-            func.coalesce(PlanEntry.budget_code, BudgetItem.code).label("budget_code"),
+            func.coalesce(func.nullif(func.trim(PlanEntry.budget_code), ""), BudgetItem.code).label(
+                "budget_code"
+            ),
             BudgetItem.name.label("budget_name"),
             BudgetItem.map_category.label("capex_opex"),
             BudgetItem.map_attribute.label("asset_type"),
@@ -46,7 +50,7 @@ def _plan_read_query(capex_filter: str | None):
             or_(
                 and_(
                     PlanEntry.budget_code.is_not(None),
-                    BudgetItem.code == PlanEntry.budget_code,
+                    normalized_item_code == normalized_plan_code,
                 ),
                 BudgetItem.id == PlanEntry.budget_item_id,
             ),

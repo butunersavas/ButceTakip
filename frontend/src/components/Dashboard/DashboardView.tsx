@@ -7,13 +7,11 @@ import {
   CardContent,
   CardHeader,
   Box,
-  Checkbox,
   Chip,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
-  FormControlLabel,
   Grid,
   List,
   ListItem,
@@ -22,6 +20,7 @@ import {
   Snackbar,
   Skeleton,
   Stack,
+  Switch,
   Table,
   TableBody,
   TableCell,
@@ -109,18 +108,16 @@ type TrendMonth = {
   planned: number;
   actual: number;
   remaining: number;
-  over: number;
-};
-
-type TrendQuarter = {
-  actual: number;
-  over: number;
-  remaining: number;
+  overrun: number;
+  overrun_pct: number;
 };
 
 type TrendResponse = {
+  year: number;
+  scenario_id: number | null;
+  scope: "all" | "item";
+  selected_budget_code: string | null;
   months: TrendMonth[];
-  quarters: Record<"Q1" | "Q2" | "Q3" | "Q4", TrendQuarter>;
 };
 
 interface Scenario {
@@ -264,22 +261,35 @@ function toSafeNumber(value: unknown) {
 
 function buildEmptyTrendResponse(): TrendResponse {
   return {
-    months: [],
-    quarters: {
-      Q1: { actual: 0, over: 0, remaining: 0 },
-      Q2: { actual: 0, over: 0, remaining: 0 },
-      Q3: { actual: 0, over: 0, remaining: 0 },
-      Q4: { actual: 0, over: 0, remaining: 0 }
-    }
+    year: new Date().getFullYear(),
+    scenario_id: null,
+    scope: "all",
+    selected_budget_code: null,
+    months: Array.from({ length: 12 }, (_, index) => ({
+      month: index + 1,
+      planned: 0,
+      actual: 0,
+      remaining: 0,
+      overrun: 0,
+      overrun_pct: 0
+    }))
   };
 }
 
 function normalizeTrendResponse(raw: unknown): TrendResponse {
+  const rawObject = typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>) : {};
   const rawMonths = Array.isArray(raw)
     ? raw
-    : Array.isArray((raw as { months?: unknown[] } | null)?.months)
-      ? (raw as { months?: unknown[] }).months ?? []
+    : Array.isArray(rawObject?.months)
+      ? (rawObject.months as unknown[])
       : [];
+  const responseYear =
+    typeof rawObject?.year === "number" ? rawObject.year : new Date().getFullYear();
+  const responseScenarioId =
+    typeof rawObject?.scenario_id === "number" ? rawObject.scenario_id : null;
+  const responseScope = rawObject?.scope === "item" ? "item" : "all";
+  const responseSelectedBudgetCode =
+    typeof rawObject?.selected_budget_code === "string" ? rawObject.selected_budget_code : null;
 
   const byMonth = new Map<number, TrendMonth>();
   rawMonths.forEach((entry: any) => {
@@ -296,6 +306,7 @@ function normalizeTrendResponse(raw: unknown): TrendResponse {
     const remainingRaw =
       entry?.remaining ?? entry?.remaining_total ?? entry?.total_remaining ?? planned - actual;
     const overRaw =
+      entry?.overrun ??
       entry?.over ??
       entry?.over_total ??
       entry?.overrun ??
@@ -303,13 +314,17 @@ function normalizeTrendResponse(raw: unknown): TrendResponse {
       entry?.total_overrun ??
       actual - planned;
     const remaining = Math.max(toSafeNumber(remainingRaw), 0);
-    const over = Math.max(toSafeNumber(overRaw), 0);
+    const overrun = Math.max(toSafeNumber(overRaw), 0);
+    const overrun_pct = toSafeNumber(
+      entry?.overrun_pct ?? entry?.overrun_percent ?? (planned > 0 ? (overrun / planned) * 100 : 0)
+    );
     byMonth.set(month, {
       month,
       planned,
       actual,
       remaining,
-      over
+      overrun,
+      overrun_pct
     });
   });
 
@@ -321,42 +336,19 @@ function normalizeTrendResponse(raw: unknown): TrendResponse {
         planned: 0,
         actual: 0,
         remaining: 0,
-        over: 0
+        overrun: 0,
+        overrun_pct: 0
       }
     );
   });
 
-  const quarters = {
-    Q1: { actual: 0, over: 0, remaining: 0 },
-    Q2: { actual: 0, over: 0, remaining: 0 },
-    Q3: { actual: 0, over: 0, remaining: 0 },
-    Q4: { actual: 0, over: 0, remaining: 0 }
+  return {
+    year: responseYear,
+    scenario_id: responseScenarioId,
+    scope: responseScope,
+    selected_budget_code: responseSelectedBudgetCode,
+    months
   };
-
-  const quarterIndexMap: Record<number, keyof typeof quarters> = {
-    1: "Q1",
-    2: "Q1",
-    3: "Q1",
-    4: "Q2",
-    5: "Q2",
-    6: "Q2",
-    7: "Q3",
-    8: "Q3",
-    9: "Q3",
-    10: "Q4",
-    11: "Q4",
-    12: "Q4"
-  };
-
-  months.forEach((entry) => {
-    const quarterKey = quarterIndexMap[entry.month];
-    const quarter = quarters[quarterKey];
-    quarter.actual += toSafeNumber(entry.actual);
-    quarter.over += toSafeNumber(entry.over);
-    quarter.remaining += toSafeNumber(entry.remaining);
-  });
-
-  return { months, quarters };
 }
 
 export default function DashboardView() {
@@ -678,8 +670,9 @@ export default function DashboardView() {
       const planned = toSafeNumber(entry.planned);
       const actual = toSafeNumber(entry.actual);
       const remaining = Math.max(toSafeNumber(entry.remaining), 0);
-      const overrun = Math.max(toSafeNumber(entry.over), 0);
-      const overrunPercent = planned > 0 ? (overrun / planned) * 100 : 0;
+      const overrun = Math.max(toSafeNumber(entry.overrun), 0);
+      const overrunPercent =
+        toSafeNumber(entry.overrun_pct) || (planned > 0 ? (overrun / planned) * 100 : 0);
       const month = entry.month;
       const monthLabel = monthLabels[month - 1] ?? `Ay ${month}`;
       return {
@@ -689,6 +682,7 @@ export default function DashboardView() {
         remaining,
         overrun,
         over_pct: planned > 0 ? overrun / planned : 0,
+        overrun_pct: overrunPercent,
         overrun_percent: overrunPercent,
         monthLabel
       };
@@ -784,11 +778,8 @@ export default function DashboardView() {
       setSelectedOverrunItem(null);
     }
   }, [overBudgetItems, selectedOverrunItem]);
-  const maxOverrunPercent = useMemo(() => {
-    return monthlyData.reduce(
-      (maxValue, entry) => Math.max(maxValue, entry.overrun_percent ?? 0),
-      0
-    );
+  const maxOverrunValue = useMemo(() => {
+    return monthlyData.reduce((maxValue, entry) => Math.max(maxValue, entry.overrun ?? 0), 0);
   }, [monthlyData]);
 
   const renderTrendTooltip = ({
@@ -821,8 +812,14 @@ export default function DashboardView() {
           <Typography variant="body2">Planlanan: {formatCurrency(toSafeNumber(data.planned))}</Typography>
           <Typography variant="body2">Gerçekleşen: {formatCurrency(toSafeNumber(data.actual))}</Typography>
           <Typography variant="body2">Kalan: {formatCurrency(toSafeNumber(data.remaining))}</Typography>
-          <Typography variant="body2" color={toSafeNumber(data.overrun) > 0 ? "error.main" : "text.secondary"}>
+          <Typography
+            variant="body2"
+            color={toSafeNumber(data.overrun) > 0 ? "error.main" : "text.secondary"}
+          >
             Aşım: {formatCurrency(toSafeNumber(data.overrun))}
+          </Typography>
+          <Typography variant="body2">
+            Aşım %: {toSafeNumber(data.overrun_pct).toFixed(1)}%
           </Typography>
         </Stack>
       </Box>
@@ -846,7 +843,7 @@ export default function DashboardView() {
       if (isSameFilter) {
         setSelectedOverrunItem(null);
       } else {
-        const top = overBudgetItems?.[0];
+        const top = overBudgetItems.find((item) => toSafeNumber(item.over) > 0);
         if (top) {
           setSelectedOverrunItem({
             budget_code: top.budget_code,
@@ -872,6 +869,9 @@ export default function DashboardView() {
   };
 
   const handleOverBudgetRowClick = (item: OverBudgetItem) => {
+    if (toSafeNumber(item.over) <= 0) {
+      return;
+    }
     setSelectedOverrunItem({
       budget_code: item.budget_code,
       budget_name: item.budget_name
@@ -1214,10 +1214,10 @@ export default function DashboardView() {
                             <YAxis
                               yAxisId="right"
                               orientation="right"
-                              hide={maxOverrunPercent <= 0 || !showOverrun}
-                              domain={[0, Math.max(maxOverrunPercent * 1.2, 5)]}
+                              hide={maxOverrunValue <= 0 || !showOverrun}
+                              domain={[0, Math.max(maxOverrunValue * 1.2, 1)]}
                               tick={{ fill: "#475569" }}
-                              tickFormatter={(value) => `%${Number(value).toFixed(0)}`}
+                              tickFormatter={(value) => formatCurrency(toSafeNumber(value))}
                             />
                             <ReferenceLine y={0} stroke="#9e9e9e" strokeDasharray="3 3" />
                             <RechartsTooltip content={renderTrendTooltip} />
@@ -1247,8 +1247,8 @@ export default function DashboardView() {
                               hide={!showRemaining}
                             />
                             <Line
-                              dataKey="overrun_percent"
-                              name="Aşım (%)"
+                              dataKey="overrun"
+                              name="Aşım"
                               stroke={pieColors.overrun}
                               strokeWidth={2}
                               dot={(props) => {
@@ -1267,7 +1267,7 @@ export default function DashboardView() {
                                 );
                               }}
                               yAxisId="right"
-                              hide={!showOverrun || maxOverrunPercent <= 0}
+                              hide={!showOverrun || maxOverrunValue <= 0}
                             />
                           </ComposedChart>
                         </ResponsiveContainer>
@@ -1330,64 +1330,69 @@ export default function DashboardView() {
                       Çeyreklik görünüm için yeterli veri bulunamadı.
                     </Typography>
                   ) : (
-                    <Grid container spacing={2} justifyContent="space-between" alignItems="center">
+                    <Box
+                      sx={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(4, 1fr)",
+                        gap: 2,
+                        alignItems: "start",
+                        justifyItems: "center"
+                      }}
+                    >
                       {quarterlyTotals.map((quarter) => (
-                        <Grid item xs={12} sm={6} md={3} key={quarter.label}>
-                          <Box
-                            sx={{
-                              width: "100%",
-                              display: "flex",
-                              flexDirection: "column",
-                              alignItems: "center"
-                            }}
+                        <Box
+                          key={quarter.label}
+                          sx={{
+                            width: "100%",
+                            minWidth: 0,
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "center"
+                          }}
+                        >
+                          <Typography
+                            variant="subtitle2"
+                            fontWeight={600}
+                            mb={1}
+                            sx={{ textAlign: "center", width: "100%" }}
                           >
-                            <Typography
-                              variant="subtitle2"
-                              fontWeight={600}
-                              mb={1}
-                              sx={{ alignSelf: "flex-start" }}
-                            >
-                              {quarter.label}
+                            {quarter.label}
+                          </Typography>
+                          {quarter.totalValue <= 0 ? (
+                            <Typography variant="body2" color="text.secondary">
+                              Veri yok
                             </Typography>
-                            {quarter.totalValue <= 0 ? (
-                              <Typography variant="body2" color="text.secondary">
-                                Veri yok
-                              </Typography>
-                            ) : (
-                              <Box sx={{ height: 240, width: "100%" }}>
-                                <SafeChartContainer minHeight={240}>
-                                  <ResponsiveContainer width="100%" height="100%">
-                                    <PieChart>
-                                      <RechartsTooltip
-                                        formatter={(value: number, name: string) => [
-                                          formatCurrency(toSafeNumber(value)),
-                                          name
-                                        ]}
-                                      />
-                                      <Pie
-                                        data={quarter.pieData}
-                                        dataKey="value"
-                                        nameKey="name"
-                                        innerRadius={50}
-                                        outerRadius={80}
-                                        paddingAngle={2}
-                                      >
-                                        {quarter.pieData.map((entry) => (
-                                          <Cell
-                                            key={`${quarter.label}-${entry.name}`}
-                                            fill={entry.color}
-                                          />
-                                        ))}
-                                      </Pie>
-                                    </PieChart>
-                                  </ResponsiveContainer>
-                                </SafeChartContainer>
-                              </Box>
-                            )}
-                          </Box>
-                        </Grid>
+                          ) : (
+                            <Box sx={{ height: 240, width: "100%" }}>
+                              <SafeChartContainer minHeight={240}>
+                                <ResponsiveContainer width="100%" height="100%">
+                                  <PieChart>
+                                    <RechartsTooltip
+                                      formatter={(value: number, name: string) => [
+                                        formatCurrency(toSafeNumber(value)),
+                                        name
+                                      ]}
+                                    />
+                                    <Pie
+                                      data={quarter.pieData}
+                                      dataKey="value"
+                                      nameKey="name"
+                                      innerRadius={50}
+                                      outerRadius={80}
+                                      paddingAngle={2}
+                                    >
+                                      {quarter.pieData.map((entry) => (
+                                        <Cell key={`${quarter.label}-${entry.name}`} fill={entry.color} />
+                                      ))}
+                                    </Pie>
+                                  </PieChart>
+                                </ResponsiveContainer>
+                              </SafeChartContainer>
+                            </Box>
+                          )}
+                        </Box>
                       ))}
-                    </Grid>
+                    </Box>
                   )}
                 </CardContent>
               </Card>
@@ -1505,7 +1510,7 @@ export default function DashboardView() {
               <ListItem
                 key={`${item.budget_item_id}-${item.year}-${item.month}`}
                 secondaryAction={
-                  <Checkbox
+                  <Switch
                     edge="end"
                     checked={item.is_form_prepared}
                     onChange={(e) => {
@@ -1531,17 +1536,14 @@ export default function DashboardView() {
             ))}
           </List>
 
-          <FormControlLabel
-            sx={{ mt: 1 }}
-            control={
-              <Checkbox
-                size="small"
-                checked={dontShowAgainThisMonth}
-                onChange={(e) => setDontShowAgainThisMonth(e.target.checked)}
-              />
-            }
-            label="Bu ay tekrar gösterme"
-          />
+          <Stack direction="row" alignItems="center" spacing={1} sx={{ mt: 1 }}>
+            <Switch
+              size="small"
+              checked={dontShowAgainThisMonth}
+              onChange={(e) => setDontShowAgainThisMonth(e.target.checked)}
+            />
+            <Typography variant="body2">Bu ay tekrar gösterme</Typography>
+          </Stack>
         </DialogContent>
 
         <DialogActions>
