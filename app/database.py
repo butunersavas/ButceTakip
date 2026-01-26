@@ -98,6 +98,9 @@ def ensure_warranty_schema(inspector) -> None:
                     "WHERE certificate_issuer IS NULL AND issuer IS NOT NULL"
                 )
             )
+    if "note" not in warranty_columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE warranty_items ADD COLUMN note TEXT"))
     if "renewal_owner" not in warranty_columns:
         with engine.begin() as connection:
             connection.execute(text("ALTER TABLE warranty_items ADD COLUMN renewal_owner TEXT"))
