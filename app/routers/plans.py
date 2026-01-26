@@ -32,10 +32,12 @@ def _plan_read_query(capex_filter: str | None):
             PlanEntry.department,
             PlanEntry.budget_code.label("plan_budget_code"),
             Scenario.name.label("scenario_name"),
-            BudgetItem.code.label("budget_code"),
+            func.coalesce(PlanEntry.budget_code, BudgetItem.code).label("budget_code"),
             BudgetItem.name.label("budget_name"),
             BudgetItem.map_category.label("capex_opex"),
             BudgetItem.map_attribute.label("asset_type"),
+            BudgetItem.map_category.label("map_capex_opex"),
+            BudgetItem.map_attribute.label("map_nitelik"),
         )
         .select_from(PlanEntry)
         .join(Scenario, Scenario.id == PlanEntry.scenario_id)
@@ -58,6 +60,8 @@ def _plan_read_query(capex_filter: str | None):
 def _build_plan_read(row: dict) -> PlanEntryRead:
     budget_code = row.get("plan_budget_code") or row.get("budget_code")
     budget_name = row.get("budget_name") or budget_code
+    capex_value = row.get("capex_opex") or row.get("map_capex_opex")
+    asset_value = row.get("asset_type") or row.get("map_nitelik")
     return PlanEntryRead(
         id=row.get("id"),
         year=row.get("year"),
@@ -69,8 +73,11 @@ def _build_plan_read(row: dict) -> PlanEntryRead:
         scenario_name=row.get("scenario_name"),
         budget_code=budget_code,
         budget_name=budget_name,
-        capex_opex=row.get("capex_opex").title() if row.get("capex_opex") else None,
-        asset_type=row.get("asset_type"),
+        capex_opex=capex_value.title() if capex_value else None,
+        asset_type=asset_value,
+        map_capex_opex=capex_value.title() if capex_value else None,
+        map_nitelik=asset_value,
+        nitelik=asset_value,
     )
 
 
