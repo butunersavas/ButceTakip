@@ -98,7 +98,25 @@ const mapStatusKey = (status?: string | null) => {
 const formatDate = (value: string | null | undefined) => {
   if (!value) return "-";
   const date = new Date(value + "T00:00:00");
+  if (Number.isNaN(date.getTime())) {
+    return "-";
+  }
   return new Intl.DateTimeFormat("tr-TR").format(date);
+};
+
+const getDisplayText = (...values: Array<unknown>) => {
+  for (const value of values) {
+    if (value === null || value === undefined) continue;
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (!trimmed || trimmed === "-" || trimmed === "—") {
+        continue;
+      }
+      return trimmed;
+    }
+    return String(value);
+  }
+  return "-";
 };
 
 const formatTypeLabel = (value?: string | null) => {
@@ -432,27 +450,29 @@ export default function WarrantyTrackingView() {
         headerName: "Sertifika Sağlayıcı",
         flex: 1,
         valueGetter: (params) =>
-          params?.row?.certificate_issuer ??
-          params?.row?.issuer ??
-          params?.row?.certificateIssuer ??
-          "-",
+          getDisplayText(
+            params?.row?.certificate_issuer,
+            params?.row?.issuer,
+            params?.row?.certificateIssuer
+          ),
       },
       {
         field: "domain",
         headerName: "Domain",
         flex: 1,
-        valueGetter: (params) => params?.row?.domain ?? "-",
+        valueGetter: (params) => getDisplayText(params?.row?.domain),
       },
       {
         field: "renewal_responsible",
         headerName: "Yenileme Sorumlusu",
         flex: 1,
         valueGetter: (params) =>
-          params?.row?.renewal_responsible ??
-          params?.row?.renewal_owner ??
-          params?.row?.renewalResponsible ??
-          params?.row?.renewalOwner ??
-          "-",
+          getDisplayText(
+            params?.row?.renewal_responsible,
+            params?.row?.renewal_owner,
+            params?.row?.renewalResponsible,
+            params?.row?.renewalOwner
+          ),
       },
       {
         field: "end_date",
@@ -533,27 +553,29 @@ export default function WarrantyTrackingView() {
         headerName: "Kaydı Giren",
         flex: 1,
         valueGetter: (params) =>
-          params?.row?.created_by_name ??
-          params?.row?.createdByName ??
-          params?.row?.created_by_username ??
-          "-",
+          getDisplayText(
+            params?.row?.created_by_name,
+            params?.row?.createdByName,
+            params?.row?.created_by_username
+          ),
       },
       {
         field: "updated_by_name",
         headerName: "Son Güncelleyen",
         flex: 1,
         valueGetter: (params) =>
-          params?.row?.updated_by_name ??
-          params?.row?.updatedByName ??
-          params?.row?.updated_by_username ??
-          "-",
+          getDisplayText(
+            params?.row?.updated_by_name,
+            params?.row?.updatedByName,
+            params?.row?.updated_by_username
+          ),
       },
       {
         field: "note",
         headerName: "Not",
         flex: 1.2,
         sortable: false,
-        valueGetter: (params) => params?.row?.note ?? params?.row?.notes ?? "-",
+        valueGetter: (params) => getDisplayText(params?.row?.note, params?.row?.notes),
       },
       {
         field: "actions",

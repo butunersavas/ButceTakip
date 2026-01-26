@@ -975,140 +975,150 @@ export default function ExpensesView() {
                 py: 2
               }}
             >
-              <Box
-                sx={{
-                  display: "flex",
-                  flexWrap: "wrap",
-                  alignItems: "center",
-                  gap: 1.5,
-                  "& .MuiInputBase-root": { height: 40 },
-                  "& .MuiOutlinedInput-input": { padding: "10px 12px" },
-                  "& .MuiButton-root": { height: 40 }
-                }}
+              <Stack
+                direction={{ xs: "column", md: "row" }}
+                spacing={1.5}
+                alignItems={{ xs: "stretch", md: "center" }}
               >
-                <TextField
-                  select
-                  label="Durum"
-                  size="small"
-                  value={statusFilter}
-                  onChange={(event) =>
-                    setStatusFilter(event.target.value as "ACTIVE" | "CANCELLED" | "OUT_OF_BUDGET" | "ALL")
-                  }
-                  sx={{ minWidth: 200 }}
+                <Box
+                  sx={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    alignItems: "center",
+                    gap: 1.5,
+                    flex: 1,
+                    minWidth: 0,
+                    "& .MuiInputBase-root": { height: 40 },
+                    "& .MuiOutlinedInput-input": { padding: "10px 12px" },
+                    "& .MuiButton-root": { height: 40 }
+                  }}
                 >
-                  {statusOptions.map((option) => (
-                    <MenuItem key={option.value} value={option.value}>
-                      {option.label}
-                    </MenuItem>
-                  ))}
-                </TextField>
-                <TextField
-                  select
-                  label="Sahiplik"
-                  size="small"
-                  value={ownershipFilter}
-                  onChange={(event) => setOwnershipFilter(event.target.value as "ALL" | "MINE")}
-                  sx={{ minWidth: 160 }}
-                >
-                  {ownershipOptions.map((option) => (
-                    <MenuItem key={option.value} value={option.value}>
-                      {option.label}
-                    </MenuItem>
-                  ))}
-                </TextField>
-                <TextField
-                  label="Başlangıç Tarihi"
-                  type="date"
-                  size="small"
-                  value={startDate}
-                  onChange={(event) => setStartDate(event.target.value)}
-                  InputLabelProps={{ shrink: true }}
-                  sx={{ minWidth: 170 }}
-                />
-                <TextField
-                  label="Bitiş Tarihi"
-                  type="date"
-                  size="small"
-                  value={endDate}
-                  onChange={(event) => setEndDate(event.target.value)}
-                  InputLabelProps={{ shrink: true }}
-                  sx={{ minWidth: 170 }}
-                />
-                <Autocomplete
-                  size="small"
-                  options={budgetItems ?? []}
-                  value={budgetItems?.find((item) => item.id === budgetItemId) ?? null}
-                  onChange={(_, value) => setBudgetItemId(value?.id ?? null)}
-                  getOptionLabel={(option) => formatBudgetItemLabel(option) || "-"}
-                  filterOptions={budgetFilterOptions}
-                  isOptionEqualToValue={(option, value) => option.id === value.id}
-                  sx={{ minWidth: 320, flex: 1 }}
-                  renderInput={(params) => (
-                    <TextField {...params} label="Bütçe Kalemi" placeholder="Tümü" size="small" />
-                  )}
-                />
-                <TextField
-                  select
-                  label="Capex/Opex"
-                  size="small"
-                  value={capexOpex}
-                  onChange={(event) => setCapexOpex(event.target.value as "" | "capex" | "opex")}
-                  sx={{ minWidth: 170 }}
-                >
-                  <MenuItem value="">Tümü</MenuItem>
-                  <MenuItem value="capex">Capex</MenuItem>
-                  <MenuItem value="opex">Opex</MenuItem>
-                </TextField>
-                <TextField
-                  label="Yıl"
-                  type="number"
-                  size="small"
-                  value={year}
-                  onChange={(event) => setYear(event.target.value ? Number(event.target.value) : "")}
-                  sx={{ minWidth: 110 }}
-                />
-                <TextField
-                  select
-                  label="Senaryo"
-                  size="small"
-                  value={scenarioId ?? ""}
-                  onChange={(event) =>
-                    setScenarioId(event.target.value ? Number(event.target.value) : null)
-                  }
-                  sx={{ minWidth: 220 }}
-                >
-                  <MenuItem value="">Tümü</MenuItem>
-                  {scenarios?.map((scenario) => (
-                    <MenuItem key={scenario.id} value={scenario.id}>
-                      {scenario.name} ({scenario.year})
-                    </MenuItem>
-                  ))}
-                </TextField>
-                <TextField
-                  size="small"
-                  label="Ara"
-                  value={searchText}
-                  onChange={handleSearchChange}
-                  sx={{ minWidth: 200 }}
-                />
-                <IconButton
-                  size="small"
-                  onClick={handleMenuOpen}
-                  aria-label="Daha Fazla"
-                  sx={{ height: 40, width: 40 }}
-                >
-                  <MoreVertIcon fontSize="small" />
-                </IconButton>
-                <Button
-                  variant="text"
-                  color="inherit"
-                  size="small"
-                  onClick={handleResetFilters}
-                  sx={{ height: 40 }}
-                >
-                  Sıfırla
-                </Button>
-              </Box>
+                  <TextField
+                    select
+                    label="Durum"
+                    size="small"
+                    value={statusFilter}
+                    onChange={(event) =>
+                      setStatusFilter(event.target.value as "ACTIVE" | "CANCELLED" | "OUT_OF_BUDGET" | "ALL")
+                    }
+                    sx={{ minWidth: 200 }}
+                  >
+                    {statusOptions.map((option) => (
+                      <MenuItem key={option.value} value={option.value}>
+                        {option.label}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                  <TextField
+                    select
+                    label="Sahiplik"
+                    size="small"
+                    value={ownershipFilter}
+                    onChange={(event) => setOwnershipFilter(event.target.value as "ALL" | "MINE")}
+                    sx={{ minWidth: 160 }}
+                  >
+                    {ownershipOptions.map((option) => (
+                      <MenuItem key={option.value} value={option.value}>
+                        {option.label}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                  <TextField
+                    label="Başlangıç Tarihi"
+                    type="date"
+                    size="small"
+                    value={startDate}
+                    onChange={(event) => setStartDate(event.target.value)}
+                    InputLabelProps={{ shrink: true }}
+                    sx={{ minWidth: 170 }}
+                  />
+                  <TextField
+                    label="Bitiş Tarihi"
+                    type="date"
+                    size="small"
+                    value={endDate}
+                    onChange={(event) => setEndDate(event.target.value)}
+                    InputLabelProps={{ shrink: true }}
+                    sx={{ minWidth: 170 }}
+                  />
+                  <Autocomplete
+                    size="small"
+                    options={budgetItems ?? []}
+                    value={budgetItems?.find((item) => item.id === budgetItemId) ?? null}
+                    onChange={(_, value) => setBudgetItemId(value?.id ?? null)}
+                    getOptionLabel={(option) => formatBudgetItemLabel(option) || "-"}
+                    filterOptions={budgetFilterOptions}
+                    isOptionEqualToValue={(option, value) => option.id === value.id}
+                    sx={{ minWidth: 320, flex: 1 }}
+                    renderInput={(params) => (
+                      <TextField {...params} label="Bütçe Kalemi" placeholder="Tümü" size="small" />
+                    )}
+                  />
+                  <TextField
+                    select
+                    label="Capex/Opex"
+                    size="small"
+                    value={capexOpex}
+                    onChange={(event) => setCapexOpex(event.target.value as "" | "capex" | "opex")}
+                    sx={{ minWidth: 170 }}
+                  >
+                    <MenuItem value="">Tümü</MenuItem>
+                    <MenuItem value="capex">Capex</MenuItem>
+                    <MenuItem value="opex">Opex</MenuItem>
+                  </TextField>
+                  <TextField
+                    label="Yıl"
+                    type="number"
+                    size="small"
+                    value={year}
+                    onChange={(event) => setYear(event.target.value ? Number(event.target.value) : "")}
+                    sx={{ minWidth: 110 }}
+                  />
+                  <TextField
+                    select
+                    label="Senaryo"
+                    size="small"
+                    value={scenarioId ?? ""}
+                    onChange={(event) =>
+                      setScenarioId(event.target.value ? Number(event.target.value) : null)
+                    }
+                    sx={{ minWidth: 220 }}
+                  >
+                    <MenuItem value="">Tümü</MenuItem>
+                    {scenarios?.map((scenario) => (
+                      <MenuItem key={scenario.id} value={scenario.id}>
+                        {scenario.name} ({scenario.year})
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                  <TextField
+                    size="small"
+                    label="Ara"
+                    value={searchText}
+                    onChange={handleSearchChange}
+                    sx={{ minWidth: 200 }}
+                  />
+                </Box>
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ flexShrink: 0 }}>
+                  <IconButton
+                    size="small"
+                    onClick={handleMenuOpen}
+                    aria-label="Daha Fazla"
+                    sx={{ height: 40, width: 40 }}
+                  >
+                    <MoreVertIcon fontSize="small" />
+                  </IconButton>
+                  <Button
+                    variant="text"
+                    color="inherit"
+                    size="small"
+                    onClick={handleResetFilters}
+                    sx={{ height: 40 }}
+                  >
+                    Sıfırla
+                  </Button>
+                </Stack>
+              </Stack>
             </Box>
           </Box>
 
