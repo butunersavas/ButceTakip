@@ -53,14 +53,22 @@ interface PlanEntry {
   scenario_id: number;
   budget_item_id: number;
   department?: string | null;
+  department_name?: string | null;
+  departmentName?: string | null;
   scenario?: string | null;
   scenario_name?: string | null;
+  scenarioName?: string | null;
   budget_code?: string | null;
   budget_name?: string | null;
+  budgetName?: string | null;
   capex_opex?: string | null;
+  capexOpex?: string | null;
   asset_type?: string | null;
+  assetType?: string | null;
   map_capex_opex?: string | null;
   map_nitelik?: string | null;
+  budget_item?: BudgetItem | null;
+  budgetItem?: BudgetItem | null;
 }
 
 type PlanMutationPayload = {
@@ -345,6 +353,51 @@ export default function PlansView() {
     [budgetItemByCode, budgetItemById]
   );
 
+  const getPlanDisplayValues = useCallback(
+    (row?: PlanEntry | null) => {
+      const fallbackItem =
+        row?.budget_item ??
+        row?.budgetItem ??
+        findBudgetItem(row);
+      const scenario =
+        row?.scenario_name ??
+        row?.scenarioName ??
+        (row as any)?.scenario?.name ??
+        scenarioById.get(row?.scenario_id ?? -1)?.name ??
+        "-";
+      const budgetName =
+        row?.budget_name ??
+        row?.budgetName ??
+        (row as any)?.budget_item?.name ??
+        (row as any)?.budgetItem?.name ??
+        fallbackItem?.name ??
+        row?.budget_code ??
+        "-";
+      const budgetCode = row?.budget_code ?? fallbackItem?.code ?? undefined;
+      const budgetLabel =
+        budgetName === "-" ? "-" : formatBudgetItemLabel({ code: budgetCode, name: budgetName });
+      const capexOpex =
+        row?.map_capex_opex ??
+        row?.capex_opex ??
+        row?.capexOpex ??
+        formatCapexLabel(fallbackItem?.map_category) ??
+        "-";
+      const nitelik =
+        row?.map_nitelik ??
+        row?.asset_type ??
+        row?.assetType ??
+        fallbackItem?.map_attribute ??
+        "-";
+      const department =
+        row?.department ??
+        row?.department_name ??
+        row?.departmentName ??
+        "-";
+      return { scenario, budgetLabel, capexOpex, nitelik, department };
+    },
+    [findBudgetItem, scenarioById]
+  );
+
   const departmentOptions = useMemo(() => {
     const options = new Set<string>();
     plansQuery.data?.forEach((plan) => {
@@ -378,11 +431,7 @@ export default function PlansView() {
         headerName: "Senaryo",
         flex: 1,
         valueGetter: (params) => {
-          const row = params?.row;
-          if (!row) {
-            return "-";
-          }
-          return row.scenario_name ?? scenarioById.get(row.scenario_id)?.name ?? "-";
+          return getPlanDisplayValues(params?.row).scenario;
         }
       },
       {
@@ -390,21 +439,7 @@ export default function PlansView() {
         headerName: "Bütçe Kalemi",
         flex: 1,
         valueGetter: (params) => {
-          const row = params?.row;
-          const fallbackItem = findBudgetItem(row);
-          const label =
-            row?.budget_name ??
-            fallbackItem?.name ??
-            row?.budget_code ??
-            fallbackItem?.code ??
-            "-";
-          if (label === "-") {
-            return "-";
-          }
-          return formatBudgetItemLabel({
-            code: row?.budget_code ?? fallbackItem?.code ?? undefined,
-            name: row?.budget_name ?? fallbackItem?.name ?? row?.budget_code ?? ""
-          });
+          return getPlanDisplayValues(params?.row).budgetLabel;
         }
       },
       {
@@ -412,14 +447,7 @@ export default function PlansView() {
         headerName: "Map Capex/Opex",
         flex: 1,
         valueGetter: (params) => {
-          const row = params?.row;
-          const fallbackItem = findBudgetItem(row);
-          return (
-            row?.capex_opex ??
-            row?.map_capex_opex ??
-            formatCapexLabel(fallbackItem?.map_category) ??
-            "-"
-          );
+          return getPlanDisplayValues(params?.row).capexOpex;
         }
       },
       {
@@ -427,16 +455,14 @@ export default function PlansView() {
         headerName: "Map Nitelik",
         flex: 1,
         valueGetter: (params) => {
-          const row = params?.row;
-          const fallbackItem = findBudgetItem(row);
-          return row?.asset_type ?? row?.map_nitelik ?? fallbackItem?.map_attribute ?? "-";
+          return getPlanDisplayValues(params?.row).nitelik;
         }
       },
       {
         field: "department",
         headerName: "Departman",
         flex: 1,
-        valueGetter: (params) => params?.row?.department ?? "-",
+        valueGetter: (params) => getPlanDisplayValues(params?.row).department,
       },
       { field: "year", headerName: "Yıl", width: 110 },
       {
@@ -523,7 +549,7 @@ export default function PlansView() {
         )
       }
     ];
-  }, [findBudgetItem, handleDelete, handleEdit, scenarioById, user?.is_admin]);
+  }, [getPlanDisplayValues, handleDelete, handleEdit, user?.is_admin]);
 
   const monthlyTotals = useMemo(() => {
     const totals = Array(12).fill(0);

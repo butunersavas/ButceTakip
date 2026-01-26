@@ -49,6 +49,13 @@ type WarrantyItem = {
   status_label?: string;
   status_key?: "expired" | "critical" | "approaching" | "ok" | "unknown";
   type_label?: string;
+  certificate_issuer_display?: string;
+  domain_display?: string;
+  renewal_responsible_display?: string;
+  end_date_display?: string;
+  created_by_display?: string;
+  updated_by_display?: string;
+  note_display?: string;
 };
 
 type WarrantyItemForm = {
@@ -104,21 +111,6 @@ const formatDate = (value: string | null | undefined) => {
   return new Intl.DateTimeFormat("tr-TR").format(date);
 };
 
-const getDisplayText = (...values: Array<unknown>) => {
-  for (const value of values) {
-    if (value === null || value === undefined) continue;
-    if (typeof value === "string") {
-      const trimmed = value.trim();
-      if (!trimmed || trimmed === "-" || trimmed === "—") {
-        continue;
-      }
-      return trimmed;
-    }
-    return String(value);
-  }
-  return "-";
-};
-
 const formatTypeLabel = (value?: string | null) => {
   if (value === "DEVICE") return "Cihaz";
   if (value === "SERVICE") return "Bakım/Hizmet";
@@ -151,10 +143,19 @@ const normalizeOptionalText = (value: string | null | undefined) => {
   return trimmed;
 };
 
+const toDisplayText = (value: string | null | undefined) => {
+  if (value == null) return "-";
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed ? trimmed : "-";
+  }
+  return String(value);
+};
+
 const normalizeWarrantyRow = (row: any): WarrantyItem => {
   const start = row?.start_date ?? row?.startDate ?? null;
-  const end =
-    normalizeDateInput(row?.end_date ?? row?.endDate ?? row?.expiration_date ?? null) || null;
+  const endRaw = row?.end_date ?? row?.endDate ?? row?.expiration_date ?? null;
+  const end = normalizeDateInput(endRaw) || null;
   const remindDaysBefore =
     typeof row?.remind_days === "number"
       ? row.remind_days
@@ -179,23 +180,28 @@ const normalizeWarrantyRow = (row: any): WarrantyItem => {
     typeof statusLabel === "string" && statusLabel.trim().length
       ? { label: statusLabel, key: mapStatusKey(statusLabel) }
       : calcStatus(days_left);
-  const certificateIssuer = normalizeOptionalText(
-    row?.certificate_issuer ?? row?.issuer ?? row?.certificateIssuer
-  );
-  const issuer = normalizeOptionalText(
-    row?.issuer ?? row?.certificate_issuer ?? row?.certificateIssuer
-  );
-  const domain = normalizeOptionalText(row?.domain);
-  const renewalResponsible = normalizeOptionalText(
-    row?.renewal_responsible ?? row?.renewal_owner ?? row?.renewalResponsible ?? row?.renewalOwner
-  );
-  const note = normalizeOptionalText(row?.note ?? row?.notes);
-  const createdByName = normalizeOptionalText(
-    row?.created_by_name ?? row?.createdByName ?? row?.created_by_username
-  );
-  const updatedByName = normalizeOptionalText(
-    row?.updated_by_name ?? row?.updatedByName ?? row?.updated_by_username
-  );
+  const certificateIssuerRaw =
+    row?.certificate_issuer ?? row?.issuer ?? row?.certificateIssuer ?? null;
+  const issuerRaw = row?.issuer ?? row?.certificate_issuer ?? row?.certificateIssuer ?? null;
+  const domainRaw = row?.domain ?? null;
+  const renewalResponsibleRaw =
+    row?.renewal_responsible ??
+    row?.renewal_owner ??
+    row?.renewalResponsible ??
+    row?.renewalOwner ??
+    null;
+  const noteRaw = row?.note ?? row?.notes ?? null;
+  const createdByRaw =
+    row?.created_by_name ?? row?.createdByName ?? row?.created_by_username ?? null;
+  const updatedByRaw =
+    row?.updated_by_name ?? row?.updatedByName ?? row?.updated_by_username ?? null;
+  const certificateIssuer = normalizeOptionalText(certificateIssuerRaw);
+  const issuer = normalizeOptionalText(issuerRaw);
+  const domain = normalizeOptionalText(domainRaw);
+  const renewalResponsible = normalizeOptionalText(renewalResponsibleRaw);
+  const note = normalizeOptionalText(noteRaw);
+  const createdByName = normalizeOptionalText(createdByRaw);
+  const updatedByName = normalizeOptionalText(updatedByRaw);
   return {
     ...row,
     id,
@@ -213,6 +219,13 @@ const normalizeWarrantyRow = (row: any): WarrantyItem => {
     note,
     created_by_name: createdByName,
     updated_by_name: updatedByName,
+    certificate_issuer_display: toDisplayText(certificateIssuerRaw ?? issuerRaw ?? null),
+    domain_display: toDisplayText(domainRaw ?? null),
+    renewal_responsible_display: toDisplayText(renewalResponsibleRaw ?? null),
+    end_date_display: toDisplayText(end ?? null),
+    created_by_display: toDisplayText(createdByRaw ?? null),
+    updated_by_display: toDisplayText(updatedByRaw ?? null),
+    note_display: toDisplayText(noteRaw ?? null),
     remind_days: remindDaysBefore,
     remind_days_before: remindDaysBefore,
     reminder_days: remindDaysBefore,
@@ -228,6 +241,7 @@ export default function WarrantyTrackingView() {
   const [success, setSuccess] = useState<string | null>(null);
   const [editingItem, setEditingItem] = useState<WarrantyItem | null>(null);
   const tableRef = useRef<HTMLDivElement | null>(null);
+  const hasLoggedWarrantyResponse = useRef(false);
   const [selectedWarrantyFilter, setSelectedWarrantyFilter] = useState<
     "CRITICAL" | "NEAR" | "EXPIRED" | null
   >(null);
@@ -253,6 +267,10 @@ export default function WarrantyTrackingView() {
     try {
       const { data } = await client.get("/warranty-items");
       const raw = Array.isArray(data) ? data : (data as { items?: WarrantyItem[] } | null)?.items ?? [];
+      if (import.meta.env.DEV && !hasLoggedWarrantyResponse.current && raw[0]) {
+        console.debug("[Warranty] First row response", raw[0]);
+        hasLoggedWarrantyResponse.current = true;
+      }
       const normalized = raw.filter(Boolean).map(normalizeWarrantyRow);
       setItems(normalized);
     } catch (err) {
@@ -449,42 +467,25 @@ export default function WarrantyTrackingView() {
         field: "certificate_issuer",
         headerName: "Sertifika Sağlayıcı",
         flex: 1,
-        valueGetter: (params) =>
-          getDisplayText(
-            params?.row?.certificate_issuer,
-            params?.row?.issuer,
-            params?.row?.certificateIssuer
-          ),
+        valueGetter: (params) => params?.row?.certificate_issuer_display ?? "-",
       },
       {
         field: "domain",
         headerName: "Domain",
         flex: 1,
-        valueGetter: (params) => getDisplayText(params?.row?.domain),
+        valueGetter: (params) => params?.row?.domain_display ?? "-",
       },
       {
         field: "renewal_responsible",
         headerName: "Yenileme Sorumlusu",
         flex: 1,
-        valueGetter: (params) =>
-          getDisplayText(
-            params?.row?.renewal_responsible,
-            params?.row?.renewal_owner,
-            params?.row?.renewalResponsible,
-            params?.row?.renewalOwner
-          ),
+        valueGetter: (params) => params?.row?.renewal_responsible_display ?? "-",
       },
       {
         field: "end_date",
         headerName: "Bitiş Tarihi",
         flex: 0.9,
-        valueGetter: (params) =>
-          formatDate(
-            params?.row?.end_date ??
-              params?.row?.endDate ??
-              params?.row?.expiration_date ??
-              null
-          ),
+        valueGetter: (params) => formatDate(params?.row?.end_date ?? null),
       },
       {
         field: "updated_at",
@@ -552,30 +553,20 @@ export default function WarrantyTrackingView() {
         field: "created_by_name",
         headerName: "Kaydı Giren",
         flex: 1,
-        valueGetter: (params) =>
-          getDisplayText(
-            params?.row?.created_by_name,
-            params?.row?.createdByName,
-            params?.row?.created_by_username
-          ),
+        valueGetter: (params) => params?.row?.created_by_display ?? "-",
       },
       {
         field: "updated_by_name",
         headerName: "Son Güncelleyen",
         flex: 1,
-        valueGetter: (params) =>
-          getDisplayText(
-            params?.row?.updated_by_name,
-            params?.row?.updatedByName,
-            params?.row?.updated_by_username
-          ),
+        valueGetter: (params) => params?.row?.updated_by_display ?? "-",
       },
       {
         field: "note",
         headerName: "Not",
         flex: 1.2,
         sortable: false,
-        valueGetter: (params) => getDisplayText(params?.row?.note, params?.row?.notes),
+        valueGetter: (params) => params?.row?.note_display ?? "-",
       },
       {
         field: "actions",

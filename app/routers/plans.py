@@ -32,6 +32,7 @@ def _plan_read_query(capex_filter: str | None):
             PlanEntry.scenario_id,
             PlanEntry.budget_item_id,
             PlanEntry.department,
+            PlanEntry.department.label("department_name"),
             func.nullif(func.trim(PlanEntry.budget_code), "").label("plan_budget_code"),
             Scenario.name.label("scenario_name"),
             func.coalesce(func.nullif(func.trim(PlanEntry.budget_code), ""), BudgetItem.code).label(
@@ -74,6 +75,7 @@ def _build_plan_read(row: dict) -> PlanEntryRead:
         scenario_id=row.get("scenario_id"),
         budget_item_id=row.get("budget_item_id"),
         department=row.get("department"),
+        department_name=row.get("department_name"),
         scenario_name=row.get("scenario_name"),
         budget_code=budget_code,
         budget_name=budget_name,
