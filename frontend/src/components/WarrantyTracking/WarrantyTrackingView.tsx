@@ -181,20 +181,14 @@ const normalizeWarrantyRow = (row: any): WarrantyItem => {
       ? { label: statusLabel, key: mapStatusKey(statusLabel) }
       : calcStatus(days_left);
   const certificateIssuerRaw =
-    row?.certificate_issuer ?? row?.issuer ?? row?.certificateIssuer ?? null;
+    row?.certificate_issuer ?? row?.issuer ?? row?.certificateIssuer ?? "-";
   const issuerRaw = row?.issuer ?? row?.certificate_issuer ?? row?.certificateIssuer ?? null;
-  const domainRaw = row?.domain ?? null;
+  const domainRaw = row?.domain ?? "-";
   const renewalResponsibleRaw =
-    row?.renewal_responsible ??
-    row?.renewal_owner ??
-    row?.renewalResponsible ??
-    row?.renewalOwner ??
-    null;
-  const noteRaw = row?.note ?? row?.notes ?? null;
-  const createdByRaw =
-    row?.created_by_name ?? row?.createdByName ?? row?.created_by_username ?? null;
-  const updatedByRaw =
-    row?.updated_by_name ?? row?.updatedByName ?? row?.updated_by_username ?? null;
+    row?.renewal_responsible ?? row?.renewal_owner ?? row?.renewalResponsible ?? "-";
+  const noteRaw = row?.note ?? "-";
+  const createdByRaw = row?.created_by_name ?? row?.createdByName ?? "-";
+  const updatedByRaw = row?.updated_by_name ?? row?.updatedByName ?? "-";
   const certificateIssuer = normalizeOptionalText(certificateIssuerRaw);
   const issuer = normalizeOptionalText(issuerRaw);
   const domain = normalizeOptionalText(domainRaw);
@@ -219,13 +213,13 @@ const normalizeWarrantyRow = (row: any): WarrantyItem => {
     note,
     created_by_name: createdByName,
     updated_by_name: updatedByName,
-    certificate_issuer_display: toDisplayText(certificateIssuerRaw ?? issuerRaw ?? null),
-    domain_display: toDisplayText(domainRaw ?? null),
-    renewal_responsible_display: toDisplayText(renewalResponsibleRaw ?? null),
-    end_date_display: toDisplayText(end ?? null),
-    created_by_display: toDisplayText(createdByRaw ?? null),
-    updated_by_display: toDisplayText(updatedByRaw ?? null),
-    note_display: toDisplayText(noteRaw ?? null),
+    certificate_issuer_display: toDisplayText(certificateIssuerRaw),
+    domain_display: toDisplayText(domainRaw),
+    renewal_responsible_display: toDisplayText(renewalResponsibleRaw),
+    end_date_display: toDisplayText(endRaw ?? "-"),
+    created_by_display: toDisplayText(createdByRaw),
+    updated_by_display: toDisplayText(updatedByRaw),
+    note_display: toDisplayText(noteRaw),
     remind_days: remindDaysBefore,
     remind_days_before: remindDaysBefore,
     reminder_days: remindDaysBefore,
@@ -467,25 +461,42 @@ export default function WarrantyTrackingView() {
         field: "certificate_issuer",
         headerName: "Sertifika Sağlayıcı",
         flex: 1,
-        valueGetter: (params) => params?.row?.certificate_issuer_display ?? "-",
+        valueGetter: (params) => {
+          const row = params?.row;
+          const value = row?.certificate_issuer ?? row?.issuer ?? row?.certificateIssuer ?? "-";
+          return toDisplayText(value);
+        },
       },
       {
         field: "domain",
         headerName: "Domain",
         flex: 1,
-        valueGetter: (params) => params?.row?.domain_display ?? "-",
+        valueGetter: (params) => {
+          const row = params?.row;
+          const value = row?.domain ?? "-";
+          return toDisplayText(value);
+        },
       },
       {
         field: "renewal_responsible",
         headerName: "Yenileme Sorumlusu",
         flex: 1,
-        valueGetter: (params) => params?.row?.renewal_responsible_display ?? "-",
+        valueGetter: (params) => {
+          const row = params?.row;
+          const value =
+            row?.renewal_responsible ?? row?.renewal_owner ?? row?.renewalResponsible ?? "-";
+          return toDisplayText(value);
+        },
       },
       {
         field: "end_date",
         headerName: "Bitiş Tarihi",
         flex: 0.9,
-        valueGetter: (params) => formatDate(params?.row?.end_date ?? null),
+        valueGetter: (params) => {
+          const row = params?.row;
+          const value = row?.end_date ?? row?.endDate ?? row?.expiration_date ?? "-";
+          return formatDate(value);
+        },
       },
       {
         field: "updated_at",
@@ -553,20 +564,32 @@ export default function WarrantyTrackingView() {
         field: "created_by_name",
         headerName: "Kaydı Giren",
         flex: 1,
-        valueGetter: (params) => params?.row?.created_by_display ?? "-",
+        valueGetter: (params) => {
+          const row = params?.row;
+          const value = row?.created_by_name ?? row?.createdByName ?? "-";
+          return toDisplayText(value);
+        },
       },
       {
         field: "updated_by_name",
         headerName: "Son Güncelleyen",
         flex: 1,
-        valueGetter: (params) => params?.row?.updated_by_display ?? "-",
+        valueGetter: (params) => {
+          const row = params?.row;
+          const value = row?.updated_by_name ?? row?.updatedByName ?? "-";
+          return toDisplayText(value);
+        },
       },
       {
         field: "note",
         headerName: "Not",
         flex: 1.2,
         sortable: false,
-        valueGetter: (params) => params?.row?.note_display ?? "-",
+        valueGetter: (params) => {
+          const row = params?.row;
+          const value = row?.note ?? "-";
+          return toDisplayText(value);
+        },
       },
       {
         field: "actions",
