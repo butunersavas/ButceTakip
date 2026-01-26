@@ -656,6 +656,23 @@ class SpendMonthlySummary(BaseModel):
     remaining_total: float
 
 
+class SpendTrendMonth(BaseModel):
+    month: int
+    planned: float
+    actual: float
+    remaining: float
+    overrun: float
+    overrun_pct: float
+
+
+class SpendTrendResponse(BaseModel):
+    year: int
+    scenario_id: int | None
+    scope: str
+    selected_budget_code: str | None
+    months: list[SpendTrendMonth]
+
+
 class RiskyItem(BaseModel):
     budget_item_id: int
     budget_code: str

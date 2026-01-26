@@ -12,7 +12,6 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  FormControlLabel,
   Grid,
   IconButton,
   Menu,
@@ -180,12 +179,8 @@ export default function ExpensesView() {
     ""
   );
   const [statusFilter, setStatusFilter] = usePersistentState<
-    "ACTIVE" | "CANCELLED" | "OUT_OF_BUDGET" | "ALL"
+    "ACTIVE" | "CANCELLED" | "OUT_OF_BUDGET" | "ALL" | "MINE" | "TODAY"
   >("expenses:statusFilter", "ACTIVE");
-  const [ownershipFilter, setOwnershipFilter] = usePersistentState<"ALL" | "MINE">(
-    "expenses:ownershipFilter",
-    "ALL"
-  );
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -278,26 +273,60 @@ export default function ExpensesView() {
       startDate,
       endDate,
       capexOpex,
-      statusFilter,
-      ownershipFilter
+      statusFilter
     ],
     queryFn: async () => {
       try {
-        const includeOutOfBudget =
-          statusFilter === "OUT_OF_BUDGET" || statusFilter === "CANCELLED" || statusFilter === "ALL";
-        const showCancelled = statusFilter === "CANCELLED" || statusFilter === "ALL";
-        const mineOnly = ownershipFilter === "MINE";
+        let includeOutOfBudget = false;
+        let showCancelled = false;
+        let mineOnly = false;
+        let todayOnly = false;
+        let statusParam: string | undefined;
+
+        switch (statusFilter) {
+          case "ACTIVE":
+            statusParam = "recorded";
+            break;
+          case "CANCELLED":
+            statusParam = "cancelled";
+            showCancelled = true;
+            includeOutOfBudget = true;
+            break;
+          case "OUT_OF_BUDGET":
+            statusParam = "recorded";
+            includeOutOfBudget = true;
+            break;
+          case "MINE":
+            mineOnly = true;
+            includeOutOfBudget = true;
+            showCancelled = true;
+            break;
+          case "TODAY":
+            todayOnly = true;
+            includeOutOfBudget = true;
+            showCancelled = true;
+            break;
+          case "ALL":
+          default:
+            includeOutOfBudget = true;
+            showCancelled = true;
+            break;
+        }
         const params: Record<string, string | number | boolean> = {};
         if (year) params.year = Number(year);
         if (scenarioId) params.scenario_id = scenarioId;
         if (budgetItemId) params.budget_item_id = budgetItemId;
-        if (startDate) params.start_date = startDate;
-        if (endDate) params.end_date = endDate;
+        if (!todayOnly && startDate) params.start_date = startDate;
+        if (!todayOnly && endDate) params.end_date = endDate;
         if (capexOpex) params.capex_opex = capexOpex;
         params.include_out_of_budget = includeOutOfBudget;
         params.show_cancelled = showCancelled;
         params.show_out_of_budget = includeOutOfBudget;
         params.mine_only = mineOnly;
+        params.today_only = todayOnly;
+        if (statusParam) {
+          params.status_filter = statusParam;
+        }
         const { data } = await client.get<Expense[]>("/expenses", { params });
         return data.map((item) => ({
           ...item,
@@ -770,7 +799,6 @@ export default function ExpensesView() {
     setEndDate("");
     setCapexOpex("");
     setStatusFilter("ACTIVE");
-    setOwnershipFilter("ALL");
     setSelectedExpenseFilter("ALL");
     setSearchText("");
     setFilterModel({ items: [], quickFilterValues: [] });
@@ -784,12 +812,9 @@ export default function ExpensesView() {
     { value: "ACTIVE", label: "Aktif" },
     { value: "CANCELLED", label: "İptal" },
     { value: "OUT_OF_BUDGET", label: "Bütçe Dışı" },
+    { value: "MINE", label: "Sadece Benim" },
+    { value: "TODAY", label: "Bugün" },
     { value: "ALL", label: "Tümü" }
-  ] as const;
-
-  const ownershipOptions = [
-    { value: "ALL", label: "Tümü" },
-    { value: "MINE", label: "Benimkiler" }
   ] as const;
 
   const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -999,25 +1024,19 @@ export default function ExpensesView() {
                     size="small"
                     value={statusFilter}
                     onChange={(event) =>
-                      setStatusFilter(event.target.value as "ACTIVE" | "CANCELLED" | "OUT_OF_BUDGET" | "ALL")
+                      setStatusFilter(
+                        event.target.value as
+                          | "ACTIVE"
+                          | "CANCELLED"
+                          | "OUT_OF_BUDGET"
+                          | "MINE"
+                          | "TODAY"
+                          | "ALL"
+                      )
                     }
                     sx={{ minWidth: 200 }}
                   >
                     {statusOptions.map((option) => (
-                      <MenuItem key={option.value} value={option.value}>
-                        {option.label}
-                      </MenuItem>
-                    ))}
-                  </TextField>
-                  <TextField
-                    select
-                    label="Sahiplik"
-                    size="small"
-                    value={ownershipFilter}
-                    onChange={(event) => setOwnershipFilter(event.target.value as "ALL" | "MINE")}
-                    sx={{ minWidth: 160 }}
-                  >
-                    {ownershipOptions.map((option) => (
                       <MenuItem key={option.value} value={option.value}>
                         {option.label}
                       </MenuItem>
@@ -1100,6 +1119,14 @@ export default function ExpensesView() {
                   />
                 </Box>
                 <Stack direction="row" spacing={1} alignItems="center" sx={{ flexShrink: 0 }}>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={() => refetchExpenses()}
+                    sx={{ height: 40 }}
+                  >
+                    Yenile
+                  </Button>
                   <IconButton
                     size="small"
                     onClick={handleMenuOpen}
@@ -1284,28 +1311,22 @@ export default function ExpensesView() {
                   />
                 </Grid>
                 <Grid item xs={12} md={4}>
-                  <FormControlLabel
-                    control={
-                      <Switch
-                        name="is_cancelled"
-                        defaultChecked={editingExpense?.status === "cancelled"}
-                      />
-                    }
-                    label="İptal Edildi"
-                    sx={{ ml: 0 }}
-                  />
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <Switch
+                      name="is_cancelled"
+                      defaultChecked={editingExpense?.status === "cancelled"}
+                    />
+                    <Typography variant="body2">İptal Edildi</Typography>
+                  </Stack>
                 </Grid>
                 <Grid item xs={12} md={4}>
-                  <FormControlLabel
-                    control={
-                      <Switch
-                        name="is_out_of_budget"
-                        defaultChecked={editingExpense?.is_out_of_budget ?? false}
-                      />
-                    }
-                    label="Bütçe Dışı"
-                    sx={{ ml: 0 }}
-                  />
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <Switch
+                      name="is_out_of_budget"
+                      defaultChecked={editingExpense?.is_out_of_budget ?? false}
+                    />
+                    <Typography variant="body2">Bütçe Dışı</Typography>
+                  </Stack>
                 </Grid>
               </Grid>
             </Stack>
