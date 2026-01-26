@@ -104,14 +104,24 @@ interface OverBudgetResponse {
   items: OverBudgetItem[];
 }
 
-interface SpendMonthlySummary {
+type TrendMonth = {
   month: number;
-  plan_total: number;
-  actual_total: number;
-  within_plan_total: number;
-  over_total: number;
-  remaining_total: number;
-}
+  planned: number;
+  actual: number;
+  remaining: number;
+  over: number;
+};
+
+type TrendQuarter = {
+  actual: number;
+  over: number;
+  remaining: number;
+};
+
+type TrendResponse = {
+  months: TrendMonth[];
+  quarters: Record<"Q1" | "Q2" | "Q3" | "Q4", TrendQuarter>;
+};
 
 interface Scenario {
   id: number;
@@ -250,6 +260,103 @@ function formatBudgetLabel(name?: string | null, code?: string | null) {
 function toSafeNumber(value: unknown) {
   const num = Number(value);
   return Number.isFinite(num) ? num : 0;
+}
+
+function buildEmptyTrendResponse(): TrendResponse {
+  return {
+    months: [],
+    quarters: {
+      Q1: { actual: 0, over: 0, remaining: 0 },
+      Q2: { actual: 0, over: 0, remaining: 0 },
+      Q3: { actual: 0, over: 0, remaining: 0 },
+      Q4: { actual: 0, over: 0, remaining: 0 }
+    }
+  };
+}
+
+function normalizeTrendResponse(raw: unknown): TrendResponse {
+  const rawMonths = Array.isArray(raw)
+    ? raw
+    : Array.isArray((raw as { months?: unknown[] } | null)?.months)
+      ? (raw as { months?: unknown[] }).months ?? []
+      : [];
+
+  const byMonth = new Map<number, TrendMonth>();
+  rawMonths.forEach((entry: any) => {
+    const month = Number(entry?.month);
+    if (!Number.isFinite(month) || month < 1 || month > 12) {
+      return;
+    }
+    const planned = toSafeNumber(
+      entry?.planned ?? entry?.plan_total ?? entry?.plan ?? entry?.total_plan
+    );
+    const actual = toSafeNumber(
+      entry?.actual ?? entry?.actual_total ?? entry?.spent ?? entry?.total_actual
+    );
+    const remainingRaw =
+      entry?.remaining ?? entry?.remaining_total ?? entry?.total_remaining ?? planned - actual;
+    const overRaw =
+      entry?.over ??
+      entry?.over_total ??
+      entry?.overrun ??
+      entry?.overrun_total ??
+      entry?.total_overrun ??
+      actual - planned;
+    const remaining = Math.max(toSafeNumber(remainingRaw), 0);
+    const over = Math.max(toSafeNumber(overRaw), 0);
+    byMonth.set(month, {
+      month,
+      planned,
+      actual,
+      remaining,
+      over
+    });
+  });
+
+  const months = Array.from({ length: 12 }, (_, index) => {
+    const month = index + 1;
+    return (
+      byMonth.get(month) ?? {
+        month,
+        planned: 0,
+        actual: 0,
+        remaining: 0,
+        over: 0
+      }
+    );
+  });
+
+  const quarters = {
+    Q1: { actual: 0, over: 0, remaining: 0 },
+    Q2: { actual: 0, over: 0, remaining: 0 },
+    Q3: { actual: 0, over: 0, remaining: 0 },
+    Q4: { actual: 0, over: 0, remaining: 0 }
+  };
+
+  const quarterIndexMap: Record<number, keyof typeof quarters> = {
+    1: "Q1",
+    2: "Q1",
+    3: "Q1",
+    4: "Q2",
+    5: "Q2",
+    6: "Q2",
+    7: "Q3",
+    8: "Q3",
+    9: "Q3",
+    10: "Q4",
+    11: "Q4",
+    12: "Q4"
+  };
+
+  months.forEach((entry) => {
+    const quarterKey = quarterIndexMap[entry.month];
+    const quarter = quarters[quarterKey];
+    quarter.actual += toSafeNumber(entry.actual);
+    quarter.over += toSafeNumber(entry.over);
+    quarter.remaining += toSafeNumber(entry.remaining);
+  });
+
+  return { months, quarters };
 }
 
 export default function DashboardView() {
@@ -510,11 +617,11 @@ export default function DashboardView() {
   });
 
   const {
-    data: trendMonths = [],
+    data: trendData = buildEmptyTrendResponse(),
     isLoading: isTrendLoading,
     isError: isTrendError,
     refetch: refetchTrend
-  } = useQuery<SpendMonthlySummary[]>({
+  } = useQuery<TrendResponse>({
     queryKey: [
       "dashboard",
       "trend",
@@ -535,8 +642,8 @@ export default function DashboardView() {
       }
       if (debouncedFilters.department) params.department = debouncedFilters.department;
       if (debouncedFilters.capexOpex) params.capex_opex = debouncedFilters.capexOpex;
-      const { data } = await client.get<SpendMonthlySummary[]>("/dashboard/trend", { params });
-      return data ?? [];
+      const { data } = await client.get("/dashboard/trend", { params });
+      return normalizeTrendResponse(data);
     },
     enabled: Boolean(debouncedFilters.year)
   });
@@ -567,25 +674,13 @@ export default function DashboardView() {
   };
 
   const monthlyData = useMemo(() => {
-    const months = Array.from({ length: 12 }, (_, index) => index + 1);
-    const byMonth = new Map(
-      (trendMonths ?? [])
-        .map((entry) => ({ ...entry, month: Number(entry.month) }))
-        .filter((entry) => entry.month >= 1 && entry.month <= 12)
-        .map((entry) => [entry.month, entry] as const)
-    );
-
-    return months.map((month) => {
-      const entry = byMonth.get(month) ?? ({} as Partial<SpendMonthlySummary>);
-      const planned = toSafeNumber(entry.plan_total ?? (entry as any).planned ?? (entry as any).plan);
-      const actual = toSafeNumber(entry.actual_total ?? (entry as any).actual ?? (entry as any).spent);
-      const remainingRaw =
-        entry.remaining_total ?? Math.max(planned - actual, 0);
-      const overRaw =
-        entry.over_total ?? (entry as any).overrun_total ?? Math.max(actual - planned, 0);
-      const remaining = Math.max(toSafeNumber(remainingRaw), 0);
-      const overrun = Math.max(toSafeNumber(overRaw), 0);
+    return trendData.months.map((entry) => {
+      const planned = toSafeNumber(entry.planned);
+      const actual = toSafeNumber(entry.actual);
+      const remaining = Math.max(toSafeNumber(entry.remaining), 0);
+      const overrun = Math.max(toSafeNumber(entry.over), 0);
       const overrunPercent = planned > 0 ? (overrun / planned) * 100 : 0;
+      const month = entry.month;
       const monthLabel = monthLabels[month - 1] ?? `Ay ${month}`;
       return {
         month,
@@ -598,7 +693,7 @@ export default function DashboardView() {
         monthLabel
       };
     });
-  }, [trendMonths]);
+  }, [trendData.months]);
 
   const quarterlyTotals = useMemo(() => {
     const quarters = [
@@ -1080,7 +1175,7 @@ export default function DashboardView() {
                           : "Tüm Kalemler"
                       }
                       color={selectedOverrunItem ? "error" : "primary"}
-                      variant={selectedOverrunItem ? "filled" : "outlined"}
+                      variant="filled"
                       onClick={
                         selectedOverrunItem ? () => setSelectedOverrunItem(null) : undefined
                       }
