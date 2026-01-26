@@ -277,9 +277,11 @@ function buildEmptyTrendResponse(): TrendResponse {
 }
 
 function normalizeTrendResponse(raw: unknown): TrendResponse {
-  const rawObject = typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>) : {};
-  const rawMonths = Array.isArray(raw)
-    ? raw
+  const input = (raw as any)?.data ?? raw;
+  const rawObject =
+    typeof input === "object" && input !== null ? (input as Record<string, unknown>) : {};
+  const rawMonths = Array.isArray(input)
+    ? (input as unknown[])
     : Array.isArray(rawObject?.months)
       ? (rawObject.months as unknown[])
       : [];
@@ -386,6 +388,7 @@ export default function DashboardView() {
   const overBudgetRef = useRef<HTMLDivElement | null>(null);
   const trendSectionRef = useRef<HTMLDivElement | null>(null);
   const highlightTimeoutRef = useRef<number | null>(null);
+  const hasLoggedTrendResponse = useRef(false);
 
   const monthOptions = [
     { value: 1, label: "Ocak" },
@@ -635,6 +638,10 @@ export default function DashboardView() {
       if (debouncedFilters.department) params.department = debouncedFilters.department;
       if (debouncedFilters.capexOpex) params.capex_opex = debouncedFilters.capexOpex;
       const { data } = await client.get("/dashboard/trend", { params });
+      if (import.meta.env.DEV && !hasLoggedTrendResponse.current) {
+        console.debug("[Dashboard] Trend response", data);
+        hasLoggedTrendResponse.current = true;
+      }
       return normalizeTrendResponse(data);
     },
     enabled: Boolean(debouncedFilters.year)
@@ -665,8 +672,10 @@ export default function DashboardView() {
     setSelectedOverrunItem(null);
   };
 
+  const trendMonths = Array.isArray(trendData.months) ? trendData.months : [];
+  const hasTrendMonths = Array.isArray(trendData.months);
   const monthlyData = useMemo(() => {
-    return trendData.months.map((entry) => {
+    return trendMonths.map((entry) => {
       const planned = toSafeNumber(entry.planned);
       const actual = toSafeNumber(entry.actual);
       const remaining = Math.max(toSafeNumber(entry.remaining), 0);
@@ -687,7 +696,7 @@ export default function DashboardView() {
         monthLabel
       };
     });
-  }, [trendData.months]);
+  }, [trendMonths]);
 
   const quarterlyTotals = useMemo(() => {
     const quarters = [
@@ -763,9 +772,20 @@ export default function DashboardView() {
   const showRemaining = !selectedKpiFilter || selectedKpiFilter === "total_remaining";
   const showOverrun = !selectedKpiFilter || selectedKpiFilter === "total_overrun";
   const showOverBudgetSection = !budgetItemId || forceShowOverBudget;
-  const hasTrendData = monthlyData.some(
+  const hasTrendData = hasTrendMonths && monthlyData.some(
     (entry) => entry.planned > 0 || entry.actual > 0 || entry.remaining > 0 || entry.overrun > 0
   );
+  const selectedOverrunSummary = useMemo(() => {
+    if (!selectedOverrunItem) {
+      return null;
+    }
+    return (
+      overBudgetItems.find((item) => item.budget_code === selectedOverrunItem.budget_code) ??
+      null
+    );
+  }, [overBudgetItems, selectedOverrunItem]);
+  const hasSelectedOverrun =
+    selectedOverrunItem && toSafeNumber(selectedOverrunSummary?.over) > 0;
 
   useEffect(() => {
     if (!selectedOverrunItem) {
@@ -843,7 +863,16 @@ export default function DashboardView() {
       if (isSameFilter) {
         setSelectedOverrunItem(null);
       } else {
-        const top = overBudgetItems.find((item) => toSafeNumber(item.over) > 0);
+        const top = overBudgetItems.reduce<OverBudgetItem | null>((best, item) => {
+          const over = toSafeNumber(item.over);
+          if (over <= 0) {
+            return best;
+          }
+          if (!best || over > toSafeNumber(best.over)) {
+            return item;
+          }
+          return best;
+        }, null);
         if (top) {
           setSelectedOverrunItem({
             budget_code: top.budget_code,
@@ -1167,20 +1196,20 @@ export default function DashboardView() {
                     </Typography>
                     <Chip
                       label={
-                        selectedOverrunItem
+                        hasSelectedOverrun
                           ? `Aşım: ${formatBudgetLabel(
                               selectedOverrunItem.budget_name,
                               selectedOverrunItem.budget_code
                             )}`
                           : "Tüm Kalemler"
                       }
-                      color={selectedOverrunItem ? "error" : "primary"}
+                      color={hasSelectedOverrun ? "error" : "primary"}
                       variant="filled"
                       onClick={
-                        selectedOverrunItem ? () => setSelectedOverrunItem(null) : undefined
+                        hasSelectedOverrun ? () => setSelectedOverrunItem(null) : undefined
                       }
                       sx={{
-                        cursor: selectedOverrunItem ? "pointer" : "default"
+                        cursor: hasSelectedOverrun ? "pointer" : "default"
                       }}
                     />
                   </Stack>
@@ -1197,6 +1226,8 @@ export default function DashboardView() {
                     >
                       Aylık Trend yüklenirken hata oluştu.
                     </Alert>
+                  ) : !hasTrendMonths ? (
+                    <Alert severity="info">Boş veri.</Alert>
                   ) : !hasTrendData ? (
                     <Alert severity="info">Trend verisi yok.</Alert>
                   ) : (
@@ -1333,8 +1364,12 @@ export default function DashboardView() {
                     <Box
                       sx={{
                         display: "grid",
-                        gridTemplateColumns: "repeat(4, 1fr)",
-                        gap: 2,
+                        gridTemplateColumns: {
+                          xs: "repeat(1, minmax(0, 1fr))",
+                          sm: "repeat(2, minmax(0, 1fr))",
+                          lg: "repeat(4, minmax(0, 1fr))"
+                        },
+                        gap: 3,
                         alignItems: "start",
                         justifyItems: "center"
                       }}

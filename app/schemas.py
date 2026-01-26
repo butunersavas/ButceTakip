@@ -199,6 +199,7 @@ class PlanEntryRead(SQLModel, table=False):
     scenario_id: int
     budget_item_id: int
     department: Optional[str] = None
+    department_name: Optional[str] = None
     scenario_name: Optional[str] = None
     budget_code: Optional[str] = None
     budget_name: Optional[str] = None
