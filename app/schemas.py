@@ -441,6 +441,10 @@ class WarrantyItemBase(BaseModel):
             values.setdefault("certificate_issuer", values.get("issuer"))
         if "renewalResponsible" in values and "renewal_responsible" not in values:
             values["renewal_responsible"] = values.get("renewalResponsible")
+        if "renewalOwner" in values and "renewal_owner" not in values:
+            values["renewal_owner"] = values.get("renewalOwner")
+        if "renewalOwner" in values and "renewal_responsible" not in values:
+            values["renewal_responsible"] = values.get("renewalOwner")
         if "renewal_owner" in values and "renewal_responsible" not in values:
             values.setdefault("renewal_responsible", values.get("renewal_owner"))
         if "renewal_owner" not in values and "renewal_responsible" in values:
@@ -524,6 +528,10 @@ class WarrantyItemUpdate(BaseModel):
             values.setdefault("certificate_issuer", values.get("issuer"))
         if "renewalResponsible" in values and "renewal_responsible" not in values:
             values["renewal_responsible"] = values.get("renewalResponsible")
+        if "renewalOwner" in values and "renewal_owner" not in values:
+            values["renewal_owner"] = values.get("renewalOwner")
+        if "renewalOwner" in values and "renewal_responsible" not in values:
+            values["renewal_responsible"] = values.get("renewalOwner")
         if "renewal_owner" in values and "renewal_responsible" not in values:
             values.setdefault("renewal_responsible", values.get("renewal_owner"))
         if "renewal_owner" not in values and "renewal_responsible" in values:

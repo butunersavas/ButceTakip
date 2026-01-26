@@ -1102,7 +1102,13 @@ export default function ExpensesView() {
                 >
                   <MoreVertIcon fontSize="small" />
                 </IconButton>
-                <Button variant="text" color="inherit" size="small" onClick={handleResetFilters}>
+                <Button
+                  variant="text"
+                  color="inherit"
+                  size="small"
+                  onClick={handleResetFilters}
+                  sx={{ height: 40 }}
+                >
                   Sıfırla
                 </Button>
               </Box>

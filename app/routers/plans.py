@@ -56,6 +56,8 @@ def _plan_read_query(capex_filter: str | None):
 
 
 def _build_plan_read(row: dict) -> PlanEntryRead:
+    budget_code = row.get("plan_budget_code") or row.get("budget_code")
+    budget_name = row.get("budget_name") or budget_code
     return PlanEntryRead(
         id=row.get("id"),
         year=row.get("year"),
@@ -65,8 +67,8 @@ def _build_plan_read(row: dict) -> PlanEntryRead:
         budget_item_id=row.get("budget_item_id"),
         department=row.get("department"),
         scenario_name=row.get("scenario_name"),
-        budget_code=row.get("plan_budget_code") or row.get("budget_code"),
-        budget_name=row.get("budget_name"),
+        budget_code=budget_code,
+        budget_name=budget_name,
         capex_opex=row.get("capex_opex").title() if row.get("capex_opex") else None,
         asset_type=row.get("asset_type"),
     )
