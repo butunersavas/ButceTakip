@@ -204,6 +204,9 @@ class PlanEntryRead(SQLModel, table=False):
     budget_name: Optional[str] = None
     capex_opex: Optional[str] = None
     asset_type: Optional[str] = None
+    map_capex_opex: Optional[str] = None
+    map_nitelik: Optional[str] = None
+    nitelik: Optional[str] = None
 
     class Config:
         orm_mode = True

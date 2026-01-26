@@ -8,19 +8,18 @@ import {
   CardActionArea,
   CardContent,
   Chip,
-  Checkbox,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControlLabel,
   Grid,
   IconButton,
   Menu,
   MenuItem,
-  OutlinedInput,
-  Select,
   Snackbar,
   Stack,
+  Switch,
   TextField,
   Tooltip,
   Typography
@@ -180,9 +179,13 @@ export default function ExpensesView() {
     "expenses:capexOpex",
     ""
   );
-  const [statusSelections, setStatusSelections] = usePersistentState<
-    Array<"ACTIVE" | "CANCELLED" | "OUT_OF_BUDGET" | "MINE" | "TODAY">
-  >("expenses:statusSelections", ["ACTIVE"]);
+  const [statusFilter, setStatusFilter] = usePersistentState<
+    "ACTIVE" | "CANCELLED" | "OUT_OF_BUDGET" | "ALL"
+  >("expenses:statusFilter", "ACTIVE");
+  const [ownershipFilter, setOwnershipFilter] = usePersistentState<"ALL" | "MINE">(
+    "expenses:ownershipFilter",
+    "ALL"
+  );
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -275,14 +278,15 @@ export default function ExpensesView() {
       startDate,
       endDate,
       capexOpex,
-      statusSelections
+      statusFilter,
+      ownershipFilter
     ],
     queryFn: async () => {
       try {
-        const includeOutOfBudget = statusSelections.includes("OUT_OF_BUDGET");
-        const showCancelled = statusSelections.includes("CANCELLED");
-        const mineOnly = statusSelections.includes("MINE");
-        const todayOnly = statusSelections.includes("TODAY");
+        const includeOutOfBudget =
+          statusFilter === "OUT_OF_BUDGET" || statusFilter === "CANCELLED" || statusFilter === "ALL";
+        const showCancelled = statusFilter === "CANCELLED" || statusFilter === "ALL";
+        const mineOnly = ownershipFilter === "MINE";
         const params: Record<string, string | number | boolean> = {};
         if (year) params.year = Number(year);
         if (scenarioId) params.scenario_id = scenarioId;
@@ -294,7 +298,6 @@ export default function ExpensesView() {
         params.show_cancelled = showCancelled;
         params.show_out_of_budget = includeOutOfBudget;
         params.mine_only = mineOnly;
-        params.today_only = todayOnly;
         const { data } = await client.get<Expense[]>("/expenses", { params });
         return data.map((item) => ({
           ...item,
@@ -766,7 +769,8 @@ export default function ExpensesView() {
     setStartDate("");
     setEndDate("");
     setCapexOpex("");
-    setStatusSelections(["ACTIVE"]);
+    setStatusFilter("ACTIVE");
+    setOwnershipFilter("ALL");
     setSelectedExpenseFilter("ALL");
     setSearchText("");
     setFilterModel({ items: [], quickFilterValues: [] });
@@ -778,18 +782,15 @@ export default function ExpensesView() {
 
   const statusOptions = [
     { value: "ACTIVE", label: "Aktif" },
-    { value: "CANCELLED", label: "İptal Edildi" },
+    { value: "CANCELLED", label: "İptal" },
     { value: "OUT_OF_BUDGET", label: "Bütçe Dışı" },
-    { value: "TODAY", label: "Bugüne ait" },
-    { value: "MINE", label: "Sadece benim" }
+    { value: "ALL", label: "Tümü" }
   ] as const;
 
-  const handleStatusSelectionsChange = (value: string[]) => {
-    const nextSelections = value.length ? value : ["ACTIVE"];
-    setStatusSelections(
-      nextSelections as Array<"ACTIVE" | "CANCELLED" | "OUT_OF_BUDGET" | "MINE" | "TODAY">
-    );
-  };
+  const ownershipOptions = [
+    { value: "ALL", label: "Tümü" },
+    { value: "MINE", label: "Benimkiler" }
+  ] as const;
 
   const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = event.target.value;
@@ -985,40 +986,36 @@ export default function ExpensesView() {
                   "& .MuiButton-root": { height: 40 }
                 }}
               >
-                <Select
-                  multiple
+                <TextField
+                  select
+                  label="Durum"
                   size="small"
-                  value={statusSelections}
+                  value={statusFilter}
                   onChange={(event) =>
-                    handleStatusSelectionsChange(
-                      typeof event.target.value === "string"
-                        ? event.target.value.split(",")
-                        : (event.target.value as string[])
-                    )
+                    setStatusFilter(event.target.value as "ACTIVE" | "CANCELLED" | "OUT_OF_BUDGET" | "ALL")
                   }
-                  input={<OutlinedInput label="Durum" />}
-                  displayEmpty
-                  renderValue={(selected) => {
-                    if (!selected.length) {
-                      return "Durum";
-                    }
-                    return statusOptions
-                      .filter((option) => selected.includes(option.value))
-                      .map((option) => option.label)
-                      .join(", ");
-                  }}
                   sx={{ minWidth: 200 }}
                 >
                   {statusOptions.map((option) => (
                     <MenuItem key={option.value} value={option.value}>
-                      <Checkbox
-                        size="small"
-                        checked={statusSelections.includes(option.value)}
-                      />
-                      <Typography variant="body2">{option.label}</Typography>
+                      {option.label}
                     </MenuItem>
                   ))}
-                </Select>
+                </TextField>
+                <TextField
+                  select
+                  label="Sahiplik"
+                  size="small"
+                  value={ownershipFilter}
+                  onChange={(event) => setOwnershipFilter(event.target.value as "ALL" | "MINE")}
+                  sx={{ minWidth: 160 }}
+                >
+                  {ownershipOptions.map((option) => (
+                    <MenuItem key={option.value} value={option.value}>
+                      {option.label}
+                    </MenuItem>
+                  ))}
+                </TextField>
                 <TextField
                   label="Başlangıç Tarihi"
                   type="date"

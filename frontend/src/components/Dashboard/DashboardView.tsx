@@ -7,6 +7,7 @@ import {
   CardContent,
   CardHeader,
   Box,
+  Checkbox,
   Chip,
   Dialog,
   DialogActions,
@@ -511,7 +512,8 @@ export default function DashboardView() {
   const {
     data: trendMonths = [],
     isLoading: isTrendLoading,
-    isError: isTrendError
+    isError: isTrendError,
+    refetch: refetchTrend
   } = useQuery<SpendMonthlySummary[]>({
     queryKey: [
       "dashboard",
@@ -673,9 +675,67 @@ export default function DashboardView() {
   const hasTrendData = monthlyData.some(
     (entry) => entry.planned > 0 || entry.actual > 0 || entry.remaining > 0 || entry.overrun > 0
   );
+
+  useEffect(() => {
+    if (!selectedOverrunItem) {
+      return;
+    }
+    const stillExists = overBudgetItems.some(
+      (item) => item.budget_code === selectedOverrunItem.budget_code
+    );
+    if (!stillExists) {
+      setSelectedOverrunItem(null);
+    }
+  }, [overBudgetItems, selectedOverrunItem]);
   const maxOverrun = useMemo(() => {
     return monthlyData.reduce((maxValue, entry) => Math.max(maxValue, entry.overrun), 0);
   }, [monthlyData]);
+
+  const renderTrendTooltip = ({
+    active,
+    payload,
+    label
+  }: {
+    active?: boolean;
+    payload?: Array<{ payload?: (typeof monthlyData)[number] }>;
+    label?: string;
+  }) => {
+    if (!active || !payload?.length) return null;
+    const data = payload[0]?.payload;
+    if (!data) return null;
+    return (
+      <Box
+        sx={{
+          bgcolor: "background.paper",
+          border: "1px solid",
+          borderColor: "divider",
+          borderRadius: 2,
+          px: 1.5,
+          py: 1
+        }}
+      >
+        <Typography variant="subtitle2" fontWeight={600} gutterBottom>
+          {label}
+        </Typography>
+        <Stack spacing={0.4}>
+          <Typography variant="body2">Planlanan: {formatCurrency(toSafeNumber(data.planned))}</Typography>
+          <Typography variant="body2">Gerçekleşen: {formatCurrency(toSafeNumber(data.actual))}</Typography>
+          <Typography variant="body2">Kalan: {formatCurrency(toSafeNumber(data.remaining))}</Typography>
+          <Typography
+            variant="body2"
+            color={toSafeNumber(data.overrun) > 0 ? "error.main" : "text.secondary"}
+          >
+            Aşım:{" "}
+            {`${formatCurrency(toSafeNumber(data.overrun))}${
+              toSafeNumber(data.planned) > 0
+                ? ` (%${(toSafeNumber(data.overrun) / toSafeNumber(data.planned) * 100).toFixed(1)})`
+                : ""
+            }`}
+          </Typography>
+        </Stack>
+      </Box>
+    );
+  };
 
   useEffect(() => {
     return () => {
@@ -1035,7 +1095,16 @@ export default function DashboardView() {
                   {isTrendLoading ? (
                     <Skeleton variant="rectangular" height="100%" />
                   ) : isTrendError ? (
-                    <Alert severity="error">Aylık Trend yüklenirken hata oluştu.</Alert>
+                    <Alert
+                      severity="error"
+                      action={
+                        <Button color="inherit" size="small" onClick={() => refetchTrend()}>
+                          Tekrar Dene
+                        </Button>
+                      }
+                    >
+                      Aylık Trend yüklenirken hata oluştu.
+                    </Alert>
                   ) : !hasTrendData ? (
                     <Alert severity="info">Trend verisi yok.</Alert>
                   ) : (
@@ -1059,19 +1128,7 @@ export default function DashboardView() {
                               tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
                             />
                             <ReferenceLine y={0} stroke="#9e9e9e" strokeDasharray="3 3" />
-                            <RechartsTooltip
-                              formatter={(value: number, name: string, props: any) => {
-                                if (name === "Aşım") {
-                                  const pct = toSafeNumber(props?.payload?.over_pct);
-                                  return [
-                                    `${formatCurrency(toSafeNumber(value))} (%${(pct * 100).toFixed(1)})`,
-                                    name
-                                  ];
-                                }
-                                return [formatCurrency(toSafeNumber(value)), name];
-                              }}
-                              labelFormatter={(label) => label}
-                            />
+                            <RechartsTooltip content={renderTrendTooltip} />
                             <Legend />
                             <Bar
                               dataKey="planned"
@@ -1102,7 +1159,21 @@ export default function DashboardView() {
                               name="Aşım"
                               stroke={pieColors.overrun}
                               strokeWidth={2}
-                              dot={{ r: 3 }}
+                              dot={(props) => {
+                                if (!props?.payload || props.payload.overrun <= 0) {
+                                  return null;
+                                }
+                                return (
+                                  <circle
+                                    cx={props.cx}
+                                    cy={props.cy}
+                                    r={4}
+                                    fill={pieColors.overrun}
+                                    stroke="#fff"
+                                    strokeWidth={1}
+                                  />
+                                );
+                              }}
                               yAxisId="right"
                               hide={!showOverrun || maxOverrun <= 0}
                             />
