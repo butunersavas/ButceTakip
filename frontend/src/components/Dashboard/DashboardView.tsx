@@ -169,18 +169,18 @@ type WarrantyCriticalItem = {
 };
 
 const monthLabels = [
-  "Ocak",
-  "Şubat",
-  "Mart",
-  "Nisan",
-  "Mayıs",
-  "Haziran",
-  "Temmuz",
-  "Ağustos",
-  "Eylül",
-  "Ekim",
-  "Kasım",
-  "Aralık"
+  "Oca",
+  "Şub",
+  "Mar",
+  "Nis",
+  "May",
+  "Haz",
+  "Tem",
+  "Ağu",
+  "Eyl",
+  "Eki",
+  "Kas",
+  "Ara"
 ];
 
 const pieColors: Record<keyof QuarterlySummary, string> = {
@@ -299,26 +299,14 @@ function normalizeTrendResponse(raw: unknown): TrendResponse {
     if (!Number.isFinite(month) || month < 1 || month > 12) {
       return;
     }
-    const planned = toSafeNumber(
-      entry?.planned ?? entry?.plan_total ?? entry?.plan ?? entry?.total_plan
-    );
-    const actual = toSafeNumber(
-      entry?.actual ?? entry?.actual_total ?? entry?.spent ?? entry?.total_actual
-    );
-    const remainingRaw =
-      entry?.remaining ?? entry?.remaining_total ?? entry?.total_remaining ?? planned - actual;
-    const overRaw =
-      entry?.overrun ??
-      entry?.over ??
-      entry?.over_total ??
-      entry?.overrun ??
-      entry?.overrun_total ??
-      entry?.total_overrun ??
-      actual - planned;
+    const planned = toSafeNumber(entry?.planned);
+    const actual = toSafeNumber(entry?.actual);
+    const remainingRaw = entry?.remaining ?? planned - actual;
+    const overRaw = entry?.overrun ?? actual - planned;
     const remaining = Math.max(toSafeNumber(remainingRaw), 0);
     const overrun = Math.max(toSafeNumber(overRaw), 0);
     const overrun_pct = toSafeNumber(
-      entry?.overrun_pct ?? entry?.overrun_percent ?? (planned > 0 ? (overrun / planned) * 100 : 0)
+      entry?.overrun_pct ?? (planned > 0 ? (overrun / planned) * 100 : 0)
     );
     byMonth.set(month, {
       month,
@@ -634,6 +622,7 @@ export default function DashboardView() {
       if (trendBudgetItemId) params.budget_item_id = trendBudgetItemId;
       if (selectedOverrunItem?.budget_code) {
         params.budget_code = selectedOverrunItem.budget_code;
+        params.selected_budget_code = selectedOverrunItem.budget_code;
       }
       if (debouncedFilters.department) params.department = debouncedFilters.department;
       if (debouncedFilters.capexOpex) params.capex_opex = debouncedFilters.capexOpex;
@@ -860,26 +849,24 @@ export default function DashboardView() {
     if (filterKey === "total_overrun") {
       setForceShowOverBudget(true);
       setHighlightOverBudget(true);
-      if (isSameFilter) {
-        setSelectedOverrunItem(null);
-      } else {
-        const top = overBudgetItems.reduce<OverBudgetItem | null>((best, item) => {
-          const over = toSafeNumber(item.over);
-          if (over <= 0) {
-            return best;
-          }
-          if (!best || over > toSafeNumber(best.over)) {
-            return item;
-          }
+      const top = overBudgetItems.reduce<OverBudgetItem | null>((best, item) => {
+        const over = toSafeNumber(item.over);
+        if (over <= 0) {
           return best;
-        }, null);
-        if (top) {
+        }
+        if (!best || over > toSafeNumber(best.over)) {
+          return item;
+        }
+        return best;
+      }, null);
+      if (top) {
+        if (isSameFilter) {
+          setSelectedOverrunItem(null);
+        } else {
           setSelectedOverrunItem({
             budget_code: top.budget_code,
             budget_name: top.budget_name
           });
-        } else {
-          setSelectedOverrunItem(null);
         }
       }
       if (highlightTimeoutRef.current) {
