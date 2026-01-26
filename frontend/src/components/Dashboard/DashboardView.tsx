@@ -7,6 +7,7 @@ import {
   CardContent,
   CardHeader,
   Box,
+  Checkbox,
   Chip,
   Dialog,
   DialogActions,
