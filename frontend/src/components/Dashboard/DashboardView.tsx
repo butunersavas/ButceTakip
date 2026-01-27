@@ -861,6 +861,77 @@ export default function DashboardView() {
     }, 0);
   };
 
+  if (isLoading || !dashboard) {
+    return (
+      <Box
+        sx={{
+          width: "100%",
+          maxWidth: "none",
+          ml: 0,
+          mr: 0,
+          px: { xs: 2, md: 3 },
+          py: { xs: 2, md: 3 },
+          overflowX: "hidden"
+        }}
+      >
+        <Stack spacing={2} sx={{ width: "100%" }}>
+          <Skeleton variant="rectangular" height={52} sx={{ borderRadius: 1 }} />
+          <Grid container spacing={2} sx={{ mb: 3 }}>
+            {Array.from({ length: 4 }).map((_, index) => (
+              <Grid item xs={12} sm={6} md={3} key={`dashboard-skeleton-${index}`}>
+                <Card>
+                  <CardContent>
+                    <Skeleton variant="text" width="40%" />
+                    <Skeleton variant="rectangular" height={64} sx={{ borderRadius: 1 }} />
+                  </CardContent>
+                </Card>
+              </Grid>
+            ))}
+          </Grid>
+          <Stack spacing={3}>
+            <Card>
+              <CardHeader title={<Skeleton variant="text" width="30%" />} />
+              <CardContent>
+                <Skeleton variant="rectangular" height={120} sx={{ borderRadius: 1 }} />
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent>
+                <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
+                  <Skeleton variant="text" width="35%" />
+                  <Skeleton variant="rectangular" width={120} height={32} sx={{ borderRadius: 1 }} />
+                </Stack>
+                <Skeleton variant="rectangular" height={200} sx={{ borderRadius: 1 }} />
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent>
+                <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
+                  <Skeleton variant="text" width="35%" />
+                </Stack>
+                <Skeleton variant="rectangular" height={260} sx={{ borderRadius: 1 }} />
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent>
+                <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
+                  <Skeleton variant="text" width="35%" />
+                </Stack>
+                <Grid container spacing={2}>
+                  {Array.from({ length: 4 }).map((_, index) => (
+                    <Grid item xs={12} sm={6} md={3} key={`quarter-skeleton-${index}`}>
+                      <Skeleton variant="rectangular" height={180} sx={{ borderRadius: 1 }} />
+                    </Grid>
+                  ))}
+                </Grid>
+              </CardContent>
+            </Card>
+          </Stack>
+        </Stack>
+      </Box>
+    );
+  }
+
   return (
     <>
       <Box
@@ -1045,7 +1116,7 @@ export default function DashboardView() {
                     </Typography>
                   ) : (
                     <List dense>
-                      {riskyItems.map((item) => {
+                      {riskyItems?.map((item) => {
                         const plan = toSafeNumber(item.plan);
                         const actual = toSafeNumber(item.actual);
                         const ratioPct = Math.round(toSafeNumber(item.ratio) * 100);
@@ -1107,7 +1178,7 @@ export default function DashboardView() {
                             </TableRow>
                           </TableHead>
                           <TableBody>
-                            {overBudgetItems.slice(0, 10).map((item) => {
+                            {overBudgetItems?.slice(0, 10)?.map((item) => {
                               const plan = toSafeNumber(item.plan);
                               const actual = toSafeNumber(item.actual);
                               const over = toSafeNumber(item.over);
@@ -1177,8 +1248,12 @@ export default function DashboardView() {
                     >
                       Aylık Trend yüklenirken hata oluştu.
                     </Alert>
-                  ) : !hasTrendMonths ? (
-                    <Alert severity="info">Trend verisi yok.</Alert>
+                  ) : !monthlyData?.length ? (
+                    <Box sx={{ py: 4, textAlign: "center" }}>
+                      <Typography variant="body2" color="text.secondary">
+                        Veri bulunamadı.
+                      </Typography>
+                    </Box>
                   ) : !hasTrendData ? (
                     <Alert severity="info">Trend verisi yok.</Alert>
                   ) : (
@@ -1325,7 +1400,7 @@ export default function DashboardView() {
                         justifyItems: "center"
                       }}
                     >
-                      {quarterlyTotals.map((quarter) => (
+                      {quarterlyTotals?.map((quarter) => (
                         <Box
                           key={quarter.label}
                           sx={{
@@ -1344,7 +1419,11 @@ export default function DashboardView() {
                           >
                             {quarter.label}
                           </Typography>
-                          {quarter.totalValue <= 0 ? (
+                          {!quarter.pieData?.length ? (
+                            <Typography variant="body2" color="text.secondary">
+                              Veri bulunamadı.
+                            </Typography>
+                          ) : quarter.totalValue <= 0 ? (
                             <Typography variant="body2" color="text.secondary">
                               Veri yok
                             </Typography>
@@ -1367,7 +1446,7 @@ export default function DashboardView() {
                                       outerRadius={80}
                                       paddingAngle={2}
                                     >
-                                      {quarter.pieData.map((entry) => (
+                                      {quarter.pieData?.map((entry) => (
                                         <Cell key={`${quarter.label}-${entry.name}`} fill={entry.color} />
                                       ))}
                                     </Pie>
@@ -1397,7 +1476,7 @@ export default function DashboardView() {
         </DialogTitle>
         <DialogContent dividers>
           <List dense sx={{ maxHeight: 400, overflowY: "auto" }}>
-            {criticalWarrantyItems.map((item) => (
+            {criticalWarrantyItems?.map((item) => (
               <ListItem key={item.id}>
                 <ListItemText
                   primary={`${item.type === "DEVICE" ? "Cihaz" : "Bakım/Hizmet"} — ${item.name} / ${item.location} — ${item.days_left} gün kaldı (Bitiş: ${item.end_date})`}
@@ -1449,7 +1528,7 @@ export default function DashboardView() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {overBudgetItems.map((item) => {
+                {overBudgetItems?.map((item) => {
                   const plan = toSafeNumber(item.plan);
                   const actual = toSafeNumber(item.actual);
                   const over = toSafeNumber(item.over);
@@ -1492,7 +1571,7 @@ export default function DashboardView() {
           </Typography>
 
           <List dense sx={{ maxHeight: 500, overflowY: "auto" }}>
-            {purchaseItems.map((item, index) => (
+            {purchaseItems?.map((item, index) => (
               <ListItem
                 key={`${item.budget_item_id}-${item.year}-${item.month}`}
                 secondaryAction={
