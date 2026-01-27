@@ -1279,7 +1279,7 @@ export default function DashboardView() {
                         <ResponsiveContainer width="100%" height="100%">
                           <ComposedChart data={monthlyData}>
                             <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
-                            <XAxis dataKey="monthLabel" tick={{ fill: "#475569" }} />
+                            <XAxis dataKey="name" tick={{ fill: "#475569" }} />
                             <YAxis
                               yAxisId="left"
                               tick={{ fill: "#475569" }}
