@@ -265,14 +265,7 @@ function buildEmptyTrendResponse(): TrendResponse {
     scenario_id: null,
     scope: "all",
     selected_budget_code: null,
-    months: Array.from({ length: 12 }, (_, index) => ({
-      month: index + 1,
-      planned: 0,
-      actual: 0,
-      remaining: 0,
-      overrun: 0,
-      overrun_pct: 0
-    }))
+    months: []
   };
 }
 
@@ -293,43 +286,16 @@ function normalizeTrendResponse(raw: unknown): TrendResponse {
   const responseSelectedBudgetCode =
     typeof rawObject?.selected_budget_code === "string" ? rawObject.selected_budget_code : null;
 
-  const byMonth = new Map<number, TrendMonth>();
-  rawMonths.forEach((entry: any) => {
+  const months = rawMonths.map((entry: any, index) => {
     const month = Number(entry?.month);
-    if (!Number.isFinite(month) || month < 1 || month > 12) {
-      return;
-    }
-    const planned = toSafeNumber(entry?.planned);
-    const actual = toSafeNumber(entry?.actual);
-    const remainingRaw = entry?.remaining ?? planned - actual;
-    const overRaw = entry?.overrun ?? actual - planned;
-    const remaining = Math.max(toSafeNumber(remainingRaw), 0);
-    const overrun = Math.max(toSafeNumber(overRaw), 0);
-    const overrun_pct = toSafeNumber(
-      entry?.overrun_pct ?? (planned > 0 ? (overrun / planned) * 100 : 0)
-    );
-    byMonth.set(month, {
-      month,
-      planned,
-      actual,
-      remaining,
-      overrun,
-      overrun_pct
-    });
-  });
-
-  const months = Array.from({ length: 12 }, (_, index) => {
-    const month = index + 1;
-    return (
-      byMonth.get(month) ?? {
-        month,
-        planned: 0,
-        actual: 0,
-        remaining: 0,
-        overrun: 0,
-        overrun_pct: 0
-      }
-    );
+    return {
+      month: Number.isFinite(month) ? month : index + 1,
+      planned: toSafeNumber(entry?.planned),
+      actual: toSafeNumber(entry?.actual),
+      remaining: toSafeNumber(entry?.remaining),
+      overrun: toSafeNumber(entry?.overrun),
+      overrun_pct: toSafeNumber(entry?.overrun_pct)
+    };
   });
 
   return {
@@ -621,7 +587,6 @@ export default function DashboardView() {
       const trendBudgetItemId = selectedOverrunBudgetItemId ?? debouncedFilters.budgetItemId;
       if (trendBudgetItemId) params.budget_item_id = trendBudgetItemId;
       if (selectedOverrunItem?.budget_code) {
-        params.budget_code = selectedOverrunItem.budget_code;
         params.selected_budget_code = selectedOverrunItem.budget_code;
       }
       if (debouncedFilters.department) params.department = debouncedFilters.department;
@@ -662,16 +627,15 @@ export default function DashboardView() {
   };
 
   const trendMonths = Array.isArray(trendData.months) ? trendData.months : [];
-  const hasTrendMonths = Array.isArray(trendData.months);
+  const hasTrendMonths = trendMonths.length > 0;
   const monthlyData = useMemo(() => {
     return trendMonths.map((entry) => {
-      const planned = toSafeNumber(entry.planned);
-      const actual = toSafeNumber(entry.actual);
-      const remaining = Math.max(toSafeNumber(entry.remaining), 0);
-      const overrun = Math.max(toSafeNumber(entry.overrun), 0);
-      const overrunPercent =
-        toSafeNumber(entry.overrun_pct) || (planned > 0 ? (overrun / planned) * 100 : 0);
-      const month = entry.month;
+      const planned = Number(entry?.planned ?? 0);
+      const actual = Number(entry?.actual ?? 0);
+      const remaining = Number(entry?.remaining ?? 0);
+      const overrun = Number(entry?.overrun ?? 0);
+      const overrunPercent = Number(entry?.overrun_pct ?? 0);
+      const month = Number(entry?.month ?? 0);
       const monthLabel = monthLabels[month - 1] ?? `Ay ${month}`;
       return {
         month,
@@ -1214,7 +1178,7 @@ export default function DashboardView() {
                       Aylık Trend yüklenirken hata oluştu.
                     </Alert>
                   ) : !hasTrendMonths ? (
-                    <Alert severity="info">Boş veri.</Alert>
+                    <Alert severity="info">Trend verisi yok.</Alert>
                   ) : !hasTrendData ? (
                     <Alert severity="info">Trend verisi yok.</Alert>
                   ) : (
