@@ -603,7 +603,7 @@ export default function DashboardView() {
       const trendBudgetItemId = selectedOverrunBudgetItemId ?? debouncedFilters.budgetItemId;
       if (trendBudgetItemId) params.budget_item_id = trendBudgetItemId;
       if (selectedOverrunItem?.budget_code) {
-        params.selected_budget_code = selectedOverrunItem.budget_code;
+        params.budget_code = selectedOverrunItem.budget_code;
       }
       if (debouncedFilters.department) params.department = debouncedFilters.department;
       if (debouncedFilters.capexOpex) params.capex_opex = debouncedFilters.capexOpex;
@@ -655,6 +655,7 @@ export default function DashboardView() {
       const monthLabel = monthLabels[month - 1] ?? `Ay ${month}`;
       return {
         month,
+        name: monthLabel,
         monthLabel,
         planned,
         actual,
