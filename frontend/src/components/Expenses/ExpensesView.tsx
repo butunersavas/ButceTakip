@@ -591,21 +591,21 @@ export default function ExpensesView() {
         field: "expense_date",
         headerName: "Tarih",
         width: 140,
-        valueFormatter: ({ value }) => dayjs(value as string).format("DD MMMM YYYY")
+        valueFormatter: (value) => dayjs(value as string).format("DD MMMM YYYY")
       },
       {
         field: "budget_name",
         headerName: "Bütçe Kalemi",
         width: 240,
-        valueGetter: (params) => {
-          const row = params?.row;
-          const label = row?.budget_name ?? row?.budget_code ?? "-";
+        valueGetter: (_value, row) => {
+          const r = row as any;
+          const label = r?.budget_name ?? r?.budget_code ?? "-";
           if (label === "-") {
             return "-";
           }
           return formatBudgetItemLabel({
-            code: row?.budget_code ?? undefined,
-            name: row?.budget_name ?? row?.budget_code ?? ""
+            code: r?.budget_code ?? undefined,
+            name: r?.budget_name ?? r?.budget_code ?? ""
           });
         }
       },
@@ -613,36 +613,41 @@ export default function ExpensesView() {
         field: "capex_opex",
         headerName: "Map Capex/Opex",
         width: 180,
-        valueGetter: (params) => {
-          return params?.row?.capex_opex ?? "-";
+        valueGetter: (_value, row) => {
+          const r = row as any;
+          return r?.capex_opex ?? "-";
         }
       },
       {
         field: "asset_type",
         headerName: "Map Nitelik",
         width: 180,
-        valueGetter: (params) => {
-          return params?.row?.asset_type ?? "-";
+        valueGetter: (_value, row) => {
+          const r = row as any;
+          return r?.asset_type ?? "-";
         }
       },
       {
         field: "department",
         headerName: "Departman",
         width: 160,
-        valueGetter: (params) => params?.row?.department ?? "-"
+        valueGetter: (_value, row) => {
+          const r = row as any;
+          return r?.department ?? "-";
+        }
       },
       {
         field: "scenario_id",
         headerName: "Bütçe Yılı",
         width: 150,
-        valueGetter: (params) => {
-          const row = params?.row;
-          if (!row || row.scenario_id == null || !Array.isArray(scenarios)) {
+        valueGetter: (_value, row) => {
+          const r = row as any;
+          if (!r || r.scenario_id == null || !Array.isArray(scenarios)) {
             return "";
           }
 
           const scenario = scenarios.find(
-            (item) => item && (item.scenario_id === row.scenario_id || item.id === row.scenario_id)
+            (item) => item && (item.scenario_id === r.scenario_id || item.id === r.scenario_id)
           );
 
           return scenario?.year ?? "";
@@ -745,7 +750,10 @@ export default function ExpensesView() {
         headerName: "Bütçe Dışı",
         width: 140,
         type: "boolean",
-        valueGetter: (params) => Boolean(params?.row?.is_out_of_budget),
+        valueGetter: (_value, row) => {
+          const r = row as any;
+          return Boolean(r?.is_out_of_budget);
+        },
         renderCell: ({ row }) =>
           row.is_out_of_budget ? (
             <Chip label="Bütçe Dışı" color="warning" size="small" />

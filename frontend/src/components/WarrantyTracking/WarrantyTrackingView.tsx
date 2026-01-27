@@ -453,7 +453,10 @@ export default function WarrantyTrackingView() {
         field: "type",
         headerName: "Tip",
         flex: 0.7,
-        valueGetter: (params) => formatTypeLabel(params?.row?.type),
+        valueGetter: (_value, row) => {
+          const r = row as any;
+          return formatTypeLabel(r?.type);
+        },
       },
       { field: "name", headerName: "Ad", flex: 1.2 },
       { field: "location", headerName: "Lokasyon", flex: 1 },
@@ -461,9 +464,9 @@ export default function WarrantyTrackingView() {
         field: "certificate_issuer",
         headerName: "Sertifika Sağlayıcı",
         flex: 1,
-        valueGetter: (params) => {
-          const row = params?.row;
-          const value = row?.certificate_issuer ?? row?.issuer ?? row?.certificateIssuer ?? "-";
+        valueGetter: (_value, row) => {
+          const r = row as any;
+          const value = r?.certificate_issuer ?? r?.issuer ?? r?.certificateIssuer ?? "-";
           return toDisplayText(value);
         },
       },
@@ -471,9 +474,9 @@ export default function WarrantyTrackingView() {
         field: "domain",
         headerName: "Domain",
         flex: 1,
-        valueGetter: (params) => {
-          const row = params?.row;
-          const value = row?.domain ?? "-";
+        valueGetter: (_value, row) => {
+          const r = row as any;
+          const value = r?.domain ?? "-";
           return toDisplayText(value);
         },
       },
@@ -481,10 +484,10 @@ export default function WarrantyTrackingView() {
         field: "renewal_responsible",
         headerName: "Yenileme Sorumlusu",
         flex: 1,
-        valueGetter: (params) => {
-          const row = params?.row;
+        valueGetter: (_value, row) => {
+          const r = row as any;
           const value =
-            row?.renewal_responsible ?? row?.renewal_owner ?? row?.renewalResponsible ?? "-";
+            r?.renewal_responsible ?? r?.renewal_owner ?? r?.renewalResponsible ?? "-";
           return toDisplayText(value);
         },
       },
@@ -492,9 +495,9 @@ export default function WarrantyTrackingView() {
         field: "end_date",
         headerName: "Bitiş Tarihi",
         flex: 0.9,
-        valueGetter: (params) => {
-          const row = params?.row;
-          const value = row?.end_date ?? row?.endDate ?? row?.expiration_date ?? "-";
+        valueGetter: (_value, row) => {
+          const r = row as any;
+          const value = r?.end_date ?? r?.endDate ?? r?.expiration_date ?? "-";
           return formatDate(value);
         },
       },
@@ -502,8 +505,10 @@ export default function WarrantyTrackingView() {
         field: "updated_at",
         headerName: "Son Güncelleme",
         flex: 0.9,
-        valueGetter: (params) =>
-          formatDate(params?.row?.updated_at ?? params?.row?.updatedAt ?? null),
+        valueGetter: (_value, row) => {
+          const r = row as any;
+          return formatDate(r?.updated_at ?? r?.updatedAt ?? null);
+        },
       },
       {
         field: "days_left",
@@ -564,9 +569,9 @@ export default function WarrantyTrackingView() {
         field: "created_by_name",
         headerName: "Kaydı Giren",
         flex: 1,
-        valueGetter: (params) => {
-          const row = params?.row;
-          const value = row?.created_by_name ?? row?.createdByName ?? "-";
+        valueGetter: (_value, row) => {
+          const r = row as any;
+          const value = r?.created_by_name ?? r?.createdByName ?? "-";
           return toDisplayText(value);
         },
       },
@@ -574,9 +579,9 @@ export default function WarrantyTrackingView() {
         field: "updated_by_name",
         headerName: "Son Güncelleyen",
         flex: 1,
-        valueGetter: (params) => {
-          const row = params?.row;
-          const value = row?.updated_by_name ?? row?.updatedByName ?? "-";
+        valueGetter: (_value, row) => {
+          const r = row as any;
+          const value = r?.updated_by_name ?? r?.updatedByName ?? "-";
           return toDisplayText(value);
         },
       },
@@ -585,9 +590,9 @@ export default function WarrantyTrackingView() {
         headerName: "Not",
         flex: 1.2,
         sortable: false,
-        valueGetter: (params) => {
-          const row = params?.row;
-          const value = row?.note ?? "-";
+        valueGetter: (_value, row) => {
+          const r = row as any;
+          const value = r?.note ?? "-";
           return toDisplayText(value);
         },
       },

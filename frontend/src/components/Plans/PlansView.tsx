@@ -430,47 +430,55 @@ export default function PlansView() {
         field: "scenario",
         headerName: "Senaryo",
         flex: 1,
-        valueGetter: (params) => {
-          return getPlanDisplayValues(params?.row).scenario;
+        valueGetter: (_value, row) => {
+          const r = row as any;
+          return getPlanDisplayValues(r).scenario;
         }
       },
       {
         field: "budget",
         headerName: "Bütçe Kalemi",
         flex: 1,
-        valueGetter: (params) => {
-          return getPlanDisplayValues(params?.row).budgetLabel;
+        valueGetter: (_value, row) => {
+          const r = row as any;
+          return getPlanDisplayValues(r).budgetLabel;
         }
       },
       {
         field: "capex_opex",
         headerName: "Map Capex/Opex",
         flex: 1,
-        valueGetter: (params) => {
-          return getPlanDisplayValues(params?.row).capexOpex;
+        valueGetter: (_value, row) => {
+          const r = row as any;
+          return getPlanDisplayValues(r).capexOpex;
         }
       },
       {
         field: "asset_type",
         headerName: "Map Nitelik",
         flex: 1,
-        valueGetter: (params) => {
-          return getPlanDisplayValues(params?.row).nitelik;
+        valueGetter: (_value, row) => {
+          const r = row as any;
+          return getPlanDisplayValues(r).nitelik;
         }
       },
       {
         field: "department",
         headerName: "Departman",
         flex: 1,
-        valueGetter: (params) => getPlanDisplayValues(params?.row).department,
+        valueGetter: (_value, row) => {
+          const r = row as any;
+          return getPlanDisplayValues(r).department;
+        },
       },
       { field: "year", headerName: "Yıl", width: 110 },
       {
         field: "month",
         headerName: "Ay",
         width: 120,
-        valueGetter: (params) => {
-          const raw = params?.row?.month;
+        valueGetter: (_value, row) => {
+          const r = row as any;
+          const raw = r?.month;
 
           // month zaten sayıysa
           if (typeof raw === "number") {
