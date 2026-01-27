@@ -259,6 +259,11 @@ function toSafeNumber(value: unknown) {
   return Number.isFinite(num) ? num : 0;
 }
 
+function asNumber(value: unknown) {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : 0;
+}
+
 function buildEmptyTrendResponse(): TrendResponse {
   return {
     year: new Date().getFullYear(),
@@ -269,15 +274,21 @@ function buildEmptyTrendResponse(): TrendResponse {
   };
 }
 
+function normalizeTrendMonths(raw: unknown) {
+  if (Array.isArray(raw)) {
+    return raw;
+  }
+  if (raw && typeof raw === "object" && Array.isArray((raw as { months?: unknown }).months)) {
+    return (raw as { months: unknown[] }).months;
+  }
+  return [];
+}
+
 function normalizeTrendResponse(raw: unknown): TrendResponse {
   const input = (raw as any)?.data ?? raw;
   const rawObject =
     typeof input === "object" && input !== null ? (input as Record<string, unknown>) : {};
-  const rawMonths = Array.isArray(input)
-    ? (input as unknown[])
-    : Array.isArray(rawObject?.months)
-      ? (rawObject.months as unknown[])
-      : [];
+  const rawMonths = normalizeTrendMonths(input);
   const responseYear =
     typeof rawObject?.year === "number" ? rawObject.year : new Date().getFullYear();
   const responseScenarioId =
@@ -287,14 +298,19 @@ function normalizeTrendResponse(raw: unknown): TrendResponse {
     typeof rawObject?.selected_budget_code === "string" ? rawObject.selected_budget_code : null;
 
   const months = rawMonths.map((entry: any, index) => {
-    const month = Number(entry?.month);
+    const month = asNumber(entry?.month);
+    const planned = entry?.planned ?? entry?.plan_total;
+    const actual = entry?.actual ?? entry?.actual_total;
+    const remaining = entry?.remaining ?? entry?.remaining_total;
+    const overrun = entry?.overrun ?? entry?.over_total;
+    const overrunPct = entry?.overrun_pct ?? entry?.over_pct;
     return {
       month: Number.isFinite(month) ? month : index + 1,
-      planned: toSafeNumber(entry?.planned),
-      actual: toSafeNumber(entry?.actual),
-      remaining: toSafeNumber(entry?.remaining),
-      overrun: toSafeNumber(entry?.overrun),
-      overrun_pct: toSafeNumber(entry?.overrun_pct)
+      planned: asNumber(planned),
+      actual: asNumber(actual),
+      remaining: asNumber(remaining),
+      overrun: asNumber(overrun),
+      overrun_pct: asNumber(overrunPct)
     };
   });
 
@@ -630,23 +646,23 @@ export default function DashboardView() {
   const hasTrendMonths = trendMonths.length > 0;
   const monthlyData = useMemo(() => {
     return trendMonths.map((entry) => {
-      const planned = Number(entry?.planned ?? 0);
-      const actual = Number(entry?.actual ?? 0);
-      const remaining = Number(entry?.remaining ?? 0);
-      const overrun = Number(entry?.overrun ?? 0);
-      const overrunPercent = Number(entry?.overrun_pct ?? 0);
-      const month = Number(entry?.month ?? 0);
+      const planned = asNumber(entry?.planned ?? entry?.plan_total);
+      const actual = asNumber(entry?.actual ?? entry?.actual_total);
+      const remaining = asNumber(entry?.remaining ?? entry?.remaining_total);
+      const overrun = asNumber(entry?.overrun ?? entry?.over_total);
+      const overrunPct = asNumber(entry?.overrun_pct ?? entry?.over_pct);
+      const month = asNumber(entry?.month ?? 0);
       const monthLabel = monthLabels[month - 1] ?? `Ay ${month}`;
       return {
         month,
+        monthLabel,
         planned,
         actual,
         remaining,
         overrun,
+        overrunPct,
         over_pct: planned > 0 ? overrun / planned : 0,
-        overrun_pct: overrunPercent,
-        overrun_percent: overrunPercent,
-        monthLabel
+        overrun_pct: overrunPct
       };
     });
   }, [trendMonths]);
@@ -792,7 +808,7 @@ export default function DashboardView() {
             Aşım: {formatCurrency(toSafeNumber(data.overrun))}
           </Typography>
           <Typography variant="body2">
-            Aşım %: {toSafeNumber(data.overrun_pct).toFixed(1)}%
+            Aşım %: {toSafeNumber(data.overrunPct ?? data.overrun_pct).toFixed(1)}%
           </Typography>
         </Stack>
       </Box>
@@ -1251,7 +1267,7 @@ export default function DashboardView() {
                   ) : !monthlyData?.length ? (
                     <Box sx={{ py: 4, textAlign: "center" }}>
                       <Typography variant="body2" color="text.secondary">
-                        Veri bulunamadı.
+                        Trend verisi yok.
                       </Typography>
                     </Box>
                   ) : !hasTrendData ? (
