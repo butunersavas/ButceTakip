@@ -3,8 +3,15 @@ import type { ReactNode } from "react";
 import { Box, Skeleton } from "@mui/material";
 import type { SxProps, Theme } from "@mui/material/styles";
 
+type SafeChartContainerSize = {
+  width: number;
+  height: number;
+};
+
+type SafeChartContainerChildren = ReactNode | ((size: SafeChartContainerSize) => ReactNode);
+
 type SafeChartContainerProps = {
-  children: ReactNode;
+  children: SafeChartContainerChildren;
   minHeight?: number;
   sx?: SxProps<Theme>;
 };
@@ -15,7 +22,7 @@ export default function SafeChartContainer({
   sx
 }: SafeChartContainerProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const [size, setSize] = useState({ width: 0, height: 0 });
+  const [size, setSize] = useState<SafeChartContainerSize>({ width: 0, height: 0 });
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -34,7 +41,15 @@ export default function SafeChartContainer({
 
   return (
     <Box ref={containerRef} sx={{ width: "100%", height: "100%", minHeight, ...sx }}>
-      {isReady ? children : <Skeleton variant="rectangular" height="100%" />}
+      {isReady ? (
+        typeof children === "function" ? (
+          children(size)
+        ) : (
+          children
+        )
+      ) : (
+        <Skeleton variant="rectangular" height="100%" />
+      )}
     </Box>
   );
 }
