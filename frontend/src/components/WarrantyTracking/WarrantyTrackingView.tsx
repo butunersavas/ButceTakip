@@ -680,44 +680,7 @@ export default function WarrantyTrackingView() {
       </Grid>
 
       <Grid container spacing={3} alignItems="flex-start">
-        <Grid item xs={12} lg={8} ref={tableRef}>
-          <Card variant="outlined">
-            <CardContent sx={{ height: 560 }}>
-              <Typography variant="h6" fontWeight={600} gutterBottom>
-                Garanti Kayıtları
-              </Typography>
-              {activeFilterLabel && (
-                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
-                  <Chip
-                    color="primary"
-                    size="small"
-                    label={`Aktif filtre: ${activeFilterLabel}`}
-                    onDelete={() => setSelectedWarrantyFilter(null)}
-                  />
-                  <Button size="small" variant="text" onClick={() => setSelectedWarrantyFilter(null)}>
-                    Temizle
-                  </Button>
-                </Stack>
-              )}
-              {(filteredItems ?? []).length === 0 ? (
-                <Alert severity="info">Henüz garanti kaydı yok.</Alert>
-              ) : (
-                <DataGrid
-                  rows={filteredItems ?? []}
-                  getRowId={(row) => row?.id}
-                  columns={columns}
-                  loading={loading}
-                  disableRowSelectionOnClick
-                  autoHeight={false}
-                  pageSizeOptions={[5, 10, 20]}
-                  initialState={{ pagination: { paginationModel: { pageSize: 10, page: 0 } } }}
-                  sx={{ border: "none" }}
-                />
-              )}
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} lg={4}>
+        <Grid item xs={12}>
           <Card variant="outlined">
             <CardContent>
               <Typography variant="h6" fontWeight={600} gutterBottom>
@@ -834,6 +797,43 @@ export default function WarrantyTrackingView() {
                 <Alert severity="success" sx={{ mt: 2 }}>
                   {success}
                 </Alert>
+              )}
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} ref={tableRef}>
+          <Card variant="outlined">
+            <CardContent sx={{ height: 560 }}>
+              <Typography variant="h6" fontWeight={600} gutterBottom>
+                Garanti Kayıtları
+              </Typography>
+              {activeFilterLabel && (
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
+                  <Chip
+                    color="primary"
+                    size="small"
+                    label={`Aktif filtre: ${activeFilterLabel}`}
+                    onDelete={() => setSelectedWarrantyFilter(null)}
+                  />
+                  <Button size="small" variant="text" onClick={() => setSelectedWarrantyFilter(null)}>
+                    Temizle
+                  </Button>
+                </Stack>
+              )}
+              {(filteredItems ?? []).length === 0 ? (
+                <Alert severity="info">Henüz garanti kaydı yok.</Alert>
+              ) : (
+                <DataGrid
+                  rows={filteredItems ?? []}
+                  getRowId={(row) => row?.id}
+                  columns={columns}
+                  loading={loading}
+                  disableRowSelectionOnClick
+                  autoHeight={false}
+                  pageSizeOptions={[5, 10, 20]}
+                  initialState={{ pagination: { paginationModel: { pageSize: 10, page: 0 } } }}
+                  sx={{ border: "none" }}
+                />
               )}
             </CardContent>
           </Card>
