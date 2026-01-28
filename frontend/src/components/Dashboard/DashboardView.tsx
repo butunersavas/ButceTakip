@@ -20,7 +20,6 @@ import {
   Snackbar,
   Skeleton,
   Stack,
-  Switch,
   Table,
   TableBody,
   TableCell,
@@ -141,6 +140,7 @@ type PurchaseReminderItem = {
   year: number;
   month: number;
   is_form_prepared: boolean;
+  amount?: number | null;
 };
 
 type RiskyItem = {
@@ -159,13 +159,14 @@ type QuarterlySummary = {
   overrun: number;
 };
 
-type WarrantyCriticalItem = {
-  id: number;
-  type: "DEVICE" | "SERVICE" | "DOMAIN_SSL";
-  name: string;
-  location: string;
-  end_date: string;
-  days_left: number;
+type WarrantyAlertItem = {
+  id?: number | string;
+  type?: "DEVICE" | "SERVICE" | "DOMAIN_SSL";
+  name?: string | null;
+  location?: string | null;
+  serial_no?: string | null;
+  end_date?: string | null;
+  days_left?: number | null;
 };
 
 const monthLabels = [
@@ -254,6 +255,33 @@ function formatBudgetLabel(name?: string | null, code?: string | null) {
   return stripBudgetCode(name ?? "") || code || "-";
 }
 
+const calcDaysLeft = (endDate?: string | null) => {
+  if (!endDate) return null;
+  const end = new Date(`${endDate}T00:00:00`);
+  if (Number.isNaN(end.getTime())) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const ms = end.getTime() - today.getTime();
+  return Math.floor(ms / (1000 * 60 * 60 * 24));
+};
+
+const normalizeWarrantyAlerts = (items: WarrantyAlertItem[]) =>
+  items.map((item) => {
+    const daysLeft =
+      typeof item.days_left === "number" ? item.days_left : calcDaysLeft(item.end_date ?? null);
+    return { ...item, days_left: daysLeft };
+  });
+
+const splitWarrantyAlerts = (items: WarrantyAlertItem[]) => {
+  const normalized = normalizeWarrantyAlerts(items);
+  const expired = normalized.filter((item) => (item.days_left ?? 0) < 0);
+  const near = normalized.filter(
+    (item) =>
+      typeof item.days_left === "number" && item.days_left >= 0 && item.days_left <= 30
+  );
+  return { normalized, expired, near };
+};
+
 function toSafeNumber(value: unknown) {
   const num = Number(value);
   return Number.isFinite(num) ? num : 0;
@@ -337,14 +365,12 @@ export default function DashboardView() {
   );
   const [department, setDepartment] = useState<string>("");
   const [purchaseItems, setPurchaseItems] = useState<PurchaseReminderItem[]>([]);
-  const [isPurchaseDialogOpen, setIsPurchaseDialogOpen] = useState(false);
-  const [dontShowAgainThisMonth, setDontShowAgainThisMonth] = useState(false);
+  const [isAlertsDialogOpen, setIsAlertsDialogOpen] = useState(false);
   const [savingPurchaseStatus, setSavingPurchaseStatus] = useState(false);
   const [purchaseStatusFeedback, setPurchaseStatusFeedback] = useState<
     { message: string; severity: "success" | "error" } | null
   >(null);
-  const [criticalWarrantyItems, setCriticalWarrantyItems] = useState<WarrantyCriticalItem[]>([]);
-  const [isWarrantyDialogOpen, setIsWarrantyDialogOpen] = useState(false);
+  const [warrantyAlertItems, setWarrantyAlertItems] = useState<WarrantyAlertItem[]>([]);
   const [selectedKpiFilter, setSelectedKpiFilter] = useState<
     "total_plan" | "total_actual" | "total_remaining" | "total_overrun" | null
   >(null);
@@ -378,7 +404,9 @@ export default function DashboardView() {
   const now = new Date();
   const yearNow = now.getFullYear();
   const currentMonth = now.getMonth() + 1;
-  const reminderKey = `purchase-reminder-${yearNow}-${currentMonth}`;
+  const dayKey = `${yearNow}${String(currentMonth).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
+  const alertsShownKey = `dashboard_alert_shown_${dayKey}`;
+  const purchaseDoneKey = `purchase_alert_done_${yearNow}_${currentMonth}`;
   const debouncedFilters = useDebouncedValue(
     useMemo(
       () => ({
@@ -424,49 +452,70 @@ export default function DashboardView() {
   });
 
   useEffect(() => {
-    const dismissed = localStorage.getItem(reminderKey);
-    if (dismissed === "dismissed") {
+    const shown = localStorage.getItem(alertsShownKey);
+    if (shown === "shown") {
       return;
     }
 
-    client
-      .get<PurchaseReminderItem[]>(
-        `/budget/purchase-reminders?year=${yearNow}&month=${currentMonth}`
-      )
-      .then((res) => {
-        const items = res.data ?? [];
-        setPurchaseItems(items);
+    let isMounted = true;
 
-        if (items.length > 0) {
-          setIsPurchaseDialogOpen(true);
-        }
-      })
-      .catch(() => {
-        // Hata durumunda sessiz geçilebilir veya loglanabilir
-      });
-  }, [client, currentMonth, reminderKey, yearNow]);
+    const fetchWarrantyAlerts = async () => {
+      try {
+        const { data } = await client.get<WarrantyAlertItem[]>("/warranty-items/alerts", {
+          params: { days: 30 }
+        });
+        return Array.isArray(data) ? data : (data as { items?: WarrantyAlertItem[] } | null)?.items ?? [];
+      } catch (error) {
+        const { data } = await client.get("/warranty-items");
+        return Array.isArray(data) ? data : (data as { items?: WarrantyAlertItem[] } | null)?.items ?? [];
+      }
+    };
 
-  useEffect(() => {
-    client
-      .get<WarrantyCriticalItem[]>("/warranty-items/critical")
-      .then((res) => {
-        const items = res.data ?? [];
-        setCriticalWarrantyItems(items);
-        if (items.length > 0) {
-          setIsWarrantyDialogOpen(true);
-        }
-      })
-      .catch(() => {
-        // Sessiz geç
-      });
-  }, [client]);
+    const loadAlerts = async () => {
+      const purchaseDismissed = localStorage.getItem(purchaseDoneKey) === "done";
+      const purchasePromise = purchaseDismissed
+        ? Promise.resolve({ data: [] as PurchaseReminderItem[] })
+        : client.get<PurchaseReminderItem[]>(
+            `/budget/purchase-reminders?year=${yearNow}&month=${currentMonth}`
+          );
 
-  const handleClosePurchaseDialog = () => {
-    if (dontShowAgainThisMonth) {
-      localStorage.setItem(reminderKey, "dismissed");
-    }
-    setIsPurchaseDialogOpen(false);
+      const [purchaseResult, warrantyResult] = await Promise.allSettled([
+        purchasePromise,
+        fetchWarrantyAlerts()
+      ]);
+
+      if (!isMounted) return;
+
+      const purchaseList =
+        purchaseResult.status === "fulfilled" ? purchaseResult.value.data ?? [] : [];
+      const warrantyList =
+        warrantyResult.status === "fulfilled" ? warrantyResult.value : [];
+      const { normalized, expired, near } = splitWarrantyAlerts(warrantyList);
+
+      setPurchaseItems(purchaseList);
+      setWarrantyAlertItems(normalized);
+
+      if (purchaseList.length > 0 || expired.length > 0 || near.length > 0) {
+        setIsAlertsDialogOpen(true);
+        localStorage.setItem(alertsShownKey, "shown");
+      }
+    };
+
+    loadAlerts();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [alertsShownKey, client, currentMonth, purchaseDoneKey, yearNow]);
+
+  const handleCloseAlertsDialog = () => {
+    setIsAlertsDialogOpen(false);
   };
+
+  const warrantyAlerts = useMemo(
+    () => splitWarrantyAlerts(warrantyAlertItems),
+    [warrantyAlertItems]
+  );
 
   const { data: riskyItems = [] } = useQuery<RiskyItem[]>({
     queryKey: [
@@ -1483,40 +1532,144 @@ export default function DashboardView() {
         </Stack>
       </Box>
       <Dialog
-        open={isWarrantyDialogOpen && criticalWarrantyItems.length > 0}
-        onClose={() => setIsWarrantyDialogOpen(false)}
-        maxWidth="sm"
+        open={isAlertsDialogOpen}
+        onClose={handleCloseAlertsDialog}
+        maxWidth="md"
         fullWidth
       >
         <DialogTitle sx={{ fontSize: 18, fontWeight: 600 }}>
-          Garanti süresi dolmak üzere (30 gün altı)
+          Uyarılar
         </DialogTitle>
         <DialogContent dividers>
-          <List dense sx={{ maxHeight: 400, overflowY: "auto" }}>
-            {criticalWarrantyItems?.map((item) => (
-              <ListItem key={item.id}>
-                <ListItemText
-                  primary={`${item.type === "DEVICE" ? "Cihaz" : "Bakım/Hizmet"} — ${item.name} / ${item.location} — ${item.days_left} gün kaldı (Bitiş: ${item.end_date})`}
-                  primaryTypographyProps={{ variant: "body2" }}
-                />
-              </ListItem>
-            ))}
-          </List>
+          {purchaseItems.length > 0 && (
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+                Bu ay bütçede satın alma kalemleriniz var
+              </Typography>
+              <List dense sx={{ maxHeight: 300, overflowY: "auto" }}>
+                {purchaseItems?.map((item) => {
+                  const amountLabel =
+                    item.amount != null ? formatCurrency(toSafeNumber(item.amount)) : null;
+                  return (
+                    <ListItem key={`${item.budget_item_id}-${item.year}-${item.month}`}>
+                      <ListItemText
+                        primary={formatBudgetLabel(item.budget_name, item.budget_code)}
+                        secondary={amountLabel ? `Tutar: ${amountLabel}` : undefined}
+                        primaryTypographyProps={{ variant: "body2" }}
+                      />
+                    </ListItem>
+                  );
+                })}
+              </List>
+            </Box>
+          )}
+
+          <Box>
+            <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+              Garanti Uyarıları
+            </Typography>
+            <Stack spacing={2}>
+              <Box>
+                <Typography variant="subtitle2" fontWeight={600} gutterBottom>
+                  Süresi dolanlar
+                </Typography>
+                {warrantyAlerts.expired.length === 0 ? (
+                  <Typography variant="body2" color="text.secondary">
+                    Süresi dolan garanti kaydı bulunmuyor.
+                  </Typography>
+                ) : (
+                  <List dense sx={{ maxHeight: 240, overflowY: "auto" }}>
+                    {warrantyAlerts.expired.map((item) => (
+                      <ListItem key={item.id ?? `${item.name}-${item.end_date}`}>
+                        <ListItemText
+                          primary={item.name ?? item.location ?? item.serial_no ?? "Garanti kalemi"}
+                          secondary={`Kalan gün: ${item.days_left ?? "-"}`}
+                          primaryTypographyProps={{ variant: "body2" }}
+                        />
+                      </ListItem>
+                    ))}
+                  </List>
+                )}
+              </Box>
+              <Box>
+                <Typography variant="subtitle2" fontWeight={600} gutterBottom>
+                  30 gün kalanlar
+                </Typography>
+                {warrantyAlerts.near.length === 0 ? (
+                  <Typography variant="body2" color="text.secondary">
+                    30 gün içinde süresi dolacak garanti kaydı bulunmuyor.
+                  </Typography>
+                ) : (
+                  <List dense sx={{ maxHeight: 240, overflowY: "auto" }}>
+                    {warrantyAlerts.near.map((item) => (
+                      <ListItem key={item.id ?? `${item.name}-${item.end_date}`}>
+                        <ListItemText
+                          primary={item.name ?? item.location ?? item.serial_no ?? "Garanti kalemi"}
+                          secondary={`Kalan gün: ${item.days_left ?? "-"}`}
+                          primaryTypographyProps={{ variant: "body2" }}
+                        />
+                      </ListItem>
+                    ))}
+                  </List>
+                )}
+              </Box>
+            </Stack>
+          </Box>
         </DialogContent>
         <DialogActions>
-          <Button size="small" onClick={() => setIsWarrantyDialogOpen(false)}>
+          <Button size="small" onClick={handleCloseAlertsDialog} disabled={savingPurchaseStatus}>
             Kapat
           </Button>
-          <Button
-            variant="contained"
-            size="small"
-            onClick={() => {
-              setIsWarrantyDialogOpen(false);
-              navigate("/warranty-tracking");
-            }}
-          >
-            Garanti Takibi'ne git
-          </Button>
+          {(warrantyAlerts.expired.length > 0 || warrantyAlerts.near.length > 0) && (
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={() => {
+                handleCloseAlertsDialog();
+                navigate("/warranty-tracking");
+              }}
+            >
+              Garanti Takibi'ne git
+            </Button>
+          )}
+          {purchaseItems.length > 0 && (
+            <Button
+              variant="contained"
+              size="small"
+              disabled={savingPurchaseStatus}
+              onClick={async () => {
+                try {
+                  setSavingPurchaseStatus(true);
+                  const payload = purchaseItems.map((item) => ({
+                    budget_item_id: item.budget_item_id,
+                    year: item.year,
+                    month: item.month,
+                    is_form_prepared: true
+                  }));
+
+                  await client.post("/budget/purchase-reminders/mark-prepared", payload);
+                  localStorage.setItem(purchaseDoneKey, "done");
+                  setPurchaseStatusFeedback({
+                    message: "Kalemler yazıldı olarak işaretlendi.",
+                    severity: "success"
+                  });
+                  handleCloseAlertsDialog();
+                } catch (error) {
+                  console.error(error);
+                  localStorage.setItem(purchaseDoneKey, "done");
+                  setPurchaseStatusFeedback({
+                    message: "İşaretleme sırasında hata oluştu. Yerel olarak kaydedildi.",
+                    severity: "error"
+                  });
+                  handleCloseAlertsDialog();
+                } finally {
+                  setSavingPurchaseStatus(false);
+                }
+              }}
+            >
+              Yazıldı olarak işaretle
+            </Button>
+          )}
         </DialogActions>
       </Dialog>
       <Dialog
@@ -1569,103 +1722,6 @@ export default function DashboardView() {
         <DialogActions>
           <Button size="small" onClick={() => setIsOverBudgetDialogOpen(false)}>
             Kapat
-          </Button>
-        </DialogActions>
-      </Dialog>
-      <Dialog
-        open={isPurchaseDialogOpen && purchaseItems.length > 0}
-        onClose={handleClosePurchaseDialog}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle sx={{ fontSize: 18, fontWeight: 600 }}>
-          Bu ay bütçede satın alma kalemleriniz var
-        </DialogTitle>
-
-        <DialogContent dividers>
-          <Typography variant="body2" sx={{ mb: 1 }}>
-            Aşağıdaki kalemler için satın alma formunu hazırlamayı unutmayın:
-          </Typography>
-
-          <List dense sx={{ maxHeight: 500, overflowY: "auto" }}>
-            {purchaseItems?.map((item, index) => (
-              <ListItem
-                key={`${item.budget_item_id}-${item.year}-${item.month}`}
-                secondaryAction={
-                  <Switch
-                    edge="end"
-                    checked={item.is_form_prepared}
-                    onChange={(e) => {
-                      const checked = e.target.checked;
-                      setPurchaseItems((prev) =>
-                        prev.map((x, i) => (i === index ? { ...x, is_form_prepared: checked } : x))
-                      );
-                    }}
-                  />
-                }
-              >
-                <ListItemText
-                  primary={stripBudgetCode(item.budget_name) || "-"}
-                  secondary={
-                    item.is_form_prepared
-                      ? "Satın alma formu hazırlandı"
-                      : "Satın alma formunu hazırlamayı unutmayın"
-                  }
-                  primaryTypographyProps={{ variant: "body2" }}
-                  secondaryTypographyProps={{ variant: "caption" }}
-                />
-              </ListItem>
-            ))}
-          </List>
-
-          <Stack direction="row" alignItems="center" spacing={1} sx={{ mt: 1 }}>
-            <Switch
-              size="small"
-              checked={dontShowAgainThisMonth}
-              onChange={(e) => setDontShowAgainThisMonth(e.target.checked)}
-            />
-            <Typography variant="body2">Bu ay tekrar gösterme</Typography>
-          </Stack>
-        </DialogContent>
-
-        <DialogActions>
-          <Button size="small" onClick={handleClosePurchaseDialog} disabled={savingPurchaseStatus}>
-            Kapat
-          </Button>
-          <Button
-            variant="contained"
-            size="small"
-            disabled={savingPurchaseStatus}
-            onClick={async () => {
-              try {
-                setSavingPurchaseStatus(true);
-                const payload = purchaseItems
-                  .filter((item) => item.is_form_prepared)
-                  .map((item) => ({
-                    budget_item_id: item.budget_item_id,
-                    year: item.year,
-                    month: item.month,
-                    is_form_prepared: true
-                  }));
-
-                await client.post("/budget/purchase-reminders/mark-prepared", payload);
-                setPurchaseStatusFeedback({
-                  message: "Seçili kalemler için satın alma formu hazırlandı olarak kaydedildi.",
-                  severity: "success"
-                });
-                handleClosePurchaseDialog();
-              } catch (error) {
-                console.error(error);
-                setPurchaseStatusFeedback({
-                  message: "Kayıt sırasında bir hata oluştu.",
-                  severity: "error"
-                });
-              } finally {
-                setSavingPurchaseStatus(false);
-              }
-            }}
-          >
-            Satın alma formu hazırlandı olarak kaydet
           </Button>
         </DialogActions>
       </Dialog>
