@@ -9,6 +9,18 @@ export const apiClient = axios.create({
   baseURL: API_BASE
 });
 
+apiClient.interceptors.request.use((config) => {
+  const token = localStorage.getItem("butce_token");
+  if (token) {
+    const headers: any = config.headers ?? {};
+    if (!headers.Authorization && !headers.authorization) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+    config.headers = headers;
+  }
+  return config;
+});
+
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
