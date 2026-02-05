@@ -7,6 +7,7 @@ import {
   CardContent,
   CardHeader,
   Box,
+  Checkbox,
   Chip,
   Dialog,
   DialogActions,
@@ -95,6 +96,9 @@ interface OverBudgetItem {
   actual: number;
   over: number;
   over_pct: number;
+  year?: number;
+  month?: number | null;
+  scenario?: number | null;
 }
 
 interface OverBudgetResponse {
@@ -139,6 +143,8 @@ type PurchaseReminderItem = {
   budget_name: string;
   year: number;
   month: number;
+  scenario_id: number;
+  department?: string | null;
   is_form_prepared: boolean;
   amount?: number | null;
 };
@@ -255,6 +261,12 @@ function formatBudgetLabel(name?: string | null, code?: string | null) {
   return stripBudgetCode(name ?? "") || code || "-";
 }
 
+const buildPurchaseKey = (item: Pick<
+  PurchaseReminderItem,
+  "budget_code" | "year" | "month" | "scenario_id" | "department"
+>) =>
+  `${item.budget_code}-${item.year}-${item.month}-${item.scenario_id}-${item.department ?? ""}`;
+
 const calcDaysLeft = (endDate?: string | null) => {
   if (!endDate) return null;
   const end = new Date(`${endDate}T00:00:00`);
@@ -365,6 +377,8 @@ export default function DashboardView() {
   );
   const [department, setDepartment] = useState<string>("");
   const [purchaseItems, setPurchaseItems] = useState<PurchaseReminderItem[]>([]);
+  const [purchaseDepartmentFilter, setPurchaseDepartmentFilter] = useState("");
+  const [purchaseSelections, setPurchaseSelections] = useState<Record<string, boolean>>({});
   const [isAlertsDialogOpen, setIsAlertsDialogOpen] = useState(false);
   const [savingPurchaseStatus, setSavingPurchaseStatus] = useState(false);
   const [purchaseStatusFeedback, setPurchaseStatusFeedback] = useState<
@@ -460,15 +474,10 @@ export default function DashboardView() {
     let isMounted = true;
 
     const fetchWarrantyAlerts = async () => {
-      try {
-        const { data } = await client.get<WarrantyAlertItem[]>("/warranty-items/alerts", {
-          params: { days: 30 }
-        });
-        return Array.isArray(data) ? data : (data as { items?: WarrantyAlertItem[] } | null)?.items ?? [];
-      } catch (error) {
-        const { data } = await client.get("/warranty-items");
-        return Array.isArray(data) ? data : (data as { items?: WarrantyAlertItem[] } | null)?.items ?? [];
-      }
+      const { data } = await client.get("/warranty-items");
+      return Array.isArray(data)
+        ? data
+        : (data as { items?: WarrantyAlertItem[] } | null)?.items ?? [];
     };
 
     const loadAlerts = async () => {
@@ -516,6 +525,37 @@ export default function DashboardView() {
     () => splitWarrantyAlerts(warrantyAlertItems),
     [warrantyAlertItems]
   );
+
+  useEffect(() => {
+    const nextSelections: Record<string, boolean> = {};
+    purchaseItems.forEach((item) => {
+      nextSelections[buildPurchaseKey(item)] = item.is_form_prepared;
+    });
+    setPurchaseSelections(nextSelections);
+  }, [purchaseItems]);
+
+  const purchaseDepartments = useMemo(() => {
+    const unique = new Set<string>();
+    purchaseItems.forEach((item) => {
+      if (item.department) {
+        unique.add(item.department);
+      }
+    });
+    return Array.from(unique).sort((a, b) => a.localeCompare(b, "tr"));
+  }, [purchaseItems]);
+
+  const filteredPurchaseItems = useMemo(() => {
+    if (!purchaseDepartmentFilter) {
+      return purchaseItems;
+    }
+    return purchaseItems.filter((item) => item.department === purchaseDepartmentFilter);
+  }, [purchaseItems, purchaseDepartmentFilter]);
+
+  useEffect(() => {
+    if (purchaseDepartmentFilter && !purchaseDepartments.includes(purchaseDepartmentFilter)) {
+      setPurchaseDepartmentFilter("");
+    }
+  }, [purchaseDepartmentFilter, purchaseDepartments]);
 
   const { data: riskyItems = [] } = useQuery<RiskyItem[]>({
     queryKey: [
@@ -770,11 +810,25 @@ export default function DashboardView() {
   const formattedTotalPlan = formatCurrency(normalizedKpi.total_plan);
   const formattedActual = formatCurrency(normalizedKpi.total_actual);
   const formattedRemaining = formatCurrency(normalizedKpi.total_remaining);
-  const formattedOver = formatCurrency(
-    overBudget?.summary?.over_total ?? normalizedKpi.total_overrun
-  );
-  const overBudgetItems = overBudget?.items ?? [];
-  const overBudgetSummary = overBudget?.summary;
+  const rawOverBudgetItems = overBudget?.items ?? [];
+  const overBudgetItems = useMemo(() => {
+    return rawOverBudgetItems
+      .map((item) => {
+        const plan = toSafeNumber(item.plan);
+        const actual = toSafeNumber(item.actual);
+        const over = Math.max(actual - plan, 0);
+        const overPct = plan > 0 ? (over / plan) * 100 : 0;
+        return { ...item, plan, actual, over, over_pct: overPct };
+      })
+      .filter((item) => item.over > 0)
+      .sort((a, b) => b.over - a.over);
+  }, [rawOverBudgetItems]);
+  const overBudgetSummary = useMemo(() => {
+    const overTotal = overBudgetItems.reduce((sum, item) => sum + item.over, 0);
+    return { over_total: overTotal, over_item_count: overBudgetItems.length };
+  }, [overBudgetItems]);
+  const overBudgetTopItems = useMemo(() => overBudgetItems.slice(0, 10), [overBudgetItems]);
+  const formattedOver = formatCurrency(overBudgetSummary.over_total);
   const selectedBudgetOverrun = debouncedFilters.budgetItemId
     ? overBudgetItems[0]
     : null;
@@ -1228,7 +1282,7 @@ export default function DashboardView() {
                           </Button>
                         )}
                       </Stack>
-                      {overBudgetItems.length === 0 ? (
+                      {overBudgetTopItems.length === 0 ? (
                         <Typography variant="body2" color="text.secondary">
                           Aşım yapan kalem bulunmuyor.
                         </Typography>
@@ -1244,7 +1298,7 @@ export default function DashboardView() {
                             </TableRow>
                           </TableHead>
                           <TableBody>
-                            {overBudgetItems?.slice(0, 10)?.map((item) => {
+                            {overBudgetTopItems?.map((item) => {
                               const plan = toSafeNumber(item.plan);
                               const actual = toSafeNumber(item.actual);
                               const over = toSafeNumber(item.over);
@@ -1546,15 +1600,47 @@ export default function DashboardView() {
               <Typography variant="subtitle1" fontWeight={600} gutterBottom>
                 Bu ay bütçede satın alma kalemleriniz var
               </Typography>
+              <TextField
+                select
+                label="Departman"
+                size="small"
+                value={purchaseDepartmentFilter}
+                onChange={(event) => setPurchaseDepartmentFilter(event.target.value)}
+                sx={{ mb: 2, minWidth: 220 }}
+              >
+                <MenuItem value="">Hepsi</MenuItem>
+                {purchaseDepartments.map((department) => (
+                  <MenuItem key={department} value={department}>
+                    {department}
+                  </MenuItem>
+                ))}
+              </TextField>
               <List dense sx={{ maxHeight: 300, overflowY: "auto" }}>
-                {purchaseItems?.map((item) => {
+                {filteredPurchaseItems?.map((item) => {
                   const amountLabel =
                     item.amount != null ? formatCurrency(toSafeNumber(item.amount)) : null;
+                  const secondaryPieces = [
+                    amountLabel ? `Tutar: ${amountLabel}` : null,
+                    item.department ? `Departman: ${item.department}` : null
+                  ].filter(Boolean);
+                  const key = buildPurchaseKey(item);
                   return (
-                    <ListItem key={`${item.budget_item_id}-${item.year}-${item.month}`}>
+                    <ListItem
+                      key={key}
+                      secondaryAction={
+                        <Checkbox
+                          edge="end"
+                          checked={purchaseSelections[key] ?? false}
+                          onChange={(event) => {
+                            const checked = event.target.checked;
+                            setPurchaseSelections((prev) => ({ ...prev, [key]: checked }));
+                          }}
+                        />
+                      }
+                    >
                       <ListItemText
                         primary={formatBudgetLabel(item.budget_name, item.budget_code)}
-                        secondary={amountLabel ? `Tutar: ${amountLabel}` : undefined}
+                        secondary={secondaryPieces.length ? secondaryPieces.join(" • ") : undefined}
                         primaryTypographyProps={{ variant: "body2" }}
                       />
                     </ListItem>
@@ -1641,16 +1727,18 @@ export default function DashboardView() {
                 try {
                   setSavingPurchaseStatus(true);
                   const payload = purchaseItems.map((item) => ({
-                    budget_item_id: item.budget_item_id,
+                    budget_code: item.budget_code,
                     year: item.year,
                     month: item.month,
-                    is_form_prepared: true
+                    scenario_id: item.scenario_id,
+                    department: item.department ?? null,
+                    is_form_prepared: purchaseSelections[buildPurchaseKey(item)] ?? false
                   }));
 
                   await client.post("/budget/purchase-reminders/mark-prepared", payload);
                   localStorage.setItem(purchaseDoneKey, "done");
                   setPurchaseStatusFeedback({
-                    message: "Kalemler yazıldı olarak işaretlendi.",
+                    message: "Satın alma seçimleri kaydedildi.",
                     severity: "success"
                   });
                   handleCloseAlertsDialog();
@@ -1658,7 +1746,7 @@ export default function DashboardView() {
                   console.error(error);
                   localStorage.setItem(purchaseDoneKey, "done");
                   setPurchaseStatusFeedback({
-                    message: "İşaretleme sırasında hata oluştu. Yerel olarak kaydedildi.",
+                    message: "Kayıt sırasında hata oluştu. Yerel olarak kaydedildi.",
                     severity: "error"
                   });
                   handleCloseAlertsDialog();
@@ -1667,7 +1755,7 @@ export default function DashboardView() {
                 }
               }}
             >
-              Yazıldı olarak işaretle
+              Seçimleri Kaydet
             </Button>
           )}
         </DialogActions>

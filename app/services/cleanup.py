@@ -3,7 +3,7 @@ from datetime import datetime
 from sqlalchemy import exists, select
 from sqlmodel import Session, delete
 
-from app.models import BudgetItem, Expense, PlanEntry, PurchaseFormStatus
+from app.models import BudgetItem, Expense, PlanEntry, PurchaseFormStatus, PurchaseFormStatusExt
 from app.schemas import CleanupRequest
 
 
@@ -30,9 +30,17 @@ def perform_cleanup(session: Session, request: CleanupRequest) -> dict[str, int]
     deleted_purchase_statuses = 0
     if request.reset_plans:
         purchase_status_query = delete(PurchaseFormStatus)
+        purchase_status_ext_query = delete(PurchaseFormStatusExt)
         if request.budget_item_id is not None:
             purchase_status_query = purchase_status_query.where(
                 PurchaseFormStatus.budget_item_id == request.budget_item_id
+            )
+            purchase_status_ext_query = purchase_status_ext_query.where(
+                PurchaseFormStatusExt.budget_code.in_(
+                    select(PlanEntry.budget_code).where(
+                        PlanEntry.budget_item_id == request.budget_item_id
+                    )
+                )
             )
         elif request.scenario_id is not None:
             purchase_status_query = purchase_status_query.where(
@@ -42,10 +50,16 @@ def perform_cleanup(session: Session, request: CleanupRequest) -> dict[str, int]
                     )
                 )
             )
+            purchase_status_ext_query = purchase_status_ext_query.where(
+                PurchaseFormStatusExt.scenario_id == request.scenario_id
+            )
         purchase_status_result = session.exec(purchase_status_query)
+        purchase_status_ext_result = session.exec(purchase_status_ext_query)
         deleted_purchase_statuses = (
             purchase_status_result.rowcount if purchase_status_result else 0
         )
+        if purchase_status_ext_result:
+            deleted_purchase_statuses += purchase_status_ext_result.rowcount or 0
 
         plan_query = delete(PlanEntry)
         if request.budget_item_id is not None:

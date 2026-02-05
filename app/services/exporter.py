@@ -5,9 +5,10 @@ from typing import Literal
 
 from fastapi import Response
 from openpyxl import Workbook
-from sqlmodel import Session, exists, select
+from sqlalchemy import func
+from sqlmodel import Session, select
 
-from app.models import BudgetItem, Expense, ExpenseStatus, PlanEntry, PurchaseFormStatus, Scenario
+from app.models import BudgetItem, Expense, ExpenseStatus, PlanEntry, PurchaseFormStatusExt, Scenario
 from app.services.analytics import compute_quarterly_summary
 from app.schemas import PurchaseFormPreparedReportItem
 
@@ -130,41 +131,46 @@ def get_purchase_forms_prepared(
     session: Session,
     year: int,
     scenario_id: int | None = None,
+    month: int | None = None,
+    department: str | None = None,
 ) -> list[PurchaseFormPreparedReportItem]:
+    normalized_budget_code = func.upper(func.trim(PurchaseFormStatusExt.budget_code))
+    normalized_item_code = func.upper(func.trim(BudgetItem.code))
     query = (
         select(
-            PurchaseFormStatus.budget_item_id,
-            BudgetItem.code,
+            BudgetItem.id,
+            PurchaseFormStatusExt.budget_code,
             BudgetItem.name,
-            PurchaseFormStatus.year,
-            PurchaseFormStatus.month,
+            PurchaseFormStatusExt.year,
+            PurchaseFormStatusExt.month,
+            PurchaseFormStatusExt.scenario_id,
+            PurchaseFormStatusExt.department,
         )
-        .join(BudgetItem, BudgetItem.id == PurchaseFormStatus.budget_item_id)
-        .where(PurchaseFormStatus.year == year)
-        .where(PurchaseFormStatus.is_prepared.is_(True))
+        .select_from(PurchaseFormStatusExt)
+        .outerjoin(BudgetItem, normalized_item_code == normalized_budget_code)
+        .where(PurchaseFormStatusExt.year == year)
+        .where(PurchaseFormStatusExt.is_form_prepared.is_(True))
     )
 
     if scenario_id is not None:
-        query = query.where(
-            exists(
-                select(PlanEntry.id)
-                .where(PlanEntry.budget_item_id == PurchaseFormStatus.budget_item_id)
-                .where(PlanEntry.year == year)
-                .where(PlanEntry.scenario_id == scenario_id)
-            )
-        )
+        query = query.where(PurchaseFormStatusExt.scenario_id == scenario_id)
+    if month is not None:
+        query = query.where(PurchaseFormStatusExt.month == month)
+    if department is not None:
+        query = query.where(PurchaseFormStatusExt.department == department)
 
-    rows = session.exec(query.order_by(PurchaseFormStatus.month, BudgetItem.code)).all()
+    rows = session.exec(query.order_by(PurchaseFormStatusExt.month, PurchaseFormStatusExt.budget_code)).all()
     return [
         PurchaseFormPreparedReportItem(
             budget_item_id=budget_item_id,
             budget_code=code,
-            budget_name=name,
+            budget_name=name or code,
             year=form_year,
             month=month,
-            scenario_id=scenario_id if scenario_id is not None else None,
+            scenario_id=form_scenario_id,
+            department=form_department or None,
         )
-        for budget_item_id, code, name, form_year, month in rows
+        for budget_item_id, code, name, form_year, month, form_scenario_id, form_department in rows
     ]
 
 
@@ -328,8 +334,10 @@ def export_purchase_forms_prepared_xlsx(
     session: Session,
     year: int,
     scenario_id: int | None = None,
+    month: int | None = None,
+    department: str | None = None,
 ) -> Response:
-    items = get_purchase_forms_prepared(session, year, scenario_id)
+    items = get_purchase_forms_prepared(session, year, scenario_id, month, department)
     wb = Workbook()
     sheet = wb.active
     sheet.title = "PreparedPurchaseForms"

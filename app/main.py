@@ -14,6 +14,7 @@ from app.config import get_settings
 from app.database import engine, init_db
 from app.routers import (
     auth,
+    backup,
     budget_items,
     dashboard,
     expenses,
@@ -83,6 +84,7 @@ async def sqlalchemy_error_handler(request: Request, exc: SQLAlchemyError) -> JS
 
 
 app.include_router(auth.router, prefix=API_PREFIX)
+app.include_router(backup.router, prefix=API_PREFIX)
 app.include_router(scenarios.router, prefix=API_PREFIX)
 app.include_router(budget_items.router, prefix=API_PREFIX)
 app.include_router(plans.router, prefix=API_PREFIX)

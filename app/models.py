@@ -107,6 +107,30 @@ class PurchaseFormStatus(SQLModel, table=True):
     prepared_at: datetime | None = Field(default_factory=datetime.utcnow)
 
 
+class PurchaseFormStatusExt(SQLModel, table=True):
+    __tablename__ = "purchase_form_status_ext"
+    __table_args__ = (
+        UniqueConstraint(
+            "budget_code",
+            "year",
+            "month",
+            "scenario_id",
+            "department",
+            name="uq_form_status_ext",
+        ),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    budget_code: str = Field(nullable=False, index=True)
+    year: int = Field(nullable=False, index=True)
+    month: int = Field(nullable=False, index=True)
+    scenario_id: int = Field(nullable=False, index=True)
+    department: str = Field(default="", max_length=100)
+    is_form_prepared: bool = Field(default=False)
+    updated_at: datetime | None = Field(default_factory=datetime.utcnow)
+    updated_by: int | None = Field(default=None)
+
+
 class Expense(TimestampMixin, SQLModel, table=True):
     __tablename__ = "expenses"
 

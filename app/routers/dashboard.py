@@ -425,23 +425,28 @@ def get_overbudget(
     for row in rows:
         plan = float(row.plan or 0)
         actual = float(row.actual or 0)
-        over = max(actual - plan, 0)
+        over = actual - plan
+        if over <= 0:
+            continue
         over_pct = (over / plan * 100) if plan > 0 else 0.0
-        if budget_code or over > 0:
-            items.append(
-                OverBudgetItem(
-                    budget_code=row.code,
-                    budget_name=row.name,
-                    plan=plan,
-                    actual=actual,
-                    over=over,
-                    over_pct=over_pct,
-                )
+        items.append(
+            OverBudgetItem(
+                budget_code=row.code,
+                budget_name=row.name,
+                plan=plan,
+                actual=actual,
+                over=over,
+                over_pct=over_pct,
+                year=resolved_year,
+                month=month,
+                scenario=scenario_id,
             )
+        )
 
     items.sort(key=lambda item: item.over, reverse=True)
+    items = items[:10]
     over_total = sum(item.over for item in items)
-    over_item_count = sum(1 for item in items if item.over > 0)
+    over_item_count = len(items)
     return OverBudgetResponse(
         summary=OverBudgetSummary(over_total=over_total, over_item_count=over_item_count),
         items=items,

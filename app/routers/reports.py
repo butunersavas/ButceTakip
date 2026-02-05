@@ -12,17 +12,21 @@ router = APIRouter(prefix="/reports", tags=["Reports"])
 def get_purchase_forms_prepared_report(
     year: int = Query(...),
     scenario_id: int | None = Query(None),
+    month: int | None = Query(default=None),
+    department: str | None = Query(default=None),
     session: Session = Depends(get_db_session),
     _= Depends(get_current_user),
 ) -> list[PurchaseFormPreparedReportItem]:
-    return exporter.get_purchase_forms_prepared(session, year, scenario_id)
+    return exporter.get_purchase_forms_prepared(session, year, scenario_id, month, department)
 
 
 @router.get("/purchase-forms-prepared/xlsx")
 def download_purchase_forms_prepared_xlsx(
     year: int = Query(...),
     scenario_id: int | None = Query(None),
+    month: int | None = Query(default=None),
+    department: str | None = Query(default=None),
     session: Session = Depends(get_db_session),
     _= Depends(get_current_user),
 ):
-    return exporter.export_purchase_forms_prepared_xlsx(session, year, scenario_id)
+    return exporter.export_purchase_forms_prepared_xlsx(session, year, scenario_id, month, department)
