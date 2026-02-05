@@ -37,6 +37,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (token) {
+      apiClient.defaults.headers.common.Authorization = `Bearer ${token}`;
+    } else {
+      delete apiClient.defaults.headers.common.Authorization;
+    }
+  }, [token]);
+
   const fetchCurrentUser = useCallback(
     async (authToken: string) => {
       try {
