@@ -183,6 +183,12 @@ def change_password(
 
 @router.get("/me", response_model=CurrentUserResponse)
 @router.get("/me/", response_model=CurrentUserResponse, include_in_schema=False)
-def read_current_user(current_user: User = Depends(get_current_user)) -> User:
+def read_current_user(current_user: User = Depends(get_current_user)) -> CurrentUserResponse:
     """Return the authenticated user's profile information."""
-    return current_user
+    return CurrentUserResponse(
+        id=current_user.id,
+        username=current_user.username,
+        full_name=current_user.full_name,
+        is_admin=current_user.is_admin,
+        is_active=current_user.is_active,
+    )

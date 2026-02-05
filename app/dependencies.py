@@ -20,10 +20,16 @@ def get_current_user(
     user = session.get(User, token_data.user_id)
     if not user or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Inactive user")
-    user.updated_at = datetime.utcnow()
-    session.add(user)
-    session.commit()
-    session.refresh(user)
+
+    # Best-effort metadata update: auth flow should not fail if this write fails.
+    try:
+        user.updated_at = datetime.utcnow()
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+    except Exception:
+        session.rollback()
+
     return user
 
 

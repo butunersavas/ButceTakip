@@ -57,6 +57,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setError(null);
       } catch (err) {
         console.error("Failed to load current user", err);
+        setError("Oturum doğrulanamadı (auth/me 500). Lütfen tekrar giriş yapın.");
         setUser(null);
         setToken(null);
         localStorage.removeItem("butce_token");
