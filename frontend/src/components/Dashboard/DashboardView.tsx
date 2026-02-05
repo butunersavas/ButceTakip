@@ -176,18 +176,18 @@ type WarrantyAlertItem = {
 };
 
 const monthLabels = [
-  "Oca",
-  "Şub",
-  "Mar",
-  "Nis",
-  "May",
-  "Haz",
-  "Tem",
-  "Ağu",
-  "Eyl",
-  "Eki",
-  "Kas",
-  "Ara"
+  "Ocak",
+  "Şubat",
+  "Mart",
+  "Nisan",
+  "Mayıs",
+  "Haziran",
+  "Temmuz",
+  "Ağustos",
+  "Eylül",
+  "Ekim",
+  "Kasım",
+  "Aralık"
 ];
 
 const pieColors: Record<keyof QuarterlySummary, string> = {
@@ -1397,7 +1397,15 @@ export default function DashboardView() {
                               tickFormatter={(value) => formatCurrency(toSafeNumber(value))}
                             />
                             <ReferenceLine y={0} stroke="#9e9e9e" strokeDasharray="3 3" />
-                            <RechartsTooltip content={renderTrendTooltip} />
+                            <RechartsTooltip
+                              content={renderTrendTooltip}
+                              labelFormatter={(label) => {
+                                const n = Number(label);
+                                return Number.isFinite(n)
+                                  ? (monthLabels[n - 1] ?? `Ay ${n}`)
+                                  : String(label);
+                              }}
+                            />
                             <Legend />
                             <Bar
                               dataKey="planned"
