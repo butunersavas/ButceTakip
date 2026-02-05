@@ -1,5 +1,6 @@
 from . import (
     auth,
+    backup,
     budget_items,
     dashboard,
     expenses,
@@ -14,6 +15,7 @@ from . import (
 
 __all__ = [
     "auth",
+    "backup",
     "budget_items",
     "dashboard",
     "expenses",

@@ -208,6 +208,7 @@ class PlanEntryRead(SQLModel, table=False):
     map_capex_opex: Optional[str] = None
     map_nitelik: Optional[str] = None
     nitelik: Optional[str] = None
+    is_form_prepared: bool = False
 
     class Config:
         orm_mode = True
@@ -225,13 +226,17 @@ class PurchaseReminder(BaseModel):
     budget_name: str
     year: int
     month: int
+    scenario_id: int | None = None
+    department: str | None = None
     is_form_prepared: bool = False
 
 
 class PurchaseReminderUpdate(BaseModel):
-    budget_item_id: int
+    budget_code: str
     year: int
     month: int
+    scenario_id: int
+    department: str | None = None
     is_form_prepared: bool
 
 
@@ -242,6 +247,7 @@ class PurchaseFormPreparedReportItem(BaseModel):
     year: int
     month: int
     scenario_id: int | None = None
+    department: str | None = None
 
 
 class ExpenseBase(BaseModel):
@@ -641,6 +647,9 @@ class OverBudgetItem(BaseModel):
     actual: float
     over: float
     over_pct: float
+    year: int
+    month: int | None = None
+    scenario: int | None = None
 
 
 class OverBudgetResponse(BaseModel):

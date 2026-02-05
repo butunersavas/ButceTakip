@@ -5,6 +5,7 @@ import {
   Card,
   CardContent,
   Box,
+  Chip,
   Dialog,
   DialogActions,
   DialogContent,
@@ -67,6 +68,7 @@ interface PlanEntry {
   assetType?: string | null;
   map_capex_opex?: string | null;
   map_nitelik?: string | null;
+  is_form_prepared?: boolean | null;
   budget_item?: BudgetItem | null;
   budgetItem?: BudgetItem | null;
 }
@@ -521,6 +523,26 @@ export default function PlansView() {
           }
 
           return formatCurrency(num);
+        },
+      },
+      {
+        field: "is_form_prepared",
+        headerName: "Satın alındı",
+        width: 140,
+        valueGetter: (_value, row) => {
+          const r = row as any;
+          return Boolean(r?.is_form_prepared);
+        },
+        renderCell: ({ row }) => {
+          const prepared = Boolean((row as any)?.is_form_prepared);
+          return (
+            <Chip
+              size="small"
+              label={prepared ? "Evet" : "Hayır"}
+              color={prepared ? "success" : "default"}
+              variant={prepared ? "filled" : "outlined"}
+            />
+          );
         },
       },
       {

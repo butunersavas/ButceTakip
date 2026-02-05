@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Button,
@@ -19,6 +19,7 @@ import * as XLSX from "xlsx";
 
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import usePersistentState from "../../hooks/usePersistentState";
+import { useAuth } from "../../context/AuthContext";
 import { formatBudgetItemLabel, stripBudgetCode } from "../../utils/budgetLabel";
 
 interface Scenario {
@@ -121,6 +122,21 @@ const sampleRows: BudgetImportRow[] = [
   }
 ];
 
+const monthLabels = [
+  "Ocak",
+  "Şubat",
+  "Mart",
+  "Nisan",
+  "Mayıs",
+  "Haziran",
+  "Temmuz",
+  "Ağustos",
+  "Eylül",
+  "Ekim",
+  "Kasım",
+  "Aralık"
+];
+
 const sampleCsv = [
   sampleHeaders.join(","),
   ...sampleRows.map((row) =>
@@ -131,13 +147,21 @@ const sampleCsv = [
 export default function ImportExportView() {
   const client = useAuthorizedClient();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const isAdmin = !!user?.is_admin;
+  const restoreInputRef = useRef<HTMLInputElement | null>(null);
   const [importSummary, setImportSummary] = useState<ImportSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [year, setYear] = usePersistentState<number | "">("io:year", new Date().getFullYear());
   const [scenarioId, setScenarioId] = usePersistentState<number | null>("io:scenarioId", null);
   const [budgetItemId, setBudgetItemId] = usePersistentState<number | null>("io:budgetItemId", null);
+  const [monthFilter, setMonthFilter] = usePersistentState<number | "">("io:month", "");
+  const [departmentFilter, setDepartmentFilter] = usePersistentState<string>("io:department", "");
   const [exportError, setExportError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [backupFeedback, setBackupFeedback] = useState<{ message: string; severity: "success" | "error" } | null>(
+    null
+  );
 
   const { data: scenarios } = useQuery<Scenario[]>({
     queryKey: ["scenarios"],
@@ -152,6 +176,17 @@ export default function ImportExportView() {
     queryFn: async () => {
       const { data } = await client.get<BudgetItem[]>("/budget-items");
       return data;
+    }
+  });
+
+  const { data: departments = [] } = useQuery<string[]>({
+    queryKey: ["plan-departments", year, scenarioId],
+    queryFn: async () => {
+      const params: Record<string, number> = {};
+      if (year) params.year = Number(year);
+      if (scenarioId) params.scenario_id = scenarioId;
+      const { data } = await client.get<string[]>("/plans/departments", { params });
+      return data ?? [];
     }
   });
 
@@ -222,11 +257,21 @@ export default function ImportExportView() {
     }
   };
 
+  const handleRestoreFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      void handleRestoreBackup(file);
+      event.target.value = "";
+    }
+  };
+
   const buildExportParams = () => {
     const params: Record<string, string | number> = {};
     if (year) params.year = Number(year);
     if (scenarioId) params.scenario_id = scenarioId;
     if (budgetItemId) params.budget_item_id = budgetItemId;
+    if (monthFilter) params.month = Number(monthFilter);
+    if (departmentFilter) params.department = departmentFilter;
     return params;
   };
 
@@ -330,8 +375,13 @@ export default function ImportExportView() {
     setExporting(true);
     setExportError(null);
     try {
+      const params: Record<string, string | number> = {};
+      if (year) params.year = Number(year);
+      if (scenarioId) params.scenario_id = scenarioId;
+      if (monthFilter) params.month = Number(monthFilter);
+      if (departmentFilter) params.department = departmentFilter;
       const response = await client.get("/reports/purchase-forms-prepared/xlsx", {
-        params: { year, scenario_id: scenarioId ?? undefined },
+        params,
         responseType: "blob",
       });
       downloadBlob(response.data, `satinalma_formu_hazirlanan_butceler_${year}.xlsx`);
@@ -345,6 +395,59 @@ export default function ImportExportView() {
       } else {
         setExportError("Rapor indirilirken hata oluştu. Lütfen filtreleri kontrol edin.");
       }
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleDownloadBackup = async (type: "full" | "users") => {
+    setExporting(true);
+    setBackupFeedback(null);
+    try {
+      const response = await client.get(`/backup/${type}`, {
+        responseType: "blob"
+      });
+      const fileName =
+        type === "full"
+          ? `butce_tam_yedek_${Date.now()}.json`
+          : `butce_kullanicilar_${Date.now()}.json`;
+      downloadBlob(response.data, fileName, { type: "application/json" });
+      setBackupFeedback({
+        message: "Yedek başarıyla indirildi.",
+        severity: "success"
+      });
+    } catch (err) {
+      console.error(err);
+      setBackupFeedback({
+        message: "Yedek indirilirken hata oluştu.",
+        severity: "error"
+      });
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleRestoreBackup = async (file: File) => {
+    const confirmed = window.confirm(
+      "Mevcut tüm veri silinip yüklenecek, emin misiniz?"
+    );
+    if (!confirmed) return;
+    setExporting(true);
+    setBackupFeedback(null);
+    try {
+      const text = await file.text();
+      const payload = JSON.parse(text);
+      await client.post("/backup/restore/full", payload);
+      setBackupFeedback({
+        message: "Yedek başarıyla geri yüklendi.",
+        severity: "success"
+      });
+    } catch (err) {
+      console.error(err);
+      setBackupFeedback({
+        message: "Yedek geri yüklenirken hata oluştu.",
+        severity: "error"
+      });
     } finally {
       setExporting(false);
     }
@@ -475,6 +578,40 @@ export default function ImportExportView() {
                       ))}
                     </TextField>
                   </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      select
+                      label="Ay"
+                      value={monthFilter}
+                      onChange={(event) =>
+                        setMonthFilter(event.target.value ? Number(event.target.value) : "")
+                      }
+                      fullWidth
+                    >
+                      <MenuItem value="">Tümü</MenuItem>
+                      {monthLabels.map((label, index) => (
+                        <MenuItem key={label} value={index + 1}>
+                          {label}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      select
+                      label="Departman"
+                      value={departmentFilter}
+                      onChange={(event) => setDepartmentFilter(event.target.value)}
+                      fullWidth
+                    >
+                      <MenuItem value="">Tümü</MenuItem>
+                      {departments.map((department) => (
+                        <MenuItem key={department} value={department}>
+                          {department}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                  </Grid>
                   <Grid item xs={12}>
                     <Autocomplete
                       options={budgetItems ?? []}
@@ -556,6 +693,58 @@ export default function ImportExportView() {
           </Card>
         </Grid>
       </Grid>
+
+      {isAdmin && (
+        <Card>
+          <CardContent>
+            <Stack spacing={2}>
+              <Typography variant="h6" fontWeight={600}>
+                Yönetici Yedekleme
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Tam yedek ve kullanıcı yedeklerini alabilir, mevcut veriyi tamamen değiştirerek geri yükleyebilirsiniz.
+              </Typography>
+              {backupFeedback && (
+                <Alert severity={backupFeedback.severity}>{backupFeedback.message}</Alert>
+              )}
+              <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+                <Button
+                  variant="contained"
+                  startIcon={<DownloadIcon />}
+                  onClick={() => void handleDownloadBackup("full")}
+                  disabled={exporting}
+                >
+                  Tam Yedek Al
+                </Button>
+                <Button
+                  variant="outlined"
+                  startIcon={<DownloadIcon />}
+                  onClick={() => void handleDownloadBackup("users")}
+                  disabled={exporting}
+                >
+                  Kullanıcı Yedeği Al
+                </Button>
+                <Button
+                  variant="contained"
+                  color="warning"
+                  startIcon={<CloudUploadIcon />}
+                  onClick={() => restoreInputRef.current?.click()}
+                  disabled={exporting}
+                >
+                  Geri Yükle (Replace)
+                </Button>
+                <input
+                  ref={restoreInputRef}
+                  type="file"
+                  hidden
+                  accept="application/json"
+                  onChange={handleRestoreFileChange}
+                />
+              </Stack>
+            </Stack>
+          </CardContent>
+        </Card>
+      )}
 
     </Stack>
   );

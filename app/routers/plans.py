@@ -5,7 +5,7 @@ from sqlalchemy import and_, func, or_
 from sqlmodel import Session, select
 
 from app.dependencies import get_admin_user, get_current_user, get_db_session
-from app.models import BudgetItem, PlanEntry, Scenario, User
+from app.models import BudgetItem, PlanEntry, PurchaseFormStatusExt, Scenario, User
 from app.schemas import PlanAggregateRead, PlanEntryCreate, PlanEntryRead, PlanEntryUpdate
 
 router = APIRouter(prefix="/plans", tags=["Plans"])
@@ -23,6 +23,9 @@ def _normalize_capex_opex(value: str | None) -> str | None:
 def _plan_read_query(capex_filter: str | None):
     normalized_plan_code = func.upper(func.trim(PlanEntry.budget_code))
     normalized_item_code = func.upper(func.trim(BudgetItem.code))
+    plan_budget_code = func.coalesce(func.nullif(func.trim(PlanEntry.budget_code), ""), BudgetItem.code)
+    plan_department = func.coalesce(PlanEntry.department, "")
+    status_budget_code = func.upper(func.trim(PurchaseFormStatusExt.budget_code))
     query = (
         select(
             PlanEntry.id,
@@ -43,6 +46,7 @@ def _plan_read_query(capex_filter: str | None):
             BudgetItem.map_attribute.label("asset_type"),
             BudgetItem.map_category.label("map_capex_opex"),
             BudgetItem.map_attribute.label("map_nitelik"),
+            func.coalesce(PurchaseFormStatusExt.is_form_prepared, False).label("is_form_prepared"),
         )
         .select_from(PlanEntry)
         .join(Scenario, Scenario.id == PlanEntry.scenario_id)
@@ -54,6 +58,16 @@ def _plan_read_query(capex_filter: str | None):
                     normalized_item_code == normalized_plan_code,
                 ),
                 BudgetItem.id == PlanEntry.budget_item_id,
+            ),
+        )
+        .outerjoin(
+            PurchaseFormStatusExt,
+            and_(
+                status_budget_code == func.upper(func.trim(plan_budget_code)),
+                PurchaseFormStatusExt.year == PlanEntry.year,
+                PurchaseFormStatusExt.month == PlanEntry.month,
+                PurchaseFormStatusExt.scenario_id == PlanEntry.scenario_id,
+                PurchaseFormStatusExt.department == plan_department,
             ),
         )
     )
@@ -84,6 +98,7 @@ def _build_plan_read(row: dict) -> PlanEntryRead:
         map_capex_opex=capex_value.title() if capex_value else None,
         map_nitelik=asset_value,
         nitelik=asset_value,
+        is_form_prepared=row.get("is_form_prepared") or False,
     )
 
 
