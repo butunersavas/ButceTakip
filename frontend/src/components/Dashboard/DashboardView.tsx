@@ -681,6 +681,7 @@ export default function DashboardView() {
       "trend",
       debouncedFilters.year,
       debouncedFilters.scenarioId,
+      debouncedFilters.month,
       selectedOverrunBudgetItemId ?? debouncedFilters.budgetItemId,
       debouncedFilters.department,
       debouncedFilters.capexOpex,
@@ -689,6 +690,7 @@ export default function DashboardView() {
     queryFn: async () => {
       const params: Record<string, number | string> = { year: debouncedFilters.year };
       if (debouncedFilters.scenarioId) params.scenario_id = debouncedFilters.scenarioId;
+      if (debouncedFilters.month) params.month = debouncedFilters.month;
       const trendBudgetItemId = selectedOverrunBudgetItemId ?? debouncedFilters.budgetItemId;
       if (trendBudgetItemId) params.budget_item_id = trendBudgetItemId;
       if (selectedOverrunItem?.budget_code) {
