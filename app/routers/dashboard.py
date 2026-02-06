@@ -490,6 +490,7 @@ def get_spend_last_months(
 def get_spend_trend(
     year: int | None = Query(default=None),
     scenario_id: int | None = Query(default=None),
+    month: int | None = Query(default=None, ge=1, le=12),
     budget_item_id: int | None = Query(default=None),
     budget_code: str | None = Query(default=None),
     department: str | None = Query(default=None),
@@ -505,7 +506,8 @@ def get_spend_trend(
         resolved_year = date.today().year
 
     capex_filter = _normalize_capex_opex(capex_opex)
-    month_range = list(range(1, 13))
+    end_month = month or 12
+    month_range = list(range(1, end_month + 1))
     raw_months = _calculate_item_based_monthly_totals(
         session,
         year=resolved_year,
@@ -518,7 +520,7 @@ def get_spend_trend(
     )
     month_map = {entry.month: entry for entry in raw_months}
     normalized_months: list[SpendTrendMonth] = []
-    for month in range(1, 13):
+    for month in month_range:
         entry = month_map.get(
             month,
             SpendMonthlySummary(
