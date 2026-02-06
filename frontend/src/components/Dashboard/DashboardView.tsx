@@ -33,18 +33,14 @@ import Autocomplete, { createFilterOptions } from "@mui/material/Autocomplete";
 import { useQuery } from "@tanstack/react-query";
 import {
   Bar,
+  BarChart,
   CartesianGrid,
   Cell,
-  ComposedChart,
   Legend,
-  Line,
   Pie,
   PieChart,
-  ReferenceLine,
   ResponsiveContainer,
-  Tooltip as RechartsTooltip,
-  XAxis,
-  YAxis
+  Tooltip as RechartsTooltip
 } from "recharts";
 import { useNavigate } from "react-router-dom";
 
@@ -872,9 +868,6 @@ export default function DashboardView() {
       setSelectedOverrunItem(null);
     }
   }, [overBudgetItems, selectedOverrunItem]);
-  const maxOverrunValue = useMemo(() => {
-    return monthlyData.reduce((maxValue, entry) => Math.max(maxValue, entry.overrun ?? 0), 0);
-  }, [monthlyData]);
 
   const renderTrendTooltip = ({
     active,
@@ -903,18 +896,23 @@ export default function DashboardView() {
           {label}
         </Typography>
         <Stack spacing={0.4}>
-          <Typography variant="body2">Planlanan: {formatCurrency(toSafeNumber(data.planned))}</Typography>
-          <Typography variant="body2">Gerçekleşen: {formatCurrency(toSafeNumber(data.actual))}</Typography>
-          <Typography variant="body2">Kalan: {formatCurrency(toSafeNumber(data.remaining))}</Typography>
-          <Typography
-            variant="body2"
-            color={toSafeNumber(data.overrun) > 0 ? "error.main" : "text.secondary"}
-          >
-            Aşım: {formatCurrency(toSafeNumber(data.overrun))}
-          </Typography>
-          <Typography variant="body2">
-            Aşım %: {toSafeNumber(data.overrunPct ?? data.overrun_pct).toFixed(1)}%
-          </Typography>
+          {showPlanned ? (
+            <Typography variant="body2">Planlanan: {formatCurrency(toSafeNumber(data.planned))}</Typography>
+          ) : null}
+          {showActual ? (
+            <Typography variant="body2">Gerçekleşen: {formatCurrency(toSafeNumber(data.actual))}</Typography>
+          ) : null}
+          {showRemaining ? (
+            <Typography variant="body2">Kalan: {formatCurrency(toSafeNumber(data.remaining))}</Typography>
+          ) : null}
+          {showOverrun ? (
+            <Typography
+              variant="body2"
+              color={toSafeNumber(data.overrun) > 0 ? "error.main" : "text.secondary"}
+            >
+              Aşım: {formatCurrency(toSafeNumber(data.overrun))}
+            </Typography>
+          ) : null}
         </Stack>
       </Box>
     );
@@ -1378,84 +1376,31 @@ export default function DashboardView() {
                   ) : !hasTrendData ? (
                     <Alert severity="info">Trend verisi yok.</Alert>
                   ) : (
-                    <Box sx={{ width: "100%", height: 260, minWidth: 240 }}>
-                      <SafeChartContainer minHeight={260}>
-                        <ResponsiveContainer width="100%" height={260}>
-                          <ComposedChart data={monthlyData}>
+                    <Box sx={{ width: "100%", height: 280, minWidth: 240 }}>
+                      <SafeChartContainer minHeight={280}>
+                        <ResponsiveContainer width="100%" height={280}>
+                          <BarChart data={monthlyData} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
                             <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
                             <XAxis dataKey="name" tick={{ fill: "#475569" }} />
                             <YAxis
-                              yAxisId="left"
                               tick={{ fill: "#475569" }}
-                              tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
+                              tickFormatter={(value) => `${(Number(value) / 1000).toFixed(0)}k`}
                             />
-                            <YAxis
-                              yAxisId="right"
-                              orientation="right"
-                              hide={maxOverrunValue <= 0 || !showOverrun}
-                              domain={[0, Math.max(maxOverrunValue * 1.2, 1)]}
-                              tick={{ fill: "#475569" }}
-                              tickFormatter={(value) => formatCurrency(toSafeNumber(value))}
-                            />
-                            <ReferenceLine y={0} stroke="#9e9e9e" strokeDasharray="3 3" />
-                            <RechartsTooltip
-                              content={renderTrendTooltip}
-                              labelFormatter={(label) => {
-                                const n = Number(label);
-                                return Number.isFinite(n)
-                                  ? (monthLabels[n - 1] ?? `Ay ${n}`)
-                                  : String(label);
-                              }}
-                            />
+                            <RechartsTooltip content={renderTrendTooltip} />
                             <Legend />
-                            <Bar
-                              dataKey="planned"
-                              name="Planlanan"
-                              fill={pieColors.planned}
-                              radius={[6, 6, 0, 0]}
-                              yAxisId="left"
-                              hide={!showPlanned}
-                            />
-                            <Bar
-                              dataKey="actual"
-                              name="Gerçekleşen"
-                              fill={pieColors.actual}
-                              radius={[6, 6, 0, 0]}
-                              yAxisId="left"
-                              hide={!showActual}
-                            />
-                            <Bar
-                              dataKey="remaining"
-                              name="Kalan"
-                              fill={pieColors.remaining}
-                              radius={[6, 6, 0, 0]}
-                              yAxisId="left"
-                              hide={!showRemaining}
-                            />
-                            <Line
-                              dataKey="overrun"
-                              name="Aşım"
-                              stroke={pieColors.overrun}
-                              strokeWidth={2}
-                              dot={(props) => {
-                                if (!props?.payload || props.payload.overrun <= 0) {
-                                  return null;
-                                }
-                                return (
-                                  <circle
-                                    cx={props.cx}
-                                    cy={props.cy}
-                                    r={4}
-                                    fill={pieColors.overrun}
-                                    stroke="#fff"
-                                    strokeWidth={1}
-                                  />
-                                );
-                              }}
-                              yAxisId="right"
-                              hide={!showOverrun || maxOverrunValue <= 0}
-                            />
-                          </ComposedChart>
+                            {showPlanned ? (
+                              <Bar dataKey="planned" name="Planlanan" fill={pieColors.planned} radius={[6, 6, 0, 0]} />
+                            ) : null}
+                            {showActual ? (
+                              <Bar dataKey="actual" name="Gerçekleşen" fill={pieColors.actual} radius={[6, 6, 0, 0]} />
+                            ) : null}
+                            {showRemaining ? (
+                              <Bar dataKey="remaining" name="Kalan" fill={pieColors.remaining} radius={[6, 6, 0, 0]} />
+                            ) : null}
+                            {showOverrun ? (
+                              <Bar dataKey="overrun" name="Aşım" fill={pieColors.overrun} radius={[6, 6, 0, 0]} />
+                            ) : null}
+                          </BarChart>
                         </ResponsiveContainer>
                       </SafeChartContainer>
                     </Box>
