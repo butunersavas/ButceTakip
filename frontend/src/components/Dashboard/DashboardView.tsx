@@ -1380,7 +1380,7 @@ export default function DashboardView() {
                   ) : (
                     <Box sx={{ width: "100%", height: 260, minWidth: 240 }}>
                       <SafeChartContainer minHeight={260}>
-                        <ResponsiveContainer width="100%" height="100%">
+                        <ResponsiveContainer width="100%" height={260}>
                           <ComposedChart data={monthlyData}>
                             <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
                             <XAxis dataKey="name" tick={{ fill: "#475569" }} />
@@ -1559,7 +1559,7 @@ export default function DashboardView() {
                           ) : (
                             <Box sx={{ height: 240, width: "100%" }}>
                               <SafeChartContainer minHeight={240}>
-                                <ResponsiveContainer width="100%" height="100%">
+                                <ResponsiveContainer width="100%" height={240}>
                                   <PieChart>
                                     <RechartsTooltip
                                       formatter={(value: number, name: string) => [
