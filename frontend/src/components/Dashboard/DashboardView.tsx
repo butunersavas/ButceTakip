@@ -41,7 +41,6 @@ import {
   Pie,
   PieChart,
   ReferenceLine,
-  ResponsiveContainer,
   Tooltip as RechartsTooltip,
   XAxis,
   YAxis
@@ -1380,8 +1379,8 @@ export default function DashboardView() {
                   ) : (
                     <Box sx={{ width: "100%", height: 260, minWidth: 240 }}>
                       <SafeChartContainer minHeight={260}>
-                        <ResponsiveContainer width="100%" height="100%">
-                          <ComposedChart data={monthlyData}>
+                        {(size) => (
+                          <ComposedChart width={size.width} height={size.height} data={monthlyData}>
                             <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
                             <XAxis dataKey="name" tick={{ fill: "#475569" }} />
                             <YAxis
@@ -1456,7 +1455,7 @@ export default function DashboardView() {
                               hide={!showOverrun || maxOverrunValue <= 0}
                             />
                           </ComposedChart>
-                        </ResponsiveContainer>
+                        )}
                       </SafeChartContainer>
                     </Box>
                   )}
@@ -1559,8 +1558,8 @@ export default function DashboardView() {
                           ) : (
                             <Box sx={{ height: 240, width: "100%" }}>
                               <SafeChartContainer minHeight={240}>
-                                <ResponsiveContainer width="100%" height="100%">
-                                  <PieChart>
+                                {(size) => (
+                                  <PieChart width={size.width} height={size.height}>
                                     <RechartsTooltip
                                       formatter={(value: number, name: string) => [
                                         formatCurrency(toSafeNumber(value)),
@@ -1580,7 +1579,7 @@ export default function DashboardView() {
                                       ))}
                                     </Pie>
                                   </PieChart>
-                                </ResponsiveContainer>
+                                )}
                               </SafeChartContainer>
                             </Box>
                           )}
