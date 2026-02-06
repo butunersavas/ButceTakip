@@ -32,19 +32,11 @@ import {
 import Autocomplete, { createFilterOptions } from "@mui/material/Autocomplete";
 import { useQuery } from "@tanstack/react-query";
 import {
-  Bar,
-  CartesianGrid,
   Cell,
-  ComposedChart,
-  Legend,
-  Line,
   Pie,
   PieChart,
-  ReferenceLine,
   ResponsiveContainer,
-  Tooltip as RechartsTooltip,
-  XAxis,
-  YAxis
+  Tooltip as RechartsTooltip
 } from "recharts";
 import { useNavigate } from "react-router-dom";
 
@@ -872,53 +864,6 @@ export default function DashboardView() {
       setSelectedOverrunItem(null);
     }
   }, [overBudgetItems, selectedOverrunItem]);
-  const maxOverrunValue = useMemo(() => {
-    return monthlyData.reduce((maxValue, entry) => Math.max(maxValue, entry.overrun ?? 0), 0);
-  }, [monthlyData]);
-
-  const renderTrendTooltip = ({
-    active,
-    payload,
-    label
-  }: {
-    active?: boolean;
-    payload?: Array<{ payload?: (typeof monthlyData)[number] }>;
-    label?: string;
-  }) => {
-    if (!active || !payload?.length) return null;
-    const data = payload[0]?.payload;
-    if (!data) return null;
-    return (
-      <Box
-        sx={{
-          bgcolor: "background.paper",
-          border: "1px solid",
-          borderColor: "divider",
-          borderRadius: 2,
-          px: 1.5,
-          py: 1
-        }}
-      >
-        <Typography variant="subtitle2" fontWeight={600} gutterBottom>
-          {label}
-        </Typography>
-        <Stack spacing={0.4}>
-          <Typography variant="body2">Planlanan: {formatCurrency(toSafeNumber(data.planned))}</Typography>
-          <Typography variant="body2">Gerçekleşen: {formatCurrency(toSafeNumber(data.actual))}</Typography>
-          <Typography variant="body2">Kalan: {formatCurrency(toSafeNumber(data.remaining))}</Typography>
-          <Typography
-            variant="body2"
-            color={toSafeNumber(data.overrun) > 0 ? "error.main" : "text.secondary"}
-          >
-            Aşım: {formatCurrency(toSafeNumber(data.overrun))}
-          </Typography>
-          <Typography variant="body2">
-            Aşım %: {toSafeNumber(data.overrunPct ?? data.overrun_pct).toFixed(1)}%
-          </Typography>
-        </Stack>
-      </Box>
-    );
-  };
 
   useEffect(() => {
     return () => {
@@ -1378,86 +1323,52 @@ export default function DashboardView() {
                   ) : !hasTrendData ? (
                     <Alert severity="info">Trend verisi yok.</Alert>
                   ) : (
-                    <Box sx={{ width: "100%", height: 260, minWidth: 240 }}>
-                      <SafeChartContainer minHeight={260}>
-                        <ResponsiveContainer width="100%" height={260}>
-                          <ComposedChart data={monthlyData}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
-                            <XAxis dataKey="name" tick={{ fill: "#475569" }} />
-                            <YAxis
-                              yAxisId="left"
-                              tick={{ fill: "#475569" }}
-                              tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
-                            />
-                            <YAxis
-                              yAxisId="right"
-                              orientation="right"
-                              hide={maxOverrunValue <= 0 || !showOverrun}
-                              domain={[0, Math.max(maxOverrunValue * 1.2, 1)]}
-                              tick={{ fill: "#475569" }}
-                              tickFormatter={(value) => formatCurrency(toSafeNumber(value))}
-                            />
-                            <ReferenceLine y={0} stroke="#9e9e9e" strokeDasharray="3 3" />
-                            <RechartsTooltip
-                              content={renderTrendTooltip}
-                              labelFormatter={(label) => {
-                                const n = Number(label);
-                                return Number.isFinite(n)
-                                  ? (monthLabels[n - 1] ?? `Ay ${n}`)
-                                  : String(label);
-                              }}
-                            />
-                            <Legend />
-                            <Bar
-                              dataKey="planned"
-                              name="Planlanan"
-                              fill={pieColors.planned}
-                              radius={[6, 6, 0, 0]}
-                              yAxisId="left"
-                              hide={!showPlanned}
-                            />
-                            <Bar
-                              dataKey="actual"
-                              name="Gerçekleşen"
-                              fill={pieColors.actual}
-                              radius={[6, 6, 0, 0]}
-                              yAxisId="left"
-                              hide={!showActual}
-                            />
-                            <Bar
-                              dataKey="remaining"
-                              name="Kalan"
-                              fill={pieColors.remaining}
-                              radius={[6, 6, 0, 0]}
-                              yAxisId="left"
-                              hide={!showRemaining}
-                            />
-                            <Line
-                              dataKey="overrun"
-                              name="Aşım"
-                              stroke={pieColors.overrun}
-                              strokeWidth={2}
-                              dot={(props) => {
-                                if (!props?.payload || props.payload.overrun <= 0) {
-                                  return null;
-                                }
-                                return (
-                                  <circle
-                                    cx={props.cx}
-                                    cy={props.cy}
-                                    r={4}
-                                    fill={pieColors.overrun}
-                                    stroke="#fff"
-                                    strokeWidth={1}
-                                  />
-                                );
-                              }}
-                              yAxisId="right"
-                              hide={!showOverrun || maxOverrunValue <= 0}
-                            />
-                          </ComposedChart>
-                        </ResponsiveContainer>
-                      </SafeChartContainer>
+                    <Box sx={{ width: "100%", overflowX: "auto" }}>
+                      <Table size="small">
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>Ay</TableCell>
+                            {showPlanned ? <TableCell align="right">Planlanan</TableCell> : null}
+                            {showActual ? <TableCell align="right">Gerçekleşen</TableCell> : null}
+                            {showRemaining ? <TableCell align="right">Kalan</TableCell> : null}
+                            {showOverrun ? <TableCell align="right">Aşım</TableCell> : null}
+                            {showOverrun ? <TableCell align="right">Aşım %</TableCell> : null}
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {monthlyData.map((entry) => {
+                            const planned = toSafeNumber(entry.planned);
+                            const actual = toSafeNumber(entry.actual);
+                            const remaining = toSafeNumber(entry.remaining);
+                            const overrun = toSafeNumber(entry.overrun);
+                            const overrunPct = toSafeNumber(
+                              entry.overrunPct ?? entry.overrun_pct
+                            );
+                            return (
+                              <TableRow key={`trend-${entry.month}`} hover>
+                                <TableCell>{entry.monthLabel}</TableCell>
+                                {showPlanned ? (
+                                  <TableCell align="right">{formatCurrency(planned)}</TableCell>
+                                ) : null}
+                                {showActual ? (
+                                  <TableCell align="right">{formatCurrency(actual)}</TableCell>
+                                ) : null}
+                                {showRemaining ? (
+                                  <TableCell align="right">{formatCurrency(remaining)}</TableCell>
+                                ) : null}
+                                {showOverrun ? (
+                                  <TableCell align="right">{formatCurrency(overrun)}</TableCell>
+                                ) : null}
+                                {showOverrun ? (
+                                  <TableCell align="right">
+                                    {overrunPct.toFixed(1)}%
+                                  </TableCell>
+                                ) : null}
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
                     </Box>
                   )}
                 </CardContent>
