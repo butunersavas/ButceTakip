@@ -32,10 +32,16 @@ import {
 import Autocomplete, { createFilterOptions } from "@mui/material/Autocomplete";
 import { useQuery } from "@tanstack/react-query";
 import {
+  CartesianGrid,
   Cell,
+  Legend,
+  Line,
+  LineChart,
   Pie,
   PieChart,
   ResponsiveContainer,
+  XAxis,
+  YAxis,
   Tooltip as RechartsTooltip
 } from "recharts";
 import { useNavigate } from "react-router-dom";
@@ -249,6 +255,13 @@ function formatCurrency(value: number) {
   }).format(value ?? 0);
 }
 
+function formatCompactCurrency(value: number) {
+  return new Intl.NumberFormat("tr-TR", {
+    notation: "compact",
+    maximumFractionDigits: 1
+  }).format(value ?? 0);
+}
+
 function formatBudgetLabel(name?: string | null, code?: string | null) {
   return stripBudgetCode(name ?? "") || code || "-";
 }
@@ -410,8 +423,6 @@ export default function DashboardView() {
   const now = new Date();
   const yearNow = now.getFullYear();
   const currentMonth = now.getMonth() + 1;
-  const dayKey = `${yearNow}${String(currentMonth).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
-  const alertsShownKey = `dashboard_alert_shown_${dayKey}`;
   const purchaseDoneKey = `purchase_alert_done_${yearNow}_${currentMonth}`;
   const debouncedFilters = useDebouncedValue(
     useMemo(
@@ -458,11 +469,6 @@ export default function DashboardView() {
   });
 
   useEffect(() => {
-    const shown = localStorage.getItem(alertsShownKey);
-    if (shown === "shown") {
-      return;
-    }
-
     let isMounted = true;
 
     const fetchWarrantyAlerts = async () => {
@@ -495,11 +501,7 @@ export default function DashboardView() {
 
       setPurchaseItems(purchaseList);
       setWarrantyAlertItems(normalized);
-
-      if (purchaseList.length > 0 || expired.length > 0 || near.length > 0) {
-        setIsAlertsDialogOpen(true);
-        localStorage.setItem(alertsShownKey, "shown");
-      }
+      setIsAlertsDialogOpen(true);
     };
 
     loadAlerts();
@@ -507,7 +509,7 @@ export default function DashboardView() {
     return () => {
       isMounted = false;
     };
-  }, [alertsShownKey, client, currentMonth, purchaseDoneKey, yearNow]);
+  }, [client, currentMonth, purchaseDoneKey, yearNow]);
 
   const handleCloseAlertsDialog = () => {
     setIsAlertsDialogOpen(false);
@@ -1323,53 +1325,67 @@ export default function DashboardView() {
                   ) : !hasTrendData ? (
                     <Alert severity="info">Trend verisi yok.</Alert>
                   ) : (
-                    <Box sx={{ width: "100%", overflowX: "auto" }}>
-                      <Table size="small">
-                        <TableHead>
-                          <TableRow>
-                            <TableCell>Ay</TableCell>
-                            {showPlanned ? <TableCell align="right">Planlanan</TableCell> : null}
-                            {showActual ? <TableCell align="right">Gerçekleşen</TableCell> : null}
-                            {showRemaining ? <TableCell align="right">Kalan</TableCell> : null}
-                            {showOverrun ? <TableCell align="right">Aşım</TableCell> : null}
-                            {showOverrun ? <TableCell align="right">Aşım %</TableCell> : null}
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {monthlyData.map((entry) => {
-                            const planned = toSafeNumber(entry.planned);
-                            const actual = toSafeNumber(entry.actual);
-                            const remaining = toSafeNumber(entry.remaining);
-                            const overrun = toSafeNumber(entry.overrun);
-                            const overrunPct = toSafeNumber(
-                              entry.overrunPct ?? entry.overrun_pct
-                            );
-                            return (
-                              <TableRow key={`trend-${entry.month}`} hover>
-                                <TableCell>{entry.monthLabel}</TableCell>
-                                {showPlanned ? (
-                                  <TableCell align="right">{formatCurrency(planned)}</TableCell>
-                                ) : null}
-                                {showActual ? (
-                                  <TableCell align="right">{formatCurrency(actual)}</TableCell>
-                                ) : null}
-                                {showRemaining ? (
-                                  <TableCell align="right">{formatCurrency(remaining)}</TableCell>
-                                ) : null}
-                                {showOverrun ? (
-                                  <TableCell align="right">{formatCurrency(overrun)}</TableCell>
-                                ) : null}
-                                {showOverrun ? (
-                                  <TableCell align="right">
-                                    {overrunPct.toFixed(1)}%
-                                  </TableCell>
-                                ) : null}
-                              </TableRow>
-                            );
-                          })}
-                        </TableBody>
-                      </Table>
-                    </Box>
+                    <SafeChartContainer minHeight={340}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart
+                          data={monthlyData}
+                          margin={{ top: 12, right: 28, left: 8, bottom: 8 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="monthLabel" />
+                          <YAxis tickFormatter={formatCompactCurrency} width={80} />
+                          <RechartsTooltip
+                            formatter={(value: number, name: string) => {
+                              if (name === "Aşım %") {
+                                return [`${toSafeNumber(value).toFixed(1)}%`, name];
+                              }
+                              return [formatCurrency(toSafeNumber(value)), name];
+                            }}
+                          />
+                          <Legend />
+                          {showPlanned ? (
+                            <Line
+                              type="monotone"
+                              dataKey="planned"
+                              stroke={COLOR_PLANNED}
+                              name="Planlanan"
+                              strokeWidth={2}
+                              dot={false}
+                            />
+                          ) : null}
+                          {showActual ? (
+                            <Line
+                              type="monotone"
+                              dataKey="actual"
+                              stroke={COLOR_ACTUAL}
+                              name="Gerçekleşen"
+                              strokeWidth={2}
+                              dot={false}
+                            />
+                          ) : null}
+                          {showRemaining ? (
+                            <Line
+                              type="monotone"
+                              dataKey="remaining"
+                              stroke={COLOR_REMAINING}
+                              name="Kalan"
+                              strokeWidth={2}
+                              dot={false}
+                            />
+                          ) : null}
+                          {showOverrun ? (
+                            <Line
+                              type="monotone"
+                              dataKey="overrun"
+                              stroke={COLOR_OVER}
+                              name="Aşım"
+                              strokeWidth={2}
+                              dot={false}
+                            />
+                          ) : null}
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </SafeChartContainer>
                   )}
                 </CardContent>
               </Card>
