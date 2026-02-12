@@ -37,8 +37,6 @@ import {
   CartesianGrid,
   Cell,
   Legend,
-  Line,
-  LineChart,
   Pie,
   PieChart,
   ResponsiveContainer,
@@ -1327,76 +1325,13 @@ export default function DashboardView() {
                   ) : !hasTrendData ? (
                     <Alert severity="info">Trend verisi yok.</Alert>
                   ) : (
-                    <Stack spacing={3}>
+                    <Box>
+                      <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1 }}>
+                          Aylık Plan / Gerçekleşen / Kalan / Aşım Karşılaştırması
+                      </Typography>
                       <SafeChartContainer minHeight={320}>
                         <ResponsiveContainer width="100%" height={320}>
-                          <LineChart
-                            data={monthlyData}
-                            margin={{ top: 12, right: 28, left: 8, bottom: 8 }}
-                          >
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="monthLabel" />
-                            <YAxis tickFormatter={formatCompactCurrency} width={80} />
-                            <RechartsTooltip
-                              formatter={(value: number, name: string) => {
-                                if (name === "Aşım %") {
-                                  return [`${toSafeNumber(value).toFixed(1)}%`, name];
-                                }
-                                return [formatCurrency(toSafeNumber(value)), name];
-                              }}
-                            />
-                            <Legend />
-                            {showPlanned ? (
-                              <Line
-                                type="monotone"
-                                dataKey="planned"
-                                stroke={COLOR_PLANNED}
-                                name="Planlanan"
-                                strokeWidth={2}
-                                dot={false}
-                              />
-                            ) : null}
-                            {showActual ? (
-                              <Line
-                                type="monotone"
-                                dataKey="actual"
-                                stroke={COLOR_ACTUAL}
-                                name="Gerçekleşen"
-                                strokeWidth={2}
-                                dot={false}
-                              />
-                            ) : null}
-                            {showRemaining ? (
-                              <Line
-                                type="monotone"
-                                dataKey="remaining"
-                                stroke={COLOR_REMAINING}
-                                name="Kalan"
-                                strokeWidth={2}
-                                dot={false}
-                              />
-                            ) : null}
-                            {showOverrun ? (
-                              <Line
-                                type="monotone"
-                                dataKey="overrun"
-                                stroke={COLOR_OVER}
-                                name="Aşım"
-                                strokeWidth={2}
-                                dot={false}
-                              />
-                            ) : null}
-                          </LineChart>
-                        </ResponsiveContainer>
-                      </SafeChartContainer>
-
-                      <Box>
-                        <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1 }}>
-                          Aylık Plan / Gerçekleşen / Kalan / Aşım Karşılaştırması
-                        </Typography>
-                        <SafeChartContainer minHeight={320}>
-                          <ResponsiveContainer width="100%" height={320}>
-                            <BarChart
+                          <BarChart
                               data={monthlyData}
                               margin={{ top: 8, right: 20, left: 8, bottom: 8 }}
                               barCategoryGap="20%"
@@ -1411,15 +1346,22 @@ export default function DashboardView() {
                                 ]}
                               />
                               <Legend />
-                              <Bar dataKey="planned" name="Planlanan" fill={COLOR_PLANNED} />
-                              <Bar dataKey="actual" name="Gerçekleşen" fill={COLOR_ACTUAL} />
-                              <Bar dataKey="remaining" name="Kalan" fill={COLOR_REMAINING} />
-                              <Bar dataKey="overrun" name="Aşım" fill={COLOR_OVER} />
+                              {showPlanned ? (
+                                <Bar dataKey="planned" name="Planlanan" fill={COLOR_PLANNED} />
+                              ) : null}
+                              {showActual ? (
+                                <Bar dataKey="actual" name="Gerçekleşen" fill={COLOR_ACTUAL} />
+                              ) : null}
+                              {showRemaining ? (
+                                <Bar dataKey="remaining" name="Kalan" fill={COLOR_REMAINING} />
+                              ) : null}
+                              {showOverrun ? (
+                                <Bar dataKey="overrun" name="Aşım" fill={COLOR_OVER} />
+                              ) : null}
                             </BarChart>
-                          </ResponsiveContainer>
-                        </SafeChartContainer>
-                      </Box>
-                    </Stack>
+                        </ResponsiveContainer>
+                      </SafeChartContainer>
+                    </Box>
                   )}
                 </CardContent>
               </Card>
