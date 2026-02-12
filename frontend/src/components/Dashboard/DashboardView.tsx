@@ -1507,60 +1507,69 @@ export default function DashboardView() {
           Uyarılar
         </DialogTitle>
         <DialogContent dividers>
-          {purchaseItems.length > 0 && (
-            <Box sx={{ mb: 3 }}>
-              <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-                Bu ay bütçede satın alma kalemleriniz var
+          <Box sx={{ mb: 3 }}>
+            <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+              Bütçe Demirbaş Uyarıları
+            </Typography>
+            {purchaseItems.length === 0 ? (
+              <Typography variant="body2" color="text.secondary">
+                Bu ay için satın alma/demirbaş uyarısı bulunmuyor.
               </Typography>
-              <TextField
-                select
-                label="Departman"
-                size="small"
-                value={purchaseDepartmentFilter}
-                onChange={(event) => setPurchaseDepartmentFilter(event.target.value)}
-                sx={{ mb: 2, minWidth: 220 }}
-              >
-                <MenuItem value="">Hepsi</MenuItem>
-                {purchaseDepartments.map((department) => (
-                  <MenuItem key={department} value={department}>
-                    {department}
-                  </MenuItem>
-                ))}
-              </TextField>
-              <List dense sx={{ maxHeight: 300, overflowY: "auto" }}>
-                {filteredPurchaseItems?.map((item) => {
-                  const amountLabel =
-                    item.amount != null ? formatCurrency(toSafeNumber(item.amount)) : null;
-                  const secondaryPieces = [
-                    amountLabel ? `Tutar: ${amountLabel}` : null,
-                    item.department ? `Departman: ${item.department}` : null
-                  ].filter(Boolean);
-                  const key = buildPurchaseKey(item);
-                  return (
-                    <ListItem
-                      key={key}
-                      secondaryAction={
-                        <Checkbox
-                          edge="end"
-                          checked={purchaseSelections[key] ?? false}
-                          onChange={(event) => {
-                            const checked = event.target.checked;
-                            setPurchaseSelections((prev) => ({ ...prev, [key]: checked }));
-                          }}
+            ) : (
+              <>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                  Bu ay bütçede satın alma kalemleriniz var.
+                </Typography>
+                <TextField
+                  select
+                  label="Departman"
+                  size="small"
+                  value={purchaseDepartmentFilter}
+                  onChange={(event) => setPurchaseDepartmentFilter(event.target.value)}
+                  sx={{ mb: 2, minWidth: 220 }}
+                >
+                  <MenuItem value="">Hepsi</MenuItem>
+                  {purchaseDepartments.map((department) => (
+                    <MenuItem key={department} value={department}>
+                      {department}
+                    </MenuItem>
+                  ))}
+                </TextField>
+                <List dense sx={{ maxHeight: 300, overflowY: "auto" }}>
+                  {filteredPurchaseItems?.map((item) => {
+                    const amountLabel =
+                      item.amount != null ? formatCurrency(toSafeNumber(item.amount)) : null;
+                    const secondaryPieces = [
+                      amountLabel ? `Tutar: ${amountLabel}` : null,
+                      item.department ? `Departman: ${item.department}` : null
+                    ].filter(Boolean);
+                    const key = buildPurchaseKey(item);
+                    return (
+                      <ListItem
+                        key={key}
+                        secondaryAction={
+                          <Checkbox
+                            edge="end"
+                            checked={purchaseSelections[key] ?? false}
+                            onChange={(event) => {
+                              const checked = event.target.checked;
+                              setPurchaseSelections((prev) => ({ ...prev, [key]: checked }));
+                            }}
+                          />
+                        }
+                      >
+                        <ListItemText
+                          primary={formatBudgetLabel(item.budget_name, item.budget_code)}
+                          secondary={secondaryPieces.length ? secondaryPieces.join(" • ") : undefined}
+                          primaryTypographyProps={{ variant: "body2" }}
                         />
-                      }
-                    >
-                      <ListItemText
-                        primary={formatBudgetLabel(item.budget_name, item.budget_code)}
-                        secondary={secondaryPieces.length ? secondaryPieces.join(" • ") : undefined}
-                        primaryTypographyProps={{ variant: "body2" }}
-                      />
-                    </ListItem>
-                  );
-                })}
-              </List>
-            </Box>
-          )}
+                      </ListItem>
+                    );
+                  })}
+                </List>
+              </>
+            )}
+          </Box>
 
           <Box>
             <Typography variant="subtitle1" fontWeight={600} gutterBottom>
