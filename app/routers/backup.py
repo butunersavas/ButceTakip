@@ -82,7 +82,7 @@ def restore_full_backup(
         table = SQLModel.metadata.tables.get(table_name)
         if table is None:
             continue
-        session.exec(table.insert(), rows)
+        session.execute(table.insert(), rows)
 
     session.commit()
     return {"detail": "Yedek geri yüklendi."}
