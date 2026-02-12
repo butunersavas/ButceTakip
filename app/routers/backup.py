@@ -3,6 +3,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import inspect, text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, SQLModel
 
 from app.dependencies import get_admin_user, get_db_session
@@ -60,29 +61,40 @@ def restore_full_backup(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Backup data missing.")
 
     table_names = _get_table_names(session)
+    if not table_names:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No tables found to restore.")
+
     bind = session.get_bind()
     dialect_name = bind.dialect.name
 
-    if dialect_name == "postgresql":
-        quoted_tables = ", ".join(f'"{name}"' for name in table_names)
-        session.exec(text(f"TRUNCATE TABLE {quoted_tables} RESTART IDENTITY CASCADE"))
-    elif dialect_name == "sqlite":
-        session.exec(text("PRAGMA foreign_keys=OFF"))
-        for table_name in table_names:
-            session.exec(text(f'DELETE FROM "{table_name}"'))
-        session.exec(text("PRAGMA foreign_keys=ON"))
-    else:
-        for table_name in table_names:
-            session.exec(text(f'DELETE FROM "{table_name}"'))
+    try:
+        if dialect_name == "postgresql":
+            quoted_tables = ", ".join(f'"{name}"' for name in table_names)
+            session.exec(text(f"TRUNCATE TABLE {quoted_tables} RESTART IDENTITY CASCADE"))
+        elif dialect_name == "sqlite":
+            session.exec(text("PRAGMA foreign_keys=OFF"))
+            for table_name in table_names:
+                session.exec(text(f'DELETE FROM "{table_name}"'))
+            session.exec(text("PRAGMA foreign_keys=ON"))
+        else:
+            for table_name in table_names:
+                session.exec(text(f'DELETE FROM "{table_name}"'))
 
-    for table_name in table_names:
-        rows = payload.tables.get(table_name, [])
-        if not rows:
-            continue
-        table = SQLModel.metadata.tables.get(table_name)
-        if table is None:
-            continue
-        session.execute(table.insert(), rows)
+        for table_name in table_names:
+            rows = payload.tables.get(table_name, [])
+            if not rows:
+                continue
+            table = SQLModel.metadata.tables.get(table_name)
+            if table is None:
+                continue
+            session.execute(table.insert(), rows)
 
-    session.commit()
+        session.commit()
+    except SQLAlchemyError as exc:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Backup restore failed: {exc}",
+        ) from exc
+
     return {"detail": "Yedek geri yüklendi."}
