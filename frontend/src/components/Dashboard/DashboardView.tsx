@@ -675,6 +675,7 @@ export default function DashboardView() {
       "trend",
       debouncedFilters.year,
       debouncedFilters.scenarioId,
+      debouncedFilters.month,
       selectedOverrunBudgetItemId ?? debouncedFilters.budgetItemId,
       debouncedFilters.department,
       debouncedFilters.capexOpex,
