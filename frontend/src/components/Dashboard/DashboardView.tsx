@@ -1329,7 +1329,7 @@ export default function DashboardView() {
                   ) : (
                     <Stack spacing={3}>
                       <SafeChartContainer minHeight={320}>
-                        <ResponsiveContainer width="100%" height="100%">
+                        <ResponsiveContainer width="100%" height={320}>
                           <LineChart
                             data={monthlyData}
                             margin={{ top: 12, right: 28, left: 8, bottom: 8 }}
@@ -1395,7 +1395,7 @@ export default function DashboardView() {
                           Aylık Plan / Gerçekleşen / Kalan / Aşım Karşılaştırması
                         </Typography>
                         <SafeChartContainer minHeight={320}>
-                          <ResponsiveContainer width="100%" height="100%">
+                          <ResponsiveContainer width="100%" height={320}>
                             <BarChart
                               data={monthlyData}
                               margin={{ top: 8, right: 20, left: 8, bottom: 8 }}
