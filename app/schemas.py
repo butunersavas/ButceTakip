@@ -250,6 +250,26 @@ class PurchaseFormPreparedReportItem(BaseModel):
     department: str | None = None
 
 
+class DashboardPurchaseAlertItem(BaseModel):
+    id: int
+    title: str
+    department: str | None = None
+    amount: float
+    currency: str = "TRY"
+    vendor: str | None = None
+    requested: bool = False
+    requested_at: datetime | None = None
+
+
+class DashboardPurchaseAlertResponse(BaseModel):
+    year: int
+    month: int
+    total: int
+    pending: int
+    done: int
+    items: list[DashboardPurchaseAlertItem]
+
+
 class ExpenseBase(BaseModel):
     budget_item_id: int
     scenario_id: int | None = Field(default=None, alias="scenario")

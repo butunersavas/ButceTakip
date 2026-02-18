@@ -7,7 +7,6 @@ import {
   CardContent,
   CardHeader,
   Box,
-  Checkbox,
   Chip,
   Dialog,
   DialogActions,
@@ -54,6 +53,7 @@ import AccountBalanceWalletOutlinedIcon from "@mui/icons-material/AccountBalance
 import CheckCircleOutlineOutlinedIcon from "@mui/icons-material/CheckCircleOutlineOutlined";
 import TrendingUpOutlinedIcon from "@mui/icons-material/TrendingUpOutlined";
 import WarningAmberOutlinedIcon from "@mui/icons-material/WarningAmberOutlined";
+import TaskAltIcon from "@mui/icons-material/TaskAlt";
 import { SummaryCard } from "./SummaryCard";
 import {
   COLOR_ACTUAL,
@@ -135,16 +135,24 @@ interface BudgetItem {
   map_attribute?: string | null;
 }
 
-type PurchaseReminderItem = {
-  budget_item_id: number;
-  budget_code: string;
-  budget_name: string;
+type PurchaseAlertItem = {
+  id: number;
+  title: string;
+  department?: string | null;
+  amount: number;
+  currency?: string | null;
+  vendor?: string | null;
+  requested: boolean;
+  requested_at?: string | null;
+};
+
+type PurchaseAlertResponse = {
   year: number;
   month: number;
-  scenario_id: number;
-  department?: string | null;
-  is_form_prepared: boolean;
-  amount?: number | null;
+  total: number;
+  pending: number;
+  done: number;
+  items: PurchaseAlertItem[];
 };
 
 type RiskyItem = {
@@ -266,12 +274,6 @@ function formatBudgetLabel(name?: string | null, code?: string | null) {
   return stripBudgetCode(name ?? "") || code || "-";
 }
 
-const buildPurchaseKey = (item: Pick<
-  PurchaseReminderItem,
-  "budget_code" | "year" | "month" | "scenario_id" | "department"
->) =>
-  `${item.budget_code}-${item.year}-${item.month}-${item.scenario_id}-${item.department ?? ""}`;
-
 const calcDaysLeft = (endDate?: string | null) => {
   if (!endDate) return null;
   const end = new Date(`${endDate}T00:00:00`);
@@ -381,11 +383,10 @@ export default function DashboardView() {
     ""
   );
   const [department, setDepartment] = useState<string>("");
-  const [purchaseItems, setPurchaseItems] = useState<PurchaseReminderItem[]>([]);
+  const [purchaseAlert, setPurchaseAlert] = useState<PurchaseAlertResponse | null>(null);
   const [purchaseDepartmentFilter, setPurchaseDepartmentFilter] = useState("");
-  const [purchaseSelections, setPurchaseSelections] = useState<Record<string, boolean>>({});
   const [isAlertsDialogOpen, setIsAlertsDialogOpen] = useState(false);
-  const [savingPurchaseStatus, setSavingPurchaseStatus] = useState(false);
+  const [savingPurchaseStatus, setSavingPurchaseStatus] = useState<number | null>(null);
   const [purchaseStatusFeedback, setPurchaseStatusFeedback] = useState<
     { message: string; severity: "success" | "error" } | null
   >(null);
@@ -420,10 +421,6 @@ export default function DashboardView() {
     { value: 12, label: "Aralık" }
   ];
 
-  const now = new Date();
-  const yearNow = now.getFullYear();
-  const currentMonth = now.getMonth() + 1;
-  const purchaseDoneKey = `purchase_alert_done_${yearNow}_${currentMonth}`;
   const debouncedFilters = useDebouncedValue(
     useMemo(
       () => ({
@@ -479,29 +476,23 @@ export default function DashboardView() {
     };
 
     const loadAlerts = async () => {
-      const purchaseDismissed = localStorage.getItem(purchaseDoneKey) === "done";
-      const purchasePromise = purchaseDismissed
-        ? Promise.resolve({ data: [] as PurchaseReminderItem[] })
-        : client.get<PurchaseReminderItem[]>(
-            `/budget/purchase-reminders?year=${yearNow}&month=${currentMonth}`
-          );
-
       const [purchaseResult, warrantyResult] = await Promise.allSettled([
-        purchasePromise,
+        client.get<PurchaseAlertResponse>("/dashboard/purchase-alert"),
         fetchWarrantyAlerts()
       ]);
 
       if (!isMounted) return;
 
-      const purchaseList =
-        purchaseResult.status === "fulfilled" ? purchaseResult.value.data ?? [] : [];
-      const warrantyList =
-        warrantyResult.status === "fulfilled" ? warrantyResult.value : [];
-      const { normalized, expired, near } = splitWarrantyAlerts(warrantyList);
+      const purchaseData =
+        purchaseResult.status === "fulfilled" ? purchaseResult.value.data ?? null : null;
+      const warrantyList = warrantyResult.status === "fulfilled" ? warrantyResult.value : [];
+      const { normalized } = splitWarrantyAlerts(warrantyList);
 
-      setPurchaseItems(purchaseList);
+      setPurchaseAlert(purchaseData);
       setWarrantyAlertItems(normalized);
-      setIsAlertsDialogOpen(true);
+      if (purchaseData?.pending && purchaseData.pending > 0) {
+        setIsAlertsDialogOpen(true);
+      }
     };
 
     loadAlerts();
@@ -509,7 +500,7 @@ export default function DashboardView() {
     return () => {
       isMounted = false;
     };
-  }, [client, currentMonth, purchaseDoneKey, yearNow]);
+  }, [client]);
 
   const handleCloseAlertsDialog = () => {
     setIsAlertsDialogOpen(false);
@@ -520,13 +511,7 @@ export default function DashboardView() {
     [warrantyAlertItems]
   );
 
-  useEffect(() => {
-    const nextSelections: Record<string, boolean> = {};
-    purchaseItems.forEach((item) => {
-      nextSelections[buildPurchaseKey(item)] = item.is_form_prepared;
-    });
-    setPurchaseSelections(nextSelections);
-  }, [purchaseItems]);
+  const purchaseItems = purchaseAlert?.items ?? [];
 
   const purchaseDepartments = useMemo(() => {
     const unique = new Set<string>();
@@ -550,6 +535,41 @@ export default function DashboardView() {
       setPurchaseDepartmentFilter("");
     }
   }, [purchaseDepartmentFilter, purchaseDepartments]);
+
+  const handleMarkPurchaseRequested = async (itemId: number) => {
+    try {
+      setSavingPurchaseStatus(itemId);
+      await client.post(`/budget/purchase-requests/${itemId}/mark-requested`);
+      setPurchaseAlert((prev) => {
+        if (!prev) return prev;
+        const nextItems = prev.items.map((item) =>
+          item.id === itemId
+            ? { ...item, requested: true, requested_at: new Date().toISOString() }
+            : item
+        );
+        const done = nextItems.filter((item) => item.requested).length;
+        return {
+          ...prev,
+          items: nextItems,
+          done,
+          pending: Math.max(nextItems.length - done, 0),
+          total: nextItems.length
+        };
+      });
+      setPurchaseStatusFeedback({
+        message: "Satın alma talebi işaretlendi.",
+        severity: "success"
+      });
+    } catch (error) {
+      console.error(error);
+      setPurchaseStatusFeedback({
+        message: "Satın alma talebi işaretlenirken hata oluştu.",
+        severity: "error"
+      });
+    } finally {
+      setSavingPurchaseStatus(null);
+    }
+  };
 
   const { data: riskyItems = [] } = useQuery<RiskyItem[]>({
     queryKey: [
@@ -1497,6 +1517,19 @@ export default function DashboardView() {
           </Stack>
         </Stack>
       </Box>
+      {purchaseAlert && purchaseAlert.total > 0 && purchaseAlert.pending === 0 && (
+        <Alert
+          severity="success"
+          sx={{ mb: 2, display: "flex", alignItems: "center", gap: 1 }}
+          action={
+            <Button size="small" onClick={() => setIsAlertsDialogOpen(true)}>
+              Listeyi Gör
+            </Button>
+          }
+        >
+          Bu ay tüm satın alma talepleri oluşturulmuş (✓)
+        </Alert>
+      )}
       <Dialog
         open={isAlertsDialogOpen}
         onClose={handleCloseAlertsDialog}
@@ -1504,21 +1537,21 @@ export default function DashboardView() {
         fullWidth
       >
         <DialogTitle sx={{ fontSize: 18, fontWeight: 600 }}>
-          Uyarılar
+          Bu Ay Satın Alma Talepleri
         </DialogTitle>
         <DialogContent dividers>
           <Box sx={{ mb: 3 }}>
             <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-              Bütçe Demirbaş Uyarıları
+              Bu Ay Satın Alma Talepleri
             </Typography>
             {purchaseItems.length === 0 ? (
               <Typography variant="body2" color="text.secondary">
-                Bu ay için satın alma/demirbaş uyarısı bulunmuyor.
+                Bu ay için satın alma kalemi bulunmuyor.
               </Typography>
             ) : (
               <>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-                  Bu ay bütçede satın alma kalemleriniz var.
+                  {`Toplam ${purchaseAlert?.done ?? 0}/${purchaseAlert?.total ?? 0} talep oluşturuldu • Bekleyen: ${purchaseAlert?.pending ?? 0}`}
                 </Typography>
                 <TextField
                   select
@@ -1537,29 +1570,37 @@ export default function DashboardView() {
                 </TextField>
                 <List dense sx={{ maxHeight: 300, overflowY: "auto" }}>
                   {filteredPurchaseItems?.map((item) => {
-                    const amountLabel =
-                      item.amount != null ? formatCurrency(toSafeNumber(item.amount)) : null;
+                    const amountLabel = formatCurrency(toSafeNumber(item.amount));
                     const secondaryPieces = [
-                      amountLabel ? `Tutar: ${amountLabel}` : null,
-                      item.department ? `Departman: ${item.department}` : null
+                      `Tutar: ${amountLabel}`,
+                      item.department ? `Departman: ${item.department}` : null,
+                      item.requested ? "Talep yapıldı" : "Talep yapılmadı"
                     ].filter(Boolean);
-                    const key = buildPurchaseKey(item);
                     return (
                       <ListItem
-                        key={key}
+                        key={item.id}
                         secondaryAction={
-                          <Checkbox
-                            edge="end"
-                            checked={purchaseSelections[key] ?? false}
-                            onChange={(event) => {
-                              const checked = event.target.checked;
-                              setPurchaseSelections((prev) => ({ ...prev, [key]: checked }));
-                            }}
-                          />
+                          item.requested ? (
+                            <Chip
+                              icon={<TaskAltIcon color="success" />}
+                              size="small"
+                              color="success"
+                              label="✓ Talep yapıldı"
+                            />
+                          ) : (
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              disabled={savingPurchaseStatus === item.id}
+                              onClick={() => void handleMarkPurchaseRequested(item.id)}
+                            >
+                              Talep oluştur
+                            </Button>
+                          )
                         }
                       >
                         <ListItemText
-                          primary={formatBudgetLabel(item.budget_name, item.budget_code)}
+                          primary={item.title}
                           secondary={secondaryPieces.length ? secondaryPieces.join(" • ") : undefined}
                           primaryTypographyProps={{ variant: "body2" }}
                         />
@@ -1624,7 +1665,7 @@ export default function DashboardView() {
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button size="small" onClick={handleCloseAlertsDialog} disabled={savingPurchaseStatus}>
+          <Button size="small" onClick={handleCloseAlertsDialog} disabled={savingPurchaseStatus !== null}>
             Kapat
           </Button>
           {(warrantyAlerts.expired.length > 0 || warrantyAlerts.near.length > 0) && (
@@ -1637,46 +1678,6 @@ export default function DashboardView() {
               }}
             >
               Garanti Takibi'ne git
-            </Button>
-          )}
-          {purchaseItems.length > 0 && (
-            <Button
-              variant="contained"
-              size="small"
-              disabled={savingPurchaseStatus}
-              onClick={async () => {
-                try {
-                  setSavingPurchaseStatus(true);
-                  const payload = purchaseItems.map((item) => ({
-                    budget_code: item.budget_code,
-                    year: item.year,
-                    month: item.month,
-                    scenario_id: item.scenario_id,
-                    department: item.department ?? null,
-                    is_form_prepared: purchaseSelections[buildPurchaseKey(item)] ?? false
-                  }));
-
-                  await client.post("/budget/purchase-reminders/mark-prepared", payload);
-                  localStorage.setItem(purchaseDoneKey, "done");
-                  setPurchaseStatusFeedback({
-                    message: "Satın alma seçimleri kaydedildi.",
-                    severity: "success"
-                  });
-                  handleCloseAlertsDialog();
-                } catch (error) {
-                  console.error(error);
-                  localStorage.setItem(purchaseDoneKey, "done");
-                  setPurchaseStatusFeedback({
-                    message: "Kayıt sırasında hata oluştu. Yerel olarak kaydedildi.",
-                    severity: "error"
-                  });
-                  handleCloseAlertsDialog();
-                } finally {
-                  setSavingPurchaseStatus(false);
-                }
-              }}
-            >
-              Seçimleri Kaydet
             </Button>
           )}
         </DialogActions>
