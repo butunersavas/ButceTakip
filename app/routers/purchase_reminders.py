@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from datetime import datetime
 
 from sqlalchemy import exists, func
@@ -147,3 +147,53 @@ def mark_purchase_forms_prepared(
 
     session.commit()
     return {"detail": "Satın alma formu durumları güncellendi."}
+
+
+@router.post("/purchase-requests/{item_id}/mark-requested")
+def mark_purchase_request_created(
+    item_id: int,
+    session: Session = Depends(get_db_session),
+    user: User = Depends(get_current_user),
+):
+    plan_row = session.exec(
+        select(PlanEntry, BudgetItem.code)
+        .join(BudgetItem, BudgetItem.id == PlanEntry.budget_item_id)
+        .where(PlanEntry.id == item_id)
+    ).first()
+
+    if not plan_row:
+        raise HTTPException(status_code=404, detail="Kalem bulunamadı.")
+
+    plan_entry, fallback_code = plan_row
+    normalized_department = (plan_entry.department or "").strip()
+    budget_code = (plan_entry.budget_code or "").strip() or fallback_code
+
+    status = session.exec(
+        select(PurchaseFormStatusExt)
+        .where(PurchaseFormStatusExt.budget_code == budget_code)
+        .where(PurchaseFormStatusExt.year == plan_entry.year)
+        .where(PurchaseFormStatusExt.month == plan_entry.month)
+        .where(PurchaseFormStatusExt.scenario_id == plan_entry.scenario_id)
+        .where(PurchaseFormStatusExt.department == normalized_department)
+    ).first()
+
+    if not status:
+        status = PurchaseFormStatusExt(
+            budget_code=budget_code,
+            year=plan_entry.year,
+            month=plan_entry.month,
+            scenario_id=plan_entry.scenario_id,
+            department=normalized_department,
+            is_form_prepared=True,
+            updated_at=datetime.utcnow(),
+            updated_by=user.id,
+        )
+        session.add(status)
+    elif not status.is_form_prepared:
+        status.is_form_prepared = True
+        status.updated_at = datetime.utcnow()
+        status.updated_by = user.id
+
+    session.commit()
+
+    return {"detail": "Satın alma talebi işaretlendi.", "item_id": item_id}
