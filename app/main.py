@@ -20,6 +20,7 @@ from app.routers import (
     expenses,
     import_export,
     plans,
+    purchase_alerts,
     purchase_reminders,
     reports,
     scenarios,
@@ -37,7 +38,7 @@ settings = get_settings()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
-    allow_credentials=False,
+    allow_credentials=settings.cors_allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -90,6 +91,7 @@ app.include_router(budget_items.router, prefix=API_PREFIX)
 app.include_router(plans.router, prefix=API_PREFIX)
 app.include_router(expenses.router, prefix=API_PREFIX)
 app.include_router(dashboard.router, prefix=API_PREFIX)
+app.include_router(purchase_alerts.router, prefix=API_PREFIX)
 app.include_router(import_export.router, prefix=API_PREFIX)
 app.include_router(purchase_reminders.router, prefix=API_PREFIX)
 app.include_router(reports.router, prefix=API_PREFIX)
