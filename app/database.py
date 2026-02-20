@@ -248,6 +248,17 @@ def _apply_schema_upgrades() -> None:
         if "budget_code" not in plan_columns:
             with engine.begin() as connection:
                 connection.execute(text("ALTER TABLE plan_entries ADD COLUMN budget_code TEXT"))
+        if "purchase_requested" not in plan_columns:
+            with engine.begin() as connection:
+                connection.execute(
+                    text("ALTER TABLE plan_entries ADD COLUMN purchase_requested BOOLEAN DEFAULT 0")
+                )
+        if "purchase_requested_at" not in plan_columns:
+            with engine.begin() as connection:
+                connection.execute(text("ALTER TABLE plan_entries ADD COLUMN purchase_requested_at TIMESTAMP"))
+        if "purchase_requested_by" not in plan_columns:
+            with engine.begin() as connection:
+                connection.execute(text("ALTER TABLE plan_entries ADD COLUMN purchase_requested_by TEXT"))
 
     ensure_warranty_schema(inspector)
 
