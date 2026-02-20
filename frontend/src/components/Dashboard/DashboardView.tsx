@@ -30,7 +30,7 @@ import {
 } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import Autocomplete, { createFilterOptions } from "@mui/material/Autocomplete";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Bar,
   BarChart,
@@ -376,6 +376,7 @@ export default function DashboardView() {
   const theme = useTheme();
   const client = useAuthorizedClient();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const currentYear = new Date().getFullYear();
   const [year, setYear] = usePersistentState<number>("dashboard:year", currentYear);
   const [scenarioId, setScenarioId] = usePersistentState<number | null>("dashboard:scenarioId", null);
@@ -549,7 +550,7 @@ export default function DashboardView() {
     const nextRequested = !item.requested;
     try {
       setSavingPurchaseStatus(item.id);
-      await client.patch(`/purchase-alert/${item.id}`, { requested: nextRequested });
+      await client.patch(`/plan-items/${item.id}/purchase-requested`, { requested: nextRequested });
       setPurchaseAlert((prev) => {
         if (!prev) return prev;
         const nextItems = prev.items.map((currentItem) =>
@@ -570,6 +571,7 @@ export default function DashboardView() {
           total: nextItems.length
         };
       });
+      queryClient.invalidateQueries({ queryKey: ["plans"] });
       setPurchaseStatusFeedback({
         message: nextRequested
           ? "Satın alma talebi işaretlendi."
@@ -1628,7 +1630,7 @@ export default function DashboardView() {
                             size="small"
                             color={item.requested ? "success" : "warning"}
                             icon={item.requested ? <TaskAltIcon /> : <RadioButtonUncheckedIcon />}
-                            label={item.requested ? "✓ Talep yapıldı" : "Talep bekliyor"}
+                            label={item.requested ? "Talep oluşturuldu" : "Talep bekliyor"}
                           />
                         </TableCell>
                         <TableCell align="right">

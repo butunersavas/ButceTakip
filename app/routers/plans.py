@@ -47,6 +47,8 @@ def _plan_read_query(capex_filter: str | None):
             BudgetItem.map_category.label("map_capex_opex"),
             BudgetItem.map_attribute.label("map_nitelik"),
             func.coalesce(PurchaseFormStatusExt.is_form_prepared, False).label("is_form_prepared"),
+            PlanEntry.purchase_requested,
+            PlanEntry.purchase_requested_at,
         )
         .select_from(PlanEntry)
         .join(Scenario, Scenario.id == PlanEntry.scenario_id)
@@ -99,6 +101,8 @@ def _build_plan_read(row: dict) -> PlanEntryRead:
         map_nitelik=asset_value,
         nitelik=asset_value,
         is_form_prepared=row.get("is_form_prepared") or False,
+        purchase_requested=row.get("purchase_requested") or False,
+        purchase_requested_at=row.get("purchase_requested_at"),
     )
 
 

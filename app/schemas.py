@@ -209,6 +209,8 @@ class PlanEntryRead(SQLModel, table=False):
     map_nitelik: Optional[str] = None
     nitelik: Optional[str] = None
     is_form_prepared: bool = False
+    purchase_requested: bool = False
+    purchase_requested_at: datetime | None = None
 
     class Config:
         orm_mode = True

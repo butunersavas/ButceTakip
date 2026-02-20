@@ -5,7 +5,7 @@ from sqlalchemy import exists, func
 from sqlmodel import Session, select
 
 from app.dependencies import get_current_user, get_db_session
-from app.models import BudgetItem, Expense, ExpenseStatus, PlanEntry, PurchaseFormStatusExt, Scenario, User
+from app.models import BudgetItem, Expense, ExpenseStatus, PlanEntry, Scenario, User
 from app.schemas import (
     DashboardPurchaseAlertItem,
     DashboardPurchaseAlertResponse,
@@ -37,15 +37,6 @@ def get_purchase_alert(
     selected_year = year or today.year
     selected_month = month or today.month
 
-    plan_budget_code = func.coalesce(func.nullif(func.trim(PlanEntry.budget_code), ""), BudgetItem.code)
-    plan_department = func.coalesce(PlanEntry.department, "")
-
-    status_subq = (
-        select(PurchaseFormStatusExt)
-        .where(PurchaseFormStatusExt.year == selected_year)
-        .where(PurchaseFormStatusExt.month == selected_month)
-    ).subquery()
-
     expense_exists_query = (
         select(Expense.id)
         .where(Expense.budget_item_id == PlanEntry.budget_item_id)
@@ -61,19 +52,10 @@ def get_purchase_alert(
             BudgetItem.name,
             PlanEntry.department,
             PlanEntry.amount,
-            func.coalesce(status_subq.c.is_form_prepared, False).label("requested"),
-            status_subq.c.updated_at,
+            PlanEntry.purchase_requested.label("requested"),
+            PlanEntry.purchase_requested_at.label("requested_at"),
         )
         .join(BudgetItem, BudgetItem.id == PlanEntry.budget_item_id)
-        .join(
-            status_subq,
-            (status_subq.c.budget_code == plan_budget_code)
-            & (status_subq.c.year == PlanEntry.year)
-            & (status_subq.c.month == PlanEntry.month)
-            & (status_subq.c.scenario_id == PlanEntry.scenario_id)
-            & (status_subq.c.department == plan_department),
-            isouter=True,
-        )
         .where(PlanEntry.year == selected_year)
         .where(PlanEntry.month == selected_month)
         .where(PlanEntry.amount > 0)

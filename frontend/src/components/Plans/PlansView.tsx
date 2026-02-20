@@ -69,6 +69,8 @@ interface PlanEntry {
   map_capex_opex?: string | null;
   map_nitelik?: string | null;
   is_form_prepared?: boolean | null;
+  purchase_requested?: boolean | null;
+  purchase_requested_at?: string | null;
   budget_item?: BudgetItem | null;
   budgetItem?: BudgetItem | null;
 }
@@ -541,6 +543,26 @@ export default function PlansView() {
               label={prepared ? "Evet" : "Hayır"}
               color={prepared ? "success" : "default"}
               variant={prepared ? "filled" : "outlined"}
+            />
+          );
+        },
+      },
+      {
+        field: "purchase_requested",
+        headerName: "Talep Oluşturuldu",
+        width: 170,
+        valueGetter: (_value, row) => {
+          const r = row as any;
+          return Boolean(r?.purchase_requested);
+        },
+        renderCell: ({ row }) => {
+          const requested = Boolean((row as any)?.purchase_requested);
+          return (
+            <Chip
+              size="small"
+              label={requested ? "Evet" : "Hayır"}
+              color={requested ? "success" : "default"}
+              variant={requested ? "filled" : "outlined"}
             />
           );
         },
