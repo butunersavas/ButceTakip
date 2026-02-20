@@ -28,6 +28,7 @@ import {
   TextField,
   Typography
 } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
 import Autocomplete, { createFilterOptions } from "@mui/material/Autocomplete";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -54,6 +55,7 @@ import CheckCircleOutlineOutlinedIcon from "@mui/icons-material/CheckCircleOutli
 import TrendingUpOutlinedIcon from "@mui/icons-material/TrendingUpOutlined";
 import WarningAmberOutlinedIcon from "@mui/icons-material/WarningAmberOutlined";
 import TaskAltIcon from "@mui/icons-material/TaskAlt";
+import RadioButtonUncheckedIcon from "@mui/icons-material/RadioButtonUnchecked";
 import { SummaryCard } from "./SummaryCard";
 import {
   COLOR_ACTUAL,
@@ -371,6 +373,7 @@ function normalizeTrendResponse(raw: unknown): TrendResponse {
 }
 
 export default function DashboardView() {
+  const theme = useTheme();
   const client = useAuthorizedClient();
   const navigate = useNavigate();
   const currentYear = new Date().getFullYear();
@@ -476,8 +479,14 @@ export default function DashboardView() {
     };
 
     const loadAlerts = async () => {
+      const today = new Date();
       const [purchaseResult, warrantyResult] = await Promise.allSettled([
-        client.get<PurchaseAlertResponse>("/dashboard/purchase-alert"),
+        client.get<PurchaseAlertResponse>("/dashboard/purchase-alert", {
+          params: {
+            year: today.getFullYear(),
+            month: today.getMonth() + 1
+          }
+        }),
         fetchWarrantyAlerts()
       ]);
 
@@ -536,16 +545,21 @@ export default function DashboardView() {
     }
   }, [purchaseDepartmentFilter, purchaseDepartments]);
 
-  const handleMarkPurchaseRequested = async (itemId: number) => {
+  const handleSetPurchaseRequested = async (item: PurchaseAlertItem) => {
+    const nextRequested = !item.requested;
     try {
-      setSavingPurchaseStatus(itemId);
-      await client.post(`/budget/purchase-requests/${itemId}/mark-requested`);
+      setSavingPurchaseStatus(item.id);
+      await client.patch(`/purchase-alert/${item.id}`, { requested: nextRequested });
       setPurchaseAlert((prev) => {
         if (!prev) return prev;
-        const nextItems = prev.items.map((item) =>
-          item.id === itemId
-            ? { ...item, requested: true, requested_at: new Date().toISOString() }
-            : item
+        const nextItems = prev.items.map((currentItem) =>
+          currentItem.id === item.id
+            ? {
+                ...currentItem,
+                requested: nextRequested,
+                requested_at: nextRequested ? new Date().toISOString() : null
+              }
+            : currentItem
         );
         const done = nextItems.filter((item) => item.requested).length;
         return {
@@ -557,13 +571,15 @@ export default function DashboardView() {
         };
       });
       setPurchaseStatusFeedback({
-        message: "Satın alma talebi işaretlendi.",
+        message: nextRequested
+          ? "Satın alma talebi işaretlendi."
+          : "Satın alma talebi geri alındı.",
         severity: "success"
       });
     } catch (error) {
       console.error(error);
       setPurchaseStatusFeedback({
-        message: "Satın alma talebi işaretlenirken hata oluştu.",
+        message: "Satın alma talebi güncellenirken hata oluştu.",
         severity: "error"
       });
     } finally {
@@ -1518,25 +1534,38 @@ export default function DashboardView() {
         </Stack>
       </Box>
       {purchaseAlert && purchaseAlert.total > 0 && purchaseAlert.pending === 0 && (
-        <Alert
-          severity="success"
-          sx={{ mb: 2, display: "flex", alignItems: "center", gap: 1 }}
-          action={
+        <Card variant="outlined" sx={{ mb: 2 }}>
+          <CardContent sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <Typography variant="body2" color="success.main" fontWeight={700}>
+              Bu ay tüm satın alma talepleri tamamlandı (✓)
+            </Typography>
             <Button size="small" onClick={() => setIsAlertsDialogOpen(true)}>
               Listeyi Gör
             </Button>
-          }
-        >
-          Bu ay tüm satın alma talepleri oluşturulmuş (✓)
-        </Alert>
+          </CardContent>
+        </Card>
       )}
       <Dialog
         open={isAlertsDialogOpen}
         onClose={handleCloseAlertsDialog}
         maxWidth="md"
         fullWidth
+        PaperProps={{
+          sx: {
+            bgcolor: theme.palette.background.paper,
+            border: `1px solid ${theme.palette.divider}`,
+            borderRadius: "16px"
+          }
+        }}
       >
-        <DialogTitle sx={{ fontSize: 18, fontWeight: 600 }}>
+        <DialogTitle
+          sx={{
+            fontSize: 18,
+            fontWeight: 800,
+            bgcolor: theme.palette.primary.main,
+            color: theme.palette.primary.contrastText
+          }}
+        >
           Bu Ay Satın Alma Talepleri
         </DialogTitle>
         <DialogContent dividers>
@@ -1568,46 +1597,55 @@ export default function DashboardView() {
                     </MenuItem>
                   ))}
                 </TextField>
-                <List dense sx={{ maxHeight: 300, overflowY: "auto" }}>
-                  {filteredPurchaseItems?.map((item) => {
-                    const amountLabel = formatCurrency(toSafeNumber(item.amount));
-                    const secondaryPieces = [
-                      `Tutar: ${amountLabel}`,
-                      item.department ? `Departman: ${item.department}` : null,
-                      item.requested ? "Talep yapıldı" : "Talep yapılmadı"
-                    ].filter(Boolean);
-                    return (
-                      <ListItem
-                        key={item.id}
-                        secondaryAction={
-                          item.requested ? (
-                            <Chip
-                              icon={<TaskAltIcon color="success" />}
-                              size="small"
-                              color="success"
-                              label="✓ Talep yapıldı"
-                            />
-                          ) : (
-                            <Button
-                              size="small"
-                              variant="outlined"
-                              disabled={savingPurchaseStatus === item.id}
-                              onClick={() => void handleMarkPurchaseRequested(item.id)}
-                            >
-                              Talep oluştur
-                            </Button>
-                          )
-                        }
-                      >
-                        <ListItemText
-                          primary={item.title}
-                          secondary={secondaryPieces.length ? secondaryPieces.join(" • ") : undefined}
-                          primaryTypographyProps={{ variant: "body2" }}
-                        />
-                      </ListItem>
-                    );
-                  })}
-                </List>
+                <Table size="small" sx={{ maxHeight: 320 }}>
+                  <TableHead>
+                    <TableRow sx={{ bgcolor: theme.palette.action.hover }}>
+                      <TableCell>
+                        <Typography fontWeight={700}>Kalem</Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Typography fontWeight={700}>Departman</Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography fontWeight={700}>Tutar</Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Typography fontWeight={700}>Durum</Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography fontWeight={700}>İşlem</Typography>
+                      </TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {filteredPurchaseItems?.map((item) => (
+                      <TableRow key={item.id} hover>
+                        <TableCell>{item.title}</TableCell>
+                        <TableCell>{item.department || "-"}</TableCell>
+                        <TableCell align="right">{formatCurrency(toSafeNumber(item.amount))}</TableCell>
+                        <TableCell>
+                          <Chip
+                            size="small"
+                            color={item.requested ? "success" : "warning"}
+                            icon={item.requested ? <TaskAltIcon /> : <RadioButtonUncheckedIcon />}
+                            label={item.requested ? "✓ Talep yapıldı" : "Talep bekliyor"}
+                          />
+                        </TableCell>
+                        <TableCell align="right">
+                          <Button
+                            size="small"
+                            variant={item.requested ? "outlined" : "contained"}
+                            color={item.requested ? "warning" : "primary"}
+                            disabled={savingPurchaseStatus === item.id}
+                            onClick={() => void handleSetPurchaseRequested(item)}
+                          >
+                            {item.requested ? "Geri Al" : "Talep Oluştur"}
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               </>
             )}
           </Box>

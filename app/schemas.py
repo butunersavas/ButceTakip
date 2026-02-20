@@ -270,6 +270,10 @@ class DashboardPurchaseAlertResponse(BaseModel):
     items: list[DashboardPurchaseAlertItem]
 
 
+class PurchaseAlertSetRequest(BaseModel):
+    requested: bool
+
+
 class ExpenseBase(BaseModel):
     budget_item_id: int
     scenario_id: int | None = Field(default=None, alias="scenario")

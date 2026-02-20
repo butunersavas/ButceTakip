@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     algorithm: str = Field(default="HS256", env="ALGORITHM")
     access_token_expire_minutes: int = Field(default=60 * 24, env="ACCESS_TOKEN_EXPIRE_MINUTES")
     allowed_hosts: list[str] = Field(
-        default=["localhost", "127.0.0.1", "0.0.0.0", "api", "172.24.2.128"],
+        default=["*"],
         env="ALLOWED_HOSTS",
     )
     trusted_hosts: list[str] | None = Field(default=None, env="TRUSTED_HOSTS")
@@ -26,6 +26,7 @@ class Settings(BaseSettings):
         ],
         env=["CORS_ORIGINS", "ALLOWED_ORIGINS"],
     )
+    cors_allow_credentials: bool = Field(default=False, env="CORS_ALLOW_CREDENTIALS")
 
     DEFAULT_ADMIN_EMAIL: str = Field(default="admin@local", env="DEFAULT_ADMIN_EMAIL")
     DEFAULT_ADMIN_PASSWORD: str = Field(default="GucluBirSifre123!", env="DEFAULT_ADMIN_PASSWORD")
@@ -93,7 +94,7 @@ class Settings(BaseSettings):
 
     @validator("allowed_hosts", pre=True)
     def normalize_allowed_hosts(cls, value: str | list[str] | None) -> list[str]:  # noqa: D417
-        default_hosts = ["localhost", "127.0.0.1", "0.0.0.0", "api", "172.24.2.128"]
+        default_hosts = ["*"]
         if value is None:
             return default_hosts
         if isinstance(value, list):
