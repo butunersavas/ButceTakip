@@ -30,6 +30,7 @@ import usePersistentState from "../../hooks/usePersistentState";
 import { useAuth } from "../../context/AuthContext";
 import { formatBudgetItemLabel, stripBudgetCode } from "../../utils/budgetLabel";
 import { formatBudgetItemMeta } from "../../utils/budgetItem";
+import { formatMoney } from "../../utils/formatMoney";
 import FiltersBar from "../Filters/FiltersBar";
 
 interface Scenario {
@@ -107,10 +108,7 @@ const monthOptions = [
 ];
 
 function formatCurrency(value: number) {
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency: "USD"
-  }).format(value ?? 0);
+  return formatMoney(value ?? 0);
 }
 
 function formatCapexLabel(value?: string | null) {
@@ -772,19 +770,20 @@ export default function PlansView() {
       <Grid container spacing={3}>
         <Grid item xs={12}>
           <Card>
-            <CardContent>
-              <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+            <CardContent sx={{ p: 1.25, "&:last-child": { pb: 1.25 } }}>
+              <Typography variant="subtitle2" fontWeight={600} gutterBottom>
                 Aylık Toplam Tutarlar
               </Typography>
-              <Stack spacing={1.2}>
+              <Stack spacing={0.75}>
                 {monthlyTotals.map((total, index) => (
                   <Stack
                     direction="row"
                     justifyContent="space-between"
                     key={index}
                     sx={{
-                      p: 1.2,
-                      borderRadius: 2,
+                      p: 0.85,
+                      minHeight: 30,
+                      borderRadius: 1.5,
                       backgroundColor: total > 0 ? "rgba(13, 71, 161, 0.06)" : "background.default",
                       border:
                         monthFilter === index + 1 ? "1px solid rgba(13, 71, 161, 0.35)" : "1px solid transparent",
@@ -792,10 +791,10 @@ export default function PlansView() {
                     }}
                     onClick={() => handleMonthlyTotalClick(index + 1)}
                   >
-                    <Typography variant="body2" color="text.secondary">
+                    <Typography variant="caption" color="text.secondary">
                       {monthOptions[index]}
                     </Typography>
-                    <Typography variant="subtitle2" fontWeight={600}>
+                    <Typography variant="body2" fontWeight={600}>
                       {formatCurrency(total)}
                     </Typography>
                   </Stack>

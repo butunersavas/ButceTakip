@@ -399,6 +399,7 @@ export default function ImportExportView() {
       const normalizedMonth = normalizeMonthValue(monthFilter);
     if (normalizedMonth) params.month = Number(normalizedMonth);
       if (departmentFilter) params.department = departmentFilter;
+      if (budgetItemId) params.budget_item_id = budgetItemId;
       const response = await client.get("/reports/purchase-forms-prepared/xlsx", {
         params,
         responseType: "blob",
@@ -647,11 +648,6 @@ export default function ImportExportView() {
                 </Grid>
                 <Grid container spacing={1.5}>
                   {[
-                    {
-                      title: "Bütçe Yedek Al",
-                      description: "Plan + harcama verisinin tam XLSX çıktısı",
-                      action: () => void handleExportXlsx()
-                    },
                     {
                       title: "3 Aylık XLSX",
                       description: "Çeyreklik özet raporu",

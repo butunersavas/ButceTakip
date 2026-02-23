@@ -250,6 +250,9 @@ class PurchaseFormPreparedReportItem(BaseModel):
     month: int
     scenario_id: int | None = None
     department: str | None = None
+    amount: float = 0
+    capex_opex: str | None = None
+    purchase_requested_at: datetime | None = None
 
 
 class DashboardPurchaseAlertItem(BaseModel):
@@ -295,6 +298,7 @@ class PurchaseTrackingRead(BaseModel):
     budget_name: str | None = None
     amount: float
     purchase_requested: bool = False
+    purchase_requested_at: datetime | None = None
 
 
 class PurchaseTrackingUpdateRequest(BaseModel):

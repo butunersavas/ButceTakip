@@ -49,6 +49,7 @@ import { useNavigate } from "react-router-dom";
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import usePersistentState from "../../hooks/usePersistentState";
 import { formatBudgetItemLabel, stripBudgetCode } from "../../utils/budgetLabel";
+import { formatMoney } from "../../utils/formatMoney";
 import { formatBudgetItemMeta } from "../../utils/budgetItem";
 import AccountBalanceWalletOutlinedIcon from "@mui/icons-material/AccountBalanceWalletOutlined";
 import CheckCircleOutlineOutlinedIcon from "@mui/icons-material/CheckCircleOutlineOutlined";
@@ -259,10 +260,7 @@ function useDebouncedValue<T>(value: T, delayMs: number): T {
 }
 
 function formatCurrency(value: number) {
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency: "USD"
-  }).format(value ?? 0);
+  return formatMoney(value ?? 0);
 }
 
 function formatCompactCurrency(value: number) {
