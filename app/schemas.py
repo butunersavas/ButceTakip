@@ -311,6 +311,8 @@ class PurchaseTrackingUpdateRequest(BaseModel):
             PurchaseTrackingStatus.SURAT_YONETIM_IMZA.value,
             PurchaseTrackingStatus.BCC_YONETIM_IMZA.value,
             PurchaseTrackingStatus.SURAT_SATINALMA.value,
+            PurchaseTrackingStatus.ORDER_PENDING.value,
+            PurchaseTrackingStatus.COMPLETED.value,
             PurchaseTrackingStatus.CANCELLED.value,
             PurchaseTrackingStatus.TALEP_OLUSTURULDU.value,
         }

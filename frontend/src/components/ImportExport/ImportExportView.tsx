@@ -389,37 +389,6 @@ export default function ImportExportView() {
     }
   };
 
-  const handleDownloadPreparedPurchaseForms = async () => {
-    setExporting(true);
-    setExportError(null);
-    try {
-      const params: Record<string, string | number> = {};
-      if (year) params.year = Number(year);
-      if (scenarioId) params.scenario_id = scenarioId;
-      const normalizedMonth = normalizeMonthValue(monthFilter);
-    if (normalizedMonth) params.month = Number(normalizedMonth);
-      if (departmentFilter) params.department = departmentFilter;
-      if (budgetItemId) params.budget_item_id = budgetItemId;
-      const response = await client.get("/reports/purchase-forms-prepared/xlsx", {
-        params,
-        responseType: "blob",
-      });
-      downloadBlob(response.data, `satinalma_formu_hazirlanan_butceler_${year}.xlsx`);
-    } catch (err) {
-      console.error(err);
-      if (axios.isAxiosError(err)) {
-        const detail =
-          (err.response?.data as { detail?: string; message?: string } | undefined)?.detail ||
-          (err.response?.data as { detail?: string; message?: string } | undefined)?.message;
-        setExportError(detail || "Rapor indirilirken hata oluştu. Lütfen filtreleri kontrol edin.");
-      } else {
-        setExportError("Rapor indirilirken hata oluştu. Lütfen filtreleri kontrol edin.");
-      }
-    } finally {
-      setExporting(false);
-    }
-  };
-
   const handleDownloadBackup = async (type: "full" | "users") => {
     setExporting(true);
     setBackupFeedback(null);
@@ -663,11 +632,6 @@ export default function ImportExportView() {
                       description: "İptal durumundaki harcamalar",
                       action: () => void handleFilteredExpenseExport("cancelled")
                     },
-                    {
-                      title: "Satın Alma Formu Hazır Olanlar",
-                      description: "Hazırlanmış formu olan bütçe kalemleri",
-                      action: () => void handleDownloadPreparedPurchaseForms()
-                    }
                   ].map((item) => (
                     <Grid item xs={12} sm={6} key={item.title}>
                       <Card variant="outlined" sx={{ height: "100%" }}>
