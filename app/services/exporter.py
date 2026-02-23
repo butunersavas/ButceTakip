@@ -1,3 +1,4 @@
+import logging
 import csv
 import io
 from datetime import date
@@ -14,6 +15,7 @@ from app.schemas import PurchaseFormPreparedReportItem
 
 
 CURRENCY_SYMBOL = "$"
+logger = logging.getLogger(__name__)
 
 EXPORT_HEADERS = [
     "type",
@@ -286,6 +288,8 @@ def export_xlsx(
     _append_expense_rows(plan_sheet, expenses, budget_items, scenarios)
     output = io.BytesIO()
     wb.save(output)
+    output.seek(0)
+    logger.info("export_debug export_type=%s year=%s scenario=%s budget_item=%s row_count=%s", "budget_xlsx", year, scenario_id, budget_item_id, len(plans) + len(expenses))
     response = Response(
         content=output.getvalue(),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -322,6 +326,8 @@ def export_filtered_expenses_xlsx(
 
     output = io.BytesIO()
     wb.save(output)
+    output.seek(0)
+    logger.info("export_debug export_type=%s year=%s scenario=%s budget_item=%s filter_type=%s row_count=%s", "filtered_expenses_xlsx", year, scenario_id, budget_item_id, filter_type, len(filtered))
     response = Response(
         content=output.getvalue(),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -362,6 +368,8 @@ def export_purchase_forms_prepared_xlsx(
 
     output = io.BytesIO()
     wb.save(output)
+    output.seek(0)
+    logger.info("export_debug export_type=%s year=%s month=%s scenario=%s department=%s budget_item=%s row_count=%s", "purchase_forms_prepared_xlsx", year, month, scenario_id, department, None, len(items))
     response = Response(
         content=output.getvalue(),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -438,6 +446,8 @@ def export_quarterly_xlsx(
         )
     output = io.BytesIO()
     wb.save(output)
+    output.seek(0)
+    logger.info("export_debug export_type=%s year=%s scenario=%s budget_item=%s row_count=%s", "quarterly_xlsx", year, scenario_id, budget_item_id, len(summary))
     response = Response(
         content=output.getvalue(),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

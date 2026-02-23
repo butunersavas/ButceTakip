@@ -22,6 +22,7 @@ from app.routers import (
     plans,
     purchase_alerts,
     purchase_reminders,
+    purchase_tracking,
     reports,
     scenarios,
     users,
@@ -92,6 +93,7 @@ app.include_router(plans.router, prefix=API_PREFIX)
 app.include_router(expenses.router, prefix=API_PREFIX)
 app.include_router(dashboard.router, prefix=API_PREFIX)
 app.include_router(purchase_alerts.router, prefix=API_PREFIX)
+app.include_router(purchase_tracking.router, prefix=API_PREFIX)
 app.include_router(import_export.router, prefix=API_PREFIX)
 app.include_router(purchase_reminders.router, prefix=API_PREFIX)
 app.include_router(reports.router, prefix=API_PREFIX)

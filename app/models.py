@@ -94,6 +94,29 @@ class PlanEntry(TimestampMixin, SQLModel, table=True):
 
     scenario: Scenario = Relationship(back_populates="plans")
     budget_item: BudgetItem = Relationship(back_populates="plans")
+    purchase_trackings: list["PurchaseRequestTracking"] = Relationship(back_populates="plan_entry")
+
+
+class PurchaseTrackingStatus(str, enum.Enum):
+    TALEP_OLUSTURULDU = "TALEP_OLUSTURULDU"
+    SURAT_YONETIM_IMZA = "SURAT_YONETIM_IMZA"
+    BCC_YONETIM_IMZA = "BCC_YONETIM_IMZA"
+    SURAT_SATINALMA = "SURAT_SATINALMA"
+    CANCELLED = "CANCELLED"
+
+
+class PurchaseRequestTracking(SQLModel, table=True):
+    __tablename__ = "purchase_request_tracking"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    plan_item_id: int = Field(foreign_key="plan_entries.id", index=True, nullable=False)
+    status: str = Field(default=PurchaseTrackingStatus.TALEP_OLUSTURULDU.value, nullable=False)
+    updated_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
+    updated_by: Optional[str] = Field(default=None, nullable=True)
+    note: Optional[str] = Field(default=None, nullable=True)
+    is_active: bool = Field(default=True, nullable=False)
+
+    plan_entry: PlanEntry = Relationship(back_populates="purchase_trackings")
 
 
 class PurchaseFormStatus(SQLModel, table=True):

@@ -137,6 +137,21 @@ const monthLabels = [
   "Aralık"
 ];
 
+const monthValueMap: Record<string, number> = monthLabels.reduce((acc, label, index) => {
+  acc[label.toLowerCase()] = index + 1;
+  return acc;
+}, {} as Record<string, number>);
+
+function normalizeMonthValue(month: number | string | "" | null | undefined): number | "" {
+  if (month === "" || month === null || month === undefined) return "";
+  if (typeof month === "number") return month;
+  const raw = month.toString().trim();
+  if (!raw) return "";
+  const parsed = Number(raw);
+  if (!Number.isNaN(parsed)) return parsed;
+  return monthValueMap[raw.toLowerCase()] ?? "";
+}
+
 const sampleCsv = [
   sampleHeaders.join(","),
   ...sampleRows.map((row) =>
@@ -162,6 +177,7 @@ export default function ImportExportView() {
   const [backupFeedback, setBackupFeedback] = useState<{ message: string; severity: "success" | "error" } | null>(
     null
   );
+  const [recentDownloads, setRecentDownloads] = useState<string[]>([]);
 
   const { data: scenarios } = useQuery<Scenario[]>({
     queryKey: ["scenarios"],
@@ -270,7 +286,8 @@ export default function ImportExportView() {
     if (year) params.year = Number(year);
     if (scenarioId) params.scenario_id = scenarioId;
     if (budgetItemId) params.budget_item_id = budgetItemId;
-    if (monthFilter) params.month = Number(monthFilter);
+    const normalizedMonth = normalizeMonthValue(monthFilter);
+    if (normalizedMonth) params.month = Number(normalizedMonth);
     if (departmentFilter) params.department = departmentFilter;
     return params;
   };
@@ -289,6 +306,7 @@ export default function ImportExportView() {
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
+    setRecentDownloads((previous) => [fileName, ...previous].slice(0, 5));
   };
 
   const handleExportXlsx = async () => {
@@ -378,7 +396,8 @@ export default function ImportExportView() {
       const params: Record<string, string | number> = {};
       if (year) params.year = Number(year);
       if (scenarioId) params.scenario_id = scenarioId;
-      if (monthFilter) params.month = Number(monthFilter);
+      const normalizedMonth = normalizeMonthValue(monthFilter);
+    if (normalizedMonth) params.month = Number(normalizedMonth);
       if (departmentFilter) params.department = departmentFilter;
       const response = await client.get("/reports/purchase-forms-prepared/xlsx", {
         params,
@@ -626,68 +645,77 @@ export default function ImportExportView() {
                     />
                   </Grid>
                 </Grid>
-                <Grid container spacing={2}>
-                  <Grid item xs={12} sm={6}>
-                    <Button
-                      variant="contained"
-                      color="primary"
-                      startIcon={<DownloadIcon />}
-                      onClick={() => void handleExportXlsx()}
-                      disabled={exporting}
-                      fullWidth
-                    >
-                      Bütçe Yedek Al
-                    </Button>
-                  </Grid>
-                  <Grid item xs={12} sm={6}>
-                    <Button
-                      variant="contained"
-                      color="primary"
-                      startIcon={<DownloadIcon />}
-                      onClick={() => void handleQuarterlyExportXlsx()}
-                      disabled={exporting}
-                      fullWidth
-                    >
-                      3 Aylık XLSX İndir
-                    </Button>
-                  </Grid>
-                  <Grid item xs={12} sm={6}>
-                    <Button
-                      variant="contained"
-                      color="primary"
-                      startIcon={<DownloadIcon />}
-                      onClick={() => void handleFilteredExpenseExport("out-of-budget")}
-                      disabled={exporting}
-                      fullWidth
-                    >
-                      Bütçe Dışı Harcamalar XLSX
-                    </Button>
-                  </Grid>
-                  <Grid item xs={12} sm={6}>
-                    <Button
-                      variant="contained"
-                      color="primary"
-                      startIcon={<DownloadIcon />}
-                      onClick={() => void handleFilteredExpenseExport("cancelled")}
-                      disabled={exporting}
-                      fullWidth
-                    >
-                      İptal Edilen Harcamalar XLSX
-                    </Button>
-                  </Grid>
-                  <Grid item xs={12}>
-                    <Button
-                      fullWidth
-                      variant="contained"
-                      color="primary"
-                      startIcon={<DownloadIcon />}
-                      onClick={() => void handleDownloadPreparedPurchaseForms()}
-                      disabled={exporting}
-                    >
-                      Satın alma formu hazırlanan bütçeler XLSX
-                    </Button>
-                  </Grid>
+                <Grid container spacing={1.5}>
+                  {[
+                    {
+                      title: "Bütçe Yedek Al",
+                      description: "Plan + harcama verisinin tam XLSX çıktısı",
+                      action: () => void handleExportXlsx()
+                    },
+                    {
+                      title: "3 Aylık XLSX",
+                      description: "Çeyreklik özet raporu",
+                      action: () => void handleQuarterlyExportXlsx()
+                    },
+                    {
+                      title: "Bütçe Dışı Harcamalar",
+                      description: "Sadece bütçe dışı kayıtlar",
+                      action: () => void handleFilteredExpenseExport("out-of-budget")
+                    },
+                    {
+                      title: "İptal Edilen Harcamalar",
+                      description: "İptal durumundaki harcamalar",
+                      action: () => void handleFilteredExpenseExport("cancelled")
+                    },
+                    {
+                      title: "Satın Alma Formu Hazır Olanlar",
+                      description: "Hazırlanmış formu olan bütçe kalemleri",
+                      action: () => void handleDownloadPreparedPurchaseForms()
+                    }
+                  ].map((item) => (
+                    <Grid item xs={12} sm={6} key={item.title}>
+                      <Card variant="outlined" sx={{ height: "100%" }}>
+                        <CardContent>
+                          <Stack spacing={1.2}>
+                            <Button
+                              variant="contained"
+                              color="primary"
+                              startIcon={<DownloadIcon />}
+                              onClick={item.action}
+                              disabled={exporting}
+                              fullWidth
+                            >
+                              {item.title}
+                            </Button>
+                            <Typography variant="body2" color="text.secondary">
+                              {item.description}
+                            </Typography>
+                          </Stack>
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                  ))}
                 </Grid>
+                <Card variant="outlined" sx={{ mt: 2 }}>
+                  <CardContent>
+                    <Typography variant="subtitle2" fontWeight={700} gutterBottom>
+                      Son indirilen raporlar
+                    </Typography>
+                    {recentDownloads.length === 0 ? (
+                      <Typography variant="body2" color="text.secondary">
+                        Henüz rapor indirilmedi.
+                      </Typography>
+                    ) : (
+                      <Stack component="ul" sx={{ m: 0, pl: 2 }} spacing={0.5}>
+                        {recentDownloads.map((fileName) => (
+                          <Typography component="li" variant="body2" key={fileName}>
+                            {fileName}
+                          </Typography>
+                        ))}
+                      </Stack>
+                    )}
+                  </CardContent>
+                </Card>
               </Stack>
             </CardContent>
           </Card>
