@@ -26,8 +26,10 @@ interface RowItem {
 
 const STATUS_OPTIONS = [
   { value: "SURAT_YONETIM_IMZA", label: "Sürat Kargo Yönetim İmza" },
+  { value: "SURAT_SATINALMA", label: "Sürat Kargo Satın Alma" },
   { value: "BCC_YONETIM_IMZA", label: "BCC Yönetim İmza" },
-  { value: "SURAT_SATINALMA", label: "Sürat Kargo Satın Alma Departmanında" }
+  { value: "ORDER_PENDING", label: "Sipariş Bekleniyor" },
+  { value: "COMPLETED", label: "Tamamlandı" }
 ];
 
 const monthOptions = ["", "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
@@ -106,7 +108,7 @@ export default function PurchaseTrackingView() {
     },
     {
       field: "status",
-      headerName: "Mevcut Status",
+      headerName: "Durum",
       flex: 1,
       minWidth: 220,
       renderCell: ({ row }) => (

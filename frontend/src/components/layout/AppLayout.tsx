@@ -106,6 +106,11 @@ export default function AppLayout({ children }: AppLayoutProps) {
     ];
 
     if (user?.is_admin) {
+      items.push({
+        label: "Garanti Takibi",
+        icon: <VerifiedOutlinedIcon />,
+        path: "/warranty-tracking",
+      });
       items.push(
         {
           label: "Temizleme Araçları",
@@ -118,11 +123,6 @@ export default function AppLayout({ children }: AppLayoutProps) {
           label: "Kullanıcı Yönetimi",
           icon: <PeopleOutlineOutlinedIcon />,
           path: "/users",
-        },
-        {
-          label: "Garanti Takibi",
-          icon: <VerifiedOutlinedIcon />,
-          path: "/warranty-tracking",
         }
       );
     }
