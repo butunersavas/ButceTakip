@@ -31,6 +31,7 @@ import CloudOutlinedIcon from "@mui/icons-material/CloudOutlined";
 import CleaningServicesOutlinedIcon from "@mui/icons-material/CleaningServicesOutlined";
 import PeopleOutlineOutlinedIcon from "@mui/icons-material/PeopleOutlineOutlined";
 import VerifiedOutlinedIcon from "@mui/icons-material/VerifiedOutlined";
+import LocalShippingOutlinedIcon from "@mui/icons-material/LocalShippingOutlined";
 import MenuIcon from "@mui/icons-material/Menu";
 import DarkModeIcon from "@mui/icons-material/DarkModeOutlined";
 import LightModeIcon from "@mui/icons-material/LightModeOutlined";
@@ -96,6 +97,11 @@ export default function AppLayout({ children }: AppLayoutProps) {
         label: "Raporlama",
         icon: <CloudOutlinedIcon />,
         path: "/reports",
+      },
+      {
+        label: "Satın Alma Takip",
+        icon: <LocalShippingOutlinedIcon />,
+        path: "/purchase-tracking",
       },
     ];
 

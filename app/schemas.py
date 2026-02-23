@@ -4,7 +4,7 @@ from typing import Optional
 from pydantic import BaseModel, Field, root_validator, validator
 from sqlmodel import SQLModel
 
-from app.models import ExpenseStatus, WarrantyItemType
+from app.models import ExpenseStatus, PurchaseTrackingStatus, WarrantyItemType
 
 PLACEHOLDER_VALUES = {"-", "—"}
 
@@ -274,6 +274,45 @@ class DashboardPurchaseAlertResponse(BaseModel):
 
 class PurchaseAlertSetRequest(BaseModel):
     requested: bool
+
+
+
+
+class PurchaseTrackingRead(BaseModel):
+    id: int | None = None
+    plan_item_id: int
+    status: str
+    updated_at: datetime | None = None
+    updated_by: str | None = None
+    note: str | None = None
+    is_active: bool = True
+    year: int
+    month: int
+    department: str | None = None
+    scenario_id: int
+    budget_item_id: int
+    budget_code: str | None = None
+    budget_name: str | None = None
+    amount: float
+    purchase_requested: bool = False
+
+
+class PurchaseTrackingUpdateRequest(BaseModel):
+    status: str
+    note: str | None = None
+
+    @validator("status")
+    def validate_status(cls, value: str) -> str:
+        allowed = {
+            PurchaseTrackingStatus.SURAT_YONETIM_IMZA.value,
+            PurchaseTrackingStatus.BCC_YONETIM_IMZA.value,
+            PurchaseTrackingStatus.SURAT_SATINALMA.value,
+            PurchaseTrackingStatus.CANCELLED.value,
+            PurchaseTrackingStatus.TALEP_OLUSTURULDU.value,
+        }
+        if value not in allowed:
+            raise ValueError("Geçersiz takip durumu")
+        return value
 
 
 class ExpenseBase(BaseModel):

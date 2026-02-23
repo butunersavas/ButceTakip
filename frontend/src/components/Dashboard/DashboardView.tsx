@@ -394,6 +394,7 @@ export default function DashboardView() {
   const [purchaseStatusFeedback, setPurchaseStatusFeedback] = useState<
     { message: string; severity: "success" | "error" } | null
   >(null);
+  const [newlyRequestedItemId, setNewlyRequestedItemId] = useState<number | null>(null);
   const [warrantyAlertItems, setWarrantyAlertItems] = useState<WarrantyAlertItem[]>([]);
   const [selectedKpiFilter, setSelectedKpiFilter] = useState<
     "total_plan" | "total_actual" | "total_remaining" | "total_overrun" | null
@@ -578,6 +579,7 @@ export default function DashboardView() {
           : "Satın alma talebi geri alındı.",
         severity: "success"
       });
+      setNewlyRequestedItemId(nextRequested ? item.id : null);
     } catch (error) {
       console.error(error);
       setPurchaseStatusFeedback({
@@ -1532,6 +1534,30 @@ export default function DashboardView() {
                 </CardContent>
               </Card>
             </DashboardSectionBoundary>
+
+            <DashboardSectionBoundary title="Garanti Takip Özeti">
+              <Card variant="outlined">
+                <CardContent>
+                  <Stack spacing={1.5}>
+                    <Typography variant="h6" fontWeight={700}>Garanti Takip Özeti</Typography>
+                    <Grid container spacing={1.5}>
+                      <Grid item xs={12} sm={4}>
+                        <Card variant="outlined"><CardContent><Typography variant="caption" color="text.secondary">Süresi geçen</Typography><Typography variant="h5" fontWeight={700}>{warrantyAlerts.expired.length}</Typography></CardContent></Card>
+                      </Grid>
+                      <Grid item xs={12} sm={4}>
+                        <Card variant="outlined"><CardContent><Typography variant="caption" color="text.secondary">30 gün içinde bitecek</Typography><Typography variant="h5" fontWeight={700}>{warrantyAlerts.near.length}</Typography></CardContent></Card>
+                      </Grid>
+                      <Grid item xs={12} sm={4}>
+                        <Card variant="outlined"><CardContent><Typography variant="caption" color="text.secondary">Toplam</Typography><Typography variant="h5" fontWeight={700}>{warrantyAlertItems.length}</Typography></CardContent></Card>
+                      </Grid>
+                    </Grid>
+                    <Stack direction="row" justifyContent="flex-end">
+                      <Button variant="outlined" onClick={() => navigate("/warranty-tracking")}>Garanti Takibe Git</Button>
+                    </Stack>
+                  </Stack>
+                </CardContent>
+              </Card>
+            </DashboardSectionBoundary>
           </Stack>
         </Stack>
       </Box>
@@ -1584,6 +1610,33 @@ export default function DashboardView() {
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
                   {`Toplam ${purchaseAlert?.done ?? 0}/${purchaseAlert?.total ?? 0} talep oluşturuldu • Bekleyen: ${purchaseAlert?.pending ?? 0}`}
                 </Typography>
+                {newlyRequestedItemId && (
+                  <Alert
+                    severity="success"
+                    sx={{ mb: 1.5 }}
+                    action={
+                      <Stack direction="row" spacing={1}>
+                        <Button
+                          size="small"
+                          onClick={() => {
+                            const yearParam = purchaseAlert?.year ?? new Date().getFullYear();
+                            const monthParam = purchaseAlert?.month ?? new Date().getMonth() + 1;
+                            handleCloseAlertsDialog();
+                            navigate(`/purchase-tracking?year=${yearParam}&month=${monthParam}&focusId=${newlyRequestedItemId}`);
+                            setNewlyRequestedItemId(null);
+                          }}
+                        >
+                          Takibe Git
+                        </Button>
+                        <Button size="small" onClick={() => setNewlyRequestedItemId(null)}>
+                          Listede Kal
+                        </Button>
+                      </Stack>
+                    }
+                  >
+                    Talep oluşturuldu. Takip ekranına geçebilirsiniz.
+                  </Alert>
+                )}
                 <TextField
                   select
                   label="Departman"

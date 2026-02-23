@@ -10,6 +10,7 @@ import CleanupView from "./components/Cleanup/CleanupView";
 import UsersView from "./components/Users/UsersView";
 import DailyExportView from "./components/DailyExport/DailyExportView";
 import WarrantyTrackingView from "./components/WarrantyTracking/WarrantyTrackingView";
+import PurchaseTrackingView from "./components/PurchaseTracking/PurchaseTrackingView";
 import AppLayout from "./components/layout/AppLayout";
 import { useAuth } from "./context/AuthContext";
 import LoginPage from "./pages/LoginPage";
@@ -75,6 +76,7 @@ export default function App() {
       <Route path="/cleanup" element={<LayoutRoute><CleanupView /></LayoutRoute>} />
       <Route path="/users" element={<LayoutRoute requireAdmin><UsersView /></LayoutRoute>} />
       <Route path="/warranty-tracking" element={<LayoutRoute requireAdmin><WarrantyTrackingView /></LayoutRoute>} />
+      <Route path="/purchase-tracking" element={<LayoutRoute><PurchaseTrackingView /></LayoutRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

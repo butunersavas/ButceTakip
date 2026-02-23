@@ -442,7 +442,15 @@ export default function PlansView() {
       {
         field: "budget",
         headerName: "Bütçe Kalemi",
-        flex: 1,
+        flex: 1.6,
+        minWidth: 260,
+        renderCell: ({ value }) => (
+          <Tooltip title={value || "-"}>
+            <Typography variant="body2" noWrap title={String(value ?? "-")}>
+              {String(value ?? "-")}
+            </Typography>
+          </Tooltip>
+        ),
         valueGetter: (_value, row) => {
           const r = row as any;
           return getPlanDisplayValues(r).budgetLabel;
@@ -451,7 +459,8 @@ export default function PlansView() {
       {
         field: "capex_opex",
         headerName: "Map Capex/Opex",
-        flex: 1,
+        flex: 0.9,
+        minWidth: 150,
         valueGetter: (_value, row) => {
           const r = row as any;
           return getPlanDisplayValues(r).capexOpex;
@@ -460,7 +469,13 @@ export default function PlansView() {
       {
         field: "asset_type",
         headerName: "Map Nitelik",
-        flex: 1,
+        flex: 1.1,
+        minWidth: 180,
+        renderCell: ({ value }) => (
+          <Typography variant="body2" noWrap title={String(value ?? "-")}>
+            {String(value ?? "-")}
+          </Typography>
+        ),
         valueGetter: (_value, row) => {
           const r = row as any;
           return getPlanDisplayValues(r).nitelik;
@@ -469,7 +484,8 @@ export default function PlansView() {
       {
         field: "department",
         headerName: "Departman",
-        flex: 1,
+        flex: 0.9,
+        minWidth: 170,
         valueGetter: (_value, row) => {
           const r = row as any;
           return getPlanDisplayValues(r).department;
@@ -479,7 +495,8 @@ export default function PlansView() {
       {
         field: "month",
         headerName: "Ay",
-        width: 120,
+        minWidth: 120,
+        flex: 0.6,
         valueGetter: (_value, row) => {
           const r = row as any;
           const raw = r?.month;
@@ -753,7 +770,7 @@ export default function PlansView() {
       </FiltersBar>
 
       <Grid container spacing={3}>
-        <Grid item xs={12} md={4}>
+        <Grid item xs={12}>
           <Card>
             <CardContent>
               <Typography variant="subtitle1" fontWeight={600} gutterBottom>
@@ -787,7 +804,7 @@ export default function PlansView() {
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={12} md={8}>
+        <Grid item xs={12}>
           <Card>
             <CardContent sx={{ height: "100%" }}>
               <Stack
