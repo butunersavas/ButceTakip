@@ -9,7 +9,7 @@ from openpyxl import Workbook
 from sqlalchemy import func
 from sqlmodel import Session, select
 
-from app.models import BudgetItem, Expense, ExpenseStatus, PlanEntry, PurchaseFormStatusExt, Scenario
+from app.models import BudgetItem, Expense, ExpenseStatus, PlanEntry, Scenario
 from app.services.analytics import compute_quarterly_summary
 from app.schemas import PurchaseFormPreparedReportItem
 
@@ -38,7 +38,9 @@ EXPORT_HEADERS = [
 
 
 def _format_currency(value: float) -> str:
-    return f"{CURRENCY_SYMBOL}{value:,.2f}"
+    amount = 0 if value is None else float(value)
+    formatted = f"{amount:,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
+    return f"{formatted}{CURRENCY_SYMBOL}"
 
 
 def _get_expenses(
@@ -84,7 +86,7 @@ def _append_plan_rows(
                 scenario.name if scenario else "",
                 plan.year,
                 plan.month,
-                plan.amount,
+                _format_currency(plan.amount),
                 "",
                 "",
                 "",
@@ -115,10 +117,10 @@ def _append_expense_rows(
                 scenario.name if scenario else "",
                 expense.expense_date.year,
                 expense.expense_date.month,
-                expense.amount,
+                _format_currency(expense.amount),
                 expense.expense_date.isoformat(),
                 expense.quantity,
-                expense.unit_price,
+                _format_currency(expense.unit_price),
                 expense.vendor or "",
                 expense.description or "",
                 "",
@@ -135,44 +137,40 @@ def get_purchase_forms_prepared(
     scenario_id: int | None = None,
     month: int | None = None,
     department: str | None = None,
+    budget_item_id: int | None = None,
+    capex_opex: str | None = None,
 ) -> list[PurchaseFormPreparedReportItem]:
-    normalized_budget_code = func.upper(func.trim(PurchaseFormStatusExt.budget_code))
-    normalized_item_code = func.upper(func.trim(BudgetItem.code))
-    query = (
-        select(
-            BudgetItem.id,
-            PurchaseFormStatusExt.budget_code,
-            BudgetItem.name,
-            PurchaseFormStatusExt.year,
-            PurchaseFormStatusExt.month,
-            PurchaseFormStatusExt.scenario_id,
-            PurchaseFormStatusExt.department,
-        )
-        .select_from(PurchaseFormStatusExt)
-        .outerjoin(BudgetItem, normalized_item_code == normalized_budget_code)
-        .where(PurchaseFormStatusExt.year == year)
-        .where(PurchaseFormStatusExt.is_form_prepared.is_(True))
+    query = select(PlanEntry, BudgetItem).join(BudgetItem, PlanEntry.budget_item_id == BudgetItem.id).where(
+        PlanEntry.year == year,
+        PlanEntry.purchase_requested.is_(True),
     )
 
     if scenario_id is not None:
-        query = query.where(PurchaseFormStatusExt.scenario_id == scenario_id)
+        query = query.where(PlanEntry.scenario_id == scenario_id)
     if month is not None:
-        query = query.where(PurchaseFormStatusExt.month == month)
+        query = query.where(PlanEntry.month == month)
     if department is not None:
-        query = query.where(PurchaseFormStatusExt.department == department)
+        query = query.where(PlanEntry.department == department)
+    if budget_item_id is not None:
+        query = query.where(PlanEntry.budget_item_id == budget_item_id)
+    if capex_opex:
+        query = query.where(func.lower(func.coalesce(BudgetItem.map_category, "")) == capex_opex.lower())
 
-    rows = session.exec(query.order_by(PurchaseFormStatusExt.month, PurchaseFormStatusExt.budget_code)).all()
+    rows = session.exec(query.order_by(PlanEntry.month, BudgetItem.code)).all()
     return [
         PurchaseFormPreparedReportItem(
-            budget_item_id=budget_item_id,
-            budget_code=code,
-            budget_name=name or code,
-            year=form_year,
-            month=month,
-            scenario_id=form_scenario_id,
-            department=form_department or None,
+            budget_item_id=budget_item.id,
+            budget_code=budget_item.code,
+            budget_name=budget_item.name or budget_item.code,
+            year=plan.year,
+            month=plan.month,
+            scenario_id=plan.scenario_id,
+            department=plan.department or None,
+            amount=plan.amount,
+            capex_opex=budget_item.map_category,
+            purchase_requested_at=plan.purchase_requested_at,
         )
-        for budget_item_id, code, name, form_year, month, form_scenario_id, form_department in rows
+        for plan, budget_item in rows
     ]
 
 
@@ -342,8 +340,10 @@ def export_purchase_forms_prepared_xlsx(
     scenario_id: int | None = None,
     month: int | None = None,
     department: str | None = None,
+    budget_item_id: int | None = None,
+    capex_opex: str | None = None,
 ) -> Response:
-    items = get_purchase_forms_prepared(session, year, scenario_id, month, department)
+    items = get_purchase_forms_prepared(session, year, scenario_id, month, department, budget_item_id, capex_opex)
     wb = Workbook()
     sheet = wb.active
     sheet.title = "PreparedPurchaseForms"
@@ -353,6 +353,10 @@ def export_purchase_forms_prepared_xlsx(
         "Year",
         "Month",
         "Scenario ID",
+        "Department",
+        "Capex/Opex",
+        "Amount",
+        "Purchase Requested At",
     ])
 
     for item in items:
@@ -363,13 +367,17 @@ def export_purchase_forms_prepared_xlsx(
                 item.year,
                 item.month,
                 item.scenario_id or "",
+                item.department or "",
+                item.capex_opex or "",
+                _format_currency(item.amount),
+                item.purchase_requested_at.isoformat() if item.purchase_requested_at else "",
             ]
         )
 
     output = io.BytesIO()
     wb.save(output)
     output.seek(0)
-    logger.info("export_debug export_type=%s year=%s month=%s scenario=%s department=%s budget_item=%s row_count=%s", "purchase_forms_prepared_xlsx", year, month, scenario_id, department, None, len(items))
+    logger.info("export_debug export_type=%s year=%s month=%s scenario=%s department=%s budget_item=%s capex_opex=%s row_count=%s", "purchase_forms_prepared_xlsx", year, month, scenario_id, department, budget_item_id, capex_opex, len(items))
     response = Response(
         content=output.getvalue(),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

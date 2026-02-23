@@ -62,11 +62,15 @@ def get_purchase_forms_prepared_report(
     scenario_id: int | None = Query(None),
     month: str | int | None = Query(default=None),
     department: str | None = Query(default=None),
+    budget_item_id: int | None = Query(default=None),
+    capex_opex: str | None = Query(default=None),
     session: Session = Depends(get_db_session),
     _= Depends(get_current_user),
 ) -> list[PurchaseFormPreparedReportItem]:
     normalized_month = normalize_month(month)
-    items = exporter.get_purchase_forms_prepared(session, year, scenario_id, normalized_month, department)
+    items = exporter.get_purchase_forms_prepared(
+        session, year, scenario_id, normalized_month, department, budget_item_id, capex_opex
+    )
     logger.info(
         "report_debug export_type=%s year=%s month=%s scenario=%s department=%s budget_item=%s row_count=%s",
         "purchase_forms_prepared",
@@ -74,7 +78,7 @@ def get_purchase_forms_prepared_report(
         normalized_month,
         scenario_id,
         department,
-        None,
+        budget_item_id,
         len(items),
     )
     return items
@@ -86,6 +90,8 @@ def download_purchase_forms_prepared_xlsx(
     scenario_id: int | None = Query(None),
     month: str | int | None = Query(default=None),
     department: str | None = Query(default=None),
+    budget_item_id: int | None = Query(default=None),
+    capex_opex: str | None = Query(default=None),
     session: Session = Depends(get_db_session),
     _= Depends(get_current_user),
 ):
@@ -96,4 +102,6 @@ def download_purchase_forms_prepared_xlsx(
         scenario_id,
         normalized_month,
         department,
+        budget_item_id,
+        capex_opex,
     )
