@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Button,
@@ -86,12 +86,6 @@ type PlanMutationPayload = {
   department?: string | null;
 };
 
-interface PlanAggregate {
-  budget_item_id: number;
-  month: number;
-  total_amount: number;
-}
-
 const monthOptions = [
   "Ocak",
   "Şubat",
@@ -135,8 +129,6 @@ export default function PlansView() {
   const [formError, setFormError] = useState<string | null>(null);
   const [formBudgetItemId, setFormBudgetItemId] = useState<number | null>(null);
   const [listError, setListError] = useState<string | null>(null);
-  const planTableRef = useRef<HTMLDivElement | null>(null);
-
   const { data: scenarios } = useQuery<Scenario[]>({
     queryKey: ["scenarios"],
     queryFn: async () => {
@@ -205,17 +197,6 @@ export default function PlansView() {
       setListError(detail);
     }
   }, [plansQuery.error, plansQuery.isError]);
-
-  const aggregatesQuery = useQuery<PlanAggregate[]>({
-    queryKey: ["plan-aggregate", year, scenarioId, capexOpex],
-    queryFn: async () => {
-      const params: Record<string, number | string> = { year };
-      if (scenarioId) params.scenario_id = scenarioId;
-      if (capexOpex) params.capex_opex = capexOpex;
-      const { data } = await client.get<PlanAggregate[]>("/plans/aggregate", { params });
-      return data;
-    }
-  });
 
   const mutation = useMutation({
     mutationFn: async (payload: PlanMutationPayload) => {
@@ -618,31 +599,14 @@ export default function PlansView() {
     ];
   }, [getPlanDisplayValues, handleDelete, handleEdit, user?.is_admin]);
 
-  const monthlyTotals = useMemo(() => {
-    const totals = Array(12).fill(0);
-    aggregatesQuery.data?.forEach((aggregate) => {
-      totals[aggregate.month - 1] += aggregate.total_amount;
-    });
-    return totals;
-  }, [aggregatesQuery.data]);
-
   const filteredTotal = useMemo(() => {
     return rows.reduce((sum, plan) => sum + (Number(plan.amount) || 0), 0);
   }, [rows]);
 
   const formattedFilteredTotal = formatCurrency(filteredTotal);
 
-  const handleMonthlyTotalClick = (selectedMonth: number) => {
-    setMonthFilter(selectedMonth);
-    plansQuery.refetch();
-    window.setTimeout(() => {
-      planTableRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 0);
-  };
-
   const handleApplyFilters = () => {
     plansQuery.refetch();
-    aggregatesQuery.refetch();
   };
 
   const handleResetFilters = () => {
@@ -655,7 +619,6 @@ export default function PlansView() {
     setFormBudgetItemId(null);
     setTimeout(() => {
       plansQuery.refetch();
-      aggregatesQuery.refetch();
     }, 0);
   };
 
@@ -770,41 +733,6 @@ export default function PlansView() {
       <Grid container spacing={3}>
         <Grid item xs={12}>
           <Card>
-            <CardContent sx={{ p: 1.25, "&:last-child": { pb: 1.25 } }}>
-              <Typography variant="subtitle2" fontWeight={600} gutterBottom>
-                Aylık Toplam Tutarlar
-              </Typography>
-              <Stack spacing={0.75}>
-                {monthlyTotals.map((total, index) => (
-                  <Stack
-                    direction="row"
-                    justifyContent="space-between"
-                    key={index}
-                    sx={{
-                      p: 0.85,
-                      minHeight: 30,
-                      borderRadius: 1.5,
-                      backgroundColor: total > 0 ? "rgba(13, 71, 161, 0.06)" : "background.default",
-                      border:
-                        monthFilter === index + 1 ? "1px solid rgba(13, 71, 161, 0.35)" : "1px solid transparent",
-                      cursor: "pointer"
-                    }}
-                    onClick={() => handleMonthlyTotalClick(index + 1)}
-                  >
-                    <Typography variant="caption" color="text.secondary">
-                      {monthOptions[index]}
-                    </Typography>
-                    <Typography variant="body2" fontWeight={600}>
-                      {formatCurrency(total)}
-                    </Typography>
-                  </Stack>
-                ))}
-              </Stack>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12}>
-          <Card>
             <CardContent sx={{ height: "100%" }}>
               <Stack
                 direction={{ xs: "column", sm: "row" }}
@@ -823,7 +751,7 @@ export default function PlansView() {
                   </Box>
                 </Typography>
               </Stack>
-              <Box ref={planTableRef} sx={{ width: "100%", overflowX: "auto" }}>
+              <Box sx={{ width: "100%", overflowX: "auto" }}>
                 <DataGrid
                   autoHeight
                   rows={rows ?? []}
