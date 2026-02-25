@@ -914,6 +914,11 @@ export default function DashboardView() {
   }, []);
 
   const handleSummaryCardClick = (filterKey: string) => {
+    if (filterKey === "total_actual") {
+      navigate("/expenses");
+      return;
+    }
+
     const isSameFilter = selectedKpiFilter === filterKey;
     setSelectedKpiFilter((prev) => (prev === filterKey ? null : filterKey));
     if (filterKey === "total_overrun") {
