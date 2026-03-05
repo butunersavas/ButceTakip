@@ -262,6 +262,37 @@ def _apply_schema_upgrades() -> None:
 
     ensure_warranty_schema(inspector)
 
+    if not inspector.has_table("expense_attachments"):
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "CREATE TABLE expense_attachments ("
+                    "id INTEGER PRIMARY KEY, "
+                    "expense_id INTEGER NOT NULL, "
+                    "filename TEXT NOT NULL, "
+                    "stored_filename TEXT NOT NULL UNIQUE, "
+                    "content_type TEXT NOT NULL, "
+                    "size_bytes INTEGER NOT NULL, "
+                    "storage_path TEXT NOT NULL, "
+                    "uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL, "
+                    "uploaded_by TEXT NULL, "
+                    "FOREIGN KEY(expense_id) REFERENCES expenses(id)"
+                    ")"
+                )
+            )
+            connection.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_expense_attachments_expense_id "
+                    "ON expense_attachments(expense_id)"
+                )
+            )
+            connection.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_expense_attachments_uploaded_at "
+                    "ON expense_attachments(uploaded_at)"
+                )
+            )
+
     if inspector.has_table("users"):
         user_columns = {column["name"] for column in inspector.get_columns("users")}
         if "email" not in user_columns:

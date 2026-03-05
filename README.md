@@ -78,7 +78,12 @@ DEFAULT_ADMIN_PASSWORD=GucluBirSifre123!
 # İsteğe bağlı
 DEFAULT_ADMIN_FULL_NAME=Admin Kullanıcı
 DEFAULT_ADMIN_ROLE=admin
+MAX_PDF_MB=15
+EXPENSE_UPLOAD_DIR=./data/uploads/expenses
 ```
+
+`MAX_PDF_MB` değeri harcama faturası (PDF) yükleme üst limitini MB cinsinden belirler (varsayılan 15 MB).
+Dosyalar varsayılan olarak `./data/uploads/expenses/<expense_id>/` klasörüne kaydedilir.
 
 E-posta ve parola değerleri sağlandığında veritabanında kayıt bulunmuyorsa kullanıcı otomatik oluşturulur. Parola yalnızca ilk
 oluşturma sırasında kullanılır; ileride değiştirmek isterseniz API üzerindeki kullanıcı uç noktalarını veya veritabanını

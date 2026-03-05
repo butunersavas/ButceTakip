@@ -31,6 +31,8 @@ import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
 import CheckCircleOutlineOutlinedIcon from "@mui/icons-material/CheckCircleOutlineOutlined";
 import ReportGmailerrorredOutlinedIcon from "@mui/icons-material/ReportGmailerrorredOutlined";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
+import UploadFileIcon from "@mui/icons-material/UploadFile";
+import DescriptionIcon from "@mui/icons-material/Description";
 import {
   DataGrid,
   useGridApiRef,
@@ -110,6 +112,17 @@ interface ExpensePayload {
   is_out_of_budget: boolean;
   client_hostname?: string | null;
   kaydi_giren_kullanici?: string | null;
+}
+
+interface ExpenseAttachment {
+  id: number;
+  expense_id: number;
+  filename: string;
+  content_type: string;
+  size_bytes: number;
+  uploaded_at: string;
+  uploaded_by?: string | null;
+  download_url: string;
 }
 
 type ExpensesErrorBoundaryProps = {
@@ -203,6 +216,16 @@ export default function ExpensesView() {
   const [selectedExpenseFilter, setSelectedExpenseFilter] = useState<
     "ALL" | "ACTIVE" | "OUT_OF_BUDGET" | "CANCELLED"
   >("ALL");
+  const [attachmentDialogOpen, setAttachmentDialogOpen] = useState(false);
+  const [selectedAttachmentExpense, setSelectedAttachmentExpense] = useState<Expense | null>(null);
+  const [selectedAttachmentFile, setSelectedAttachmentFile] = useState<File | null>(null);
+
+  const formatBytes = useCallback((bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    const kb = bytes / 1024;
+    if (kb < 1024) return `${kb.toFixed(1)} KB`;
+    return `${(kb / 1024).toFixed(2)} MB`;
+  }, []);
 
   const resolveApiErrorMessage = useCallback(
     (error: unknown, fallback: string) => {
@@ -381,6 +404,78 @@ export default function ExpensesView() {
       console.error(error);
     }
   });
+
+  const selectedExpenseId = selectedAttachmentExpense?.id ?? null;
+  const { data: attachments, refetch: refetchAttachments, isFetching: isFetchingAttachments } =
+    useQuery<ExpenseAttachment[]>({
+      queryKey: ["expense-attachments", selectedExpenseId],
+      enabled: attachmentDialogOpen && Boolean(selectedExpenseId),
+      queryFn: async () => {
+        if (!selectedExpenseId) return [];
+        const { data } = await client.get<ExpenseAttachment[]>(
+          `/expenses/${selectedExpenseId}/attachments`
+        );
+        return data;
+      }
+    });
+
+  const uploadAttachmentMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedExpenseId || !selectedAttachmentFile) return;
+      const formData = new FormData();
+      formData.append("file", selectedAttachmentFile);
+      await client.post(`/expenses/${selectedExpenseId}/attachments`, formData, {
+        headers: { "Content-Type": "multipart/form-data" }
+      });
+    },
+    onSuccess: async () => {
+      setSelectedAttachmentFile(null);
+      await refetchAttachments();
+    },
+    onError: (error) => {
+      setErrorMessage(resolveApiErrorMessage(error, "Fatura yüklenemedi."));
+    }
+  });
+
+  const deleteAttachmentMutation = useMutation({
+    mutationFn: async (attachmentId: number) => {
+      await client.delete(`/attachments/${attachmentId}`);
+    },
+    onSuccess: async () => {
+      await refetchAttachments();
+    },
+    onError: (error) => {
+      setErrorMessage(resolveApiErrorMessage(error, "Fatura silinemedi."));
+    }
+  });
+
+  const handleOpenAttachments = useCallback((expense: Expense) => {
+    setSelectedAttachmentExpense(expense);
+    setSelectedAttachmentFile(null);
+    setAttachmentDialogOpen(true);
+  }, []);
+
+
+  const handleDownloadAttachment = useCallback(
+    async (attachment: ExpenseAttachment) => {
+      try {
+        const response = await client.get<Blob>(`/attachments/${attachment.id}/download`, {
+          responseType: "blob"
+        });
+        const url = window.URL.createObjectURL(response.data);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = attachment.filename;
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        window.URL.revokeObjectURL(url);
+      } catch (error) {
+        setErrorMessage(resolveApiErrorMessage(error, "Fatura indirilemedi."));
+      }
+    },
+    [client, resolveApiErrorMessage]
+  );
 
   const deleteMutation = useMutation({
     mutationFn: async (expenseId: number) => {
@@ -764,10 +859,15 @@ export default function ExpensesView() {
       {
         field: "actions",
         headerName: "İşlemler",
-        width: 140,
+        width: 190,
         sortable: false,
         renderCell: ({ row }) => (
           <Stack direction="row" spacing={1}>
+            <Tooltip title="Faturalar">
+              <IconButton size="small" onClick={() => handleOpenAttachments(row)}>
+                <DescriptionIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
             <Tooltip title="Güncelle">
               <IconButton size="small" onClick={() => handleEdit(row)}>
                 <EditIcon fontSize="small" />
@@ -782,7 +882,7 @@ export default function ExpensesView() {
         )
       }
     ];
-  }, [handleDelete, handleEdit, scenarios, renderTextWithTooltip]);
+  }, [handleDelete, handleEdit, handleOpenAttachments, scenarios, renderTextWithTooltip]);
 
   const columns = useMemo<GridColDef[]>(
     () =>
@@ -1220,6 +1320,81 @@ export default function ExpensesView() {
         </CardContent>
       </Card>
 
+
+
+      <Dialog
+        open={attachmentDialogOpen}
+        onClose={() => setAttachmentDialogOpen(false)}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>Faturalar {selectedAttachmentExpense ? `(Harcama #${selectedAttachmentExpense.id})` : ""}</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ sm: "center" }}>
+              <Button variant="outlined" component="label" startIcon={<UploadFileIcon />}>
+                Fatura Yükle (PDF)
+                <input
+                  hidden
+                  type="file"
+                  accept="application/pdf,.pdf"
+                  onChange={(event) => setSelectedAttachmentFile(event.target.files?.[0] ?? null)}
+                />
+              </Button>
+              <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
+                {selectedAttachmentFile?.name ?? "Dosya seçilmedi"}
+              </Typography>
+              <Button
+                variant="contained"
+                disabled={!selectedAttachmentFile || uploadAttachmentMutation.isPending}
+                onClick={() => uploadAttachmentMutation.mutate()}
+              >
+                {uploadAttachmentMutation.isPending ? "Yükleniyor..." : "Yükle"}
+              </Button>
+            </Stack>
+            {isFetchingAttachments ? (
+              <Typography variant="body2">Faturalar yükleniyor...</Typography>
+            ) : (attachments?.length ?? 0) === 0 ? (
+              <Alert severity="info">Bu harcama için yüklenmiş fatura bulunmuyor.</Alert>
+            ) : (
+              <Stack spacing={1.2}>
+                {attachments?.map((attachment) => (
+                  <Card key={attachment.id} variant="outlined" sx={{ px: 1.5, py: 1 }}>
+                    <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
+                      <Box>
+                        <Typography variant="body2" fontWeight={600}>
+                          {attachment.filename}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {dayjs(attachment.uploaded_at).format("DD.MM.YYYY HH:mm")} • {formatBytes(attachment.size_bytes)}
+                        </Typography>
+                      </Box>
+                      <Stack direction="row" spacing={0.5}>
+                        <Button size="small" onClick={() => handleDownloadAttachment(attachment)}>
+                          İndir
+                        </Button>
+                        {(user?.is_admin || attachment.uploaded_by === user?.username) && (
+                          <Button
+                            size="small"
+                            color="error"
+                            disabled={deleteAttachmentMutation.isPending}
+                            onClick={() => deleteAttachmentMutation.mutate(attachment.id)}
+                          >
+                            Sil
+                          </Button>
+                        )}
+                      </Stack>
+                    </Stack>
+                  </Card>
+                ))}
+              </Stack>
+            )}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setAttachmentDialogOpen(false)}>Kapat</Button>
+        </DialogActions>
+      </Dialog>
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} fullWidth maxWidth="md">
         <DialogTitle>{editingExpense ? "Harcamayı Güncelle" : "Yeni Harcama"}</DialogTitle>
         <form onSubmit={handleSubmit}>
