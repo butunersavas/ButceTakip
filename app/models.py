@@ -191,6 +191,23 @@ class Expense(TimestampMixin, SQLModel, table=True):
         back_populates="expenses_updated",
         sa_relationship_kwargs={"foreign_keys": "[Expense.updated_by_id]"},
     )
+    attachments: list["ExpenseAttachment"] = Relationship(back_populates="expense")
+
+
+class ExpenseAttachment(SQLModel, table=True):
+    __tablename__ = "expense_attachments"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    expense_id: int = Field(foreign_key="expenses.id", nullable=False, index=True)
+    filename: str = Field(nullable=False)
+    stored_filename: str = Field(nullable=False, unique=True, index=True)
+    content_type: str = Field(nullable=False)
+    size_bytes: int = Field(nullable=False)
+    storage_path: str = Field(nullable=False)
+    uploaded_at: datetime = Field(default_factory=datetime.utcnow, nullable=False, index=True)
+    uploaded_by: Optional[str] = Field(default=None, nullable=True)
+
+    expense: Expense = Relationship(back_populates="attachments")
 
 
 class WarrantyItem(TimestampMixin, SQLModel, table=True):

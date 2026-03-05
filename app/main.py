@@ -17,6 +17,7 @@ from app.routers import (
     backup,
     budget_items,
     dashboard,
+    expense_attachments,
     expenses,
     import_export,
     plans,
@@ -91,6 +92,7 @@ app.include_router(scenarios.router, prefix=API_PREFIX)
 app.include_router(budget_items.router, prefix=API_PREFIX)
 app.include_router(plans.router, prefix=API_PREFIX)
 app.include_router(expenses.router, prefix=API_PREFIX)
+app.include_router(expense_attachments.router, prefix=API_PREFIX)
 app.include_router(dashboard.router, prefix=API_PREFIX)
 app.include_router(purchase_alerts.router, prefix=API_PREFIX)
 app.include_router(purchase_tracking.router, prefix=API_PREFIX)

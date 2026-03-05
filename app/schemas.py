@@ -476,6 +476,21 @@ class ExpenseRead(SQLModel, table=False):
         allow_population_by_field_name = True
 
 
+
+
+class ExpenseAttachmentRead(BaseModel):
+    id: int
+    expense_id: int
+    filename: str
+    content_type: str
+    size_bytes: int
+    uploaded_at: datetime
+    uploaded_by: str | None = None
+    download_url: str
+
+    class Config:
+        orm_mode = True
+
 class WarrantyItemBase(BaseModel):
     type: WarrantyItemType
     name: str

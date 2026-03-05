@@ -27,6 +27,8 @@ class Settings(BaseSettings):
         env=["CORS_ORIGINS", "ALLOWED_ORIGINS"],
     )
     cors_allow_credentials: bool = Field(default=False, env="CORS_ALLOW_CREDENTIALS")
+    expense_upload_dir: str = Field(default="./data/uploads/expenses", env="EXPENSE_UPLOAD_DIR")
+    max_pdf_mb: int = Field(default=15, env="MAX_PDF_MB")
 
     DEFAULT_ADMIN_EMAIL: str = Field(default="admin@local", env="DEFAULT_ADMIN_EMAIL")
     DEFAULT_ADMIN_PASSWORD: str = Field(default="GucluBirSifre123!", env="DEFAULT_ADMIN_PASSWORD")
