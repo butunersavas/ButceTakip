@@ -388,6 +388,8 @@ export default function DashboardView() {
   const [purchaseAlert, setPurchaseAlert] = useState<PurchaseAlertResponse | null>(null);
   const [purchaseDepartmentFilter, setPurchaseDepartmentFilter] = useState("");
   const [isAlertsDialogOpen, setIsAlertsDialogOpen] = useState(false);
+  const [isWarrantyAlertsDialogOpen, setIsWarrantyAlertsDialogOpen] = useState(false);
+  const [shouldOpenWarrantyAfterPurchase, setShouldOpenWarrantyAfterPurchase] = useState(false);
   const [savingPurchaseStatus, setSavingPurchaseStatus] = useState<number | null>(null);
   const [purchaseStatusFeedback, setPurchaseStatusFeedback] = useState<
     { message: string; severity: "success" | "error" } | null
@@ -495,12 +497,19 @@ export default function DashboardView() {
       const purchaseData =
         purchaseResult.status === "fulfilled" ? purchaseResult.value.data ?? null : null;
       const warrantyList = warrantyResult.status === "fulfilled" ? warrantyResult.value : [];
-      const { normalized } = splitWarrantyAlerts(warrantyList);
+      const { normalized, expired, near } = splitWarrantyAlerts(warrantyList);
+      const hasWarrantyAlerts = expired.length > 0 || near.length > 0;
 
       setPurchaseAlert(purchaseData);
       setWarrantyAlertItems(normalized);
       if (purchaseData?.pending && purchaseData.pending > 0) {
         setIsAlertsDialogOpen(true);
+        setShouldOpenWarrantyAfterPurchase(hasWarrantyAlerts);
+      } else {
+        setShouldOpenWarrantyAfterPurchase(false);
+        if (hasWarrantyAlerts) {
+          setIsWarrantyAlertsDialogOpen(true);
+        }
       }
     };
 
@@ -513,6 +522,10 @@ export default function DashboardView() {
 
   const handleCloseAlertsDialog = () => {
     setIsAlertsDialogOpen(false);
+    if (shouldOpenWarrantyAfterPurchase) {
+      setIsWarrantyAlertsDialogOpen(true);
+      setShouldOpenWarrantyAfterPurchase(false);
+    }
   };
 
   const warrantyAlerts = useMemo(
@@ -1708,60 +1721,89 @@ export default function DashboardView() {
             )}
           </Box>
 
-          <Box>
-            <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-              Garanti Uyarıları
-            </Typography>
-            <Stack spacing={2}>
-              <Box>
-                <Typography variant="subtitle2" fontWeight={600} gutterBottom>
-                  Süresi dolanlar
-                </Typography>
-                {warrantyAlerts.expired.length === 0 ? (
-                  <Typography variant="body2" color="text.secondary">
-                    Süresi dolan garanti kaydı bulunmuyor.
-                  </Typography>
-                ) : (
-                  <List dense sx={{ maxHeight: 240, overflowY: "auto" }}>
-                    {warrantyAlerts.expired.map((item) => (
-                      <ListItem key={item.id ?? `${item.name}-${item.end_date}`}>
-                        <ListItemText
-                          primary={item.name ?? item.location ?? item.serial_no ?? "Garanti kalemi"}
-                          secondary={`Kalan gün: ${item.days_left ?? "-"}`}
-                          primaryTypographyProps={{ variant: "body2" }}
-                        />
-                      </ListItem>
-                    ))}
-                  </List>
-                )}
-              </Box>
-              <Box>
-                <Typography variant="subtitle2" fontWeight={600} gutterBottom>
-                  30 gün kalanlar
-                </Typography>
-                {warrantyAlerts.near.length === 0 ? (
-                  <Typography variant="body2" color="text.secondary">
-                    30 gün içinde süresi dolacak garanti kaydı bulunmuyor.
-                  </Typography>
-                ) : (
-                  <List dense sx={{ maxHeight: 240, overflowY: "auto" }}>
-                    {warrantyAlerts.near.map((item) => (
-                      <ListItem key={item.id ?? `${item.name}-${item.end_date}`}>
-                        <ListItemText
-                          primary={item.name ?? item.location ?? item.serial_no ?? "Garanti kalemi"}
-                          secondary={`Kalan gün: ${item.days_left ?? "-"}`}
-                          primaryTypographyProps={{ variant: "body2" }}
-                        />
-                      </ListItem>
-                    ))}
-                  </List>
-                )}
-              </Box>
-            </Stack>
-          </Box>
+          <Typography variant="body2" color="text.secondary">
+            Satın alma taleplerini bu ekrandan yönetebilirsiniz.
+          </Typography>
         </DialogContent>
         <DialogActions>
           <Button size="small" onClick={handleCloseAlertsDialog} disabled={savingPurchaseStatus !== null}>
+            Kapat
+          </Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog
+        open={isWarrantyAlertsDialogOpen}
+        onClose={() => setIsWarrantyAlertsDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: {
+            bgcolor: theme.palette.background.paper,
+            border: `1px solid ${theme.palette.divider}`,
+            borderRadius: "16px"
+          }
+        }}
+      >
+        <DialogTitle
+          sx={{
+            fontSize: 18,
+            fontWeight: 800,
+            bgcolor: theme.palette.warning.main,
+            color: theme.palette.warning.contrastText
+          }}
+        >
+          Garanti Uyarıları
+        </DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={2}>
+            <Box>
+              <Typography variant="subtitle2" fontWeight={600} gutterBottom>
+                Süresi dolanlar
+              </Typography>
+              {warrantyAlerts.expired.length === 0 ? (
+                <Typography variant="body2" color="text.secondary">
+                  Süresi dolan garanti kaydı bulunmuyor.
+                </Typography>
+              ) : (
+                <List dense sx={{ maxHeight: 240, overflowY: "auto" }}>
+                  {warrantyAlerts.expired.map((item) => (
+                    <ListItem key={item.id ?? `${item.name}-${item.end_date}`}>
+                      <ListItemText
+                        primary={item.name ?? item.location ?? item.serial_no ?? "Garanti kalemi"}
+                        secondary={`Kalan gün: ${item.days_left ?? "-"}`}
+                        primaryTypographyProps={{ variant: "body2" }}
+                      />
+                    </ListItem>
+                  ))}
+                </List>
+              )}
+            </Box>
+            <Box>
+              <Typography variant="subtitle2" fontWeight={600} gutterBottom>
+                30 gün kalanlar
+              </Typography>
+              {warrantyAlerts.near.length === 0 ? (
+                <Typography variant="body2" color="text.secondary">
+                  30 gün içinde süresi dolacak garanti kaydı bulunmuyor.
+                </Typography>
+              ) : (
+                <List dense sx={{ maxHeight: 240, overflowY: "auto" }}>
+                  {warrantyAlerts.near.map((item) => (
+                    <ListItem key={item.id ?? `${item.name}-${item.end_date}`}>
+                      <ListItemText
+                        primary={item.name ?? item.location ?? item.serial_no ?? "Garanti kalemi"}
+                        secondary={`Kalan gün: ${item.days_left ?? "-"}`}
+                        primaryTypographyProps={{ variant: "body2" }}
+                      />
+                    </ListItem>
+                  ))}
+                </List>
+              )}
+            </Box>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button size="small" onClick={() => setIsWarrantyAlertsDialogOpen(false)}>
             Kapat
           </Button>
           {(warrantyAlerts.expired.length > 0 || warrantyAlerts.near.length > 0) && (
@@ -1769,7 +1811,7 @@ export default function DashboardView() {
               size="small"
               variant="outlined"
               onClick={() => {
-                handleCloseAlertsDialog();
+                setIsWarrantyAlertsDialogOpen(false);
                 navigate("/warranty-tracking");
               }}
             >

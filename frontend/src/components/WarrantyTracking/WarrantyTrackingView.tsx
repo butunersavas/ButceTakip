@@ -76,6 +76,18 @@ const typeOptions: Array<{ value: WarrantyItemType; label: string }> = [
   { value: "DOMAIN_SSL", label: "Domain SSL" },
 ];
 
+const INITIAL_FORM_STATE: WarrantyItemForm = {
+  type: "DEVICE",
+  name: "",
+  location: "",
+  end_date: "",
+  note: "",
+  issuer: "",
+  renewal_responsible: "",
+  reminder_days: "30",
+  domain: "",
+};
+
 const calcDaysLeft = (endDate: string | null): number | null => {
   if (!endDate) return null;
   const end = new Date(`${endDate}T00:00:00`);
@@ -234,22 +246,13 @@ export default function WarrantyTrackingView() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [editingItem, setEditingItem] = useState<WarrantyItem | null>(null);
+  const [isFormOpen, setIsFormOpen] = useState(false);
   const tableRef = useRef<HTMLDivElement | null>(null);
   const hasLoggedWarrantyResponse = useRef(false);
   const [selectedWarrantyFilter, setSelectedWarrantyFilter] = useState<
     "CRITICAL" | "NEAR" | "EXPIRED" | null
   >(null);
-  const [form, setForm] = useState<WarrantyItemForm>({
-    type: "DEVICE",
-    name: "",
-    location: "",
-    end_date: "",
-    note: "",
-    issuer: "",
-    renewal_responsible: "",
-    reminder_days: "30",
-    domain: "",
-  });
+  const [form, setForm] = useState<WarrantyItemForm>(INITIAL_FORM_STATE);
 
   const isDomainSsl = form.type === "DOMAIN_SSL";
   const nameLabel = isDomainSsl ? "Domain" : "Ad";
@@ -364,18 +367,9 @@ export default function WarrantyTrackingView() {
         setSuccess("Garanti kaydı eklendi.");
       }
 
-      setForm({
-        type: "DEVICE",
-        name: "",
-        location: "",
-        end_date: "",
-        note: "",
-        issuer: "",
-        renewal_responsible: "",
-        reminder_days: "30",
-        domain: ""
-      });
+      setForm(INITIAL_FORM_STATE);
       setEditingItem(null);
+      setIsFormOpen(false);
       await loadItems();
     } catch (err) {
       console.error(err);
@@ -392,6 +386,7 @@ export default function WarrantyTrackingView() {
 
   const handleEdit = useCallback((item: WarrantyItem) => {
     setEditingItem(item);
+    setIsFormOpen(true);
     setForm({
       type: item.type || "DEVICE",
       name: item.name,
@@ -422,17 +417,8 @@ export default function WarrantyTrackingView() {
       setSuccess("Garanti kaydı silindi.");
       if (editingItem?.id === item.id) {
         setEditingItem(null);
-        setForm({
-          type: "DEVICE",
-          name: "",
-          location: "",
-          end_date: "",
-          note: "",
-          issuer: "",
-          renewal_responsible: "",
-          reminder_days: "30",
-          domain: ""
-        });
+        setForm(INITIAL_FORM_STATE);
+        setIsFormOpen(false);
       }
     } catch (err) {
       console.error(err);
@@ -628,6 +614,22 @@ export default function WarrantyTrackingView() {
         <Typography color="text.secondary">
           Cihaz ve bakım/hizmet garanti kayıtlarını yönetin.
         </Typography>
+        <Button
+          variant="contained"
+          sx={{ mt: 2 }}
+          onClick={() => {
+            setIsFormOpen((prev) => {
+              const next = !prev;
+              if (!next) {
+                setEditingItem(null);
+                setForm(INITIAL_FORM_STATE);
+              }
+              return next;
+            });
+          }}
+        >
+          {isFormOpen ? "Formu Kapat" : "Garanti Ekle"}
+        </Button>
       </Box>
 
       <Grid container spacing={2}>
@@ -680,127 +682,118 @@ export default function WarrantyTrackingView() {
       </Grid>
 
       <Grid container spacing={3} alignItems="flex-start">
-        <Grid item xs={12}>
-          <Card variant="outlined">
-            <CardContent>
-              <Typography variant="h6" fontWeight={600} gutterBottom>
-                {editingItem ? "Kaydı Güncelle" : "Yeni Garanti Kaydı"}
-              </Typography>
-              <Box component="form" onSubmit={handleSubmit} sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                <TextField
-                  select
-                  label="Tip"
-                  value={form.type}
-                  onChange={(event) => setForm((prev) => ({ ...prev, type: event.target.value as WarrantyItemType }))}
-                >
-                  {typeOptions.map((option) => (
-                    <MenuItem key={option.value} value={option.value}>
-                      {option.label}
-                    </MenuItem>
-                  ))}
-                </TextField>
-                <TextField
-                  label={nameLabel}
-                  value={form.name}
-                  onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
-                  required
-                />
-                <TextField
-                  label={locationLabel}
-                  value={form.location}
-                  onChange={(event) => setForm((prev) => ({ ...prev, location: event.target.value }))}
-                  required
-                />
-                {isDomainSsl && (
-                  <>
-                    <TextField
-                      label="Domain (FQDN)"
-                      value={form.domain}
-                      onChange={(event) => setForm((prev) => ({ ...prev, domain: event.target.value }))}
-                      placeholder="example.com"
-                    />
-                    <TextField
-                      label="Sertifika Sağlayıcı"
-                      value={form.issuer}
-                      onChange={(event) =>
-                        setForm((prev) => ({ ...prev, issuer: event.target.value }))
-                      }
-                      placeholder="Örn. Let's Encrypt"
-                    />
-                    <TextField
-                      label="Yenileme Sorumlusu"
-                      value={form.renewal_responsible}
-                      onChange={(event) =>
-                        setForm((prev) => ({ ...prev, renewal_responsible: event.target.value }))
-                      }
-                      placeholder="Sorumlu kişi"
-                    />
-                    <TextField
-                      label="Otomatik hatırlatma (gün)"
-                      type="number"
-                      value={form.reminder_days}
-                      onChange={(event) =>
-                        setForm((prev) => ({ ...prev, reminder_days: event.target.value }))
-                      }
-                      inputProps={{ min: 0, step: 1 }}
-                    />
-                  </>
-                )}
-                <TextField
-                  label="Bitiş Tarihi"
-                  type="date"
-                  value={form.end_date}
-                  onChange={(event) => setForm((prev) => ({ ...prev, end_date: event.target.value }))}
-                  InputLabelProps={{ shrink: true }}
-                  required
-                />
-                <TextField
-                  label="Not"
-                  value={form.note}
-                  onChange={(event) => setForm((prev) => ({ ...prev, note: event.target.value }))}
-                  multiline
-                  minRows={3}
-                />
-                <Stack direction="row" spacing={1} justifyContent="flex-end">
-                  {editingItem && (
+        {isFormOpen && (
+          <Grid item xs={12}>
+            <Card variant="outlined">
+              <CardContent>
+                <Typography variant="h6" fontWeight={600} gutterBottom>
+                  {editingItem ? "Kaydı Güncelle" : "Yeni Garanti Kaydı"}
+                </Typography>
+                <Box component="form" onSubmit={handleSubmit} sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                  <TextField
+                    select
+                    label="Tip"
+                    value={form.type}
+                    onChange={(event) => setForm((prev) => ({ ...prev, type: event.target.value as WarrantyItemType }))}
+                  >
+                    {typeOptions.map((option) => (
+                      <MenuItem key={option.value} value={option.value}>
+                        {option.label}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                  <TextField
+                    label={nameLabel}
+                    value={form.name}
+                    onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
+                    required
+                  />
+                  <TextField
+                    label={locationLabel}
+                    value={form.location}
+                    onChange={(event) => setForm((prev) => ({ ...prev, location: event.target.value }))}
+                    required
+                  />
+                  {isDomainSsl && (
+                    <>
+                      <TextField
+                        label="Domain (FQDN)"
+                        value={form.domain}
+                        onChange={(event) => setForm((prev) => ({ ...prev, domain: event.target.value }))}
+                        placeholder="example.com"
+                      />
+                      <TextField
+                        label="Sertifika Sağlayıcı"
+                        value={form.issuer}
+                        onChange={(event) =>
+                          setForm((prev) => ({ ...prev, issuer: event.target.value }))
+                        }
+                        placeholder="Örn. Let's Encrypt"
+                      />
+                      <TextField
+                        label="Yenileme Sorumlusu"
+                        value={form.renewal_responsible}
+                        onChange={(event) =>
+                          setForm((prev) => ({ ...prev, renewal_responsible: event.target.value }))
+                        }
+                        placeholder="Sorumlu kişi"
+                      />
+                      <TextField
+                        label="Otomatik hatırlatma (gün)"
+                        type="number"
+                        value={form.reminder_days}
+                        onChange={(event) =>
+                          setForm((prev) => ({ ...prev, reminder_days: event.target.value }))
+                        }
+                        inputProps={{ min: 0, step: 1 }}
+                      />
+                    </>
+                  )}
+                  <TextField
+                    label="Bitiş Tarihi"
+                    type="date"
+                    value={form.end_date}
+                    onChange={(event) => setForm((prev) => ({ ...prev, end_date: event.target.value }))}
+                    InputLabelProps={{ shrink: true }}
+                    required
+                  />
+                  <TextField
+                    label="Not"
+                    value={form.note}
+                    onChange={(event) => setForm((prev) => ({ ...prev, note: event.target.value }))}
+                    multiline
+                    minRows={3}
+                  />
+                  <Stack direction="row" spacing={1} justifyContent="flex-end">
                     <Button
                       variant="text"
                       onClick={() => {
                         setEditingItem(null);
-                        setForm({
-                          type: "DEVICE",
-                          name: "",
-                          location: "",
-                          end_date: "",
-                          note: "",
-                          issuer: "",
-                          renewal_responsible: "",
-                          reminder_days: "30",
-                          domain: ""
-                        });
+                        setForm(INITIAL_FORM_STATE);
+                        setIsFormOpen(false);
                       }}
                     >
                       İptal
                     </Button>
-                  )}
-                  <Button variant="contained" type="submit" disabled={submitting}>
-                    {editingItem ? "Güncelle" : "Kaydet"}
-                  </Button>
-                </Stack>
-              </Box>
-              {error && (
-                <Alert severity="error" sx={{ mt: 2 }}>
-                  {error}
-                </Alert>
-              )}
-              {success && (
-                <Alert severity="success" sx={{ mt: 2 }}>
-                  {success}
-                </Alert>
-              )}
-            </CardContent>
-          </Card>
-        </Grid>
+                    <Button variant="contained" type="submit" disabled={submitting}>
+                      {editingItem ? "Güncelle" : "Kaydet"}
+                    </Button>
+                  </Stack>
+                </Box>
+                {error && (
+                  <Alert severity="error" sx={{ mt: 2 }}>
+                    {error}
+                  </Alert>
+                )}
+                {success && (
+                  <Alert severity="success" sx={{ mt: 2 }}>
+                    {success}
+                  </Alert>
+                )}
+              </CardContent>
+            </Card>
+          </Grid>
+        )}
         <Grid item xs={12} ref={tableRef}>
           <Card variant="outlined">
             <CardContent sx={{ height: 560 }}>
