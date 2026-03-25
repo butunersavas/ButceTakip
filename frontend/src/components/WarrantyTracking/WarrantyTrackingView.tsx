@@ -234,6 +234,7 @@ export default function WarrantyTrackingView() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [editingItem, setEditingItem] = useState<WarrantyItem | null>(null);
+  const [isFormOpen, setIsFormOpen] = useState(false);
   const tableRef = useRef<HTMLDivElement | null>(null);
   const hasLoggedWarrantyResponse = useRef(false);
   const [selectedWarrantyFilter, setSelectedWarrantyFilter] = useState<
@@ -254,6 +255,20 @@ export default function WarrantyTrackingView() {
   const isDomainSsl = form.type === "DOMAIN_SSL";
   const nameLabel = isDomainSsl ? "Domain" : "Ad";
   const locationLabel = isDomainSsl ? "Lokasyon" : "Lokasyon";
+  const resetForm = useCallback(() => {
+    setForm({
+      type: "DEVICE",
+      name: "",
+      location: "",
+      end_date: "",
+      note: "",
+      issuer: "",
+      renewal_responsible: "",
+      reminder_days: "30",
+      domain: ""
+    });
+    setEditingItem(null);
+  }, []);
 
   const loadItems = useCallback(async () => {
     setLoading(true);
@@ -364,18 +379,8 @@ export default function WarrantyTrackingView() {
         setSuccess("Garanti kaydı eklendi.");
       }
 
-      setForm({
-        type: "DEVICE",
-        name: "",
-        location: "",
-        end_date: "",
-        note: "",
-        issuer: "",
-        renewal_responsible: "",
-        reminder_days: "30",
-        domain: ""
-      });
-      setEditingItem(null);
+      resetForm();
+      setIsFormOpen(false);
       await loadItems();
     } catch (err) {
       console.error(err);
@@ -392,6 +397,7 @@ export default function WarrantyTrackingView() {
 
   const handleEdit = useCallback((item: WarrantyItem) => {
     setEditingItem(item);
+    setIsFormOpen(true);
     setForm({
       type: item.type || "DEVICE",
       name: item.name,
@@ -421,18 +427,8 @@ export default function WarrantyTrackingView() {
       await loadItems();
       setSuccess("Garanti kaydı silindi.");
       if (editingItem?.id === item.id) {
-        setEditingItem(null);
-        setForm({
-          type: "DEVICE",
-          name: "",
-          location: "",
-          end_date: "",
-          note: "",
-          issuer: "",
-          renewal_responsible: "",
-          reminder_days: "30",
-          domain: ""
-        });
+        resetForm();
+        setIsFormOpen(false);
       }
     } catch (err) {
       console.error(err);
@@ -445,7 +441,7 @@ export default function WarrantyTrackingView() {
     } finally {
       setSubmitting(false);
     }
-  }, [client, editingItem?.id, loadItems]);
+  }, [client, editingItem?.id, loadItems, resetForm]);
 
   const columns = useMemo<GridColDef[]>(
     () => [
@@ -681,12 +677,29 @@ export default function WarrantyTrackingView() {
 
       <Grid container spacing={3} alignItems="flex-start">
         <Grid item xs={12}>
-          <Card variant="outlined">
-            <CardContent>
-              <Typography variant="h6" fontWeight={600} gutterBottom>
-                {editingItem ? "Kaydı Güncelle" : "Yeni Garanti Kaydı"}
-              </Typography>
-              <Box component="form" onSubmit={handleSubmit} sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          <Stack spacing={1.5}>
+            <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
+              <Button
+                variant={isFormOpen ? "outlined" : "contained"}
+                onClick={() => {
+                  if (isFormOpen) {
+                    resetForm();
+                    setIsFormOpen(false);
+                  } else {
+                    setIsFormOpen(true);
+                  }
+                }}
+              >
+                {isFormOpen ? "Formu Kapat" : "Garanti Ekle"}
+              </Button>
+            </Box>
+            {isFormOpen && (
+              <Card variant="outlined">
+                <CardContent>
+                  <Typography variant="h6" fontWeight={600} gutterBottom>
+                    {editingItem ? "Kaydı Güncelle" : "Yeni Garanti Kaydı"}
+                  </Typography>
+                  <Box component="form" onSubmit={handleSubmit} sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
                 <TextField
                   select
                   label="Tip"
@@ -762,44 +775,34 @@ export default function WarrantyTrackingView() {
                   minRows={3}
                 />
                 <Stack direction="row" spacing={1} justifyContent="flex-end">
-                  {editingItem && (
-                    <Button
-                      variant="text"
-                      onClick={() => {
-                        setEditingItem(null);
-                        setForm({
-                          type: "DEVICE",
-                          name: "",
-                          location: "",
-                          end_date: "",
-                          note: "",
-                          issuer: "",
-                          renewal_responsible: "",
-                          reminder_days: "30",
-                          domain: ""
-                        });
-                      }}
-                    >
-                      İptal
-                    </Button>
-                  )}
+                  <Button
+                    variant="text"
+                    onClick={() => {
+                      resetForm();
+                      setIsFormOpen(false);
+                    }}
+                  >
+                    {editingItem ? "İptal" : "Kapat"}
+                  </Button>
                   <Button variant="contained" type="submit" disabled={submitting}>
                     {editingItem ? "Güncelle" : "Kaydet"}
                   </Button>
                 </Stack>
               </Box>
-              {error && (
-                <Alert severity="error" sx={{ mt: 2 }}>
-                  {error}
-                </Alert>
-              )}
-              {success && (
-                <Alert severity="success" sx={{ mt: 2 }}>
-                  {success}
-                </Alert>
-              )}
-            </CardContent>
-          </Card>
+                </CardContent>
+              </Card>
+            )}
+            {error && (
+              <Alert severity="error">
+                {error}
+              </Alert>
+            )}
+            {success && (
+              <Alert severity="success">
+                {success}
+              </Alert>
+            )}
+          </Stack>
         </Grid>
         <Grid item xs={12} ref={tableRef}>
           <Card variant="outlined">
