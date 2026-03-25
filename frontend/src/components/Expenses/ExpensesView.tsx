@@ -1451,7 +1451,7 @@ export default function ExpensesView() {
                     label="Adet"
                     name="quantity"
                     type="number"
-                    inputProps={{ min: 1, step: 1 }}
+                    inputProps={{ min: 1, step: "any" }}
                     value={formQuantity}
                     onChange={(event) => setFormQuantity(event.target.value)}
                     fullWidth
@@ -1462,7 +1462,7 @@ export default function ExpensesView() {
                     label="Birim Fiyat"
                     name="unit_price"
                     type="number"
-                    inputProps={{ min: 0, step: 10 }}
+                    inputProps={{ min: 0, step: "any" }}
                     value={formUnitPrice}
                     onChange={(event) => setFormUnitPrice(event.target.value)}
                     fullWidth
