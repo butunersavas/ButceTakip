@@ -1,3 +1,5 @@
+from datetime import date
+
 from fastapi import APIRouter, Depends, File, UploadFile, Query
 from sqlmodel import Session
 
@@ -52,10 +54,25 @@ def export_xlsx(
     year: int = Query(...),
     scenario_id: int | None = Query(default=None),
     budget_item_id: int | None = Query(default=None),
+    month: int | None = Query(default=None),
+    department: str | None = Query(default=None),
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    columns: list[str] | None = Query(default=None),
     session: Session = Depends(get_db_session),
     _= Depends(get_current_user),
 ):
-    return exporter.export_xlsx(session, year, scenario_id, budget_item_id)
+    return exporter.export_xlsx(
+        session,
+        year,
+        scenario_id,
+        budget_item_id,
+        month=month,
+        department=department,
+        start_date=start_date,
+        end_date=end_date,
+        columns=columns,
+    )
 
 
 @router.get("/export/quarterly/csv")
@@ -74,10 +91,23 @@ def export_quarterly_xlsx(
     year: int = Query(...),
     scenario_id: int | None = Query(default=None),
     budget_item_id: int | None = Query(default=None),
+    month: int | None = Query(default=None),
+    department: str | None = Query(default=None),
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
     session: Session = Depends(get_db_session),
     _= Depends(get_current_user),
 ):
-    return exporter.export_quarterly_xlsx(session, year, scenario_id, budget_item_id)
+    return exporter.export_quarterly_xlsx(
+        session,
+        year,
+        scenario_id,
+        budget_item_id,
+        month=month,
+        department=department,
+        start_date=start_date,
+        end_date=end_date,
+    )
 
 
 @router.get("/export/expenses/out-of-budget")
@@ -85,6 +115,11 @@ def export_out_of_budget_expenses(
     year: int = Query(...),
     scenario_id: int | None = Query(default=None),
     budget_item_id: int | None = Query(default=None),
+    month: int | None = Query(default=None),
+    department: str | None = Query(default=None),
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    columns: list[str] | None = Query(default=None),
     session: Session = Depends(get_db_session),
     _= Depends(get_current_user),
 ):
@@ -93,6 +128,11 @@ def export_out_of_budget_expenses(
         year,
         scenario_id,
         budget_item_id,
+        month=month,
+        department=department,
+        start_date=start_date,
+        end_date=end_date,
+        columns=columns,
         filter_type="out_of_budget",
     )
 
@@ -102,6 +142,11 @@ def export_cancelled_expenses(
     year: int = Query(...),
     scenario_id: int | None = Query(default=None),
     budget_item_id: int | None = Query(default=None),
+    month: int | None = Query(default=None),
+    department: str | None = Query(default=None),
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    columns: list[str] | None = Query(default=None),
     session: Session = Depends(get_db_session),
     _= Depends(get_current_user),
 ):
@@ -110,7 +155,36 @@ def export_cancelled_expenses(
         year,
         scenario_id,
         budget_item_id,
+        month=month,
+        department=department,
+        start_date=start_date,
+        end_date=end_date,
+        columns=columns,
         filter_type="cancelled",
+    )
+
+
+@router.get("/export/preview-summary")
+def get_export_preview_summary(
+    year: int = Query(...),
+    scenario_id: int | None = Query(default=None),
+    budget_item_id: int | None = Query(default=None),
+    month: int | None = Query(default=None),
+    department: str | None = Query(default=None),
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    session: Session = Depends(get_db_session),
+    _= Depends(get_current_user),
+):
+    return exporter.get_export_preview_summary(
+        session,
+        year,
+        scenario_id,
+        budget_item_id,
+        month=month,
+        department=department,
+        start_date=start_date,
+        end_date=end_date,
     )
 
 
