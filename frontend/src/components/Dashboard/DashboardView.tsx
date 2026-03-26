@@ -602,6 +602,28 @@ export default function DashboardView() {
     }
   };
 
+  const alertDialogPaperSx = {
+    bgcolor: theme.palette.background.paper,
+    border: `1px solid ${theme.palette.divider}`,
+    borderRadius: "16px"
+  } as const;
+
+  const alertDialogTitleSx = {
+    fontSize: 18,
+    fontWeight: 800,
+    bgcolor: theme.palette.primary.main,
+    color: theme.palette.primary.contrastText,
+    px: 3,
+    py: 1.75
+  } as const;
+
+  const alertDialogActionsSx = {
+    px: 3,
+    py: 2,
+    gap: 1,
+    justifyContent: "flex-end"
+  } as const;
+
   const { data: riskyItems = [] } = useQuery<RiskyItem[]>({
     queryKey: [
       "dashboard",
@@ -1595,21 +1617,10 @@ export default function DashboardView() {
         maxWidth="md"
         fullWidth
         PaperProps={{
-          sx: {
-            bgcolor: theme.palette.background.paper,
-            border: `1px solid ${theme.palette.divider}`,
-            borderRadius: "16px"
-          }
+          sx: alertDialogPaperSx
         }}
       >
-        <DialogTitle
-          sx={{
-            fontSize: 18,
-            fontWeight: 800,
-            bgcolor: theme.palette.primary.main,
-            color: theme.palette.primary.contrastText
-          }}
-        >
+        <DialogTitle sx={alertDialogTitleSx}>
           Bu Ay Satın Alma Talepleri
         </DialogTitle>
         <DialogContent dividers>
@@ -1725,7 +1736,7 @@ export default function DashboardView() {
             Satın alma taleplerini bu ekrandan yönetebilirsiniz.
           </Typography>
         </DialogContent>
-        <DialogActions>
+        <DialogActions sx={alertDialogActionsSx}>
           <Button size="small" onClick={handleCloseAlertsDialog} disabled={savingPurchaseStatus !== null}>
             Kapat
           </Button>
@@ -1737,41 +1748,49 @@ export default function DashboardView() {
         maxWidth="md"
         fullWidth
         PaperProps={{
-          sx: {
-            bgcolor: theme.palette.background.paper,
-            border: `1px solid ${theme.palette.divider}`,
-            borderRadius: "16px"
-          }
+          sx: alertDialogPaperSx
         }}
       >
-        <DialogTitle
-          sx={{
-            fontSize: 18,
-            fontWeight: 800,
-            bgcolor: theme.palette.warning.main,
-            color: theme.palette.warning.contrastText
-          }}
-        >
+        <DialogTitle sx={alertDialogTitleSx}>
           Garanti Uyarıları
         </DialogTitle>
         <DialogContent dividers>
-          <Stack spacing={2}>
+          <Stack spacing={2.5}>
             <Box>
-              <Typography variant="subtitle2" fontWeight={600} gutterBottom>
+              <Typography variant="subtitle1" fontWeight={700} gutterBottom>
                 Süresi dolanlar
               </Typography>
               {warrantyAlerts.expired.length === 0 ? (
-                <Typography variant="body2" color="text.secondary">
+                <Typography variant="body2" color="text.secondary" sx={{ py: 0.75 }}>
                   Süresi dolan garanti kaydı bulunmuyor.
                 </Typography>
               ) : (
-                <List dense sx={{ maxHeight: 240, overflowY: "auto" }}>
+                <List
+                  dense
+                  sx={{
+                    maxHeight: 240,
+                    overflowY: "auto",
+                    border: `1px solid ${theme.palette.divider}`,
+                    borderRadius: 2,
+                    bgcolor: theme.palette.background.default,
+                    p: 1
+                  }}
+                >
                   {warrantyAlerts.expired.map((item) => (
-                    <ListItem key={item.id ?? `${item.name}-${item.end_date}`}>
+                    <ListItem
+                      key={item.id ?? `${item.name}-${item.end_date}`}
+                      sx={{
+                        border: `1px solid ${theme.palette.divider}`,
+                        borderRadius: 1.5,
+                        bgcolor: theme.palette.background.paper,
+                        mb: 0.75
+                      }}
+                    >
                       <ListItemText
                         primary={item.name ?? item.location ?? item.serial_no ?? "Garanti kalemi"}
                         secondary={`Kalan gün: ${item.days_left ?? "-"}`}
-                        primaryTypographyProps={{ variant: "body2" }}
+                        primaryTypographyProps={{ variant: "body2", fontWeight: 600 }}
+                        secondaryTypographyProps={{ variant: "caption", color: "error.main" }}
                       />
                     </ListItem>
                   ))}
@@ -1779,21 +1798,40 @@ export default function DashboardView() {
               )}
             </Box>
             <Box>
-              <Typography variant="subtitle2" fontWeight={600} gutterBottom>
+              <Typography variant="subtitle1" fontWeight={700} gutterBottom>
                 30 gün kalanlar
               </Typography>
               {warrantyAlerts.near.length === 0 ? (
-                <Typography variant="body2" color="text.secondary">
+                <Typography variant="body2" color="text.secondary" sx={{ py: 0.75 }}>
                   30 gün içinde süresi dolacak garanti kaydı bulunmuyor.
                 </Typography>
               ) : (
-                <List dense sx={{ maxHeight: 240, overflowY: "auto" }}>
+                <List
+                  dense
+                  sx={{
+                    maxHeight: 240,
+                    overflowY: "auto",
+                    border: `1px solid ${theme.palette.divider}`,
+                    borderRadius: 2,
+                    bgcolor: theme.palette.background.default,
+                    p: 1
+                  }}
+                >
                   {warrantyAlerts.near.map((item) => (
-                    <ListItem key={item.id ?? `${item.name}-${item.end_date}`}>
+                    <ListItem
+                      key={item.id ?? `${item.name}-${item.end_date}`}
+                      sx={{
+                        border: `1px solid ${theme.palette.divider}`,
+                        borderRadius: 1.5,
+                        bgcolor: theme.palette.background.paper,
+                        mb: 0.75
+                      }}
+                    >
                       <ListItemText
                         primary={item.name ?? item.location ?? item.serial_no ?? "Garanti kalemi"}
                         secondary={`Kalan gün: ${item.days_left ?? "-"}`}
-                        primaryTypographyProps={{ variant: "body2" }}
+                        primaryTypographyProps={{ variant: "body2", fontWeight: 600 }}
+                        secondaryTypographyProps={{ variant: "caption", color: "warning.main" }}
                       />
                     </ListItem>
                   ))}
@@ -1802,14 +1840,14 @@ export default function DashboardView() {
             </Box>
           </Stack>
         </DialogContent>
-        <DialogActions>
+        <DialogActions sx={alertDialogActionsSx}>
           <Button size="small" onClick={() => setIsWarrantyAlertsDialogOpen(false)}>
             Kapat
           </Button>
           {(warrantyAlerts.expired.length > 0 || warrantyAlerts.near.length > 0) && (
             <Button
               size="small"
-              variant="outlined"
+              variant="contained"
               onClick={() => {
                 setIsWarrantyAlertsDialogOpen(false);
                 navigate("/warranty-tracking");
