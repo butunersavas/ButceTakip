@@ -5,8 +5,13 @@ import {
   Card,
   CardContent,
   Divider,
+  FormControl,
+  FormHelperText,
   Grid,
+  InputLabel,
   MenuItem,
+  OutlinedInput,
+  Select,
   Stack,
   TextField,
   Typography
@@ -16,6 +21,7 @@ import CloudUploadIcon from "@mui/icons-material/CloudUpload";
 import DownloadIcon from "@mui/icons-material/Download";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as XLSX from "xlsx";
+import axios from "axios";
 
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import usePersistentState from "../../hooks/usePersistentState";
@@ -41,6 +47,24 @@ interface ImportSummary {
   imported_expenses: number;
   skipped_rows: number;
   message?: string;
+}
+
+interface ExportPreviewSummary {
+  total_plan: number;
+  total_actual: number;
+  total_out_of_budget: number;
+  total_cancelled: number;
+  record_count: number;
+  quarterly_data_count: number;
+  out_of_budget_count: number;
+  cancelled_count: number;
+}
+
+interface RecentDownloadEntry {
+  fileName: string;
+  reportType: string;
+  createdAt: string;
+  filtersSummary: string;
 }
 
 type BudgetImportRow = {
@@ -137,6 +161,32 @@ const monthLabels = [
   "Aralık"
 ];
 
+const exportColumnOptions = [
+  { key: "date", label: "Tarih" },
+  { key: "department", label: "Departman" },
+  { key: "budget_name", label: "Bütçe Kalemi" },
+  { key: "description", label: "Açıklama" },
+  { key: "amount", label: "Tutar" },
+  { key: "quantity", label: "Miktar" },
+  { key: "unit_price", label: "Birim Fiyat" },
+  { key: "vendor", label: "Tedarikçi" },
+  { key: "status", label: "Durum" },
+  { key: "scenario", label: "Senaryo" },
+  { key: "capex_opex", label: "Capex/Opex" },
+  { key: "asset_type", label: "Nitelik" },
+  { key: "record_owner", label: "Kayıt Sahibi" }
+] as const;
+
+const defaultExportColumns = [
+  "date",
+  "department",
+  "budget_name",
+  "description",
+  "amount",
+  "status",
+  "scenario"
+];
+
 const monthValueMap: Record<string, number> = monthLabels.reduce((acc, label, index) => {
   acc[label.toLowerCase()] = index + 1;
   return acc;
@@ -171,13 +221,22 @@ export default function ImportExportView() {
   const [scenarioId, setScenarioId] = usePersistentState<number | null>("io:scenarioId", null);
   const [budgetItemId, setBudgetItemId] = usePersistentState<number | null>("io:budgetItemId", null);
   const [monthFilter, setMonthFilter] = usePersistentState<number | "">("io:month", "");
+  const [startDateFilter, setStartDateFilter] = usePersistentState<string>("io:startDate", "");
+  const [endDateFilter, setEndDateFilter] = usePersistentState<string>("io:endDate", "");
   const [departmentFilter, setDepartmentFilter] = usePersistentState<string>("io:department", "");
+  const [selectedExportColumns, setSelectedExportColumns] = usePersistentState<string[]>(
+    "io:exportColumns",
+    defaultExportColumns
+  );
   const [exportError, setExportError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [backupFeedback, setBackupFeedback] = useState<{ message: string; severity: "success" | "error" } | null>(
     null
   );
-  const [recentDownloads, setRecentDownloads] = useState<string[]>([]);
+  const [recentDownloads, setRecentDownloads] = usePersistentState<RecentDownloadEntry[]>(
+    "io:recentDownloads",
+    []
+  );
 
   const { data: scenarios } = useQuery<Scenario[]>({
     queryKey: ["scenarios"],
@@ -286,16 +345,72 @@ export default function ImportExportView() {
     if (year) params.year = Number(year);
     if (scenarioId) params.scenario_id = scenarioId;
     if (budgetItemId) params.budget_item_id = budgetItemId;
-    const normalizedMonth = normalizeMonthValue(monthFilter);
-    if (normalizedMonth) params.month = Number(normalizedMonth);
+    if (startDateFilter && endDateFilter) {
+      params.start_date = startDateFilter;
+      params.end_date = endDateFilter;
+    } else {
+      const normalizedMonth = normalizeMonthValue(monthFilter);
+      if (normalizedMonth) params.month = Number(normalizedMonth);
+    }
+    if (departmentFilter) params.department = departmentFilter;
+    if (selectedExportColumns.length > 0) {
+      (params as Record<string, string | number | string[]>).columns = selectedExportColumns;
+    }
+    return params;
+  };
+
+  const buildPreviewParams = () => {
+    const params: Record<string, string | number> = {};
+    if (year) params.year = Number(year);
+    if (scenarioId) params.scenario_id = scenarioId;
+    if (budgetItemId) params.budget_item_id = budgetItemId;
+    if (startDateFilter && endDateFilter) {
+      params.start_date = startDateFilter;
+      params.end_date = endDateFilter;
+    } else {
+      const normalizedMonth = normalizeMonthValue(monthFilter);
+      if (normalizedMonth) params.month = Number(normalizedMonth);
+    }
     if (departmentFilter) params.department = departmentFilter;
     return params;
   };
 
+  const selectedScenario = scenarios?.find((scenario) => scenario.id === scenarioId);
+  const selectedBudgetItem = budgetItems?.find((item) => item.id === budgetItemId);
+  const filterSummary = [
+    `Yıl: ${year || "-"}`,
+    `Senaryo: ${selectedScenario?.name || "Tümü"}`,
+    `Ay: ${startDateFilter && endDateFilter ? "Özel tarih aralığı aktif" : monthFilter ? monthLabels[Number(monthFilter) - 1] : "Tümü"}`,
+    `Departman: ${departmentFilter || "Tümü"}`,
+    `Bütçe Kalemi: ${selectedBudgetItem ? formatBudgetItemLabel(selectedBudgetItem) : "Tümü"}`,
+    `Tarih Aralığı: ${startDateFilter && endDateFilter ? `${startDateFilter} - ${endDateFilter}` : "Yok"}`
+  ].join(" / ");
+
+  const { data: previewSummary } = useQuery<ExportPreviewSummary>({
+    queryKey: [
+      "export-preview-summary",
+      year,
+      scenarioId,
+      budgetItemId,
+      monthFilter,
+      departmentFilter,
+      startDateFilter,
+      endDateFilter
+    ],
+    enabled: Boolean(year),
+    queryFn: async () => {
+      const { data } = await client.get<ExportPreviewSummary>("/io/export/preview-summary", {
+        params: buildPreviewParams()
+      });
+      return data;
+    }
+  });
+
   const downloadBlob = (
     data: BlobPart | Blob,
     fileName: string,
-    options?: BlobPropertyBag
+    options?: BlobPropertyBag,
+    reportType = "XLSX"
   ) => {
     const blob = data instanceof Blob && !options ? data : new Blob([data], options);
     const link = document.createElement("a");
@@ -306,7 +421,17 @@ export default function ImportExportView() {
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
-    setRecentDownloads((previous) => [fileName, ...previous].slice(0, 5));
+    setRecentDownloads((previous) =>
+      [
+        {
+          fileName,
+          reportType,
+          createdAt: new Date().toISOString(),
+          filtersSummary: filterSummary
+        },
+        ...previous
+      ].slice(0, 10)
+    );
   };
 
   const handleExportXlsx = async () => {
@@ -317,7 +442,7 @@ export default function ImportExportView() {
         params: buildExportParams(),
         responseType: "blob"
       });
-      downloadBlob(response.data, `butce-raporu-${Date.now()}.xlsx`);
+      downloadBlob(response.data, `butce-raporu-${Date.now()}.xlsx`, undefined, "Genel XLSX");
     } catch (err) {
       console.error(err);
       if (axios.isAxiosError(err)) {
@@ -341,7 +466,7 @@ export default function ImportExportView() {
         params: buildExportParams(),
         responseType: "blob"
       });
-      downloadBlob(response.data, `butce-ucaylik-rapor-${Date.now()}.xlsx`);
+      downloadBlob(response.data, `butce-ucaylik-rapor-${Date.now()}.xlsx`, undefined, "3 Aylık XLSX");
     } catch (err) {
       console.error(err);
       if (axios.isAxiosError(err)) {
@@ -371,7 +496,8 @@ export default function ImportExportView() {
         type === "out-of-budget"
           ? `butce-disi-harcamalar-${Date.now()}.xlsx`
           : `iptal-edilen-harcamalar-${Date.now()}.xlsx`;
-      downloadBlob(response.data, fileName);
+      const reportType = type === "out-of-budget" ? "Bütçe Dışı" : "İptal Edilen";
+      downloadBlob(response.data, fileName, undefined, reportType);
     } catch (err) {
       console.error(err);
       if (axios.isAxiosError(err)) {
@@ -400,7 +526,7 @@ export default function ImportExportView() {
         type === "full"
           ? `butce_tam_yedek_${Date.now()}.json`
           : `butce_kullanicilar_${Date.now()}.json`;
-      downloadBlob(response.data, fileName, { type: "application/json" });
+      downloadBlob(response.data, fileName, { type: "application/json" }, "Yedek");
       setBackupFeedback({
         message: "Yedek başarıyla indirildi.",
         severity: "success"
@@ -461,6 +587,10 @@ export default function ImportExportView() {
       type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     });
   };
+
+  const quarterlyDisabled = exporting || (previewSummary?.quarterly_data_count ?? 0) === 0;
+  const outOfBudgetDisabled = exporting || (previewSummary?.out_of_budget_count ?? 0) === 0;
+  const cancelledDisabled = exporting || (previewSummary?.cancelled_count ?? 0) === 0;
 
   return (
     <Stack spacing={4}>
@@ -538,7 +668,39 @@ export default function ImportExportView() {
                   formatında dışa aktarın.
                 </Typography>
                 {exportError && <Alert severity="error">{exportError}</Alert>}
+                <Alert severity="info">Kural: Özel tarih aralığı seçildiğinde ay filtresi devre dışı kalır.</Alert>
+                <Typography variant="body2" color="text.secondary">
+                  Filtre özeti: {filterSummary}
+                </Typography>
                 <Divider sx={{ my: 1 }} />
+                <Grid container spacing={1.5}>
+                  {[
+                    { title: "Toplam Plan", value: previewSummary?.total_plan ?? 0 },
+                    { title: "Toplam Gerçekleşen", value: previewSummary?.total_actual ?? 0 },
+                    { title: "Toplam Bütçe Dışı", value: previewSummary?.total_out_of_budget ?? 0 },
+                    { title: "Toplam İptal Edilen", value: previewSummary?.total_cancelled ?? 0 },
+                    { title: "Kayıt Sayısı", value: previewSummary?.record_count ?? 0, isCurrency: false }
+                  ].map((summaryItem) => (
+                    <Grid item xs={12} sm={6} md={4} key={summaryItem.title}>
+                      <Card variant="outlined">
+                        <CardContent sx={{ py: 1.5, "&:last-child": { pb: 1.5 } }}>
+                          <Typography variant="caption" color="text.secondary">
+                            {summaryItem.title}
+                          </Typography>
+                          <Typography variant="subtitle1" fontWeight={700}>
+                            {"isCurrency" in summaryItem && summaryItem.isCurrency === false
+                              ? summaryItem.value.toLocaleString("tr-TR")
+                              : Number(summaryItem.value).toLocaleString("tr-TR", {
+                                  style: "currency",
+                                  currency: "TRY",
+                                  minimumFractionDigits: 2
+                                })}
+                          </Typography>
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                  ))}
+                </Grid>
                 <Grid container spacing={2}>
                   <Grid item xs={12}>
                     <TextField
@@ -575,6 +737,7 @@ export default function ImportExportView() {
                       onChange={(event) =>
                         setMonthFilter(event.target.value ? Number(event.target.value) : "")
                       }
+                      disabled={Boolean(startDateFilter && endDateFilter)}
                       fullWidth
                     >
                       <MenuItem value="">Tümü</MenuItem>
@@ -601,6 +764,26 @@ export default function ImportExportView() {
                       ))}
                     </TextField>
                   </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      label="Başlangıç Tarihi"
+                      type="date"
+                      value={startDateFilter}
+                      onChange={(event) => setStartDateFilter(event.target.value)}
+                      InputLabelProps={{ shrink: true }}
+                      fullWidth
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      label="Bitiş Tarihi"
+                      type="date"
+                      value={endDateFilter}
+                      onChange={(event) => setEndDateFilter(event.target.value)}
+                      InputLabelProps={{ shrink: true }}
+                      fullWidth
+                    />
+                  </Grid>
                   <Grid item xs={12}>
                     <Autocomplete
                       options={budgetItems ?? []}
@@ -614,23 +797,57 @@ export default function ImportExportView() {
                       )}
                     />
                   </Grid>
+                  <Grid item xs={12}>
+                    <FormControl fullWidth>
+                      <InputLabel id="export-columns-label">Kolonlar</InputLabel>
+                      <Select
+                        labelId="export-columns-label"
+                        multiple
+                        value={selectedExportColumns}
+                        onChange={(event) =>
+                          setSelectedExportColumns(
+                            typeof event.target.value === "string"
+                              ? event.target.value.split(",")
+                              : event.target.value
+                          )
+                        }
+                        input={<OutlinedInput label="Kolonlar" />}
+                        renderValue={(selected) =>
+                          exportColumnOptions
+                            .filter((option) => (selected as string[]).includes(option.key))
+                            .map((option) => option.label)
+                            .join(", ")
+                        }
+                      >
+                        {exportColumnOptions.map((option) => (
+                          <MenuItem key={option.key} value={option.key}>
+                            {option.label}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                      <FormHelperText>Varsayılan güvenli kolonlar seçili gelir.</FormHelperText>
+                    </FormControl>
+                  </Grid>
                 </Grid>
                 <Grid container spacing={1.5}>
                   {[
                     {
                       title: "3 Aylık XLSX",
                       description: "Çeyreklik özet raporu",
-                      action: () => void handleQuarterlyExportXlsx()
+                      action: () => void handleQuarterlyExportXlsx(),
+                      disabled: quarterlyDisabled
                     },
                     {
                       title: "Bütçe Dışı Harcamalar",
                       description: "Sadece bütçe dışı kayıtlar",
-                      action: () => void handleFilteredExpenseExport("out-of-budget")
+                      action: () => void handleFilteredExpenseExport("out-of-budget"),
+                      disabled: outOfBudgetDisabled
                     },
                     {
                       title: "İptal Edilen Harcamalar",
                       description: "İptal durumundaki harcamalar",
-                      action: () => void handleFilteredExpenseExport("cancelled")
+                      action: () => void handleFilteredExpenseExport("cancelled"),
+                      disabled: cancelledDisabled
                     },
                   ].map((item) => (
                     <Grid item xs={12} sm={6} key={item.title}>
@@ -642,7 +859,7 @@ export default function ImportExportView() {
                               color="primary"
                               startIcon={<DownloadIcon />}
                               onClick={item.action}
-                              disabled={exporting}
+                              disabled={item.disabled}
                               fullWidth
                             >
                               {item.title}
@@ -650,6 +867,11 @@ export default function ImportExportView() {
                             <Typography variant="body2" color="text.secondary">
                               {item.description}
                             </Typography>
+                            {item.disabled && (
+                              <Typography variant="caption" color="text.secondary">
+                                Seçilen filtrelerde raporlanacak kayıt bulunamadı.
+                              </Typography>
+                            )}
                           </Stack>
                         </CardContent>
                       </Card>
@@ -666,11 +888,21 @@ export default function ImportExportView() {
                         Henüz rapor indirilmedi.
                       </Typography>
                     ) : (
-                      <Stack component="ul" sx={{ m: 0, pl: 2 }} spacing={0.5}>
-                        {recentDownloads.map((fileName) => (
-                          <Typography component="li" variant="body2" key={fileName}>
-                            {fileName}
-                          </Typography>
+                      <Stack spacing={1}>
+                        {recentDownloads.map((entry) => (
+                          <Card key={`${entry.fileName}-${entry.createdAt}`} variant="outlined">
+                            <CardContent sx={{ py: 1.25, "&:last-child": { pb: 1.25 } }}>
+                              <Typography variant="body2" fontWeight={600}>
+                                {entry.fileName}
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary" display="block">
+                                {entry.reportType} • {new Date(entry.createdAt).toLocaleString("tr-TR")}
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary" display="block">
+                                {entry.filtersSummary}
+                              </Typography>
+                            </CardContent>
+                          </Card>
                         ))}
                       </Stack>
                     )}
