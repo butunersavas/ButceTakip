@@ -147,9 +147,18 @@ export default function createAppTheme(mode: PaletteMode) {
             borderRadius: theme.shape.borderRadius,
             backgroundColor: theme.palette.background.paper,
             boxShadow: mode === "light" ? "0px 8px 24px rgba(15, 23, 42, 0.08)" : "none",
+            "& .MuiDataGrid-row:nth-of-type(odd)": {
+              backgroundColor: alpha(theme.palette.primary.main, mode === "light" ? 0.015 : 0.08),
+            },
+            "& .MuiDataGrid-row:hover": {
+              backgroundColor: alpha(theme.palette.primary.main, mode === "light" ? 0.06 : 0.18),
+            },
+            "& .MuiDataGrid-row.Mui-selected, & .MuiDataGrid-row.Mui-selected:hover": {
+              backgroundColor: alpha(theme.palette.primary.main, mode === "light" ? 0.12 : 0.28),
+            },
           }),
           columnHeaders: ({ theme }) => ({
-            backgroundColor: alpha(theme.palette.primary.main, 0.06),
+            backgroundColor: alpha(theme.palette.primary.main, mode === "light" ? 0.08 : 0.24),
             color: theme.palette.text.primary,
             fontWeight: 700,
             borderBottom: `1px solid ${theme.palette.divider}`,

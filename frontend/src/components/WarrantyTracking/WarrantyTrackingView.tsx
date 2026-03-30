@@ -20,8 +20,9 @@ import { DataGrid, type GridColDef } from "@mui/x-data-grid";
 import axios from "axios";
 
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
+import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS } from "../../constants/pagination";
 
-type WarrantyItemType = "DEVICE" | "SERVICE" | "DOMAIN_SSL";
+type WarrantyItemType = "DEVICE" | "MAINTENANCE" | "SERVICE" | "LICENSE" | "DOMAIN_SSL";
 
 type WarrantyItem = {
   id: number | string;
@@ -72,8 +73,9 @@ type WarrantyItemForm = {
 
 const typeOptions: Array<{ value: WarrantyItemType; label: string }> = [
   { value: "DEVICE", label: "Cihaz" },
-  { value: "SERVICE", label: "Bakım/Hizmet" },
-  { value: "DOMAIN_SSL", label: "Domain SSL" },
+  { value: "MAINTENANCE", label: "Bakım" },
+  { value: "SERVICE", label: "Hizmet" },
+  { value: "LICENSE", label: "Lisans" },
 ];
 
 const INITIAL_FORM_STATE: WarrantyItemForm = {
@@ -125,8 +127,9 @@ const formatDate = (value: string | null | undefined) => {
 
 const formatTypeLabel = (value?: string | null) => {
   if (value === "DEVICE") return "Cihaz";
-  if (value === "SERVICE") return "Bakım/Hizmet";
-  if (value === "DOMAIN_SSL") return "Domain SSL";
+  if (value === "MAINTENANCE") return "Bakım";
+  if (value === "SERVICE") return "Hizmet";
+  if (value === "LICENSE" || value === "DOMAIN_SSL") return "Lisans";
   return value ?? "-";
 };
 
@@ -254,9 +257,9 @@ export default function WarrantyTrackingView() {
   >(null);
   const [form, setForm] = useState<WarrantyItemForm>(INITIAL_FORM_STATE);
 
-  const isDomainSsl = form.type === "DOMAIN_SSL";
-  const nameLabel = isDomainSsl ? "Domain" : "Ad";
-  const locationLabel = isDomainSsl ? "Lokasyon" : "Lokasyon";
+  const isLicenseType = form.type === "LICENSE" || form.type === "DOMAIN_SSL";
+  const nameLabel = isLicenseType ? "Lisans / Domain" : "Ad";
+  const locationLabel = "Lokasyon";
 
   const loadItems = useCallback(async () => {
     setLoading(true);
@@ -612,7 +615,7 @@ export default function WarrantyTrackingView() {
           Garanti Takibi
         </Typography>
         <Typography color="text.secondary">
-          Cihaz ve bakım/hizmet garanti kayıtlarını yönetin.
+          Cihaz, bakım, hizmet ve lisans garanti kayıtlarını yönetin.
         </Typography>
         <Button
           variant="contained"
@@ -714,7 +717,7 @@ export default function WarrantyTrackingView() {
                     onChange={(event) => setForm((prev) => ({ ...prev, location: event.target.value }))}
                     required
                   />
-                  {isDomainSsl && (
+                  {isLicenseType && (
                     <>
                       <TextField
                         label="Domain (FQDN)"
@@ -823,8 +826,8 @@ export default function WarrantyTrackingView() {
                   loading={loading}
                   disableRowSelectionOnClick
                   autoHeight={false}
-                  pageSizeOptions={[5, 10, 20]}
-                  initialState={{ pagination: { paginationModel: { pageSize: 10, page: 0 } } }}
+                  pageSizeOptions={PAGE_SIZE_OPTIONS}
+                  initialState={{ pagination: { paginationModel: { pageSize: DEFAULT_PAGE_SIZE, page: 0 } } }}
                   sx={{ border: "none" }}
                 />
               )}

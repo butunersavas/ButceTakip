@@ -18,7 +18,9 @@ class ExpenseStatus(str, enum.Enum):
 
 class WarrantyItemType(str, enum.Enum):
     DEVICE = "DEVICE"
+    MAINTENANCE = "MAINTENANCE"
     SERVICE = "SERVICE"
+    LICENSE = "LICENSE"
     DOMAIN_SSL = "DOMAIN_SSL"
 
 

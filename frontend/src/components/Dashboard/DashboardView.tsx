@@ -176,7 +176,7 @@ type QuarterlySummary = {
 
 type WarrantyAlertItem = {
   id?: number | string;
-  type?: "DEVICE" | "SERVICE" | "DOMAIN_SSL";
+  type?: "DEVICE" | "MAINTENANCE" | "SERVICE" | "LICENSE" | "DOMAIN_SSL";
   name?: string | null;
   location?: string | null;
   serial_no?: string | null;
@@ -394,6 +394,7 @@ export default function DashboardView() {
   const [purchaseStatusFeedback, setPurchaseStatusFeedback] = useState<
     { message: string; severity: "success" | "error" } | null
   >(null);
+  const [pendingUndoItem, setPendingUndoItem] = useState<PurchaseAlertItem | null>(null);
   const [newlyRequestedItemId, setNewlyRequestedItemId] = useState<number | null>(null);
   const [warrantyAlertItems, setWarrantyAlertItems] = useState<WarrantyAlertItem[]>([]);
   const [selectedKpiFilter, setSelectedKpiFilter] = useState<
@@ -1719,7 +1720,13 @@ export default function DashboardView() {
                             variant={item.requested ? "outlined" : "contained"}
                             color={item.requested ? "warning" : "primary"}
                             disabled={savingPurchaseStatus === item.id}
-                            onClick={() => void handleSetPurchaseRequested(item)}
+                            onClick={() => {
+                              if (item.requested) {
+                                setPendingUndoItem(item);
+                                return;
+                              }
+                              void handleSetPurchaseRequested(item);
+                            }}
                           >
                             {item.requested ? "Geri Al" : "Talep Oluştur"}
                           </Button>
@@ -1739,6 +1746,38 @@ export default function DashboardView() {
         <DialogActions sx={alertDialogActionsSx}>
           <Button size="small" onClick={handleCloseAlertsDialog} disabled={savingPurchaseStatus !== null}>
             Kapat
+          </Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog
+        open={Boolean(pendingUndoItem)}
+        onClose={() => {
+          if (savingPurchaseStatus === null) setPendingUndoItem(null);
+        }}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>İşlemi Geri Al</DialogTitle>
+        <DialogContent dividers>
+          <Typography variant="body2">
+            Bu işlem seçili kaydın talep durumunu geri alacaktır. Devam etmek istiyor musunuz?
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPendingUndoItem(null)} disabled={savingPurchaseStatus !== null}>
+            Vazgeç
+          </Button>
+          <Button
+            color="warning"
+            variant="contained"
+            disabled={!pendingUndoItem || savingPurchaseStatus !== null}
+            onClick={async () => {
+              if (!pendingUndoItem) return;
+              await handleSetPurchaseRequested(pendingUndoItem);
+              setPendingUndoItem(null);
+            }}
+          >
+            Onayla
           </Button>
         </DialogActions>
       </Dialog>

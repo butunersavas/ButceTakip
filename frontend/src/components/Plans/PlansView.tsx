@@ -31,6 +31,7 @@ import { useAuth } from "../../context/AuthContext";
 import { formatBudgetItemLabel, stripBudgetCode } from "../../utils/budgetLabel";
 import { formatBudgetItemMeta } from "../../utils/budgetItem";
 import { formatMoney } from "../../utils/formatMoney";
+import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS } from "../../constants/pagination";
 import FiltersBar from "../Filters/FiltersBar";
 
 interface Scenario {
@@ -760,9 +761,9 @@ export default function PlansView() {
                   getRowId={(row) => row.id ?? `${row.year}-${row.month}-${row.budget_item_id}`}
                   disableRowSelectionOnClick
                   initialState={{
-                    pagination: { paginationModel: { pageSize: 10, page: 0 } }
+                    pagination: { paginationModel: { pageSize: DEFAULT_PAGE_SIZE, page: 0 } }
                   }}
-                  pageSizeOptions={[10, 25, 50]}
+                  pageSizeOptions={PAGE_SIZE_OPTIONS}
                   sx={{
                     border: "none",
                     "& .MuiDataGrid-main": {

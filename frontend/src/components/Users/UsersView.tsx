@@ -26,6 +26,7 @@ import axios from "axios";
 
 import { useAuth } from "../../context/AuthContext";
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
+import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS } from "../../constants/pagination";
 
 type UserRead = {
   id: number;
@@ -258,8 +259,8 @@ export default function UsersView() {
                   columns={columns}
                   autoHeight
                   disableRowSelectionOnClick
-                  pageSizeOptions={[10, 25, 50]}
-                  initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
+                  pageSizeOptions={PAGE_SIZE_OPTIONS}
+                  initialState={{ pagination: { paginationModel: { pageSize: DEFAULT_PAGE_SIZE } } }}
                   getRowId={(row) => row.id}
                 />
               )}
