@@ -28,6 +28,15 @@ def _reject_placeholder(value: str | None, field: str) -> str | None:
     return value
 
 
+def _normalize_warranty_type_alias(value: str | None) -> str | None:
+    if not isinstance(value, str):
+        return value
+    normalized = value.strip().upper()
+    if normalized == "DOMAIN_SSL":
+        return "LICENSE"
+    return normalized
+
+
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
@@ -506,6 +515,10 @@ class WarrantyItemBase(BaseModel):
     remind_days: Optional[int] = Field(default=30, ge=0)
     remind_days_before: Optional[int] = Field(default=30, ge=0)
 
+    @validator("type", pre=True)
+    def normalize_warranty_type(cls, value: WarrantyItemType | str) -> WarrantyItemType | str:  # noqa: D417
+        return _normalize_warranty_type_alias(value)
+
     @validator("name", "location", pre=True)
     def validate_required_warranty_text(cls, value: str | None, field) -> str:  # noqa: D417
         value = _reject_placeholder(value, field.name)
@@ -592,6 +605,10 @@ class WarrantyItemUpdate(BaseModel):
     remind_days: Optional[int] = None
     remind_days_before: Optional[int] = None
     is_active: Optional[bool] = None
+
+    @validator("type", pre=True)
+    def normalize_warranty_type(cls, value: WarrantyItemType | str | None) -> WarrantyItemType | str | None:  # noqa: D417
+        return _normalize_warranty_type_alias(value)
 
     @validator("name", "location", pre=True)
     def validate_update_warranty_text(cls, value: str | None, field) -> str | None:  # noqa: D417

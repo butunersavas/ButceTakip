@@ -6,6 +6,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import { formatMoney } from "../../utils/formatMoney";
+import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS } from "../../constants/pagination";
 
 interface RowItem {
   id: number | null;
@@ -163,6 +164,8 @@ export default function PurchaseTrackingView() {
             loading={isLoading || mutation.isPending}
             getRowId={(row) => row.plan_item_id}
             disableRowSelectionOnClick
+            initialState={{ pagination: { paginationModel: { pageSize: DEFAULT_PAGE_SIZE, page: 0 } } }}
+            pageSizeOptions={PAGE_SIZE_OPTIONS}
             getRowClassName={(params) => (focusId && params.row.plan_item_id === focusId ? "focus-row" : "")}
             sx={{ border: "none", "& .focus-row": { backgroundColor: "rgba(25, 118, 210, 0.12)" } }}
           />

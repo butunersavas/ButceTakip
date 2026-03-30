@@ -593,9 +593,9 @@ export default function ImportExportView() {
   const cancelledDisabled = exporting || (previewSummary?.cancelled_count ?? 0) === 0;
 
   return (
-    <Stack spacing={4}>
+    <Stack spacing={3}>
       <Grid container spacing={3}>
-        <Grid item xs={12} md={6}>
+        <Grid item xs={12} lg={4}>
           <Card sx={{ height: "100%" }}>
             <CardContent>
               <Stack spacing={2}>
@@ -656,7 +656,7 @@ export default function ImportExportView() {
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={12} md={6}>
+        <Grid item xs={12} lg={8}>
           <Card sx={{ height: "100%" }}>
             <CardContent>
               <Stack spacing={2}>
@@ -701,8 +701,8 @@ export default function ImportExportView() {
                     </Grid>
                   ))}
                 </Grid>
-                <Grid container spacing={2}>
-                  <Grid item xs={12}>
+                <Grid container spacing={2} alignItems="flex-start">
+                  <Grid item xs={12} md={6}>
                     <TextField
                       label="Yıl"
                       type="number"
@@ -711,7 +711,7 @@ export default function ImportExportView() {
                       fullWidth
                     />
                   </Grid>
-                  <Grid item xs={12}>
+                  <Grid item xs={12} md={6}>
                     <TextField
                       select
                       label="Senaryo"
@@ -729,7 +729,7 @@ export default function ImportExportView() {
                       ))}
                     </TextField>
                   </Grid>
-                  <Grid item xs={12} sm={6}>
+                  <Grid item xs={12} md={6}>
                     <TextField
                       select
                       label="Ay"
@@ -748,7 +748,7 @@ export default function ImportExportView() {
                       ))}
                     </TextField>
                   </Grid>
-                  <Grid item xs={12} sm={6}>
+                  <Grid item xs={12} md={6}>
                     <TextField
                       select
                       label="Departman"
@@ -764,7 +764,7 @@ export default function ImportExportView() {
                       ))}
                     </TextField>
                   </Grid>
-                  <Grid item xs={12} sm={6}>
+                  <Grid item xs={12} md={6}>
                     <TextField
                       label="Başlangıç Tarihi"
                       type="date"
@@ -774,7 +774,7 @@ export default function ImportExportView() {
                       fullWidth
                     />
                   </Grid>
-                  <Grid item xs={12} sm={6}>
+                  <Grid item xs={12} md={6}>
                     <TextField
                       label="Bitiş Tarihi"
                       type="date"
@@ -784,7 +784,7 @@ export default function ImportExportView() {
                       fullWidth
                     />
                   </Grid>
-                  <Grid item xs={12}>
+                  <Grid item xs={12} md={6}>
                     <Autocomplete
                       options={budgetItems ?? []}
                       value={budgetItems?.find((item) => item.id === budgetItemId) ?? null}
@@ -797,7 +797,7 @@ export default function ImportExportView() {
                       )}
                     />
                   </Grid>
-                  <Grid item xs={12}>
+                  <Grid item xs={12} md={6}>
                     <FormControl fullWidth>
                       <InputLabel id="export-columns-label">Kolonlar</InputLabel>
                       <Select
@@ -850,7 +850,7 @@ export default function ImportExportView() {
                       disabled: cancelledDisabled
                     },
                   ].map((item) => (
-                    <Grid item xs={12} sm={6} key={item.title}>
+                    <Grid item xs={12} md={4} key={item.title}>
                       <Card variant="outlined" sx={{ height: "100%" }}>
                         <CardContent>
                           <Stack spacing={1.2}>

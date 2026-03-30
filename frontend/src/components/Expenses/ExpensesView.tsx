@@ -51,6 +51,7 @@ import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import usePersistentState from "../../hooks/usePersistentState";
 import { useAuth } from "../../context/AuthContext";
 import { formatBudgetItemLabel, stripBudgetCode } from "../../utils/budgetLabel";
+import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS } from "../../constants/pagination";
 
 interface Scenario {
   id: number;
@@ -1283,6 +1284,7 @@ export default function ExpensesView() {
                 slots={{ toolbar: null }}
                 paginationModel={paginationModel}
                 onPaginationModelChange={setPaginationModel}
+                pageSizeOptions={PAGE_SIZE_OPTIONS}
                 filterModel={combinedFilterModel}
                 onFilterModelChange={handleFilterModelChange}
                 sortingMode="client"
@@ -1292,7 +1294,7 @@ export default function ExpensesView() {
                 disableRowSelectionOnClick
                 initialState={{
                   pagination: {
-                    paginationModel: { pageSize: 10 }
+                    paginationModel: { pageSize: DEFAULT_PAGE_SIZE }
                   },
                   columns: {
                     columnVisibilityModel,
