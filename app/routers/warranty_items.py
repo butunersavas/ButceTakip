@@ -367,12 +367,15 @@ def list_critical_warranty_items(
 @router.get("/export/xlsx")
 def export_warranty_items_xlsx(
     include_inactive: bool = False,
+    item_type: str | None = None,
     session: Session = Depends(get_db_session),
     _: User = Depends(get_current_user),
 ):
     query = select(WarrantyItem).order_by(WarrantyItem.end_date.asc())
     if not include_inactive:
         query = query.where(WarrantyItem.is_active.is_(True))
+    if item_type:
+        query = query.where(WarrantyItem.type == item_type)
     items = session.exec(query).all()
 
     wb = Workbook()
@@ -387,6 +390,18 @@ def export_warranty_items_xlsx(
             "domain",
             "issuer",
             "renewal_responsible",
+            "ssl_certificate",
+            "certificate_type",
+            "contract_end_date",
+            "vendor_company",
+            "tax_number",
+            "service_type",
+            "subscription_circuit_number",
+            "location_name",
+            "service_number",
+            "speed",
+            "commitment_end_date",
+            "billing_account_number",
             "end_date",
             "days_left",
             "status",
@@ -404,6 +419,18 @@ def export_warranty_items_xlsx(
                 item.domain or "",
                 item.issuer or item.certificate_issuer or "",
                 item.renewal_responsible or item.renewal_owner or "",
+                item.ssl_certificate or "",
+                item.certificate_type or "",
+                item.contract_end_date.isoformat() if item.contract_end_date else "",
+                item.vendor_company or "",
+                item.tax_number or "",
+                item.service_type or "",
+                item.subscription_circuit_number or "",
+                item.location_name or "",
+                item.service_number or "",
+                item.speed or "",
+                item.commitment_end_date.isoformat() if item.commitment_end_date else "",
+                item.billing_account_number or "",
                 item.end_date.isoformat() if item.end_date else "",
                 days_left if days_left is not None else "",
                 _calculate_status(days_left) or "",

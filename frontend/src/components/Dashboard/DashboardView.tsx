@@ -107,6 +107,23 @@ interface OverBudgetResponse {
   items: OverBudgetItem[];
 }
 
+interface SavingsItem {
+  budget_item_id: number;
+  budget_code: string;
+  budget_name: string;
+  department?: string | null;
+  planned_amount: number;
+  spent_amount: number;
+  saving_amount: number;
+  saving_pct: number;
+}
+
+interface SavingsItemsResponse {
+  total_saving: number;
+  saving_item_count: number;
+  items: SavingsItem[];
+}
+
 type TrendMonth = {
   month: number;
   planned: number;
@@ -398,13 +415,15 @@ export default function DashboardView() {
   const [newlyRequestedItemId, setNewlyRequestedItemId] = useState<number | null>(null);
   const [warrantyAlertItems, setWarrantyAlertItems] = useState<WarrantyAlertItem[]>([]);
   const [selectedKpiFilter, setSelectedKpiFilter] = useState<
-    "total_plan" | "total_actual" | "total_remaining" | "total_overrun" | null
+    "total_plan" | "total_actual" | "total_remaining" | "total_overrun" | "total_saving" | null
   >(null);
   const [selectedOverrunItem, setSelectedOverrunItem] = useState<{
     budget_code: string;
     budget_name?: string | null;
   } | null>(null);
   const [isOverBudgetDialogOpen, setIsOverBudgetDialogOpen] = useState(false);
+  const [isSavingsDialogOpen, setIsSavingsDialogOpen] = useState(false);
+  const [showAllSavings, setShowAllSavings] = useState(false);
   const [forceShowOverBudget, setForceShowOverBudget] = useState(false);
   const [highlightOverBudget, setHighlightOverBudget] = useState(false);
   const overBudgetRef = useRef<HTMLDivElement | null>(null);
@@ -738,6 +757,30 @@ export default function DashboardView() {
     enabled: Boolean(debouncedFilters.year)
   });
 
+  const { data: savingsItemsData } = useQuery<SavingsItemsResponse>({
+    queryKey: [
+      "dashboard",
+      "savings-items",
+      debouncedFilters.year,
+      debouncedFilters.scenarioId,
+      debouncedFilters.month,
+      debouncedFilters.budgetItemId,
+      debouncedFilters.department,
+      debouncedFilters.capexOpex
+    ],
+    queryFn: async () => {
+      const params: Record<string, number | string> = { year: debouncedFilters.year, limit: 1000 };
+      if (debouncedFilters.scenarioId) params.scenario_id = debouncedFilters.scenarioId;
+      if (debouncedFilters.month) params.month = debouncedFilters.month;
+      if (debouncedFilters.department) params.department = debouncedFilters.department;
+      if (debouncedFilters.capexOpex) params.capex_opex = debouncedFilters.capexOpex;
+      if (debouncedFilters.budgetItemId) params.budget_item_id = debouncedFilters.budgetItemId;
+      const { data } = await client.get<SavingsItemsResponse>("/dashboard/savings-items", { params });
+      return data;
+    },
+    enabled: Boolean(debouncedFilters.year)
+  });
+
   const {
     data: trendData = buildEmptyTrendResponse(),
     isLoading: isTrendLoading,
@@ -898,6 +941,11 @@ export default function DashboardView() {
   }, [overBudgetItems]);
   const overBudgetTopItems = useMemo(() => overBudgetItems.slice(0, 10), [overBudgetItems]);
   const formattedOver = formatCurrency(overBudgetSummary.over_total);
+  const savingsItems = savingsItemsData?.items ?? [];
+  const savingsTopItems = useMemo(() => savingsItems.slice(0, 10), [savingsItems]);
+  const totalSavingAmount = savingsItemsData?.total_saving ?? 0;
+  const formattedSaving = formatCurrency(totalSavingAmount);
+  const savingSubtitle = `${savingsItemsData?.saving_item_count ?? 0} kalemde tasarruf`;
   const selectedBudgetOverrun = debouncedFilters.budgetItemId
     ? overBudgetItems[0]
     : null;
@@ -950,6 +998,11 @@ export default function DashboardView() {
   }, []);
 
   const handleSummaryCardClick = (filterKey: string) => {
+    if (filterKey === "total_saving") {
+      setIsSavingsDialogOpen(true);
+      setShowAllSavings(false);
+      return;
+    }
     if (filterKey === "total_actual") {
       navigate("/expenses");
       return;
@@ -1239,6 +1292,14 @@ export default function DashboardView() {
                   icon: <WarningAmberOutlinedIcon sx={{ fontSize: 18, color: "common.white" }} />,
                   iconColor: "error.main",
                   filterKey: "total_overrun" as const
+                },
+                {
+                  title: "Tasarruf",
+                  value: formattedSaving,
+                  subtitle: savingSubtitle,
+                  icon: <TaskAltIcon sx={{ fontSize: 18, color: "common.white" }} />,
+                  iconColor: "success.main",
+                  filterKey: "total_saving" as const
                 }
               ].map((card) => (
                 <Grid item xs={12} sm={6} md={3} key={card.title}>
@@ -1948,6 +2009,70 @@ export default function DashboardView() {
           <Button size="small" onClick={() => setIsOverBudgetDialogOpen(false)}>
             Kapat
           </Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog
+        open={isSavingsDialogOpen}
+        onClose={() => setIsSavingsDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontSize: 18, fontWeight: 600 }}>
+          {showAllSavings ? "Tüm Tasarruf Kalemleri" : "Top 10 Tasarruf Edilen Kalem"}
+        </DialogTitle>
+        <DialogContent dividers>
+          {(showAllSavings ? savingsItems : savingsTopItems).length === 0 ? (
+            <Typography variant="body2" color="text.secondary">Tasarruf kalemi bulunmuyor.</Typography>
+          ) : (
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Bütçe Kalemi</TableCell>
+                  <TableCell>Departman</TableCell>
+                  <TableCell align="right">Planlanan</TableCell>
+                  <TableCell align="right">Harcanan</TableCell>
+                  <TableCell align="right">Tasarruf</TableCell>
+                  <TableCell align="right">Tasarruf %</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {(showAllSavings ? savingsItems : savingsTopItems).map((item) => (
+                  <TableRow key={`${item.budget_item_id}-${item.budget_code}`}>
+                    <TableCell>{formatBudgetLabel(item.budget_name, item.budget_code)}</TableCell>
+                    <TableCell>{item.department ?? "-"}</TableCell>
+                    <TableCell align="right">{formatCurrency(item.planned_amount)}</TableCell>
+                    <TableCell align="right">{formatCurrency(item.spent_amount)}</TableCell>
+                    <TableCell align="right" sx={{ color: "success.main", fontWeight: 700 }}>
+                      {formatCurrency(item.saving_amount)}
+                    </TableCell>
+                    <TableCell align="right">{item.saving_pct.toFixed(1)}%</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button
+            size="small"
+            onClick={() => {
+              const params = new URLSearchParams();
+              params.set("year", String(debouncedFilters.year));
+              if (debouncedFilters.scenarioId) params.set("scenario_id", String(debouncedFilters.scenarioId));
+              if (debouncedFilters.month) params.set("month", String(debouncedFilters.month));
+              if (debouncedFilters.department) params.set("department", debouncedFilters.department);
+              if (debouncedFilters.capexOpex) params.set("capex_opex", debouncedFilters.capexOpex);
+              if (debouncedFilters.budgetItemId) params.set("budget_item_id", String(debouncedFilters.budgetItemId));
+              const base = client.defaults.baseURL ?? "";
+              window.open(`${base}/dashboard/savings-items/export/xlsx?${params.toString()}`, "_blank", "noopener,noreferrer");
+            }}
+          >
+            Excel Dışa Aktar
+          </Button>
+          <Button size="small" onClick={() => setShowAllSavings((prev) => !prev)}>
+            {showAllSavings ? "Top 10 Gör" : "Tümünü Gör"}
+          </Button>
+          <Button size="small" onClick={() => setIsSavingsDialogOpen(false)}>Kapat</Button>
         </DialogActions>
       </Dialog>
       <Snackbar
