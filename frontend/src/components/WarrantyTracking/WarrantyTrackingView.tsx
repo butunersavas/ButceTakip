@@ -16,6 +16,7 @@ import {
 } from "@mui/material";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
+import DownloadIcon from "@mui/icons-material/Download";
 import { DataGrid, type GridColDef } from "@mui/x-data-grid";
 import axios from "axios";
 
@@ -44,6 +45,18 @@ type WarrantyItem = {
   certificate_issuer?: string | null;
   renewal_owner?: string | null;
   renewal_responsible?: string | null;
+  ssl_certificate?: string | null;
+  certificate_type?: string | null;
+  contract_end_date?: string | null;
+  vendor_company?: string | null;
+  tax_number?: string | null;
+  service_type?: string | null;
+  subscription_circuit_number?: string | null;
+  location_name?: string | null;
+  service_number?: string | null;
+  speed?: string | null;
+  commitment_end_date?: string | null;
+  billing_account_number?: string | null;
   reminder_days?: number | null;
   remind_days?: number | null;
   remind_days_before?: number | null;
@@ -76,6 +89,18 @@ type WarrantyItemForm = {
   renewal_responsible: string;
   reminder_days: string;
   domain: string;
+  ssl_certificate: string;
+  certificate_type: string;
+  contract_end_date: string;
+  vendor_company: string;
+  tax_number: string;
+  service_type: string;
+  subscription_circuit_number: string;
+  location_name: string;
+  service_number: string;
+  speed: string;
+  commitment_end_date: string;
+  billing_account_number: string;
 };
 
 const typeOptions: Array<{ value: WarrantyItemType; label: string }> = [
@@ -97,6 +122,18 @@ const INITIAL_FORM_STATE: WarrantyItemForm = {
   renewal_responsible: "",
   reminder_days: "30",
   domain: "",
+  ssl_certificate: "",
+  certificate_type: "",
+  contract_end_date: "",
+  vendor_company: "",
+  tax_number: "",
+  service_type: "",
+  subscription_circuit_number: "",
+  location_name: "",
+  service_number: "",
+  speed: "",
+  commitment_end_date: "",
+  billing_account_number: "",
 };
 
 const calcDaysLeft = (endDate: string | null): number | null => {
@@ -269,8 +306,14 @@ export default function WarrantyTrackingView() {
   const [form, setForm] = useState<WarrantyItemForm>(INITIAL_FORM_STATE);
 
   const isLicenseType = form.type === "LICENSE" || form.type === "DOMAIN_SSL";
+  const isCertificateType = form.type === "CERTIFICATE" || form.type === "DOMAIN_SSL";
+  const isContractType = form.type === "CONTRACT";
   const nameLabel = isLicenseType ? "Lisans / Domain" : "Ad";
   const locationLabel = "Lokasyon";
+  const handleExportXlsx = useCallback(() => {
+    const base = client.defaults.baseURL ?? "";
+    window.open(`${base}/warranty-items/export/xlsx`, "_blank", "noopener,noreferrer");
+  }, [client]);
 
   const loadItems = useCallback(async () => {
     setLoading(true);
@@ -371,6 +414,18 @@ export default function WarrantyTrackingView() {
         issuer: form.issuer.trim() || null,
         renewal_responsible: form.renewal_responsible.trim() || null,
         reminder_days: Number.isFinite(reminderValue) ? reminderValue : null,
+        ssl_certificate: form.ssl_certificate.trim() || null,
+        certificate_type: form.certificate_type.trim() || null,
+        contract_end_date: normalizeDateInput(form.contract_end_date) || null,
+        vendor_company: form.vendor_company.trim() || null,
+        tax_number: form.tax_number.trim() || null,
+        service_type: form.service_type.trim() || null,
+        subscription_circuit_number: form.subscription_circuit_number.trim() || null,
+        location_name: form.location_name.trim() || null,
+        service_number: form.service_number.trim() || null,
+        speed: form.speed.trim() || null,
+        commitment_end_date: normalizeDateInput(form.commitment_end_date) || null,
+        billing_account_number: form.billing_account_number.trim() || null,
       };
 
       if (editingItem) {
@@ -418,6 +473,18 @@ export default function WarrantyTrackingView() {
               ? String(item.remind_days_before)
               : "30",
       domain: item.domain ?? "",
+      ssl_certificate: item.ssl_certificate ?? "",
+      certificate_type: item.certificate_type ?? "",
+      contract_end_date: normalizeDateInput(item.contract_end_date) ?? "",
+      vendor_company: item.vendor_company ?? "",
+      tax_number: item.tax_number ?? "",
+      service_type: item.service_type ?? "",
+      subscription_circuit_number: item.subscription_circuit_number ?? "",
+      location_name: item.location_name ?? "",
+      service_number: item.service_number ?? "",
+      speed: item.speed ?? "",
+      commitment_end_date: normalizeDateInput(item.commitment_end_date) ?? "",
+      billing_account_number: item.billing_account_number ?? "",
     });
   }, []);
 
@@ -644,6 +711,9 @@ export default function WarrantyTrackingView() {
         >
           {isFormOpen ? "Formu Kapat" : "Garanti Ekle"}
         </Button>
+        <Button variant="outlined" sx={{ mt: 2, ml: 1 }} startIcon={<DownloadIcon />} onClick={handleExportXlsx}>
+          Excel Dışa Aktar
+        </Button>
       </Box>
 
       <Grid container spacing={2}>
@@ -763,6 +833,50 @@ export default function WarrantyTrackingView() {
                       />
                     </>
                   )}
+                  {isCertificateType && (
+                    <>
+                      <TextField
+                        label="SSL Sertifikası"
+                        value={form.ssl_certificate}
+                        onChange={(event) => setForm((prev) => ({ ...prev, ssl_certificate: event.target.value }))}
+                      />
+                      <TextField
+                        label="Sertifika Türü"
+                        value={form.certificate_type}
+                        onChange={(event) => setForm((prev) => ({ ...prev, certificate_type: event.target.value }))}
+                      />
+                      <TextField
+                        label="Sözleşme Bitiş Tarihi"
+                        type="date"
+                        value={form.contract_end_date}
+                        onChange={(event) => setForm((prev) => ({ ...prev, contract_end_date: event.target.value }))}
+                        InputLabelProps={{ shrink: true }}
+                      />
+                      <TextField
+                        label="Firma"
+                        value={form.vendor_company}
+                        onChange={(event) => setForm((prev) => ({ ...prev, vendor_company: event.target.value }))}
+                      />
+                    </>
+                  )}
+                  {isContractType && (
+                    <>
+                      <TextField label="VKN" value={form.tax_number} onChange={(event) => setForm((prev) => ({ ...prev, tax_number: event.target.value }))} />
+                      <TextField label="Hizmet Türü" value={form.service_type} onChange={(event) => setForm((prev) => ({ ...prev, service_type: event.target.value }))} />
+                      <TextField label="Abonelik Devre Numarası" value={form.subscription_circuit_number} onChange={(event) => setForm((prev) => ({ ...prev, subscription_circuit_number: event.target.value }))} />
+                      <TextField label="Lokasyon Adı" value={form.location_name} onChange={(event) => setForm((prev) => ({ ...prev, location_name: event.target.value }))} />
+                      <TextField label="Hizmet No" value={form.service_number} onChange={(event) => setForm((prev) => ({ ...prev, service_number: event.target.value }))} />
+                      <TextField label="Hız" value={form.speed} onChange={(event) => setForm((prev) => ({ ...prev, speed: event.target.value }))} />
+                      <TextField
+                        label="Taahhüt Bitiş Tarihi"
+                        type="date"
+                        value={form.commitment_end_date}
+                        onChange={(event) => setForm((prev) => ({ ...prev, commitment_end_date: event.target.value }))}
+                        InputLabelProps={{ shrink: true }}
+                      />
+                      <TextField label="Fatura Hesap No" value={form.billing_account_number} onChange={(event) => setForm((prev) => ({ ...prev, billing_account_number: event.target.value }))} />
+                    </>
+                  )}
                   <TextField
                     label="Bitiş Tarihi"
                     type="date"
@@ -810,7 +924,7 @@ export default function WarrantyTrackingView() {
         )}
         <Grid item xs={12} ref={tableRef}>
           <Card variant="outlined">
-            <CardContent sx={{ height: 560 }}>
+            <CardContent>
               <Typography variant="h6" fontWeight={600} gutterBottom>
                 Garanti Kayıtları
               </Typography>
@@ -836,7 +950,7 @@ export default function WarrantyTrackingView() {
                   columns={columns}
                   loading={loading}
                   disableRowSelectionOnClick
-                  autoHeight={false}
+                  autoHeight
                   pageSizeOptions={PAGE_SIZE_OPTIONS}
                   initialState={{ pagination: { paginationModel: { pageSize: DEFAULT_PAGE_SIZE, page: 0 } } }}
                   sx={{ border: "none" }}

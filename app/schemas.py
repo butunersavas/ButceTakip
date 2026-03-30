@@ -481,6 +481,10 @@ class ExpenseRead(SQLModel, table=False):
     updated_by_name: Optional[str] = None
     created_by_username: Optional[str] = None
     updated_by_username: Optional[str] = None
+    planned_amount: Optional[float] = None
+    spent_amount: Optional[float] = None
+    saving_amount: Optional[float] = None
+    saving_pct: Optional[float] = None
 
     class Config:
         orm_mode = True
@@ -513,6 +517,18 @@ class WarrantyItemBase(BaseModel):
     certificate_issuer: Optional[str] = Field(default=None, alias="certificateIssuer")
     renewal_owner: Optional[str] = Field(default=None, alias="renewal_owner")
     renewal_responsible: Optional[str] = Field(default=None, alias="renewalResponsible")
+    ssl_certificate: Optional[str] = None
+    certificate_type: Optional[str] = None
+    contract_end_date: Optional[date] = None
+    vendor_company: Optional[str] = None
+    tax_number: Optional[str] = None
+    service_type: Optional[str] = None
+    subscription_circuit_number: Optional[str] = None
+    location_name: Optional[str] = None
+    service_number: Optional[str] = None
+    speed: Optional[str] = None
+    commitment_end_date: Optional[date] = None
+    billing_account_number: Optional[str] = None
     reminder_days: Optional[int] = Field(default=30, ge=0)
     remind_days: Optional[int] = Field(default=30, ge=0)
     remind_days_before: Optional[int] = Field(default=30, ge=0)
@@ -535,6 +551,16 @@ class WarrantyItemBase(BaseModel):
         "certificate_issuer",
         "renewal_owner",
         "renewal_responsible",
+        "ssl_certificate",
+        "certificate_type",
+        "vendor_company",
+        "tax_number",
+        "service_type",
+        "subscription_circuit_number",
+        "location_name",
+        "service_number",
+        "speed",
+        "billing_account_number",
         pre=True,
     )
     def normalize_warranty_text(cls, value: str | None) -> str | None:  # noqa: D417
@@ -603,6 +629,18 @@ class WarrantyItemUpdate(BaseModel):
     certificate_issuer: Optional[str] = Field(default=None, alias="certificateIssuer")
     renewal_owner: Optional[str] = Field(default=None, alias="renewal_owner")
     renewal_responsible: Optional[str] = Field(default=None, alias="renewalResponsible")
+    ssl_certificate: Optional[str] = None
+    certificate_type: Optional[str] = None
+    contract_end_date: Optional[date] = None
+    vendor_company: Optional[str] = None
+    tax_number: Optional[str] = None
+    service_type: Optional[str] = None
+    subscription_circuit_number: Optional[str] = None
+    location_name: Optional[str] = None
+    service_number: Optional[str] = None
+    speed: Optional[str] = None
+    commitment_end_date: Optional[date] = None
+    billing_account_number: Optional[str] = None
     reminder_days: Optional[int] = None
     remind_days: Optional[int] = None
     remind_days_before: Optional[int] = None
@@ -626,6 +664,16 @@ class WarrantyItemUpdate(BaseModel):
         "certificate_issuer",
         "renewal_owner",
         "renewal_responsible",
+        "ssl_certificate",
+        "certificate_type",
+        "vendor_company",
+        "tax_number",
+        "service_type",
+        "subscription_circuit_number",
+        "location_name",
+        "service_number",
+        "speed",
+        "billing_account_number",
         pre=True,
     )
     def normalize_update_warranty_text(cls, value: str | None) -> str | None:  # noqa: D417
@@ -695,6 +743,18 @@ class WarrantyItemRead(SQLModel, table=False):
     certificate_issuer: Optional[str] = None
     renewal_owner: Optional[str] = None
     renewal_responsible: Optional[str] = None
+    ssl_certificate: Optional[str] = None
+    certificate_type: Optional[str] = None
+    contract_end_date: Optional[date] = None
+    vendor_company: Optional[str] = None
+    tax_number: Optional[str] = None
+    service_type: Optional[str] = None
+    subscription_circuit_number: Optional[str] = None
+    location_name: Optional[str] = None
+    service_number: Optional[str] = None
+    speed: Optional[str] = None
+    commitment_end_date: Optional[date] = None
+    billing_account_number: Optional[str] = None
     reminder_days: Optional[int] = None
     remind_days: Optional[int] = None
     remind_days_before: Optional[int] = None
@@ -748,6 +808,23 @@ class SavingsResponse(BaseModel):
     planned_amount: float
     actual_amount: float
     saving_amount: float
+
+
+class SavingsItem(BaseModel):
+    budget_item_id: int
+    budget_code: str
+    budget_name: str
+    department: str | None = None
+    planned_amount: float
+    spent_amount: float
+    saving_amount: float
+    saving_pct: float
+
+
+class SavingsItemsResponse(BaseModel):
+    total_saving: float
+    saving_item_count: int
+    items: list[SavingsItem]
 
 
 class PlannedAmountResponse(BaseModel):

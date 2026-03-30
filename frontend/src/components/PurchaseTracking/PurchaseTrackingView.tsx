@@ -96,6 +96,18 @@ export default function PurchaseTrackingView() {
     });
   };
 
+  const handleExport = () => {
+    const params = new URLSearchParams();
+    params.set("year", String(appliedFilters.year));
+    if (appliedFilters.month) params.set("month", String(appliedFilters.month));
+    if (appliedFilters.department) params.set("department", appliedFilters.department);
+    if (appliedFilters.scenarioId) params.set("scenario_id", String(appliedFilters.scenarioId));
+    if (appliedFilters.budgetItemId) params.set("budget_item", String(appliedFilters.budgetItemId));
+    if (appliedFilters.capexOpex) params.set("capex_opex", appliedFilters.capexOpex);
+    const base = client.defaults.baseURL ?? "";
+    window.open(`${base}/purchase-tracking/export/xlsx?${params.toString()}`, "_blank", "noopener,noreferrer");
+  };
+
   const columns = useMemo<GridColDef[]>(() => [
     { field: "budget", headerName: "Plan Kalemi", flex: 1.4, minWidth: 260, valueGetter: (_v, row) => `${row.budget_code ?? ""} ${row.budget_name ?? ""}`.trim() },
     { field: "department", headerName: "Departman", flex: 0.9, minWidth: 150 },
@@ -148,6 +160,7 @@ export default function PurchaseTrackingView() {
             <Grid item xs={12}>
               <Stack direction="row" spacing={1} justifyContent="flex-end">
                 <Button variant="contained" onClick={handleApply}>Uygula</Button>
+                <Button variant="outlined" onClick={handleExport}>Excel Dışa Aktar</Button>
                 <Button variant="outlined" onClick={handleReset}>Sıfırla</Button>
               </Stack>
             </Grid>

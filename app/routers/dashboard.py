@@ -1,6 +1,9 @@
 from datetime import date
+from io import BytesIO
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
+from openpyxl import Workbook
 from sqlalchemy import exists, func
 from sqlmodel import Session, select
 
@@ -17,6 +20,8 @@ from app.schemas import (
     OverBudgetResponse,
     OverBudgetSummary,
     RiskyItem,
+    SavingsItem,
+    SavingsItemsResponse,
     SavingsResponse,
     SpendMonthlySummary,
     SpendTrendMonth,
@@ -296,6 +301,113 @@ def get_dashboard_savings(
         planned_amount=planned_amount,
         actual_amount=actual_amount,
         saving_amount=planned_amount - actual_amount,
+    )
+
+
+@router.get("/savings-items", response_model=SavingsItemsResponse)
+def get_dashboard_savings_items(
+    year: int = Query(...),
+    scenario_id: int | None = Query(default=None),
+    month: int | None = Query(default=None, ge=1, le=12),
+    department: str | None = Query(default=None),
+    capex_opex: str | None = Query(default=None),
+    budget_item_id: int | None = Query(default=None),
+    limit: int = Query(default=10, ge=1, le=1000),
+    session: Session = Depends(get_db_session),
+    _: User = Depends(get_current_user),
+) -> SavingsItemsResponse:
+    capex_filter = _normalize_capex_opex(capex_opex)
+    aggregates = _budget_item_aggregates(
+        session=session,
+        year=year,
+        month=month,
+        department=department,
+        capex_opex=capex_filter,
+    )
+    items: list[SavingsItem] = []
+    for row in aggregates:
+        if budget_item_id is not None and int(row.budget_item_id) != budget_item_id:
+            continue
+        planned = float(row.plan or 0)
+        actual = float(row.actual or 0)
+        saving = planned - actual
+        if saving <= 0:
+            continue
+        items.append(
+            SavingsItem(
+                budget_item_id=int(row.budget_item_id),
+                budget_code=row.code,
+                budget_name=row.name,
+                planned_amount=planned,
+                spent_amount=actual,
+                saving_amount=saving,
+                saving_pct=(saving / planned * 100) if planned > 0 else 0.0,
+            )
+        )
+    items.sort(key=lambda item: item.saving_amount, reverse=True)
+    if scenario_id is not None:
+        # Current aggregate helper does not include scenario dimension.
+        # Kept for backward compatibility by applying a best-effort filter when provided.
+        scenario_budget_ids = set(
+            session.exec(
+                select(PlanEntry.budget_item_id)
+                .where(PlanEntry.year == year)
+                .where(PlanEntry.scenario_id == scenario_id)
+                .distinct()
+            ).all()
+        )
+        items = [item for item in items if item.budget_item_id in scenario_budget_ids]
+    return SavingsItemsResponse(
+        total_saving=sum(item.saving_amount for item in items),
+        saving_item_count=len(items),
+        items=items[:limit],
+    )
+
+
+@router.get("/savings-items/export/xlsx")
+def export_dashboard_savings_items_xlsx(
+    year: int = Query(...),
+    scenario_id: int | None = Query(default=None),
+    month: int | None = Query(default=None, ge=1, le=12),
+    department: str | None = Query(default=None),
+    capex_opex: str | None = Query(default=None),
+    budget_item_id: int | None = Query(default=None),
+    session: Session = Depends(get_db_session),
+    _: User = Depends(get_current_user),
+):
+    response = get_dashboard_savings_items(
+        year=year,
+        scenario_id=scenario_id,
+        month=month,
+        department=department,
+        capex_opex=capex_opex,
+        budget_item_id=budget_item_id,
+        limit=1000,
+        session=session,
+        _=_,
+    )
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Savings"
+    ws.append(["Bütçe Kalemi", "Departman", "Planlanan", "Harcanan", "Tasarruf", "Tasarruf %"])
+    for item in response.items:
+        ws.append(
+            [
+                f"{item.budget_code} {item.budget_name}".strip(),
+                item.department or "",
+                item.planned_amount,
+                item.spent_amount,
+                item.saving_amount,
+                item.saving_pct,
+            ]
+        )
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="tasarruf_{year}.xlsx"'},
     )
 
 

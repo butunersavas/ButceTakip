@@ -104,6 +104,10 @@ def _build_expense_read(
         capex_opex=capex_opex,
         department=department,
         asset_type=row.get("asset_type"),
+        planned_amount=row.get("planned_amount"),
+        spent_amount=row.get("spent_amount"),
+        saving_amount=row.get("saving_amount"),
+        saving_pct=row.get("saving_pct"),
         created_at=row.get("created_at"),
         updated_at=row.get("updated_at"),
     )
@@ -196,6 +200,68 @@ def _expense_read_query(
     return query
 
 
+def _build_expense_saving_map(
+    session: Session,
+    *,
+    year: int | None = None,
+    scenario_id: int | None = None,
+    month: int | None = None,
+) -> dict[tuple[int, int | None, int | None], dict[str, float | None]]:
+    plan_query = select(
+        PlanEntry.budget_item_id,
+        PlanEntry.scenario_id,
+        PlanEntry.month,
+        func.sum(PlanEntry.amount).label("planned_amount"),
+    )
+    if year is not None:
+        plan_query = plan_query.where(PlanEntry.year == year)
+    if scenario_id is not None:
+        plan_query = plan_query.where(PlanEntry.scenario_id == scenario_id)
+    if month is not None:
+        plan_query = plan_query.where(PlanEntry.month == month)
+    plan_rows = session.exec(
+        plan_query.group_by(PlanEntry.budget_item_id, PlanEntry.scenario_id, PlanEntry.month)
+    ).all()
+
+    expense_query = select(
+        Expense.budget_item_id,
+        Expense.scenario_id,
+        func.extract("month", Expense.expense_date).label("month"),
+        func.sum(Expense.amount).label("spent_amount"),
+    ).where(Expense.status == ExpenseStatus.RECORDED)
+    if year is not None:
+        expense_query = expense_query.where(func.extract("year", Expense.expense_date) == year)
+    if scenario_id is not None:
+        expense_query = expense_query.where(Expense.scenario_id == scenario_id)
+    if month is not None:
+        expense_query = expense_query.where(func.extract("month", Expense.expense_date) == month)
+    expense_rows = session.exec(
+        expense_query.group_by(
+            Expense.budget_item_id, Expense.scenario_id, func.extract("month", Expense.expense_date)
+        )
+    ).all()
+
+    merged: dict[tuple[int, int | None, int | None], dict[str, float | None]] = {}
+    for row in plan_rows:
+        key = (int(row.budget_item_id), row.scenario_id, int(row.month))
+        planned = float(row.planned_amount or 0)
+        merged[key] = {"planned_amount": planned, "spent_amount": 0.0, "saving_amount": planned, "saving_pct": 100.0}
+    for row in expense_rows:
+        key = (int(row.budget_item_id), row.scenario_id, int(row.month))
+        spent = float(row.spent_amount or 0)
+        current = merged.get(key, {"planned_amount": 0.0})
+        planned = float(current.get("planned_amount") or 0)
+        saving = max(planned - spent, 0.0)
+        pct = ((saving / planned) * 100) if planned > 0 else None
+        merged[key] = {
+            "planned_amount": planned,
+            "spent_amount": spent,
+            "saving_amount": saving,
+            "saving_pct": pct,
+        }
+    return merged
+
+
 def _fetch_expense_read(
     session: Session,
     expense_id: int,
@@ -279,8 +345,26 @@ def list_expenses(
         )
     budget_ids = {row.budget_item_id for row in rows}
     department_map = _build_department_map(session, budget_ids, year, scenario_id)
+    savings_map = _build_expense_saving_map(
+        session,
+        year=year,
+        scenario_id=scenario_id,
+    )
     return [
-        _build_expense_read(row._mapping, department_map)
+        _build_expense_read(
+            {
+                **row._mapping,
+                **(savings_map.get(
+                    (
+                        int(row.budget_item_id),
+                        row.scenario_id,
+                        int(row.expense_date.month) if row.expense_date else None,
+                    ),
+                    {},
+                )),
+            },
+            department_map,
+        )
         for row in rows
     ]
 
@@ -427,10 +511,51 @@ def get_expense_planned_amount(
     )
 
 
+@router.get("/planned-amount/by-item")
+def get_expense_planned_amount_by_item(
+    year: int = Query(...),
+    scenario_id: int = Query(...),
+    budget_item_id: int = Query(...),
+    month: int | None = Query(default=None, ge=1, le=12),
+    department: str | None = Query(default=None),
+    capex_opex: str | None = Query(default=None),
+    session: Session = Depends(get_db_session),
+    _: User = Depends(get_current_user),
+):
+    query = (
+        select(PlanEntry)
+        .join(BudgetItem, BudgetItem.id == PlanEntry.budget_item_id)
+        .where(PlanEntry.year == year)
+        .where(PlanEntry.scenario_id == scenario_id)
+        .where(PlanEntry.budget_item_id == budget_item_id)
+    )
+    if month is not None:
+        query = query.where(PlanEntry.month == month)
+    if department:
+        query = query.where(PlanEntry.department == department)
+    capex_filter = _normalize_capex_opex(capex_opex)
+    if capex_filter:
+        query = query.where(func.lower(BudgetItem.map_category) == capex_filter)
+    rows = session.exec(query).all()
+    if len(rows) > 1:
+        return {
+            "planned_amount": None,
+            "ambiguous": True,
+            "message": "Bu kalem için birden fazla plan kaydı bulunduğu için planlanan bütçe net belirlenemedi.",
+        }
+    if not rows:
+        return {"planned_amount": None, "ambiguous": False, "message": None}
+    return {"planned_amount": float(rows[0].amount or 0), "ambiguous": False, "message": None}
+
+
 @router.get("/export/xlsx")
 def export_expenses_xlsx(
     year: int = Query(...),
     scenario_id: int | None = Query(default=None),
+    budget_item_id: int | None = Query(default=None),
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    capex_opex: str | None = Query(default=None),
     session: Session = Depends(get_db_session),
     _: User = Depends(get_current_user),
 ):
@@ -442,6 +567,15 @@ def export_expenses_xlsx(
     )
     if scenario_id is not None:
         query = query.where(Expense.scenario_id == scenario_id)
+    if budget_item_id is not None:
+        query = query.where(Expense.budget_item_id == budget_item_id)
+    if start_date is not None:
+        query = query.where(Expense.expense_date >= start_date)
+    if end_date is not None:
+        query = query.where(Expense.expense_date <= end_date)
+    capex_filter = _normalize_capex_opex(capex_opex)
+    if capex_filter:
+        query = query.where(func.lower(BudgetItem.map_category) == capex_filter)
     rows = session.exec(query.order_by(Expense.expense_date.desc())).all()
 
     wb = Workbook()

@@ -610,6 +610,14 @@ export default function PlansView() {
     plansQuery.refetch();
   };
 
+  const handleExportXlsx = () => {
+    const params = new URLSearchParams();
+    params.set("year", String(year));
+    if (scenarioId) params.set("scenario_id", String(scenarioId));
+    const base = client.defaults.baseURL ?? "";
+    window.open(`${base}/plans/export/xlsx?${params.toString()}`, "_blank", "noopener,noreferrer");
+  };
+
   const handleResetFilters = () => {
     setYear(currentYear);
     setScenarioId(null);
@@ -745,12 +753,17 @@ export default function PlansView() {
                 <Typography variant="subtitle1" fontWeight={600}>
                   Plan Kayıtları
                 </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Seçili filtrelere göre plan toplamı:{" "}
-                  <Box component="span" fontWeight={700} color="text.primary">
-                    {formattedFilteredTotal}
-                  </Box>
-                </Typography>
+                <Stack direction="row" spacing={2} alignItems="center">
+                  <Typography variant="body2" color="text.secondary">
+                    Seçili filtrelere göre plan toplamı:{" "}
+                    <Box component="span" fontWeight={700} color="text.primary">
+                      {formattedFilteredTotal}
+                    </Box>
+                  </Typography>
+                  <Button variant="outlined" size="small" onClick={handleExportXlsx}>
+                    Excel Dışa Aktar
+                  </Button>
+                </Stack>
               </Stack>
               <Box sx={{ width: "100%", overflowX: "auto" }}>
                 <DataGrid
