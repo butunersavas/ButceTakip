@@ -34,6 +34,8 @@ def _normalize_warranty_type_alias(value: str | None) -> str | None:
     normalized = value.strip().upper()
     if normalized == "DOMAIN_SSL":
         return "LICENSE"
+    if normalized in {"SSL", "CERT"}:
+        return "CERTIFICATE"
     return normalized
 
 
@@ -723,6 +725,7 @@ class DashboardSummary(BaseModel):
     planned: float
     actual: float
     saving: float
+    saving_amount: float | None = None
 
 
 class DashboardKPI(BaseModel):
@@ -736,6 +739,24 @@ class DashboardKPI(BaseModel):
 class DashboardResponse(BaseModel):
     kpi: DashboardKPI
     monthly: list[DashboardSummary]
+
+
+class SavingsResponse(BaseModel):
+    year: int
+    scenario_id: int | None = None
+    month: int | None = None
+    planned_amount: float
+    actual_amount: float
+    saving_amount: float
+
+
+class PlannedAmountResponse(BaseModel):
+    year: int
+    scenario_id: int | None = None
+    month: int | None = None
+    planned_amount: float
+    actual_amount: float
+    saving_amount: float
 
 
 class OverBudgetSummary(BaseModel):

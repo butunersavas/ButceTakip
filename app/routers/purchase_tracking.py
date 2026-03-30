@@ -1,6 +1,9 @@
 from datetime import datetime
+from io import BytesIO
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
+from openpyxl import Workbook
 from sqlalchemy import func
 from sqlmodel import Session, select
 
@@ -169,4 +172,57 @@ def update_purchase_tracking(
         amount=plan.amount,
         purchase_requested=plan.purchase_requested,
         purchase_requested_at=plan.purchase_requested_at,
+    )
+
+
+@router.get("/export/xlsx")
+def export_purchase_tracking_xlsx(
+    year: int = Query(...),
+    month: str | int | None = Query(default=None),
+    scenario_id: int | None = Query(default=None),
+    session: Session = Depends(get_db_session),
+    _: User = Depends(get_current_user),
+):
+    query = (
+        select(PlanEntry, BudgetItem, PurchaseRequestTracking)
+        .join(BudgetItem, PlanEntry.budget_item_id == BudgetItem.id)
+        .outerjoin(PurchaseRequestTracking, PurchaseRequestTracking.plan_item_id == PlanEntry.id)
+        .where(PlanEntry.year == year, PlanEntry.purchase_requested.is_(True))
+    )
+    normalized_month = normalize_month(month)
+    if normalized_month is not None:
+        query = query.where(PlanEntry.month == normalized_month)
+    if scenario_id is not None:
+        query = query.where(PlanEntry.scenario_id == scenario_id)
+
+    rows = session.exec(query.order_by(PlanEntry.month, BudgetItem.code)).all()
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "PurchaseTracking"
+    ws.append(
+        ["plan_item_id", "year", "month", "scenario_id", "department", "budget_code", "budget_name", "amount", "status", "note"]
+    )
+    for plan, budget_item, tracking in rows:
+        ws.append(
+            [
+                plan.id,
+                plan.year,
+                plan.month,
+                plan.scenario_id,
+                plan.department or "",
+                budget_item.code if budget_item else plan.budget_code,
+                budget_item.name if budget_item else "",
+                float(plan.amount or 0),
+                tracking.status if tracking else PurchaseTrackingStatus.TALEP_OLUSTURULDU.value,
+                tracking.note if tracking else "",
+            ]
+        )
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="purchase_tracking_{year}.xlsx"'},
     )

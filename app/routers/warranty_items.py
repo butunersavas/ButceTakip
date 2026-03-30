@@ -1,8 +1,11 @@
 from datetime import date, datetime
+from io import BytesIO
 
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
+from openpyxl import Workbook
 from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import aliased
@@ -359,3 +362,60 @@ def list_critical_warranty_items(
                 )
             )
     return critical_items
+
+
+@router.get("/export/xlsx")
+def export_warranty_items_xlsx(
+    include_inactive: bool = False,
+    session: Session = Depends(get_db_session),
+    _: User = Depends(get_current_user),
+):
+    query = select(WarrantyItem).order_by(WarrantyItem.end_date.asc())
+    if not include_inactive:
+        query = query.where(WarrantyItem.is_active.is_(True))
+    items = session.exec(query).all()
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "WarrantyItems"
+    ws.append(
+        [
+            "id",
+            "type",
+            "name",
+            "location",
+            "domain",
+            "issuer",
+            "renewal_responsible",
+            "end_date",
+            "days_left",
+            "status",
+            "is_active",
+        ]
+    )
+    for item in items:
+        days_left = _calculate_days_left(item.end_date)
+        ws.append(
+            [
+                item.id,
+                item.type.value if item.type else "",
+                item.name,
+                item.location,
+                item.domain or "",
+                item.issuer or item.certificate_issuer or "",
+                item.renewal_responsible or item.renewal_owner or "",
+                item.end_date.isoformat() if item.end_date else "",
+                days_left if days_left is not None else "",
+                _calculate_status(days_left) or "",
+                item.is_active,
+            ]
+        )
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="warranty_items.xlsx"'},
+    )

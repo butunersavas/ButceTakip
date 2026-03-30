@@ -17,6 +17,7 @@ from app.schemas import (
     OverBudgetResponse,
     OverBudgetSummary,
     RiskyItem,
+    SavingsResponse,
     SpendMonthlySummary,
     SpendTrendMonth,
     SpendTrendResponse,
@@ -258,9 +259,43 @@ def get_dashboard(
             total_overrun=total_overrun,
         ),
         monthly=[
-            DashboardSummary(month=item.month, planned=item.planned, actual=item.actual, saving=item.saving)
+            DashboardSummary(
+                month=item.month,
+                planned=item.planned,
+                actual=item.actual,
+                saving=item.saving,
+                saving_amount=item.saving,
+            )
             for item in monthly
         ],
+    )
+
+
+@router.get("/savings", response_model=SavingsResponse)
+def get_dashboard_savings(
+    year: int = Query(...),
+    scenario_id: int | None = Query(default=None),
+    month: int | None = Query(default=None, ge=1, le=12),
+    session: Session = Depends(get_db_session),
+    _: User = Depends(get_current_user),
+) -> SavingsResponse:
+    monthly = compute_monthly_summary(
+        session=session,
+        year=year,
+        scenario_id=scenario_id,
+        budget_item_id=None,
+        month=month,
+        department=None,
+        capex_opex=None,
+    )
+    planned_amount, actual_amount = totalize(monthly)
+    return SavingsResponse(
+        year=year,
+        scenario_id=scenario_id,
+        month=month,
+        planned_amount=planned_amount,
+        actual_amount=actual_amount,
+        saving_amount=planned_amount - actual_amount,
     )
 
 

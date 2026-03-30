@@ -21,6 +21,8 @@ class WarrantyItemType(str, enum.Enum):
     MAINTENANCE = "MAINTENANCE"
     SERVICE = "SERVICE"
     LICENSE = "LICENSE"
+    CERTIFICATE = "CERTIFICATE"
+    CONTRACT = "CONTRACT"
     DOMAIN_SSL = "DOMAIN_SSL"
 
 
