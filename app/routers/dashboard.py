@@ -1,6 +1,9 @@
 from datetime import date
+import io
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
+from openpyxl import Workbook
 from sqlalchemy import exists, func
 from sqlmodel import Session, select
 
@@ -16,6 +19,9 @@ from app.schemas import (
     OverBudgetItem,
     OverBudgetResponse,
     OverBudgetSummary,
+    SavingItem,
+    SavingResponse,
+    SavingSummary,
     RiskyItem,
     SpendMonthlySummary,
     SpendTrendMonth,
@@ -515,6 +521,140 @@ def get_overbudget(
         summary=OverBudgetSummary(over_total=over_total, over_item_count=over_item_count),
         items=items,
     )
+
+
+@router.get("/savings", response_model=SavingResponse)
+def get_savings(
+    year: int | None = Query(default=None),
+    scenario_id: int | None = Query(default=None),
+    months: int = Query(default=3, ge=1, le=12),
+    month: int | None = Query(default=None),
+    budget_code: str | None = Query(default=None),
+    budget_item_id: int | None = Query(default=None),
+    department: str | None = Query(default=None),
+    capex_opex: str | None = Query(default=None),
+    session: Session = Depends(get_db_session),
+    _ = Depends(get_current_user),
+) -> SavingResponse:
+    resolved_year = year
+    if resolved_year is None and scenario_id is not None:
+        scenario = session.get(Scenario, scenario_id)
+        resolved_year = scenario.year if scenario else None
+    if resolved_year is None:
+        resolved_year = date.today().year
+    month_range = _resolve_month_range(month, months)
+    capex_filter = _normalize_capex_opex(capex_opex)
+
+    plan_query = (
+        select(
+            PlanEntry.budget_item_id,
+            PlanEntry.department,
+            func.sum(PlanEntry.amount).label("plan_total"),
+        )
+        .where(PlanEntry.year == resolved_year)
+        .where(PlanEntry.month.in_(month_range))
+    )
+    if scenario_id is not None:
+        plan_query = plan_query.where(PlanEntry.scenario_id == scenario_id)
+    if department:
+        plan_query = plan_query.where(PlanEntry.department == department)
+    if budget_item_id is not None:
+        plan_query = plan_query.where(PlanEntry.budget_item_id == budget_item_id)
+    plan_query = plan_query.group_by(PlanEntry.budget_item_id, PlanEntry.department).subquery()
+
+    expense_query = (
+        select(Expense.budget_item_id, func.sum(Expense.amount).label("actual_total"))
+        .where(func.extract("year", Expense.expense_date) == resolved_year)
+        .where(func.extract("month", Expense.expense_date).in_(month_range))
+        .where(Expense.status == ExpenseStatus.RECORDED)
+        .where(Expense.is_out_of_budget.is_(False))
+    )
+    if scenario_id is not None:
+        expense_query = expense_query.where(Expense.scenario_id == scenario_id)
+    if budget_item_id is not None:
+        expense_query = expense_query.where(Expense.budget_item_id == budget_item_id)
+    expense_query = expense_query.group_by(Expense.budget_item_id).subquery()
+
+    query = (
+        select(
+            BudgetItem.id.label("budget_item_id"),
+            BudgetItem.code,
+            BudgetItem.name,
+            plan_query.c.department,
+            func.coalesce(plan_query.c.plan_total, 0).label("plan"),
+            func.coalesce(expense_query.c.actual_total, 0).label("actual"),
+        )
+        .join(plan_query, BudgetItem.id == plan_query.c.budget_item_id, isouter=True)
+        .join(expense_query, BudgetItem.id == expense_query.c.budget_item_id, isouter=True)
+    )
+    if capex_filter:
+        query = query.where(func.lower(BudgetItem.map_category) == capex_filter)
+    if budget_code:
+        query = query.where(BudgetItem.code == budget_code)
+    rows = session.exec(query).all()
+    items: list[SavingItem] = []
+    for row in rows:
+        plan = float(row.plan or 0)
+        actual = float(row.actual or 0)
+        saving = plan - actual
+        if saving <= 0:
+            continue
+        items.append(
+            SavingItem(
+                budget_item_id=row.budget_item_id,
+                budget_code=row.code,
+                budget_name=row.name,
+                department=row.department,
+                plan=plan,
+                actual=actual,
+                saving=saving,
+                saving_pct=(saving / plan * 100) if plan > 0 else 0,
+                year=resolved_year,
+                month=month,
+                scenario=scenario_id,
+            )
+        )
+    items.sort(key=lambda item: item.saving, reverse=True)
+    return SavingResponse(
+        summary=SavingSummary(
+            total_saving=sum(item.saving for item in items),
+            saving_item_count=len(items),
+        ),
+        items=items,
+    )
+
+
+@router.get("/savings/export/xlsx")
+def export_savings_xlsx(
+    year: int | None = Query(default=None),
+    scenario_id: int | None = Query(default=None),
+    months: int = Query(default=3, ge=1, le=12),
+    month: int | None = Query(default=None),
+    budget_code: str | None = Query(default=None),
+    budget_item_id: int | None = Query(default=None),
+    department: str | None = Query(default=None),
+    capex_opex: str | None = Query(default=None),
+    session: Session = Depends(get_db_session),
+    user=Depends(get_current_user),
+):
+    response_data = get_savings(
+        year, scenario_id, months, month, budget_code, budget_item_id, department, capex_opex, session, user
+    )
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Tasarruf Kalemleri"
+    ws.append(["Kalem", "Departman", "Planlanan", "Harcanan", "Tasarruf", "Tasarruf %"])
+    for item in response_data.items:
+        ws.append([item.budget_name or item.budget_code, item.department or "", item.plan, item.actual, item.saving, item.saving_pct])
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    response = Response(
+        content=output.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response.headers["Content-Disposition"] = f"attachment; filename=tasarruf_{year or date.today().year}.xlsx"
+    return response
 
 
 @router.get("/spend_last_months", response_model=list[SpendMonthlySummary])

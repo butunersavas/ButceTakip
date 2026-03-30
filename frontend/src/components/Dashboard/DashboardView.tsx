@@ -77,6 +77,7 @@ interface DashboardKPI {
   total_plan: number;
   total_actual: number;
   total_remaining: number;
+  total_saving: number;
   total_overrun: number;
 }
 
@@ -105,6 +106,26 @@ interface OverBudgetItem {
 interface OverBudgetResponse {
   summary: OverBudgetSummary;
   items: OverBudgetItem[];
+}
+
+interface SavingSummary {
+  total_saving: number;
+  saving_item_count: number;
+}
+
+interface SavingItem {
+  budget_code: string;
+  budget_name: string;
+  department?: string | null;
+  plan: number;
+  actual: number;
+  saving: number;
+  saving_pct: number;
+}
+
+interface SavingResponse {
+  summary: SavingSummary;
+  items: SavingItem[];
 }
 
 type TrendMonth = {
@@ -398,13 +419,14 @@ export default function DashboardView() {
   const [newlyRequestedItemId, setNewlyRequestedItemId] = useState<number | null>(null);
   const [warrantyAlertItems, setWarrantyAlertItems] = useState<WarrantyAlertItem[]>([]);
   const [selectedKpiFilter, setSelectedKpiFilter] = useState<
-    "total_plan" | "total_actual" | "total_remaining" | "total_overrun" | null
+    "total_plan" | "total_actual" | "total_remaining" | "total_overrun" | "total_saving" | null
   >(null);
   const [selectedOverrunItem, setSelectedOverrunItem] = useState<{
     budget_code: string;
     budget_name?: string | null;
   } | null>(null);
   const [isOverBudgetDialogOpen, setIsOverBudgetDialogOpen] = useState(false);
+  const [isSavingsDialogOpen, setIsSavingsDialogOpen] = useState(false);
   const [forceShowOverBudget, setForceShowOverBudget] = useState(false);
   const [highlightOverBudget, setHighlightOverBudget] = useState(false);
   const overBudgetRef = useRef<HTMLDivElement | null>(null);
@@ -737,6 +759,22 @@ export default function DashboardView() {
     },
     enabled: Boolean(debouncedFilters.year)
   });
+  const { data: savings } = useQuery<SavingResponse>({
+    queryKey: ["dashboard-savings", debouncedFilters],
+    queryFn: async () => {
+      const { data } = await client.get<SavingResponse>("/dashboard/savings", {
+        params: {
+          year: debouncedFilters.year,
+          scenario_id: debouncedFilters.scenarioId || undefined,
+          month: debouncedFilters.month || undefined,
+          department: debouncedFilters.department || undefined,
+          budget_item_id: debouncedFilters.budgetItemId || undefined,
+          capex_opex: debouncedFilters.capexOpex || undefined,
+        }
+      });
+      return data;
+    }
+  });
 
   const {
     data: trendData = buildEmptyTrendResponse(),
@@ -897,6 +935,10 @@ export default function DashboardView() {
     return { over_total: overTotal, over_item_count: overBudgetItems.length };
   }, [overBudgetItems]);
   const overBudgetTopItems = useMemo(() => overBudgetItems.slice(0, 10), [overBudgetItems]);
+  const savingItems = useMemo(() => (savings?.items ?? []).sort((a, b) => b.saving - a.saving), [savings]);
+  const savingTopItems = useMemo(() => savingItems.slice(0, 10), [savingItems]);
+  const savingSummary = savings?.summary ?? { total_saving: 0, saving_item_count: 0 };
+  const formattedSaving = formatCurrency(savingSummary.total_saving);
   const formattedOver = formatCurrency(overBudgetSummary.over_total);
   const selectedBudgetOverrun = debouncedFilters.budgetItemId
     ? overBudgetItems[0]
@@ -1239,6 +1281,14 @@ export default function DashboardView() {
                   icon: <WarningAmberOutlinedIcon sx={{ fontSize: 18, color: "common.white" }} />,
                   iconColor: "error.main",
                   filterKey: "total_overrun" as const
+                },
+                {
+                  title: "Tasarruf",
+                  value: formattedSaving,
+                  subtitle: `${savingSummary.saving_item_count} kalemde tasarruf`,
+                  icon: <TrendingUpOutlinedIcon sx={{ fontSize: 18, color: "common.white" }} />,
+                  iconColor: "success.main",
+                  filterKey: "total_saving" as const
                 }
               ].map((card) => (
                 <Grid item xs={12} sm={6} md={3} key={card.title}>
@@ -1355,6 +1405,71 @@ export default function DashboardView() {
                 </Box>
               </DashboardSectionBoundary>
             ) : null}
+            <DashboardSectionBoundary title="Tasarruf Edilen Kalemler">
+              <Card>
+                <CardContent>
+                  <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
+                    <Typography variant="h6" fontWeight={600}>
+                      Top 10 Tasarruf Edilen Kalem
+                    </Typography>
+                    <Stack direction="row" spacing={1}>
+                      <Button size="small" variant="outlined" onClick={() => setIsSavingsDialogOpen(true)}>
+                        Tümünü Gör
+                      </Button>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={async () => {
+                          const { data } = await client.get("/dashboard/savings/export/xlsx", {
+                            params: {
+                              year: debouncedFilters.year,
+                              scenario_id: debouncedFilters.scenarioId || undefined,
+                              month: debouncedFilters.month || undefined,
+                              department: debouncedFilters.department || undefined,
+                              budget_item_id: debouncedFilters.budgetItemId || undefined,
+                              capex_opex: debouncedFilters.capexOpex || undefined,
+                            },
+                            responseType: "blob",
+                          });
+                          const url = window.URL.createObjectURL(new Blob([data]));
+                          const link = document.createElement("a");
+                          link.href = url;
+                          link.download = `tasarruf_${debouncedFilters.year}.xlsx`;
+                          link.click();
+                          window.URL.revokeObjectURL(url);
+                        }}
+                      >
+                        Excel Dışa Aktar
+                      </Button>
+                    </Stack>
+                  </Stack>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Bütçe Kalemi</TableCell>
+                        <TableCell>Departman</TableCell>
+                        <TableCell align="right">Planlanan</TableCell>
+                        <TableCell align="right">Harcanan</TableCell>
+                        <TableCell align="right">Tasarruf</TableCell>
+                        <TableCell align="right">Tasarruf %</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {savingTopItems.map((item) => (
+                        <TableRow key={`${item.budget_code}-${item.department ?? "all"}`}>
+                          <TableCell>{formatBudgetLabel(item.budget_name, item.budget_code)}</TableCell>
+                          <TableCell>{item.department || "-"}</TableCell>
+                          <TableCell align="right">{formatCurrency(item.plan)}</TableCell>
+                          <TableCell align="right">{formatCurrency(item.actual)}</TableCell>
+                          <TableCell align="right" sx={{ color: "success.dark", fontWeight: 700 }}>{formatCurrency(item.saving)}</TableCell>
+                          <TableCell align="right">%{item.saving_pct.toFixed(1)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            </DashboardSectionBoundary>
 
             <DashboardSectionBoundary title="Aylık Trend">
               <Card ref={trendSectionRef}>
@@ -1948,6 +2063,38 @@ export default function DashboardView() {
           <Button size="small" onClick={() => setIsOverBudgetDialogOpen(false)}>
             Kapat
           </Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog open={isSavingsDialogOpen} onClose={() => setIsSavingsDialogOpen(false)} maxWidth="lg" fullWidth>
+        <DialogTitle>Tasarruf Kalemleri</DialogTitle>
+        <DialogContent dividers>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Bütçe Kalemi</TableCell>
+                <TableCell>Departman</TableCell>
+                <TableCell align="right">Planlanan</TableCell>
+                <TableCell align="right">Harcanan</TableCell>
+                <TableCell align="right">Tasarruf</TableCell>
+                <TableCell align="right">Tasarruf %</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {savingItems.map((item) => (
+                <TableRow key={`${item.budget_code}-${item.department ?? "all"}-all`}>
+                  <TableCell>{formatBudgetLabel(item.budget_name, item.budget_code)}</TableCell>
+                  <TableCell>{item.department || "-"}</TableCell>
+                  <TableCell align="right">{formatCurrency(item.plan)}</TableCell>
+                  <TableCell align="right">{formatCurrency(item.actual)}</TableCell>
+                  <TableCell align="right" sx={{ color: "success.dark", fontWeight: 700 }}>{formatCurrency(item.saving)}</TableCell>
+                  <TableCell align="right">%{item.saving_pct.toFixed(1)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setIsSavingsDialogOpen(false)}>Kapat</Button>
         </DialogActions>
       </Dialog>
       <Snackbar

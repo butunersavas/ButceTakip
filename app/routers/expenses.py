@@ -1,8 +1,11 @@
 from datetime import date, datetime
 import ipaddress
+import io
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import Response
+from openpyxl import Workbook
 from sqlalchemy import and_, func, or_
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import aliased
@@ -212,6 +215,52 @@ def _fetch_expense_read(
     return _build_expense_read(row._mapping, department_map)
 
 
+def _build_saving_maps(
+    session: Session,
+    expenses: list[ExpenseRead],
+) -> tuple[dict[tuple[int, int | None], float], dict[tuple[int, int | None], float]]:
+    keys = {(item.budget_item_id, item.scenario_id) for item in expenses if item.budget_item_id}
+    if not keys:
+        return {}, {}
+    budget_ids = {budget_id for budget_id, _ in keys}
+    scenario_ids = {scenario_id for _, scenario_id in keys if scenario_id is not None}
+    plan_query = (
+        select(
+            PlanEntry.budget_item_id,
+            PlanEntry.scenario_id,
+            func.sum(PlanEntry.amount).label("planned_amount"),
+        )
+        .where(PlanEntry.budget_item_id.in_(budget_ids))
+    )
+    if scenario_ids:
+        plan_query = plan_query.where(PlanEntry.scenario_id.in_(scenario_ids))
+    plan_rows = session.exec(
+        plan_query.group_by(PlanEntry.budget_item_id, PlanEntry.scenario_id)
+    ).all()
+    planned_map: dict[tuple[int, int | None], float] = {
+        (row.budget_item_id, row.scenario_id): float(row.planned_amount or 0) for row in plan_rows
+    }
+    expense_query = (
+        select(
+            Expense.budget_item_id,
+            Expense.scenario_id,
+            func.sum(Expense.amount).label("spent_amount"),
+        )
+        .where(Expense.budget_item_id.in_(budget_ids))
+        .where(Expense.status == ExpenseStatus.RECORDED)
+        .where(Expense.is_out_of_budget.is_(False))
+    )
+    if scenario_ids:
+        expense_query = expense_query.where(Expense.scenario_id.in_(scenario_ids))
+    expense_rows = session.exec(
+        expense_query.group_by(Expense.budget_item_id, Expense.scenario_id)
+    ).all()
+    spent_map: dict[tuple[int, int | None], float] = {
+        (row.budget_item_id, row.scenario_id): float(row.spent_amount or 0) for row in expense_rows
+    }
+    return planned_map, spent_map
+
+
 @router.get("", response_model=list[ExpenseRead])
 @router.get("/", response_model=list[ExpenseRead], include_in_schema=False)
 def list_expenses(
@@ -276,10 +325,53 @@ def list_expenses(
         )
     budget_ids = {row.budget_item_id for row in rows}
     department_map = _build_department_map(session, budget_ids, year, scenario_id)
-    return [
-        _build_expense_read(row._mapping, department_map)
-        for row in rows
-    ]
+    items = [_build_expense_read(row._mapping, department_map) for row in rows]
+    planned_map, spent_map = _build_saving_maps(session, items)
+    for item in items:
+        key = (item.budget_item_id, item.scenario_id)
+        planned_amount = float(planned_map.get(key, 0))
+        spent_amount = float(spent_map.get(key, 0))
+        saving_amount = max(planned_amount - spent_amount, 0)
+        item.planned_amount = planned_amount
+        item.spent_amount = spent_amount
+        item.saving_amount = saving_amount
+        item.saving_pct = (saving_amount / planned_amount * 100) if planned_amount > 0 else 0.0
+    return items
+
+
+@router.get("/planned-amount")
+def get_planned_amount_for_expense(
+    budget_item_id: int,
+    scenario_id: int,
+    expense_date: date,
+    department: str | None = Query(default=None),
+    capex_opex: str | None = Query(default=None),
+    session: Session = Depends(get_db_session),
+    _: User = Depends(get_current_user),
+) -> dict:
+    normalized_capex = _normalize_capex_opex(capex_opex)
+    query = (
+        select(PlanEntry.id, PlanEntry.amount)
+        .join(BudgetItem, BudgetItem.id == PlanEntry.budget_item_id)
+        .where(PlanEntry.year == expense_date.year)
+        .where(PlanEntry.month == expense_date.month)
+        .where(PlanEntry.scenario_id == scenario_id)
+        .where(PlanEntry.budget_item_id == budget_item_id)
+    )
+    if department:
+        query = query.where(PlanEntry.department == department)
+    if normalized_capex:
+        query = query.where(func.lower(BudgetItem.map_category) == normalized_capex)
+    rows = session.exec(query).all()
+    if len(rows) != 1:
+        return {
+            "planned_amount": None,
+            "is_resolved": False,
+            "message": "Bu kalem için birden fazla plan kaydı bulunduğu için planlanan bütçe net belirlenemedi."
+            if len(rows) > 1
+            else None,
+        }
+    return {"planned_amount": float(rows[0].amount or 0), "is_resolved": True, "message": None}
 
 
 @router.post("", response_model=ExpenseRead, status_code=201)
@@ -390,3 +482,64 @@ def delete_expense(
         raise HTTPException(status_code=403, detail="Not allowed")
     session.delete(expense)
     session.commit()
+
+
+@router.get("/export/xlsx")
+def export_expenses_xlsx(
+    year: int | None = Query(default=None),
+    budget_item_id: int | None = Query(default=None),
+    scenario_id: int | None = Query(default=None),
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    status_filter: str | None = Query(default=None),
+    include_out_of_budget: bool = Query(default=True),
+    show_cancelled: bool = Query(default=False),
+    show_out_of_budget: bool = Query(default=False),
+    mine_only: bool = Query(default=False),
+    today_only: bool = Query(default=False),
+    capex_opex: str | None = Query(default=None),
+    session: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+):
+    rows = list_expenses(
+        year,
+        budget_item_id,
+        scenario_id,
+        start_date,
+        end_date,
+        status_filter,
+        include_out_of_budget,
+        show_cancelled,
+        show_out_of_budget,
+        mine_only,
+        today_only,
+        capex_opex,
+        session,
+        current_user,
+    )
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Harcamalar"
+    ws.append(["Tarih", "Bütçe Kalemi", "Departman", "Tutar", "Planlanan", "Harcanan", "Tasarruf", "Tasarruf %"])
+    for row in rows:
+        ws.append(
+            [
+                row.expense_date.isoformat() if row.expense_date else "",
+                row.budget_name or row.budget_code or "",
+                row.department or "",
+                float(row.amount or 0),
+                float(row.planned_amount or 0),
+                float(row.spent_amount or 0),
+                float(row.saving_amount or 0),
+                float(row.saving_pct or 0),
+            ]
+        )
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    response = Response(
+        content=output.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response.headers["Content-Disposition"] = f"attachment; filename=harcamalar_{year or date.today().year}.xlsx"
+    return response

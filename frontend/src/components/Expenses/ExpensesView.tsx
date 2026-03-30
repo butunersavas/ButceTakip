@@ -97,6 +97,10 @@ export interface Expense {
   updated_by_name?: string | null;
   created_by_username?: string | null;
   updated_by_username?: string | null;
+  planned_amount?: number | null;
+  spent_amount?: number | null;
+  saving_amount?: number | null;
+  saving_pct?: number | null;
 }
 
 interface ExpensePayload {
@@ -203,6 +207,9 @@ export default function ExpensesView() {
   const [formQuantity, setFormQuantity] = useState<string>("1");
   const [formUnitPrice, setFormUnitPrice] = useState<string>("0");
   const [formBudgetItemId, setFormBudgetItemId] = useState<number | null>(null);
+  const [formExpenseDate, setFormExpenseDate] = useState<string>(dayjs().format("YYYY-MM-DD"));
+  const [formPlannedAmount, setFormPlannedAmount] = useState<number | null>(null);
+  const [plannedAmountMessage, setPlannedAmountMessage] = useState<string | null>(null);
   const [filterModel, setFilterModel] = useState<GridFilterModel>({ items: [] });
   const [sortModel, setSortModel] = useState<GridSortModel>([]);
   const [columnVisibilityModel, setColumnVisibilityModel] =
@@ -504,6 +511,9 @@ export default function ExpensesView() {
     setFormQuantity("1");
     setFormUnitPrice("0");
     setFormBudgetItemId(budgetItemId ?? null);
+    setFormExpenseDate(dayjs().format("YYYY-MM-DD"));
+    setFormPlannedAmount(null);
+    setPlannedAmountMessage(null);
     setDialogOpen(true);
   }, [budgetItemId, setDialogOpen, setEditingExpense, setFormQuantity, setFormUnitPrice]);
 
@@ -513,6 +523,7 @@ export default function ExpensesView() {
       setFormQuantity(String(expense.quantity ?? 1));
       setFormUnitPrice(String(expense.unit_price ?? 0));
       setFormBudgetItemId(expense.budget_item_id ?? null);
+      setFormExpenseDate(dayjs(expense.expense_date).format("YYYY-MM-DD"));
       setDialogOpen(true);
     },
     [setDialogOpen, setEditingExpense, setFormQuantity, setFormUnitPrice]
@@ -594,6 +605,35 @@ export default function ExpensesView() {
       0
     );
   }, [safeExpenses]);
+
+  useEffect(() => {
+    const fetchPlannedAmount = async () => {
+      if (!dialogOpen || !formBudgetItemId || !scenarioId || !formExpenseDate) {
+        setFormPlannedAmount(null);
+        setPlannedAmountMessage(null);
+        return;
+      }
+      try {
+        const { data } = await client.get<{
+          planned_amount: number | null;
+          is_resolved: boolean;
+          message: string | null;
+        }>("/expenses/planned-amount", {
+          params: {
+            budget_item_id: formBudgetItemId,
+            scenario_id: scenarioId,
+            expense_date: formExpenseDate,
+          }
+        });
+        setFormPlannedAmount(data.planned_amount);
+        setPlannedAmountMessage(data.message ?? null);
+      } catch {
+        setFormPlannedAmount(null);
+        setPlannedAmountMessage(null);
+      }
+    };
+    fetchPlannedAmount();
+  }, [client, dialogOpen, formBudgetItemId, formExpenseDate, scenarioId]);
 
   const cancelledTotal = useMemo(() => {
     return safeExpenses.reduce(
@@ -773,6 +813,21 @@ export default function ExpensesView() {
           }
 
           return formatCurrency(num);
+        }
+      },
+      {
+        field: "saving_amount",
+        headerName: "Tasarruf",
+        width: 140,
+        valueGetter: (_value, row) => Number(row.saving_amount ?? 0),
+        renderCell: ({ row }) => {
+          const value = Number(row.saving_amount ?? 0);
+          if (value <= 0) return "-";
+          return (
+            <Typography variant="body2" sx={{ color: "success.dark", fontWeight: 600 }}>
+              {formatCurrency(value)}
+            </Typography>
+          );
         }
       },
       {
@@ -1269,14 +1324,42 @@ export default function ExpensesView() {
             transformOrigin={{ vertical: "top", horizontal: "right" }}
           >
             <MenuItem onClick={handleExportCsv}>Dışa Aktar (CSV)</MenuItem>
-            <MenuItem onClick={handleExportXlsx}>Dışa Aktar (XLSX)</MenuItem>
+          <MenuItem
+            onClick={async () => {
+              const params: Record<string, string | number | boolean> = {};
+              if (year) params.year = Number(year);
+              if (scenarioId) params.scenario_id = scenarioId;
+              if (budgetItemId) params.budget_item_id = budgetItemId;
+              if (startDate) params.start_date = startDate;
+              if (endDate) params.end_date = endDate;
+              if (capexOpex) params.capex_opex = capexOpex;
+              params.include_out_of_budget = true;
+              params.show_cancelled = true;
+              const response = await client.get("/expenses/export/xlsx", {
+                params,
+                responseType: "blob"
+              });
+              const url = window.URL.createObjectURL(new Blob([response.data]));
+              const link = document.createElement("a");
+              link.href = url;
+              link.download = `harcamalar_${year || new Date().getFullYear()}.xlsx`;
+              document.body.appendChild(link);
+              link.click();
+              link.remove();
+              window.URL.revokeObjectURL(url);
+              handleMenuClose();
+            }}
+          >
+            Dışa Aktar (XLSX)
+          </MenuItem>
             <MenuItem onClick={handleShowColumns}>Kolon Seçimi</MenuItem>
           </Menu>
-          <Box sx={{ height: 520, width: "100%" }}>
+          <Box sx={{ width: "100%" }}>
             {showListLoadError ? (
               <Alert severity="error">Liste yüklenemedi.</Alert>
             ) : (
               <DataGrid
+                autoHeight
                 apiRef={apiRef}
                 rows={rows ?? []}
                 columns={columns}
@@ -1435,14 +1518,25 @@ export default function ExpensesView() {
                 </Grid>
                 <Grid item xs={12} md={4}>
                   <TextField
+                    label="Planlanan Bütçe"
+                    value={formPlannedAmount != null ? formPlannedAmount.toFixed(2) : ""}
+                    InputProps={{ readOnly: true }}
+                    placeholder="Otomatik"
+                    fullWidth
+                  />
+                </Grid>
+                {plannedAmountMessage && (
+                  <Grid item xs={12}>
+                    <Alert severity="info">{plannedAmountMessage}</Alert>
+                  </Grid>
+                )}
+                <Grid item xs={12} md={4}>
+                  <TextField
                     label="Tarih"
                     name="expense_date"
                     type="date"
-                    defaultValue={
-                      editingExpense?.expense_date
-                        ? dayjs(editingExpense.expense_date).format("YYYY-MM-DD")
-                        : dayjs().format("YYYY-MM-DD")
-                    }
+                    value={formExpenseDate}
+                    onChange={(event) => setFormExpenseDate(event.target.value)}
                     InputLabelProps={{ shrink: true }}
                     required
                     fullWidth

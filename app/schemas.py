@@ -33,7 +33,11 @@ def _normalize_warranty_type_alias(value: str | None) -> str | None:
         return value
     normalized = value.strip().upper()
     if normalized == "DOMAIN_SSL":
-        return "LICENSE"
+        return "CERTIFICATE"
+    if normalized in {"SERTIFIKA", "SERTİFİKA"}:
+        return "CERTIFICATE"
+    if normalized in {"SOZLESME", "SÖZLEŞME"}:
+        return "CONTRACT"
     return normalized
 
 
@@ -479,6 +483,10 @@ class ExpenseRead(SQLModel, table=False):
     updated_by_name: Optional[str] = None
     created_by_username: Optional[str] = None
     updated_by_username: Optional[str] = None
+    planned_amount: Optional[float] = None
+    spent_amount: Optional[float] = None
+    saving_amount: Optional[float] = None
+    saving_pct: Optional[float] = None
 
     class Config:
         orm_mode = True
@@ -514,6 +522,18 @@ class WarrantyItemBase(BaseModel):
     reminder_days: Optional[int] = Field(default=30, ge=0)
     remind_days: Optional[int] = Field(default=30, ge=0)
     remind_days_before: Optional[int] = Field(default=30, ge=0)
+    ssl_certificate: Optional[str] = None
+    certificate_type: Optional[str] = None
+    contract_end_date: Optional[date] = None
+    vendor_company: Optional[str] = None
+    tax_number: Optional[str] = None
+    service_type: Optional[str] = None
+    subscription_circuit_number: Optional[str] = None
+    location_name: Optional[str] = None
+    service_number: Optional[str] = None
+    speed: Optional[str] = None
+    commitment_end_date: Optional[date] = None
+    billing_account_number: Optional[str] = None
 
     @validator("type", pre=True)
     def normalize_warranty_type(cls, value: WarrantyItemType | str) -> WarrantyItemType | str:  # noqa: D417
@@ -533,6 +553,16 @@ class WarrantyItemBase(BaseModel):
         "certificate_issuer",
         "renewal_owner",
         "renewal_responsible",
+        "ssl_certificate",
+        "certificate_type",
+        "vendor_company",
+        "tax_number",
+        "service_type",
+        "subscription_circuit_number",
+        "location_name",
+        "service_number",
+        "speed",
+        "billing_account_number",
         pre=True,
     )
     def normalize_warranty_text(cls, value: str | None) -> str | None:  # noqa: D417
@@ -562,6 +592,10 @@ class WarrantyItemBase(BaseModel):
             values["end_date"] = values.get("endDate")
         if "expiration_date" in values and "end_date" not in values:
             values["end_date"] = values.get("expiration_date")
+        if "contractEndDate" in values and "contract_end_date" not in values:
+            values["contract_end_date"] = values.get("contractEndDate")
+        if "commitmentEndDate" in values and "commitment_end_date" not in values:
+            values["commitment_end_date"] = values.get("commitmentEndDate")
         return values
 
     @validator("end_date", pre=True)
@@ -584,6 +618,10 @@ class WarrantyItemBase(BaseModel):
                 raise ValueError("end_date must be YYYY-MM-DD or DD.MM.YYYY") from exc
         raise ValueError("Invalid end_date")
 
+    @validator("contract_end_date", "commitment_end_date", pre=True)
+    def parse_extra_dates(cls, value: date | str | None) -> date | None:  # noqa: D417
+        return WarrantyItemBase.parse_end_date(value)
+
 
 class WarrantyItemCreate(WarrantyItemBase):
     class Config:
@@ -604,6 +642,18 @@ class WarrantyItemUpdate(BaseModel):
     reminder_days: Optional[int] = None
     remind_days: Optional[int] = None
     remind_days_before: Optional[int] = None
+    ssl_certificate: Optional[str] = None
+    certificate_type: Optional[str] = None
+    contract_end_date: Optional[date] = None
+    vendor_company: Optional[str] = None
+    tax_number: Optional[str] = None
+    service_type: Optional[str] = None
+    subscription_circuit_number: Optional[str] = None
+    location_name: Optional[str] = None
+    service_number: Optional[str] = None
+    speed: Optional[str] = None
+    commitment_end_date: Optional[date] = None
+    billing_account_number: Optional[str] = None
     is_active: Optional[bool] = None
 
     @validator("type", pre=True)
@@ -624,6 +674,16 @@ class WarrantyItemUpdate(BaseModel):
         "certificate_issuer",
         "renewal_owner",
         "renewal_responsible",
+        "ssl_certificate",
+        "certificate_type",
+        "vendor_company",
+        "tax_number",
+        "service_type",
+        "subscription_circuit_number",
+        "location_name",
+        "service_number",
+        "speed",
+        "billing_account_number",
         pre=True,
     )
     def normalize_update_warranty_text(cls, value: str | None) -> str | None:  # noqa: D417
@@ -653,6 +713,10 @@ class WarrantyItemUpdate(BaseModel):
             values["end_date"] = values.get("endDate")
         if "expiration_date" in values and "end_date" not in values:
             values["end_date"] = values.get("expiration_date")
+        if "contractEndDate" in values and "contract_end_date" not in values:
+            values["contract_end_date"] = values.get("contractEndDate")
+        if "commitmentEndDate" in values and "commitment_end_date" not in values:
+            values["commitment_end_date"] = values.get("commitmentEndDate")
         if "renewal_owner" not in values and "renewalResponsible" in values:
             values["renewal_owner"] = values.get("renewalResponsible")
         return values
@@ -677,6 +741,10 @@ class WarrantyItemUpdate(BaseModel):
                 raise ValueError("end_date must be YYYY-MM-DD or DD.MM.YYYY") from exc
         raise ValueError("Invalid end_date")
 
+    @validator("contract_end_date", "commitment_end_date", pre=True)
+    def parse_extra_dates(cls, value: date | str | None) -> date | None:  # noqa: D417
+        return WarrantyItemUpdate.parse_end_date(value)
+
     class Config:
         allow_population_by_field_name = True
 
@@ -696,6 +764,18 @@ class WarrantyItemRead(SQLModel, table=False):
     reminder_days: Optional[int] = None
     remind_days: Optional[int] = None
     remind_days_before: Optional[int] = None
+    ssl_certificate: Optional[str] = None
+    certificate_type: Optional[str] = None
+    contract_end_date: Optional[date] = None
+    vendor_company: Optional[str] = None
+    tax_number: Optional[str] = None
+    service_type: Optional[str] = None
+    subscription_circuit_number: Optional[str] = None
+    location_name: Optional[str] = None
+    service_number: Optional[str] = None
+    speed: Optional[str] = None
+    commitment_end_date: Optional[date] = None
+    billing_account_number: Optional[str] = None
     is_active: bool
     created_by_id: Optional[int] = None
     updated_by_id: Optional[int] = None
@@ -758,6 +838,30 @@ class OverBudgetItem(BaseModel):
 class OverBudgetResponse(BaseModel):
     summary: OverBudgetSummary
     items: list[OverBudgetItem]
+
+
+class SavingSummary(BaseModel):
+    total_saving: float
+    saving_item_count: int
+
+
+class SavingItem(BaseModel):
+    budget_item_id: int | None = None
+    budget_code: str
+    budget_name: str
+    department: str | None = None
+    plan: float
+    actual: float
+    saving: float
+    saving_pct: float
+    year: int
+    month: int | None = None
+    scenario: int | None = None
+
+
+class SavingResponse(BaseModel):
+    summary: SavingSummary
+    items: list[SavingItem]
 
 
 class SpendMonthlySummary(BaseModel):

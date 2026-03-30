@@ -137,6 +137,30 @@ export default function PurchaseTrackingView() {
           <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems={{ sm: "center" }}>
             <Typography variant="h6" fontWeight={700}>Satın Alma Talep Takibi</Typography>
             <Button variant="outlined" onClick={() => navigate("/dashboard")}>Dashboard'a Dön</Button>
+            <Button
+              variant="outlined"
+              onClick={async () => {
+                const { data } = await client.get("/purchase-tracking/export/xlsx", {
+                  params: {
+                    year: appliedFilters.year,
+                    month: appliedFilters.month || undefined,
+                    department: appliedFilters.department || undefined,
+                    scenario_id: appliedFilters.scenarioId || undefined,
+                    budget_item: appliedFilters.budgetItemId || undefined,
+                    capex_opex: appliedFilters.capexOpex || undefined,
+                  },
+                  responseType: "blob",
+                });
+                const url = window.URL.createObjectURL(new Blob([data]));
+                const link = document.createElement("a");
+                link.href = url;
+                link.download = `satin_alma_takibi_${appliedFilters.year}.xlsx`;
+                link.click();
+                window.URL.revokeObjectURL(url);
+              }}
+            >
+              Excel Dışa Aktar
+            </Button>
           </Stack>
           <Grid container spacing={2} sx={{ mt: 1 }}>
             <Grid item xs={12} sm={2}><TextField label="Yıl" type="number" value={year} onChange={(e) => setYear(Number(e.target.value) || currentYear)} fullWidth /></Grid>

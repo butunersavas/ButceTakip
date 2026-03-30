@@ -742,15 +742,42 @@ export default function PlansView() {
                 spacing={1}
                 mb={1}
               >
-                <Typography variant="subtitle1" fontWeight={600}>
-                  Plan Kayıtları
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Seçili filtrelere göre plan toplamı:{" "}
-                  <Box component="span" fontWeight={700} color="text.primary">
-                    {formattedFilteredTotal}
-                  </Box>
-                </Typography>
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems={{ sm: "center" }}>
+                  <Typography variant="subtitle1" fontWeight={600}>
+                    Plan Kayıtları
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Seçili filtrelere göre plan toplamı:{" "}
+                    <Box component="span" fontWeight={700} color="text.primary">
+                      {formattedFilteredTotal}
+                    </Box>
+                  </Typography>
+                </Stack>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={async () => {
+                    const { data } = await client.get("/plans/export/xlsx", {
+                      params: {
+                        year,
+                        scenario_id: scenarioId ?? undefined,
+                        budget_item_id: budgetItemId ?? undefined,
+                        month: monthFilter || undefined,
+                        department: departmentFilter || undefined,
+                        capex_opex: capexOpex || undefined,
+                      },
+                      responseType: "blob",
+                    });
+                    const url = window.URL.createObjectURL(new Blob([data]));
+                    const link = document.createElement("a");
+                    link.href = url;
+                    link.download = `plan_kayitlari_${year}.xlsx`;
+                    link.click();
+                    window.URL.revokeObjectURL(url);
+                  }}
+                >
+                  Excel Dışa Aktar
+                </Button>
               </Stack>
               <Box sx={{ width: "100%", overflowX: "auto" }}>
                 <DataGrid
