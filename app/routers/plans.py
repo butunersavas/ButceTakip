@@ -1,6 +1,10 @@
 from datetime import datetime
 
+import io
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import Response
+from openpyxl import Workbook
 from sqlalchemy import and_, func, or_
 from sqlmodel import Session, select
 
@@ -139,6 +143,46 @@ def list_plans(
         query = query.where(PlanEntry.department == department)
     rows = session.exec(query).all()
     return [_build_plan_read(row._mapping) for row in rows]
+
+
+@router.get("/export/xlsx")
+def export_plans_xlsx(
+    year: int = Query(...),
+    scenario_id: int | None = None,
+    budget_item_id: int | None = None,
+    month: int | None = Query(default=None),
+    department: str | None = Query(default=None),
+    capex_opex: str | None = Query(default=None),
+    session: Session = Depends(get_db_session),
+    _: User = Depends(get_current_user),
+):
+    rows = list_plans(year, scenario_id, budget_item_id, month, department, capex_opex, session, _)
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Plan Kayitlari"
+    ws.append(["Yıl", "Ay", "Senaryo", "Departman", "Bütçe Kodu", "Bütçe Kalemi", "Capex/Opex", "Tutar"])
+    for row in rows:
+        ws.append(
+            [
+                row.year,
+                row.month,
+                row.scenario_name or row.scenario_id,
+                row.department or "",
+                row.budget_code or "",
+                row.budget_name or "",
+                row.capex_opex or "",
+                float(row.amount or 0),
+            ]
+        )
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    response = Response(
+        content=output.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response.headers["Content-Disposition"] = f"attachment; filename=plan_kayitlari_{year}.xlsx"
+    return response
 
 
 @router.get("/aggregate", response_model=list[PlanAggregateRead])

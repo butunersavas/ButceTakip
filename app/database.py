@@ -157,6 +157,27 @@ def ensure_warranty_schema(inspector) -> None:
     if "updated_by_user_id" not in warranty_columns:
         with engine.begin() as connection:
             connection.execute(text("ALTER TABLE warranty_items ADD COLUMN updated_by_user_id INTEGER"))
+    optional_text_columns = [
+        "ssl_certificate",
+        "certificate_type",
+        "vendor_company",
+        "tax_number",
+        "service_type",
+        "subscription_circuit_number",
+        "location_name",
+        "service_number",
+        "speed",
+        "billing_account_number",
+    ]
+    for column_name in optional_text_columns:
+        if column_name not in warranty_columns:
+            with engine.begin() as connection:
+                connection.execute(text(f"ALTER TABLE warranty_items ADD COLUMN {column_name} TEXT"))
+    optional_date_columns = ["contract_end_date", "commitment_end_date"]
+    for column_name in optional_date_columns:
+        if column_name not in warranty_columns:
+            with engine.begin() as connection:
+                connection.execute(text(f"ALTER TABLE warranty_items ADD COLUMN {column_name} DATE"))
 
 
 def _apply_schema_upgrades() -> None:

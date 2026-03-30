@@ -1,8 +1,11 @@
 from datetime import date, datetime
 
+import io
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import Response
+from openpyxl import Workbook
 from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import aliased
@@ -100,6 +103,16 @@ def _build_warranty_read(
     read_item.certificate_issuer = _normalize_output_text(read_item.certificate_issuer)
     read_item.renewal_owner = _normalize_output_text(read_item.renewal_owner)
     read_item.renewal_responsible = _normalize_output_text(read_item.renewal_responsible)
+    read_item.ssl_certificate = _normalize_output_text(read_item.ssl_certificate)
+    read_item.certificate_type = _normalize_output_text(read_item.certificate_type)
+    read_item.vendor_company = _normalize_output_text(read_item.vendor_company)
+    read_item.tax_number = _normalize_output_text(read_item.tax_number)
+    read_item.service_type = _normalize_output_text(read_item.service_type)
+    read_item.subscription_circuit_number = _normalize_output_text(read_item.subscription_circuit_number)
+    read_item.location_name = _normalize_output_text(read_item.location_name)
+    read_item.service_number = _normalize_output_text(read_item.service_number)
+    read_item.speed = _normalize_output_text(read_item.speed)
+    read_item.billing_account_number = _normalize_output_text(read_item.billing_account_number)
     remind_days_before = _resolve_remind_days(item)
     if read_item.remind_days_before is None:
         read_item.remind_days_before = remind_days_before
@@ -359,3 +372,38 @@ def list_critical_warranty_items(
                 )
             )
     return critical_items
+
+
+@router.get("/export/xlsx")
+def export_warranty_items_xlsx(
+    include_inactive: bool = False,
+    session: Session = Depends(get_db_session),
+    _: User = Depends(get_current_user),
+):
+    rows = list_warranty_items(include_inactive, session, _)
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Garanti Kayitlari"
+    ws.append(["Tip", "Ad", "Lokasyon", "Bitiş", "Domain/SSL", "Firma", "Not", "Durum"])
+    for row in rows:
+        ws.append(
+            [
+                row.type.value if row.type else "",
+                row.name,
+                row.location,
+                row.end_date.isoformat() if row.end_date else "",
+                row.ssl_certificate or row.domain or "",
+                row.vendor_company or row.issuer or "",
+                row.note or "",
+                row.status or "",
+            ]
+        )
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    response = Response(
+        content=output.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response.headers["Content-Disposition"] = "attachment; filename=garanti_kayitlari.xlsx"
+    return response

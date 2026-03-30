@@ -1,6 +1,9 @@
 from datetime import datetime
+import io
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
+from openpyxl import Workbook
 from sqlalchemy import func
 from sqlmodel import Session, select
 
@@ -170,3 +173,43 @@ def update_purchase_tracking(
         purchase_requested=plan.purchase_requested,
         purchase_requested_at=plan.purchase_requested_at,
     )
+
+
+@router.get("/export/xlsx")
+def export_purchase_tracking(
+    year: int = Query(...),
+    month: str | int | None = Query(default=None),
+    scenario_id: int | None = Query(default=None),
+    department: str | None = Query(default=None),
+    budget_item: int | None = Query(default=None),
+    capex_opex: str | None = Query(default=None),
+    session: Session = Depends(get_db_session),
+    user: User = Depends(get_current_user),
+):
+    rows = list_purchase_tracking(
+        year, month, scenario_id, department, budget_item, capex_opex, session, user
+    )
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Satin Alma Takibi"
+    ws.append(["Yıl", "Ay", "Kalem", "Departman", "Tutar", "Durum"])
+    for row in rows:
+        ws.append(
+            [
+                row.year,
+                row.month,
+                f"{row.budget_code or ''} {row.budget_name or ''}".strip(),
+                row.department or "",
+                float(row.amount or 0),
+                row.status,
+            ]
+        )
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    response = Response(
+        content=output.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response.headers["Content-Disposition"] = f"attachment; filename=satin_alma_takibi_{year}.xlsx"
+    return response

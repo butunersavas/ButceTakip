@@ -22,6 +22,8 @@ class WarrantyItemType(str, enum.Enum):
     SERVICE = "SERVICE"
     LICENSE = "LICENSE"
     DOMAIN_SSL = "DOMAIN_SSL"
+    CERTIFICATE = "CERTIFICATE"
+    CONTRACT = "CONTRACT"
 
 
 class User(TimestampMixin, SQLModel, table=True):
@@ -229,6 +231,18 @@ class WarrantyItem(TimestampMixin, SQLModel, table=True):
     reminder_days: Optional[int] = Field(default=30, nullable=True)
     remind_days: Optional[int] = Field(default=30, nullable=True)
     remind_days_before: Optional[int] = Field(default=30, nullable=True)
+    ssl_certificate: Optional[str] = Field(default=None, nullable=True)
+    certificate_type: Optional[str] = Field(default=None, nullable=True)
+    contract_end_date: Optional[date] = Field(default=None, nullable=True)
+    vendor_company: Optional[str] = Field(default=None, nullable=True)
+    tax_number: Optional[str] = Field(default=None, nullable=True)
+    service_type: Optional[str] = Field(default=None, nullable=True)
+    subscription_circuit_number: Optional[str] = Field(default=None, nullable=True)
+    location_name: Optional[str] = Field(default=None, nullable=True)
+    service_number: Optional[str] = Field(default=None, nullable=True)
+    speed: Optional[str] = Field(default=None, nullable=True)
+    commitment_end_date: Optional[date] = Field(default=None, nullable=True)
+    billing_account_number: Optional[str] = Field(default=None, nullable=True)
     is_active: bool = Field(default=True, nullable=False)
     created_by_id: Optional[int] = Field(default=None, foreign_key="users.id")
     updated_by_id: Optional[int] = Field(default=None, foreign_key="users.id")
