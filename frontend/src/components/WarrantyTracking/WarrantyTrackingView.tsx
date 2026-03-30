@@ -22,7 +22,14 @@ import axios from "axios";
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS } from "../../constants/pagination";
 
-type WarrantyItemType = "DEVICE" | "MAINTENANCE" | "SERVICE" | "LICENSE" | "DOMAIN_SSL";
+type WarrantyItemType =
+  | "DEVICE"
+  | "MAINTENANCE"
+  | "SERVICE"
+  | "LICENSE"
+  | "DOMAIN_SSL"
+  | "CERTIFICATE"
+  | "CONTRACT";
 
 type WarrantyItem = {
   id: number | string;
@@ -76,6 +83,8 @@ const typeOptions: Array<{ value: WarrantyItemType; label: string }> = [
   { value: "MAINTENANCE", label: "Bakım" },
   { value: "SERVICE", label: "Hizmet" },
   { value: "LICENSE", label: "Lisans" },
+  { value: "CERTIFICATE", label: "Sertifika" },
+  { value: "CONTRACT", label: "Sözleşme" },
 ];
 
 const INITIAL_FORM_STATE: WarrantyItemForm = {
@@ -130,6 +139,8 @@ const formatTypeLabel = (value?: string | null) => {
   if (value === "MAINTENANCE") return "Bakım";
   if (value === "SERVICE") return "Hizmet";
   if (value === "LICENSE" || value === "DOMAIN_SSL") return "Lisans";
+  if (value === "CERTIFICATE") return "Sertifika";
+  if (value === "CONTRACT") return "Sözleşme";
   return value ?? "-";
 };
 

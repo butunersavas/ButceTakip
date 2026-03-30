@@ -1,6 +1,9 @@
 from datetime import datetime
+from io import BytesIO
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
+from openpyxl import Workbook
 from sqlalchemy import and_, func, or_
 from sqlmodel import Session, select
 
@@ -248,3 +251,48 @@ def delete_plan_entry(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan not found")
     session.delete(plan)
     session.commit()
+
+
+@router.get("/export/xlsx")
+def export_plans_xlsx(
+    year: int = Query(...),
+    scenario_id: int | None = Query(default=None),
+    session: Session = Depends(get_db_session),
+    _: User = Depends(get_current_user),
+):
+    query = (
+        select(PlanEntry, BudgetItem, Scenario)
+        .join(BudgetItem, BudgetItem.id == PlanEntry.budget_item_id)
+        .join(Scenario, Scenario.id == PlanEntry.scenario_id)
+        .where(PlanEntry.year == year)
+    )
+    if scenario_id is not None:
+        query = query.where(PlanEntry.scenario_id == scenario_id)
+    rows = session.exec(query.order_by(PlanEntry.month, BudgetItem.code)).all()
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Plans"
+    ws.append(["id", "year", "month", "scenario", "budget_code", "budget_name", "department", "amount"])
+    for plan, budget_item, scenario in rows:
+        ws.append(
+            [
+                plan.id,
+                plan.year,
+                plan.month,
+                scenario.name,
+                budget_item.code,
+                budget_item.name,
+                plan.department or "",
+                float(plan.amount or 0),
+            ]
+        )
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="plans_{year}.xlsx"'},
+    )

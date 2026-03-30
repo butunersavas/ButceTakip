@@ -1,8 +1,11 @@
 from datetime import date, datetime
 import ipaddress
 import logging
+from io import BytesIO
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
+from openpyxl import Workbook
 from sqlalchemy import and_, func, or_
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import aliased
@@ -10,7 +13,7 @@ from sqlmodel import Session, select
 
 from app.dependencies import get_current_user, get_db_session
 from app.models import BudgetItem, Expense, ExpenseStatus, PlanEntry, Scenario, User
-from app.schemas import ExpenseCreate, ExpenseRead, ExpenseUpdate
+from app.schemas import ExpenseCreate, ExpenseRead, ExpenseUpdate, PlannedAmountResponse
 
 router = APIRouter(prefix="/expenses", tags=["Expenses"])
 logger = logging.getLogger(__name__)
@@ -390,3 +393,94 @@ def delete_expense(
         raise HTTPException(status_code=403, detail="Not allowed")
     session.delete(expense)
     session.commit()
+
+
+@router.get("/planned-amount", response_model=PlannedAmountResponse)
+def get_expense_planned_amount(
+    year: int = Query(...),
+    scenario_id: int | None = Query(default=None),
+    month: int | None = Query(default=None, ge=1, le=12),
+    session: Session = Depends(get_db_session),
+    _: User = Depends(get_current_user),
+) -> PlannedAmountResponse:
+    plan_query = select(func.coalesce(func.sum(PlanEntry.amount), 0.0)).where(PlanEntry.year == year)
+    actual_query = select(func.coalesce(func.sum(Expense.amount), 0.0)).where(
+        func.extract("year", Expense.expense_date) == year,
+        Expense.status == ExpenseStatus.RECORDED,
+    )
+    if scenario_id is not None:
+        plan_query = plan_query.where(PlanEntry.scenario_id == scenario_id)
+        actual_query = actual_query.where(Expense.scenario_id == scenario_id)
+    if month is not None:
+        plan_query = plan_query.where(PlanEntry.month == month)
+        actual_query = actual_query.where(func.extract("month", Expense.expense_date) == month)
+
+    planned_amount = float(session.exec(plan_query).first() or 0.0)
+    actual_amount = float(session.exec(actual_query).first() or 0.0)
+    return PlannedAmountResponse(
+        year=year,
+        scenario_id=scenario_id,
+        month=month,
+        planned_amount=planned_amount,
+        actual_amount=actual_amount,
+        saving_amount=planned_amount - actual_amount,
+    )
+
+
+@router.get("/export/xlsx")
+def export_expenses_xlsx(
+    year: int = Query(...),
+    scenario_id: int | None = Query(default=None),
+    session: Session = Depends(get_db_session),
+    _: User = Depends(get_current_user),
+):
+    query = (
+        select(Expense, BudgetItem, Scenario)
+        .join(BudgetItem, BudgetItem.id == Expense.budget_item_id)
+        .outerjoin(Scenario, Scenario.id == Expense.scenario_id)
+        .where(func.extract("year", Expense.expense_date) == year)
+    )
+    if scenario_id is not None:
+        query = query.where(Expense.scenario_id == scenario_id)
+    rows = session.exec(query.order_by(Expense.expense_date.desc())).all()
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Expenses"
+    ws.append(
+        [
+            "id",
+            "expense_date",
+            "scenario",
+            "budget_code",
+            "budget_name",
+            "amount",
+            "status",
+            "vendor",
+            "description",
+        ]
+    )
+    for expense, budget_item, scenario in rows:
+        ws.append(
+            [
+                expense.id,
+                expense.expense_date.isoformat(),
+                scenario.name if scenario else "",
+                budget_item.code if budget_item else expense.budget_code,
+                budget_item.name if budget_item else "",
+                float(expense.amount or 0),
+                expense.status.value if expense.status else "",
+                expense.vendor or "",
+                expense.description or "",
+            ]
+        )
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    filename = f"expenses_{year}.xlsx"
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
