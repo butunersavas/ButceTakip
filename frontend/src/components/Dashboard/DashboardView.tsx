@@ -1251,7 +1251,19 @@ export default function DashboardView() {
           </FiltersBar>
 
           <DashboardSectionBoundary title="Özet kartlar">
-            <Grid container spacing={2} sx={{ mb: 3 }}>
+            <Box
+              sx={{
+                mb: 3,
+                display: "grid",
+                gridTemplateColumns: {
+                  xs: "repeat(1, minmax(0, 1fr))",
+                  sm: "repeat(2, minmax(0, 1fr))",
+                  md: "repeat(3, minmax(0, 1fr))",
+                  lg: "repeat(5, minmax(0, 1fr))"
+                },
+                gap: 2
+              }}
+            >
               {[
                 {
                   title: "Toplam Plan",
@@ -1302,48 +1314,18 @@ export default function DashboardView() {
                   filterKey: "total_saving" as const
                 }
               ].map((card) => (
-                <Grid item xs={12} sm={6} md={3} key={card.title}>
+                <Box key={card.title} sx={{ minWidth: 0 }}>
                   <SummaryCard
                     {...card}
                     isLoading={isLoading}
                     selected={selectedKpiFilter === card.filterKey}
                     onClick={() => handleSummaryCardClick(card.filterKey)}
                   />
-                </Grid>
+                </Box>
               ))}
-            </Grid>
+            </Box>
           </DashboardSectionBoundary>
           <Stack spacing={3}>
-            <DashboardSectionBoundary title="Riskteki Kalemler">
-              <Card>
-                <CardHeader title="Riskteki Kalemler" subheader="Planın %80 ve üzeri harcananlar" />
-                <CardContent>
-                  {riskyItems.length === 0 ? (
-                    <Typography variant="body2" color="text.secondary">
-                      Bu ay için kritik seviyede kalem bulunmuyor.
-                    </Typography>
-                  ) : (
-                    <List dense>
-                      {riskyItems?.map((item) => {
-                        const plan = toSafeNumber(item.plan);
-                        const actual = toSafeNumber(item.actual);
-                        const ratioPct = Math.round(toSafeNumber(item.ratio) * 100);
-                        return (
-                          <ListItem key={item.budget_item_id}>
-                            <ListItemText
-                              primary={formatBudgetLabel(item.budget_name, item.budget_code)}
-                              secondary={`Plan: ${plan.toLocaleString()} | Gerçekleşen: ${actual.toLocaleString()} | %${ratioPct}`}
-                              primaryTypographyProps={{ variant: "body2" }}
-                            />
-                          </ListItem>
-                        );
-                      })}
-                    </List>
-                  )}
-                </CardContent>
-              </Card>
-            </DashboardSectionBoundary>
-
             {showOverBudgetSection ? (
               <DashboardSectionBoundary title="Aşım Yapan Kalemler">
                 <Box ref={overBudgetRef}>
@@ -1630,6 +1612,36 @@ export default function DashboardView() {
                         </Box>
                       ))}
                     </Box>
+                  )}
+                </CardContent>
+              </Card>
+            </DashboardSectionBoundary>
+
+            <DashboardSectionBoundary title="Riskteki Kalemler">
+              <Card>
+                <CardHeader title="Riskteki Kalemler" subheader="Planın %80 ve üzeri harcananlar" />
+                <CardContent>
+                  {riskyItems.length === 0 ? (
+                    <Typography variant="body2" color="text.secondary">
+                      Bu ay için kritik seviyede kalem bulunmuyor.
+                    </Typography>
+                  ) : (
+                    <List dense>
+                      {riskyItems?.map((item) => {
+                        const plan = toSafeNumber(item.plan);
+                        const actual = toSafeNumber(item.actual);
+                        const ratioPct = Math.round(toSafeNumber(item.ratio) * 100);
+                        return (
+                          <ListItem key={item.budget_item_id}>
+                            <ListItemText
+                              primary={formatBudgetLabel(item.budget_name, item.budget_code)}
+                              secondary={`Plan: ${plan.toLocaleString()} | Gerçekleşen: ${actual.toLocaleString()} | %${ratioPct}`}
+                              primaryTypographyProps={{ variant: "body2" }}
+                            />
+                          </ListItem>
+                        );
+                      })}
+                    </List>
                   )}
                 </CardContent>
               </Card>
@@ -2056,6 +2068,7 @@ export default function DashboardView() {
           <Button
             size="small"
             onClick={() => {
+              const exportSavings = async () => {
               const params = new URLSearchParams();
               params.set("year", String(debouncedFilters.year));
               if (debouncedFilters.scenarioId) params.set("scenario_id", String(debouncedFilters.scenarioId));
@@ -2063,8 +2076,27 @@ export default function DashboardView() {
               if (debouncedFilters.department) params.set("department", debouncedFilters.department);
               if (debouncedFilters.capexOpex) params.set("capex_opex", debouncedFilters.capexOpex);
               if (debouncedFilters.budgetItemId) params.set("budget_item_id", String(debouncedFilters.budgetItemId));
-              const base = client.defaults.baseURL ?? "";
-              window.open(`${base}/dashboard/savings-items/export/xlsx?${params.toString()}`, "_blank", "noopener,noreferrer");
+                try {
+                  const response = await client.get<Blob>(
+                    `/dashboard/savings-items/export/xlsx?${params.toString()}`,
+                    { responseType: "blob" }
+                  );
+                  const blobUrl = URL.createObjectURL(response.data);
+                  const link = document.createElement("a");
+                  link.href = blobUrl;
+                  link.download = `tasarruf-kalemleri-${debouncedFilters.year}.xlsx`;
+                  document.body.appendChild(link);
+                  link.click();
+                  link.remove();
+                  URL.revokeObjectURL(blobUrl);
+                } catch (_error) {
+                  setPurchaseStatusFeedback({
+                    severity: "error",
+                    message: "Tasarruf raporu dışa aktarılamadı."
+                  });
+                }
+              };
+              void exportSavings();
             }}
           >
             Excel Dışa Aktar

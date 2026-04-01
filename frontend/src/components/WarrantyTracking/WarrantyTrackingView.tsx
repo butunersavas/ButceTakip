@@ -311,8 +311,24 @@ export default function WarrantyTrackingView() {
   const nameLabel = isLicenseType ? "Lisans / Domain" : "Ad";
   const locationLabel = "Lokasyon";
   const handleExportXlsx = useCallback(() => {
-    const base = client.defaults.baseURL ?? "";
-    window.open(`${base}/warranty-items/export/xlsx`, "_blank", "noopener,noreferrer");
+    const exportFile = async () => {
+      try {
+        const response = await client.get<Blob>("/warranty-items/export/xlsx", {
+          responseType: "blob"
+        });
+        const blobUrl = URL.createObjectURL(response.data);
+        const link = document.createElement("a");
+        link.href = blobUrl;
+        link.download = "garanti-takibi.xlsx";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(blobUrl);
+      } catch (_error) {
+        setError("Excel dışa aktarma başarısız oldu.");
+      }
+    };
+    void exportFile();
   }, [client]);
 
   const loadItems = useCallback(async () => {

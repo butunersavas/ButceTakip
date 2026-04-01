@@ -130,6 +130,8 @@ export default function PlansView() {
   const [formError, setFormError] = useState<string | null>(null);
   const [formBudgetItemId, setFormBudgetItemId] = useState<number | null>(null);
   const [listError, setListError] = useState<string | null>(null);
+  const [saveFeedback, setSaveFeedback] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
   const { data: scenarios } = useQuery<Scenario[]>({
     queryKey: ["scenarios"],
     queryFn: async () => {
@@ -214,6 +216,7 @@ export default function PlansView() {
       queryClient.invalidateQueries({ queryKey: ["plan-aggregate"] });
       setDialogOpen(false);
       setFormError(null);
+      setSaveFeedback("Değişiklikler kaydedildi.");
     }
   });
 
@@ -610,12 +613,28 @@ export default function PlansView() {
     plansQuery.refetch();
   };
 
-  const handleExportXlsx = () => {
+  const handleExportXlsx = async () => {
     const params = new URLSearchParams();
     params.set("year", String(year));
     if (scenarioId) params.set("scenario_id", String(scenarioId));
-    const base = client.defaults.baseURL ?? "";
-    window.open(`${base}/plans/export/xlsx?${params.toString()}`, "_blank", "noopener,noreferrer");
+    try {
+      setExporting(true);
+      const response = await client.get<Blob>(`/plans/export/xlsx?${params.toString()}`, {
+        responseType: "blob"
+      });
+      const blobUrl = URL.createObjectURL(response.data);
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = `planlar-${year}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(blobUrl);
+    } catch (error: any) {
+      setListError(error?.response?.data?.detail ?? "Excel dışa aktarma sırasında bir hata oluştu.");
+    } finally {
+      setExporting(false);
+    }
   };
 
   const handleResetFilters = () => {
@@ -760,7 +779,7 @@ export default function PlansView() {
                       {formattedFilteredTotal}
                     </Box>
                   </Typography>
-                  <Button variant="outlined" size="small" onClick={handleExportXlsx}>
+                  <Button variant="outlined" size="small" onClick={() => void handleExportXlsx()} disabled={exporting}>
                     Excel Dışa Aktar
                   </Button>
                 </Stack>
@@ -879,6 +898,16 @@ export default function PlansView() {
       >
         <Alert severity="error" onClose={() => setListError(null)} sx={{ width: "100%" }}>
           {listError}
+        </Alert>
+      </Snackbar>
+      <Snackbar
+        open={Boolean(saveFeedback)}
+        autoHideDuration={2500}
+        onClose={() => setSaveFeedback(null)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+      >
+        <Alert severity="success" onClose={() => setSaveFeedback(null)} sx={{ width: "100%" }}>
+          {saveFeedback}
         </Alert>
       </Snackbar>
     </Stack>

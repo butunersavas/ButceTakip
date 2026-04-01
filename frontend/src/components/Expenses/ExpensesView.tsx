@@ -232,6 +232,8 @@ export default function ExpensesView() {
   const [attachmentDialogOpen, setAttachmentDialogOpen] = useState(false);
   const [selectedAttachmentExpense, setSelectedAttachmentExpense] = useState<Expense | null>(null);
   const [selectedAttachmentFile, setSelectedAttachmentFile] = useState<File | null>(null);
+  const [saveFeedback, setSaveFeedback] = useState<string | null>(null);
+  const [exportingXlsx, setExportingXlsx] = useState(false);
 
   const formatBytes = useCallback((bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
@@ -447,6 +449,7 @@ export default function ExpensesView() {
       refetchExpenses();
       setDialogOpen(false);
       setErrorMessage(null);
+      setSaveFeedback("Kaydedildi.");
     },
     onError: (error: unknown) => {
       console.error(error);
@@ -1011,7 +1014,7 @@ export default function ExpensesView() {
     handleMenuClose();
   };
 
-  const handleExportXlsx = () => {
+  const handleExportXlsx = async () => {
     const params = new URLSearchParams();
     if (year) params.set("year", String(year));
     if (scenarioId) params.set("scenario_id", String(scenarioId));
@@ -1019,9 +1022,25 @@ export default function ExpensesView() {
     if (startDate) params.set("start_date", startDate);
     if (endDate) params.set("end_date", endDate);
     if (capexOpex) params.set("capex_opex", capexOpex);
-    const base = client.defaults.baseURL ?? "";
-    window.open(`${base}/expenses/export/xlsx?${params.toString()}`, "_blank", "noopener,noreferrer");
-    handleMenuClose();
+    try {
+      setExportingXlsx(true);
+      const response = await client.get<Blob>(`/expenses/export/xlsx?${params.toString()}`, {
+        responseType: "blob"
+      });
+      const blobUrl = URL.createObjectURL(response.data);
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = `harcamalar-${year || "tum"}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(blobUrl);
+    } catch (error) {
+      setErrorMessage(resolveApiErrorMessage(error, "Excel dışa aktarma sırasında bir hata oluştu."));
+    } finally {
+      setExportingXlsx(false);
+      handleMenuClose();
+    }
   };
 
   const handleShowColumns = () => {
@@ -1089,6 +1108,16 @@ export default function ExpensesView() {
             Liste yüklenemedi.
           </Alert>
         </Snackbar>
+        <Snackbar
+          open={Boolean(saveFeedback)}
+          autoHideDuration={2200}
+          onClose={() => setSaveFeedback(null)}
+          anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        >
+          <Alert severity="success" onClose={() => setSaveFeedback(null)} sx={{ width: "100%" }}>
+            {saveFeedback}
+          </Alert>
+        </Snackbar>
         <Grid container spacing={2} sx={{ mb: 2 }}>
           {summaryCards.map((card) => {
             const isSelected = selectedExpenseFilter === card.key;
@@ -1152,7 +1181,12 @@ export default function ExpensesView() {
               Harcama Ekle
             </Typography>
             <Stack direction="row" spacing={1}>
-              <Button variant="outlined" startIcon={<DownloadIcon />} onClick={handleExportXlsx}>
+              <Button
+                variant="outlined"
+                startIcon={<DownloadIcon />}
+                onClick={() => void handleExportXlsx()}
+                disabled={exportingXlsx}
+              >
                 Excel Dışa Aktar
               </Button>
               <Button variant="contained" startIcon={<AddIcon />} onClick={handleCreate}>

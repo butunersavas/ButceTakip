@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Alert, Button, Card, CardContent, Grid, MenuItem, Stack, TextField, Typography } from "@mui/material";
+import { Alert, Button, Card, CardContent, Grid, MenuItem, Snackbar, Stack, TextField, Typography } from "@mui/material";
 import { DataGrid, GridColDef } from "@mui/x-data-grid";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -50,6 +50,8 @@ export default function PurchaseTrackingView() {
   const [capexOpex, setCapexOpex] = useState<string>(searchParams.get("capex_opex") || "");
   const [appliedFilters, setAppliedFilters] = useState({ year, month, department, scenarioId, budgetItemId, capexOpex });
   const [editStatusByRow, setEditStatusByRow] = useState<Record<number, string>>({});
+  const [saveFeedback, setSaveFeedback] = useState<{ severity: "success" | "error"; message: string } | null>(null);
+  const [exporting, setExporting] = useState(false);
   const focusId = Number(searchParams.get("focusId")) || null;
 
   const { data: rows = [], isLoading } = useQuery<RowItem[]>({
@@ -72,7 +74,13 @@ export default function PurchaseTrackingView() {
     mutationFn: async ({ planItemId, status }: { planItemId: number; status: string }) => {
       await client.patch(`/purchase-tracking/${planItemId}`, { status, note: "" });
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["purchase-tracking"] })
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["purchase-tracking"] });
+      setSaveFeedback({ severity: "success", message: "Durum güncellendi." });
+    },
+    onError: () => {
+      setSaveFeedback({ severity: "error", message: "Durum güncellenemedi." });
+    }
   });
 
   const handleApply = () => {
@@ -96,7 +104,7 @@ export default function PurchaseTrackingView() {
     });
   };
 
-  const handleExport = () => {
+  const handleExport = async () => {
     const params = new URLSearchParams();
     params.set("year", String(appliedFilters.year));
     if (appliedFilters.month) params.set("month", String(appliedFilters.month));
@@ -104,8 +112,24 @@ export default function PurchaseTrackingView() {
     if (appliedFilters.scenarioId) params.set("scenario_id", String(appliedFilters.scenarioId));
     if (appliedFilters.budgetItemId) params.set("budget_item", String(appliedFilters.budgetItemId));
     if (appliedFilters.capexOpex) params.set("capex_opex", appliedFilters.capexOpex);
-    const base = client.defaults.baseURL ?? "";
-    window.open(`${base}/purchase-tracking/export/xlsx?${params.toString()}`, "_blank", "noopener,noreferrer");
+    try {
+      setExporting(true);
+      const response = await client.get<Blob>(`/purchase-tracking/export/xlsx?${params.toString()}`, {
+        responseType: "blob"
+      });
+      const blobUrl = URL.createObjectURL(response.data);
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = `satin-alma-takip-${appliedFilters.year}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(blobUrl);
+    } catch (_error) {
+      setSaveFeedback({ severity: "error", message: "Excel dışa aktarma başarısız oldu." });
+    } finally {
+      setExporting(false);
+    }
   };
 
   const columns = useMemo<GridColDef[]>(() => [
@@ -160,7 +184,7 @@ export default function PurchaseTrackingView() {
             <Grid item xs={12}>
               <Stack direction="row" spacing={1} justifyContent="flex-end">
                 <Button variant="contained" onClick={handleApply}>Uygula</Button>
-                <Button variant="outlined" onClick={handleExport}>Excel Dışa Aktar</Button>
+                <Button variant="outlined" onClick={() => void handleExport()} disabled={exporting}>Excel Dışa Aktar</Button>
                 <Button variant="outlined" onClick={handleReset}>Sıfırla</Button>
               </Stack>
             </Grid>
@@ -184,6 +208,18 @@ export default function PurchaseTrackingView() {
           />
         </CardContent>
       </Card>
+      <Snackbar
+        open={Boolean(saveFeedback)}
+        autoHideDuration={2500}
+        onClose={() => setSaveFeedback(null)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+      >
+        {saveFeedback && (
+          <Alert severity={saveFeedback.severity} onClose={() => setSaveFeedback(null)} sx={{ width: "100%" }}>
+            {saveFeedback.message}
+          </Alert>
+        )}
+      </Snackbar>
     </Stack>
   );
 }
