@@ -672,6 +672,21 @@ export default function ImportExportView() {
                 <Typography variant="body2" color="text.secondary">
                   Filtre özeti: {filterSummary}
                 </Typography>
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems={{ xs: "stretch", sm: "center" }}>
+                  <Button
+                    variant="contained"
+                    startIcon={<DownloadIcon />}
+                    onClick={() => void handleExportXlsx()}
+                    disabled={exporting || (previewSummary?.record_count ?? 0) === 0}
+                  >
+                    Excel'e Aktar (XLSX)
+                  </Button>
+                  {(previewSummary?.record_count ?? 0) === 0 && (
+                    <Typography variant="caption" color="text.secondary">
+                      Seçilen filtrelerde dışa aktarılacak kayıt bulunamadı.
+                    </Typography>
+                  )}
+                </Stack>
                 <Divider sx={{ my: 1 }} />
                 <Grid container spacing={1.5}>
                   {[
