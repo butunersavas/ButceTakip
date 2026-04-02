@@ -10,6 +10,7 @@ from app.dependencies import get_current_user, get_db_session
 from app.models import (
     BudgetItem,
     Expense,
+    ExpenseAttachment,
     PlanEntry,
     PurchaseFormStatus,
     PurchaseFormStatusExt,
@@ -134,36 +135,49 @@ def delete_scenario(
     )
 
     try:
-        with session.begin():
-            if cascade_delete:
-                session.exec(delete(Expense).where(Expense.scenario_id == scenario_id))
-                session.exec(delete(PlanEntry).where(PlanEntry.scenario_id == scenario_id))
-
-                if candidate_budget_item_ids:
-                    session.exec(
-                        delete(PurchaseFormStatus).where(
-                            PurchaseFormStatus.budget_item_id.in_(candidate_budget_item_ids)
-                        )
+        if cascade_delete:
+            scenario_expense_id_rows = session.exec(
+                select(Expense.id).where(Expense.scenario_id == scenario_id)
+            ).all()
+            scenario_expense_ids = [
+                int(row[0]) if hasattr(row, "__getitem__") else int(row)
+                for row in scenario_expense_id_rows
+            ]
+            if scenario_expense_ids:
+                session.exec(
+                    delete(ExpenseAttachment).where(
+                        ExpenseAttachment.expense_id.in_(scenario_expense_ids)
                     )
-                    session.exec(
-                        delete(PurchaseFormStatusExt).where(
-                            PurchaseFormStatusExt.scenario_id == scenario_id
-                        )
+                )
+            session.exec(delete(Expense).where(Expense.scenario_id == scenario_id))
+            session.exec(delete(PlanEntry).where(PlanEntry.scenario_id == scenario_id))
+
+            if candidate_budget_item_ids:
+                session.exec(
+                    delete(PurchaseFormStatus).where(
+                        PurchaseFormStatus.budget_item_id.in_(candidate_budget_item_ids)
                     )
+                )
+                session.exec(
+                    delete(PurchaseFormStatusExt).where(
+                        PurchaseFormStatusExt.scenario_id == scenario_id
+                    )
+                )
 
-                for budget_item_id in candidate_budget_item_ids:
-                    remaining_plans = session.exec(
-                        select(func.count()).where(PlanEntry.budget_item_id == budget_item_id)
-                    ).one()
-                    remaining_expenses = session.exec(
-                        select(func.count()).where(Expense.budget_item_id == budget_item_id)
-                    ).one()
-                    if not remaining_plans and not remaining_expenses:
-                        budget_item = session.get(BudgetItem, budget_item_id)
-                        if budget_item:
-                            session.delete(budget_item)
+            for budget_item_id in candidate_budget_item_ids:
+                remaining_plans = session.exec(
+                    select(func.count()).where(PlanEntry.budget_item_id == budget_item_id)
+                ).one()
+                remaining_expenses = session.exec(
+                    select(func.count()).where(Expense.budget_item_id == budget_item_id)
+                ).one()
+                if not remaining_plans and not remaining_expenses:
+                    budget_item = session.get(BudgetItem, budget_item_id)
+                    if budget_item:
+                        session.delete(budget_item)
 
-            session.delete(scenario)
+        session.delete(scenario)
+        session.commit()
     except IntegrityError:
         session.rollback()
         raise HTTPException(
@@ -205,6 +219,7 @@ def hard_delete_scenario(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
 
     deleted_counts = {
+        "expense_attachments": 0,
         "expenses": 0,
         "plan_entries": 0,
         "scenario_budget_mappings": 0,
@@ -213,6 +228,22 @@ def hard_delete_scenario(
     }
 
     try:
+        scenario_expense_id_rows = session.exec(
+            select(Expense.id).where(Expense.scenario_id == scenario_id)
+        ).all()
+        scenario_expense_ids = [
+            int(row[0]) if hasattr(row, "__getitem__") else int(row)
+            for row in scenario_expense_id_rows
+        ]
+        if scenario_expense_ids:
+            deleted_counts["expense_attachments"] = (
+                session.exec(
+                    delete(ExpenseAttachment).where(
+                        ExpenseAttachment.expense_id.in_(scenario_expense_ids)
+                    )
+                ).rowcount
+                or 0
+            )
         deleted_counts["expenses"] = (
             session.exec(delete(Expense).where(Expense.scenario_id == scenario_id)).rowcount or 0
         )
