@@ -12,6 +12,7 @@ from app.models import (
     Expense,
     ExpenseAttachment,
     PlanEntry,
+    PurchaseRequestTracking,
     PurchaseFormStatus,
     PurchaseFormStatusExt,
     Scenario,
@@ -150,6 +151,13 @@ def delete_scenario(
                     )
                 )
             session.exec(delete(Expense).where(Expense.scenario_id == scenario_id))
+            session.exec(
+                delete(PurchaseRequestTracking).where(
+                    PurchaseRequestTracking.plan_item_id.in_(
+                        select(PlanEntry.id).where(PlanEntry.scenario_id == scenario_id)
+                    )
+                )
+            )
             session.exec(delete(PlanEntry).where(PlanEntry.scenario_id == scenario_id))
 
             if candidate_budget_item_ids:
@@ -246,6 +254,13 @@ def hard_delete_scenario(
             )
         deleted_counts["expenses"] = (
             session.exec(delete(Expense).where(Expense.scenario_id == scenario_id)).rowcount or 0
+        )
+        session.exec(
+            delete(PurchaseRequestTracking).where(
+                PurchaseRequestTracking.plan_item_id.in_(
+                    select(PlanEntry.id).where(PlanEntry.scenario_id == scenario_id)
+                )
+            )
         )
         deleted_counts["plan_entries"] = (
             session.exec(delete(PlanEntry).where(PlanEntry.scenario_id == scenario_id)).rowcount

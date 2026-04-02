@@ -9,6 +9,7 @@ from app.models import (
     Expense,
     ExpenseAttachment,
     PlanEntry,
+    PurchaseRequestTracking,
     PurchaseFormStatus,
     PurchaseFormStatusExt,
 )
@@ -82,11 +83,23 @@ def perform_cleanup(session: Session, request: CleanupRequest) -> dict[str, int]
             if purchase_status_ext_result:
                 deleted_purchase_statuses += purchase_status_ext_result.rowcount or 0
 
+            plan_filters = []
             plan_query = delete(PlanEntry)
             if request.budget_item_id is not None:
-                plan_query = plan_query.where(PlanEntry.budget_item_id == request.budget_item_id)
+                plan_filters.append(PlanEntry.budget_item_id == request.budget_item_id)
             if request.scenario_id is not None:
-                plan_query = plan_query.where(PlanEntry.scenario_id == request.scenario_id)
+                plan_filters.append(PlanEntry.scenario_id == request.scenario_id)
+
+            for condition in plan_filters:
+                plan_query = plan_query.where(condition)
+
+            session.exec(
+                delete(PurchaseRequestTracking).where(
+                    PurchaseRequestTracking.plan_item_id.in_(
+                        select(PlanEntry.id).where(*plan_filters)
+                    )
+                )
+            )
             plan_result = session.exec(plan_query)
             deleted_plans = plan_result.rowcount if plan_result else 0
 
