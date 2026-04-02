@@ -27,6 +27,7 @@ import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import usePersistentState from "../../hooks/usePersistentState";
 import { useAuth } from "../../context/AuthContext";
 import { formatBudgetItemLabel, stripBudgetCode } from "../../utils/budgetLabel";
+import { formatMoney } from "../../utils/formatMoney";
 
 interface Scenario {
   id: number;
@@ -705,11 +706,7 @@ export default function ImportExportView() {
                           <Typography variant="subtitle1" fontWeight={700}>
                             {"isCurrency" in summaryItem && summaryItem.isCurrency === false
                               ? summaryItem.value.toLocaleString("tr-TR")
-                              : Number(summaryItem.value).toLocaleString("tr-TR", {
-                                  style: "currency",
-                                  currency: "TRY",
-                                  minimumFractionDigits: 2
-                                })}
+                              : formatMoney(Number(summaryItem.value))}
                           </Typography>
                         </CardContent>
                       </Card>

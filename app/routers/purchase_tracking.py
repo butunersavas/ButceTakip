@@ -8,7 +8,14 @@ from sqlalchemy import func
 from sqlmodel import Session, select
 
 from app.dependencies import get_current_user, get_db_session
-from app.models import BudgetItem, PlanEntry, PurchaseRequestTracking, PurchaseTrackingStatus, User
+from app.models import (
+    BudgetItem,
+    PlanEntry,
+    PurchaseFormStatusExt,
+    PurchaseRequestTracking,
+    PurchaseTrackingStatus,
+    User,
+)
 from app.schemas import PurchaseTrackingRead, PurchaseTrackingUpdateRequest
 
 router = APIRouter(prefix="/purchase-tracking", tags=["Purchase Tracking"])
@@ -149,6 +156,35 @@ def update_purchase_tracking(
     tracking.updated_by = user.username
     tracking.updated_at = datetime.utcnow()
     tracking.is_active = payload.status != PurchaseTrackingStatus.CANCELLED.value
+
+    if payload.status == PurchaseTrackingStatus.COMPLETED.value:
+        normalized_department = (plan.department or "").strip()
+        budget_code = (plan.budget_code or "").strip() or (budget_item.code if budget_item else "")
+        if budget_code:
+            plan_purchase_status = session.exec(
+                select(PurchaseFormStatusExt)
+                .where(PurchaseFormStatusExt.budget_code == budget_code)
+                .where(PurchaseFormStatusExt.year == plan.year)
+                .where(PurchaseFormStatusExt.month == plan.month)
+                .where(PurchaseFormStatusExt.scenario_id == plan.scenario_id)
+                .where(PurchaseFormStatusExt.department == normalized_department)
+            ).first()
+            if not plan_purchase_status:
+                plan_purchase_status = PurchaseFormStatusExt(
+                    budget_code=budget_code,
+                    year=plan.year,
+                    month=plan.month,
+                    scenario_id=plan.scenario_id,
+                    department=normalized_department,
+                    is_form_prepared=True,
+                    updated_at=datetime.utcnow(),
+                    updated_by=user.id,
+                )
+            else:
+                plan_purchase_status.is_form_prepared = True
+                plan_purchase_status.updated_at = datetime.utcnow()
+                plan_purchase_status.updated_by = user.id
+            session.add(plan_purchase_status)
 
     session.add(tracking)
     session.commit()

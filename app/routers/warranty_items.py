@@ -12,7 +12,7 @@ from sqlalchemy.orm import aliased
 from sqlmodel import Session, select
 
 from app.dependencies import get_admin_user, get_current_user, get_db_session
-from app.models import User, WarrantyItem
+from app.models import User, WarrantyItem, WarrantyItemType
 from app.schemas import (
     WarrantyItemCreate,
     WarrantyItemCriticalRead,
@@ -22,6 +22,59 @@ from app.schemas import (
 
 router = APIRouter(prefix="/warranty-items", tags=["Warranty Items"])
 logger = logging.getLogger(__name__)
+
+TYPE_SPECIFIC_FIELDS: dict[WarrantyItemType, set[str]] = {
+    WarrantyItemType.DEVICE: set(),
+    WarrantyItemType.MAINTENANCE: set(),
+    WarrantyItemType.LICENSE: {"domain", "issuer", "certificate_issuer", "renewal_owner", "renewal_responsible"},
+    WarrantyItemType.CERTIFICATE: {
+        "issuer",
+        "certificate_issuer",
+        "ssl_certificate",
+        "certificate_type",
+        "contract_end_date",
+        "vendor_company",
+    },
+    WarrantyItemType.SERVICE: {
+        "tax_number",
+        "service_type",
+        "subscription_circuit_number",
+        "location_name",
+        "service_number",
+        "speed",
+        "commitment_end_date",
+        "billing_account_number",
+    },
+    WarrantyItemType.CONTRACT: {
+        "vendor_company",
+        "tax_number",
+        "service_type",
+        "contract_end_date",
+        "commitment_end_date",
+        "billing_account_number",
+    },
+    WarrantyItemType.DOMAIN_SSL: {"domain", "issuer", "certificate_issuer", "renewal_owner", "renewal_responsible"},
+}
+
+ALL_TYPE_DEPENDENT_FIELDS = {
+    "domain",
+    "issuer",
+    "certificate_issuer",
+    "renewal_owner",
+    "renewal_responsible",
+    "ssl_certificate",
+    "certificate_type",
+    "contract_end_date",
+    "vendor_company",
+    "tax_number",
+    "service_type",
+    "subscription_circuit_number",
+    "location_name",
+    "service_number",
+    "speed",
+    "commitment_end_date",
+    "billing_account_number",
+}
 
 
 def _calculate_days_left(end_date: date | None, today: date | None = None) -> int | None:
@@ -124,6 +177,17 @@ def _build_warranty_read(
     return read_item
 
 
+def _sanitize_type_specific_fields(item_data: dict, target_type: WarrantyItemType | str | None) -> dict:
+    if not target_type:
+        return item_data
+    normalized_type = target_type if isinstance(target_type, WarrantyItemType) else WarrantyItemType(str(target_type))
+    allowed_fields = TYPE_SPECIFIC_FIELDS.get(normalized_type, set())
+    for field in ALL_TYPE_DEPENDENT_FIELDS:
+        if field not in allowed_fields and field in item_data:
+            item_data[field] = None
+    return item_data
+
+
 @router.get("", response_model=list[WarrantyItemRead])
 @router.get("/", response_model=list[WarrantyItemRead], include_in_schema=False)
 def list_warranty_items(
@@ -199,6 +263,7 @@ def create_warranty_item(
         item_data.setdefault("remind_days_before", remind_days_value)
         item_data.setdefault("reminder_days", remind_days_value)
         item_data.setdefault("remind_days", remind_days_value)
+    item_data = _sanitize_type_specific_fields(item_data, item_data.get("type"))
     item = WarrantyItem(
         **item_data,
         created_by_id=current_user.id,
@@ -255,6 +320,8 @@ def update_warranty_item(
         update_data.setdefault("remind_days_before", remind_days_value)
         update_data.setdefault("reminder_days", remind_days_value)
         update_data.setdefault("remind_days", remind_days_value)
+    target_type = update_data.get("type") or item.type
+    update_data = _sanitize_type_specific_fields(update_data, target_type)
     for field, value in update_data.items():
         setattr(item, field, value)
     if item.created_by_id is None:
