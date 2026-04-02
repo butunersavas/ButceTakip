@@ -112,6 +112,35 @@ const typeOptions: Array<{ value: WarrantyItemType; label: string }> = [
   { value: "CONTRACT", label: "Sözleşme" },
 ];
 
+const typeSpecificFormFields: Record<WarrantyItemType, Array<keyof WarrantyItemForm>> = {
+  DEVICE: [],
+  MAINTENANCE: [],
+  LICENSE: ["domain", "issuer", "renewal_responsible", "reminder_days"],
+  SERVICE: [
+    "tax_number",
+    "service_type",
+    "subscription_circuit_number",
+    "location_name",
+    "service_number",
+    "speed",
+    "commitment_end_date",
+    "billing_account_number",
+  ],
+  CERTIFICATE: ["issuer", "ssl_certificate", "certificate_type", "contract_end_date", "vendor_company"],
+  CONTRACT: ["vendor_company", "tax_number", "service_type", "contract_end_date", "commitment_end_date", "billing_account_number"],
+  DOMAIN_SSL: ["domain", "issuer", "renewal_responsible", "reminder_days"],
+};
+
+const typeSpecificColumnFields: Record<WarrantyItemType, string[]> = {
+  DEVICE: ["name", "location"],
+  MAINTENANCE: ["name", "location"],
+  LICENSE: ["name", "location", "domain", "certificate_issuer", "renewal_responsible"],
+  SERVICE: ["name", "location", "service_type", "service_number", "location_name", "speed", "billing_account_number"],
+  CERTIFICATE: ["name", "location", "certificate_issuer", "ssl_certificate", "certificate_type", "vendor_company"],
+  CONTRACT: ["name", "location", "vendor_company", "tax_number", "service_type", "contract_end_date"],
+  DOMAIN_SSL: ["name", "location", "domain", "certificate_issuer", "renewal_responsible"],
+};
+
 const INITIAL_FORM_STATE: WarrantyItemForm = {
   type: "DEVICE",
   name: "",
@@ -134,6 +163,52 @@ const INITIAL_FORM_STATE: WarrantyItemForm = {
   speed: "",
   commitment_end_date: "",
   billing_account_number: "",
+};
+
+const resetTypeSpecificFields = (nextType: WarrantyItemType, prevState: WarrantyItemForm): WarrantyItemForm => {
+  const allowedFields = new Set(typeSpecificFormFields[nextType]);
+  const nextState = { ...prevState, type: nextType };
+  Object.keys(prevState).forEach((key) => {
+    if (
+      key !== "type" &&
+      key !== "name" &&
+      key !== "location" &&
+      key !== "end_date" &&
+      key !== "note" &&
+      !allowedFields.has(key as keyof WarrantyItemForm)
+    ) {
+      (nextState as any)[key] = INITIAL_FORM_STATE[key as keyof WarrantyItemForm];
+    }
+  });
+  return nextState;
+};
+
+const sanitizePayloadByType = (payload: Record<string, unknown>, type: WarrantyItemType) => {
+  const allowed = new Set(typeSpecificFormFields[type]);
+  const typeSpecificKeys = [
+    "domain",
+    "issuer",
+    "renewal_responsible",
+    "ssl_certificate",
+    "certificate_type",
+    "contract_end_date",
+    "vendor_company",
+    "tax_number",
+    "service_type",
+    "subscription_circuit_number",
+    "location_name",
+    "service_number",
+    "speed",
+    "commitment_end_date",
+    "billing_account_number",
+    "reminder_days",
+  ];
+  typeSpecificKeys.forEach((key) => {
+    if (!allowed.has(key as keyof WarrantyItemForm)) {
+      payload[key] = null;
+    }
+  });
+  return payload;
 };
 
 const calcDaysLeft = (endDate: string | null): number | null => {
@@ -303,6 +378,7 @@ export default function WarrantyTrackingView() {
   const [selectedWarrantyFilter, setSelectedWarrantyFilter] = useState<
     "CRITICAL" | "NEAR" | "EXPIRED" | null
   >(null);
+  const [selectedTypeFilter, setSelectedTypeFilter] = useState<WarrantyItemType | "ALL">("ALL");
   const [form, setForm] = useState<WarrantyItemForm>(INITIAL_FORM_STATE);
 
   const isLicenseType = form.type === "LICENSE" || form.type === "DOMAIN_SSL";
@@ -360,14 +436,21 @@ export default function WarrantyTrackingView() {
     loadItems();
   }, [loadItems]);
 
+  const typeFilteredItems = useMemo(() => {
+    if (selectedTypeFilter === "ALL") {
+      return items;
+    }
+    return items.filter((item) => item.type === selectedTypeFilter);
+  }, [items, selectedTypeFilter]);
+
   const summary = useMemo(() => {
     const totals = {
-      total: items.length,
+      total: typeFilteredItems.length,
       critical: 0,
       upcoming: 0,
       expired: 0,
     };
-    items.forEach((item) => {
+    typeFilteredItems.forEach((item) => {
       const daysLeft = item.days_left ?? calcDaysLeft(item.end_date);
       const remindDaysBefore =
         item.reminder_days ??
@@ -386,18 +469,18 @@ export default function WarrantyTrackingView() {
       }
     });
     return totals;
-  }, [items]);
+  }, [typeFilteredItems]);
 
   const filteredItems = useMemo(() => {
-    if (!selectedWarrantyFilter) return items;
+    if (!selectedWarrantyFilter) return typeFilteredItems;
     if (selectedWarrantyFilter === "CRITICAL") {
-      return items.filter((item) => item.status_key === "critical");
+      return typeFilteredItems.filter((item) => item.status_key === "critical");
     }
     if (selectedWarrantyFilter === "NEAR") {
-      return items.filter((item) => item.status_key === "approaching");
+      return typeFilteredItems.filter((item) => item.status_key === "approaching");
     }
-    return items.filter((item) => item.status_key === "expired");
-  }, [items, selectedWarrantyFilter]);
+    return typeFilteredItems.filter((item) => item.status_key === "expired");
+  }, [typeFilteredItems, selectedWarrantyFilter]);
 
   const activeFilterLabel = useMemo(() => {
     if (!selectedWarrantyFilter) return null;
@@ -420,7 +503,7 @@ export default function WarrantyTrackingView() {
     try {
       const normalizedEndDate = normalizeDateInput(form.end_date);
       const reminderValue = form.reminder_days ? Number(form.reminder_days) : null;
-      const payload = {
+      const payload = sanitizePayloadByType({
         type: form.type,
         name: form.name.trim(),
         location: form.location.trim(),
@@ -442,7 +525,7 @@ export default function WarrantyTrackingView() {
         speed: form.speed.trim() || null,
         commitment_end_date: normalizeDateInput(form.commitment_end_date) || null,
         billing_account_number: form.billing_account_number.trim() || null,
-      };
+      }, form.type);
 
       if (editingItem) {
         await client.put(`/warranty-items/${editingItem.id}`, payload);
@@ -531,7 +614,11 @@ export default function WarrantyTrackingView() {
   }, [client, editingItem?.id, loadItems]);
 
   const columns = useMemo<GridColDef[]>(
-    () => [
+    () => {
+      const activeType = selectedTypeFilter === "ALL" ? null : selectedTypeFilter;
+      const typeFields = activeType ? typeSpecificColumnFields[activeType] : null;
+      const shouldShow = (field: string) => !typeFields || typeFields.includes(field);
+      return [
       {
         field: "type",
         headerName: "Tip",
@@ -573,6 +660,66 @@ export default function WarrantyTrackingView() {
             r?.renewal_responsible ?? r?.renewal_owner ?? r?.renewalResponsible ?? "-";
           return toDisplayText(value);
         },
+      },
+      {
+        field: "service_type",
+        headerName: "Hizmet Türü",
+        flex: 1,
+        valueGetter: (_value, row) => toDisplayText((row as any)?.service_type ?? "-"),
+      },
+      {
+        field: "service_number",
+        headerName: "Hizmet No",
+        flex: 0.8,
+        valueGetter: (_value, row) => toDisplayText((row as any)?.service_number ?? "-"),
+      },
+      {
+        field: "location_name",
+        headerName: "Lokasyon Adı",
+        flex: 1,
+        valueGetter: (_value, row) => toDisplayText((row as any)?.location_name ?? "-"),
+      },
+      {
+        field: "speed",
+        headerName: "Hız",
+        flex: 0.7,
+        valueGetter: (_value, row) => toDisplayText((row as any)?.speed ?? "-"),
+      },
+      {
+        field: "billing_account_number",
+        headerName: "Fatura Hesap No",
+        flex: 1,
+        valueGetter: (_value, row) => toDisplayText((row as any)?.billing_account_number ?? "-"),
+      },
+      {
+        field: "ssl_certificate",
+        headerName: "SSL Sertifikası",
+        flex: 1,
+        valueGetter: (_value, row) => toDisplayText((row as any)?.ssl_certificate ?? "-"),
+      },
+      {
+        field: "certificate_type",
+        headerName: "Sertifika Türü",
+        flex: 1,
+        valueGetter: (_value, row) => toDisplayText((row as any)?.certificate_type ?? "-"),
+      },
+      {
+        field: "vendor_company",
+        headerName: "Firma",
+        flex: 1,
+        valueGetter: (_value, row) => toDisplayText((row as any)?.vendor_company ?? "-"),
+      },
+      {
+        field: "tax_number",
+        headerName: "VKN",
+        flex: 0.8,
+        valueGetter: (_value, row) => toDisplayText((row as any)?.tax_number ?? "-"),
+      },
+      {
+        field: "contract_end_date",
+        headerName: "Sözleşme Bitiş",
+        flex: 0.9,
+        valueGetter: (_value, row) => formatDate((row as any)?.contract_end_date ?? null),
       },
       {
         field: "end_date",
@@ -698,8 +845,22 @@ export default function WarrantyTrackingView() {
           );
         },
       },
-    ],
-    [handleDelete, handleEdit]
+    ].filter((column) => {
+      const alwaysVisible = new Set([
+        "type",
+        "end_date",
+        "updated_at",
+        "days_left",
+        "status",
+        "created_by_name",
+        "updated_by_name",
+        "note",
+        "actions",
+      ]);
+      return alwaysVisible.has(column.field) || shouldShow(column.field);
+    });
+  },
+    [handleDelete, handleEdit, selectedTypeFilter]
   );
 
   return (
@@ -733,6 +894,22 @@ export default function WarrantyTrackingView() {
       </Box>
 
       <Grid container spacing={2}>
+        <Grid item xs={12} md={4}>
+          <TextField
+            select
+            label="Garanti Tipi"
+            value={selectedTypeFilter}
+            onChange={(event) => setSelectedTypeFilter(event.target.value as WarrantyItemType | "ALL")}
+            fullWidth
+          >
+            <MenuItem value="ALL">Tüm Tipler</MenuItem>
+            {typeOptions.map((option) => (
+              <MenuItem key={option.value} value={option.value}>
+                {option.label}
+              </MenuItem>
+            ))}
+          </TextField>
+        </Grid>
         {[
           { label: "Toplam", value: summary.total, color: "primary", filter: null },
           { label: "Kritik", value: summary.critical, color: "error", filter: "CRITICAL" as const },
@@ -782,6 +959,43 @@ export default function WarrantyTrackingView() {
       </Grid>
 
       <Grid container spacing={3} alignItems="flex-start">
+        <Grid item xs={12} ref={tableRef}>
+          <Card variant="outlined">
+            <CardContent>
+              <Typography variant="h6" fontWeight={600} gutterBottom>
+                Garanti Kayıtları
+              </Typography>
+              {activeFilterLabel && (
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
+                  <Chip
+                    color="primary"
+                    size="small"
+                    label={`Aktif filtre: ${activeFilterLabel}`}
+                    onDelete={() => setSelectedWarrantyFilter(null)}
+                  />
+                  <Button size="small" variant="text" onClick={() => setSelectedWarrantyFilter(null)}>
+                    Temizle
+                  </Button>
+                </Stack>
+              )}
+              {(filteredItems ?? []).length === 0 ? (
+                <Alert severity="info">Henüz garanti kaydı yok.</Alert>
+              ) : (
+                <DataGrid
+                  rows={filteredItems ?? []}
+                  getRowId={(row) => row?.id}
+                  columns={columns}
+                  loading={loading}
+                  disableRowSelectionOnClick
+                  autoHeight
+                  pageSizeOptions={PAGE_SIZE_OPTIONS}
+                  initialState={{ pagination: { paginationModel: { pageSize: DEFAULT_PAGE_SIZE, page: 0 } } }}
+                  sx={{ border: "none" }}
+                />
+              )}
+            </CardContent>
+          </Card>
+        </Grid>
         {isFormOpen && (
           <Grid item xs={12}>
             <Card variant="outlined">
@@ -794,7 +1008,9 @@ export default function WarrantyTrackingView() {
                     select
                     label="Tip"
                     value={form.type}
-                    onChange={(event) => setForm((prev) => ({ ...prev, type: event.target.value as WarrantyItemType }))}
+                    onChange={(event) =>
+                      setForm((prev) => resetTypeSpecificFields(event.target.value as WarrantyItemType, prev))
+                    }
                   >
                     {typeOptions.map((option) => (
                       <MenuItem key={option.value} value={option.value}>
@@ -875,7 +1091,7 @@ export default function WarrantyTrackingView() {
                       />
                     </>
                   )}
-                  {isContractType && (
+                  {(form.type === "SERVICE" || isContractType) && (
                     <>
                       <TextField label="VKN" value={form.tax_number} onChange={(event) => setForm((prev) => ({ ...prev, tax_number: event.target.value }))} />
                       <TextField label="Hizmet Türü" value={form.service_type} onChange={(event) => setForm((prev) => ({ ...prev, service_type: event.target.value }))} />
@@ -938,43 +1154,6 @@ export default function WarrantyTrackingView() {
             </Card>
           </Grid>
         )}
-        <Grid item xs={12} ref={tableRef}>
-          <Card variant="outlined">
-            <CardContent>
-              <Typography variant="h6" fontWeight={600} gutterBottom>
-                Garanti Kayıtları
-              </Typography>
-              {activeFilterLabel && (
-                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
-                  <Chip
-                    color="primary"
-                    size="small"
-                    label={`Aktif filtre: ${activeFilterLabel}`}
-                    onDelete={() => setSelectedWarrantyFilter(null)}
-                  />
-                  <Button size="small" variant="text" onClick={() => setSelectedWarrantyFilter(null)}>
-                    Temizle
-                  </Button>
-                </Stack>
-              )}
-              {(filteredItems ?? []).length === 0 ? (
-                <Alert severity="info">Henüz garanti kaydı yok.</Alert>
-              ) : (
-                <DataGrid
-                  rows={filteredItems ?? []}
-                  getRowId={(row) => row?.id}
-                  columns={columns}
-                  loading={loading}
-                  disableRowSelectionOnClick
-                  autoHeight
-                  pageSizeOptions={PAGE_SIZE_OPTIONS}
-                  initialState={{ pagination: { paginationModel: { pageSize: DEFAULT_PAGE_SIZE, page: 0 } } }}
-                  sx={{ border: "none" }}
-                />
-              )}
-            </CardContent>
-          </Card>
-        </Grid>
       </Grid>
     </Stack>
   );
