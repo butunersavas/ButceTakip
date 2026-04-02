@@ -1,6 +1,7 @@
 from datetime import date
 
-from fastapi import APIRouter, Depends, File, UploadFile, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, status, UploadFile
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlmodel import Session
 
 from app.dependencies import get_admin_user, get_current_user, get_db_session
@@ -194,5 +195,16 @@ def cleanup(
     session: Session = Depends(get_db_session),
     _= Depends(get_admin_user),
 ):
-    result = cleanup_service.perform_cleanup(session, request)
+    try:
+        result = cleanup_service.perform_cleanup(session, request)
+    except IntegrityError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Temizleme işlemi bağlı kayıtlar nedeniyle tamamlanamadı.",
+        )
+    except SQLAlchemyError:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Temizleme sırasında beklenmedik bir veritabanı hatası oluştu.",
+        )
     return {"status": "ok", **result}
