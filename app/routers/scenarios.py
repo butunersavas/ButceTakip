@@ -10,7 +10,6 @@ from app.dependencies import get_current_user, get_db_session
 from app.models import (
     BudgetItem,
     Expense,
-    ExpenseAttachment,
     PlanEntry,
     PurchaseRequestTracking,
     PurchaseFormStatus,
@@ -20,6 +19,7 @@ from app.models import (
     WarrantyItem,
 )
 from app.schemas import ScenarioCreate, ScenarioRead, ScenarioUpdate
+from app.services.expense_deletion import delete_expenses_with_attachments
 
 logger = logging.getLogger(__name__)
 
@@ -137,20 +137,7 @@ def delete_scenario(
 
     try:
         if cascade_delete:
-            scenario_expense_id_rows = session.exec(
-                select(Expense.id).where(Expense.scenario_id == scenario_id)
-            ).all()
-            scenario_expense_ids = [
-                int(row[0]) if hasattr(row, "__getitem__") else int(row)
-                for row in scenario_expense_id_rows
-            ]
-            if scenario_expense_ids:
-                session.exec(
-                    delete(ExpenseAttachment).where(
-                        ExpenseAttachment.expense_id.in_(scenario_expense_ids)
-                    )
-                )
-            session.exec(delete(Expense).where(Expense.scenario_id == scenario_id))
+            delete_expenses_with_attachments(session, [Expense.scenario_id == scenario_id])
             session.exec(
                 delete(PurchaseRequestTracking).where(
                     PurchaseRequestTracking.plan_item_id.in_(
@@ -236,25 +223,10 @@ def hard_delete_scenario(
     }
 
     try:
-        scenario_expense_id_rows = session.exec(
-            select(Expense.id).where(Expense.scenario_id == scenario_id)
-        ).all()
-        scenario_expense_ids = [
-            int(row[0]) if hasattr(row, "__getitem__") else int(row)
-            for row in scenario_expense_id_rows
-        ]
-        if scenario_expense_ids:
-            deleted_counts["expense_attachments"] = (
-                session.exec(
-                    delete(ExpenseAttachment).where(
-                        ExpenseAttachment.expense_id.in_(scenario_expense_ids)
-                    )
-                ).rowcount
-                or 0
-            )
-        deleted_counts["expenses"] = (
-            session.exec(delete(Expense).where(Expense.scenario_id == scenario_id)).rowcount or 0
-        )
+        (
+            deleted_counts["expense_attachments"],
+            deleted_counts["expenses"],
+        ) = delete_expenses_with_attachments(session, [Expense.scenario_id == scenario_id])
         session.exec(
             delete(PurchaseRequestTracking).where(
                 PurchaseRequestTracking.plan_item_id.in_(
@@ -274,16 +246,19 @@ def hard_delete_scenario(
         session.delete(scenario)
         deleted_counts["scenario"] = 1
         session.commit()
-    except IntegrityError as exc:
+    except IntegrityError:
         logger.exception("Hard delete failed due to integrity error", extra={"scenario_id": scenario_id})
         session.rollback()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(exc.orig) if getattr(exc, "orig", None) else "SCENARIO DELETE FAILED",
+            detail="Senaryo silinirken bağlı kayıtlar nedeniyle veritabanı tutarlılık hatası oluştu.",
         )
-    except Exception as exc:
+    except SQLAlchemyError:
         logger.exception("Hard delete failed", extra={"scenario_id": scenario_id})
         session.rollback()
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Senaryo silinirken beklenmedik bir veritabanı hatası oluştu.",
+        )
 
     return {"ok": True, "scenario_id": scenario_id, "deleted": deleted_counts}
