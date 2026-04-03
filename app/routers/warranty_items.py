@@ -7,12 +7,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from openpyxl import Workbook
 from sqlalchemy import func
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import aliased
 from sqlmodel import Session, select
 
 from app.dependencies import get_admin_user, get_current_user, get_db_session
-from app.models import User, WarrantyItem, WarrantyItemType
+from app.models import PlanEntry, User, WarrantyItem, WarrantyItemType
 from app.schemas import (
     WarrantyItemCreate,
     WarrantyItemCriticalRead,
@@ -188,6 +189,47 @@ def _sanitize_type_specific_fields(item_data: dict, target_type: WarrantyItemTyp
     return item_data
 
 
+def _is_completed_status(workflow_status: str | None) -> bool:
+    if not workflow_status:
+        return False
+    normalized = workflow_status.strip().lower()
+    return normalized == "tamamlandı"
+
+
+def _sync_plan_purchase_requested(
+    session: Session,
+    plan_entry_id: int | None,
+    workflow_status: str | None,
+    current_user: User,
+) -> None:
+    if not plan_entry_id:
+        return
+    plan_entry = session.get(PlanEntry, plan_entry_id)
+    if not plan_entry:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="İlişkili plan kaydı bulunamadı.",
+        )
+    should_mark_purchased = _is_completed_status(workflow_status)
+    plan_entry.purchase_requested = should_mark_purchased
+    plan_entry.purchase_requested_at = datetime.utcnow() if should_mark_purchased else None
+    plan_entry.purchase_requested_by = current_user.username if should_mark_purchased else None
+    session.add(plan_entry)
+
+
+def _ensure_warranty_id_sequence(session: Session) -> None:
+    if session.bind is None or session.bind.dialect.name != "postgresql":
+        return
+    session.exec(
+        text(
+            "SELECT setval("
+            "pg_get_serial_sequence('warranty_items','id'), "
+            "COALESCE(MAX(id),1), true"
+            ") FROM warranty_items"
+        )
+    )
+
+
 @router.get("", response_model=list[WarrantyItemRead])
 @router.get("/", response_model=list[WarrantyItemRead], include_in_schema=False)
 def list_warranty_items(
@@ -242,6 +284,7 @@ def create_warranty_item(
     current_user: User = Depends(get_admin_user),
 ) -> WarrantyItemRead:
     item_data = item_in.dict()
+    item_data.pop("id", None)
     logger.debug("Warranty item create payload: %s", item_data)
     if item_data.get("end_date") is None:
         raise HTTPException(
@@ -264,6 +307,7 @@ def create_warranty_item(
         item_data.setdefault("reminder_days", remind_days_value)
         item_data.setdefault("remind_days", remind_days_value)
     item_data = _sanitize_type_specific_fields(item_data, item_data.get("type"))
+    item_data.setdefault("workflow_status", "Aktif")
     item = WarrantyItem(
         **item_data,
         created_by_id=current_user.id,
@@ -272,16 +316,29 @@ def create_warranty_item(
         updated_by_user_id=current_user.id,
     )
     try:
+        _ensure_warranty_id_sequence(session)
+        _sync_plan_purchase_requested(
+            session=session,
+            plan_entry_id=item.plan_entry_id,
+            workflow_status=item.workflow_status,
+            current_user=current_user,
+        )
         session.add(item)
         session.commit()
         session.refresh(item)
-    except SQLAlchemyError as exc:
-        logger.exception("Failed to create warranty item")
+    except IntegrityError:
+        logger.exception("Failed to create warranty item due to integrity error")
         session.rollback()
-        detail = str(exc.orig) if getattr(exc, "orig", None) else "DB constraint error"
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=detail,
+            detail="Garanti kaydı oluşturulamadı. Kimlik/benzersizlik hatası oluştu.",
+        )
+    except SQLAlchemyError:
+        logger.exception("Failed to create warranty item")
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Garanti kaydı oluşturulamadı.",
         )
     user_map = _build_user_map(session, [item])
     created_id = item.created_by_id or item.created_by_user_id
@@ -322,6 +379,7 @@ def update_warranty_item(
         update_data.setdefault("remind_days", remind_days_value)
     target_type = update_data.get("type") or item.type
     update_data = _sanitize_type_specific_fields(update_data, target_type)
+    previous_plan_entry_id = item.plan_entry_id
     for field, value in update_data.items():
         setattr(item, field, value)
     if item.created_by_id is None:
@@ -330,6 +388,19 @@ def update_warranty_item(
     item.updated_by_id = current_user.id
     item.updated_at = datetime.utcnow()
     try:
+        if previous_plan_entry_id and previous_plan_entry_id != item.plan_entry_id:
+            _sync_plan_purchase_requested(
+                session=session,
+                plan_entry_id=previous_plan_entry_id,
+                workflow_status=None,
+                current_user=current_user,
+            )
+        _sync_plan_purchase_requested(
+            session=session,
+            plan_entry_id=item.plan_entry_id,
+            workflow_status=item.workflow_status,
+            current_user=current_user,
+        )
         session.add(item)
         session.commit()
         session.refresh(item)

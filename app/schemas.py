@@ -529,6 +529,8 @@ class WarrantyItemBase(BaseModel):
     speed: Optional[str] = None
     commitment_end_date: Optional[date] = None
     billing_account_number: Optional[str] = None
+    plan_entry_id: Optional[int] = None
+    workflow_status: str = "Aktif"
     reminder_days: Optional[int] = Field(default=30, ge=0)
     remind_days: Optional[int] = Field(default=30, ge=0)
     remind_days_before: Optional[int] = Field(default=30, ge=0)
@@ -565,6 +567,15 @@ class WarrantyItemBase(BaseModel):
     )
     def normalize_warranty_text(cls, value: str | None) -> str | None:  # noqa: D417
         return _normalize_placeholder(value)
+
+    @validator("workflow_status", pre=True)
+    def normalize_workflow_status(cls, value: str | None) -> str:  # noqa: D417
+        if value is None:
+            return "Aktif"
+        if isinstance(value, str):
+            trimmed = value.strip()
+            return trimmed or "Aktif"
+        return str(value)
 
     @root_validator(pre=True)
     def normalize_warranty_aliases(cls, values: dict) -> dict:  # noqa: D417
@@ -641,6 +652,8 @@ class WarrantyItemUpdate(BaseModel):
     speed: Optional[str] = None
     commitment_end_date: Optional[date] = None
     billing_account_number: Optional[str] = None
+    plan_entry_id: Optional[int] = None
+    workflow_status: Optional[str] = None
     reminder_days: Optional[int] = None
     remind_days: Optional[int] = None
     remind_days_before: Optional[int] = None
@@ -678,6 +691,15 @@ class WarrantyItemUpdate(BaseModel):
     )
     def normalize_update_warranty_text(cls, value: str | None) -> str | None:  # noqa: D417
         return _normalize_placeholder(value)
+
+    @validator("workflow_status", pre=True)
+    def normalize_update_workflow_status(cls, value: str | None) -> str | None:  # noqa: D417
+        if value is None:
+            return None
+        if isinstance(value, str):
+            trimmed = value.strip()
+            return trimmed or None
+        return str(value)
 
     @root_validator(pre=True)
     def normalize_warranty_aliases(cls, values: dict) -> dict:  # noqa: D417
@@ -755,6 +777,8 @@ class WarrantyItemRead(SQLModel, table=False):
     speed: Optional[str] = None
     commitment_end_date: Optional[date] = None
     billing_account_number: Optional[str] = None
+    plan_entry_id: Optional[int] = None
+    workflow_status: str = "Aktif"
     reminder_days: Optional[int] = None
     remind_days: Optional[int] = None
     remind_days_before: Optional[int] = None

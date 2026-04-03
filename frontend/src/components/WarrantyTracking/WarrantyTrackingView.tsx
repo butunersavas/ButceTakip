@@ -57,6 +57,8 @@ type WarrantyItem = {
   speed?: string | null;
   commitment_end_date?: string | null;
   billing_account_number?: string | null;
+  plan_entry_id?: number | null;
+  workflow_status?: string | null;
   reminder_days?: number | null;
   remind_days?: number | null;
   remind_days_before?: number | null;
@@ -101,6 +103,8 @@ type WarrantyItemForm = {
   speed: string;
   commitment_end_date: string;
   billing_account_number: string;
+  plan_entry_id: string;
+  workflow_status: string;
 };
 
 const typeOptions: Array<{ value: WarrantyItemType; label: string }> = [
@@ -163,6 +167,8 @@ const INITIAL_FORM_STATE: WarrantyItemForm = {
   speed: "",
   commitment_end_date: "",
   billing_account_number: "",
+  plan_entry_id: "",
+  workflow_status: "Aktif",
 };
 
 const resetTypeSpecificFields = (nextType: WarrantyItemType, prevState: WarrantyItemForm): WarrantyItemForm => {
@@ -361,6 +367,8 @@ const normalizeWarrantyRow = (row: any): WarrantyItem => {
     remind_days: remindDaysBefore,
     remind_days_before: remindDaysBefore,
     reminder_days: remindDaysBefore,
+    plan_entry_id: row?.plan_entry_id ?? null,
+    workflow_status: row?.workflow_status ?? "Aktif",
   };
 };
 
@@ -525,7 +533,10 @@ export default function WarrantyTrackingView() {
         speed: form.speed.trim() || null,
         commitment_end_date: normalizeDateInput(form.commitment_end_date) || null,
         billing_account_number: form.billing_account_number.trim() || null,
+        plan_entry_id: form.plan_entry_id ? Number(form.plan_entry_id) : null,
+        workflow_status: form.workflow_status.trim() || "Aktif",
       }, form.type);
+      delete (payload as { id?: unknown }).id;
 
       if (editingItem) {
         await client.put(`/warranty-items/${editingItem.id}`, payload);
@@ -584,6 +595,8 @@ export default function WarrantyTrackingView() {
       speed: item.speed ?? "",
       commitment_end_date: normalizeDateInput(item.commitment_end_date) ?? "",
       billing_account_number: item.billing_account_number ?? "",
+      plan_entry_id: item.plan_entry_id != null ? String(item.plan_entry_id) : "",
+      workflow_status: item.workflow_status ?? "Aktif",
     });
   }, []);
 
@@ -878,10 +891,10 @@ export default function WarrantyTrackingView() {
           onClick={() => {
             setIsFormOpen((prev) => {
               const next = !prev;
-              if (!next) {
-                setEditingItem(null);
-                setForm(INITIAL_FORM_STATE);
-              }
+              setError(null);
+              setSuccess(null);
+              setEditingItem(null);
+              setForm(INITIAL_FORM_STATE);
               return next;
             });
           }}
@@ -910,6 +923,9 @@ export default function WarrantyTrackingView() {
             ))}
           </TextField>
         </Grid>
+      </Grid>
+
+      <Grid container spacing={2} alignItems="stretch">
         {[
           { label: "Toplam", value: summary.total, color: "primary", filter: null },
           { label: "Kritik", value: summary.critical, color: "error", filter: "CRITICAL" as const },
@@ -918,10 +934,12 @@ export default function WarrantyTrackingView() {
         ].map((item) => {
           const isSelected = selectedWarrantyFilter === item.filter;
           return (
-            <Grid item xs={12} sm={6} md={3} key={item.label}>
+            <Grid item xs={12} sm={6} md={3} key={item.label} sx={{ display: "flex" }}>
               <Card
                 variant="outlined"
                 sx={{
+                  width: "100%",
+                  height: "100%",
                   borderColor: isSelected ? "primary.main" : "divider",
                   boxShadow: isSelected ? 3 : 0,
                   transition: "box-shadow 0.2s ease, border-color 0.2s ease",
@@ -939,7 +957,7 @@ export default function WarrantyTrackingView() {
                   }
                   sx={{ height: "100%" }}
                 >
-                  <CardContent>
+                  <CardContent sx={{ minHeight: 112, display: "flex", flexDirection: "column", justifyContent: "center" }}>
                     <Typography color="text.secondary" gutterBottom>
                       {item.label}
                     </Typography>
@@ -1117,6 +1135,23 @@ export default function WarrantyTrackingView() {
                     InputLabelProps={{ shrink: true }}
                     required
                   />
+                  <TextField
+                    label="Plan Kaydı ID (opsiyonel)"
+                    type="number"
+                    value={form.plan_entry_id}
+                    onChange={(event) => setForm((prev) => ({ ...prev, plan_entry_id: event.target.value }))}
+                    inputProps={{ min: 1, step: 1 }}
+                  />
+                  <TextField
+                    select
+                    label="Garanti Durumu"
+                    value={form.workflow_status}
+                    onChange={(event) => setForm((prev) => ({ ...prev, workflow_status: event.target.value }))}
+                  >
+                    <MenuItem value="Aktif">Aktif</MenuItem>
+                    <MenuItem value="Tamamlandı">Tamamlandı</MenuItem>
+                    <MenuItem value="Beklemede">Beklemede</MenuItem>
+                  </TextField>
                   <TextField
                     label="Not"
                     value={form.note}
