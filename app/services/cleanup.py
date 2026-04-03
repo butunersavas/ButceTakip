@@ -7,12 +7,12 @@ from sqlmodel import Session, delete
 from app.models import (
     BudgetItem,
     Expense,
-    ExpenseAttachment,
     PlanEntry,
     PurchaseRequestTracking,
     PurchaseFormStatus,
     PurchaseFormStatusExt,
 )
+from app.services.expense_deletion import delete_expenses_with_attachments
 from app.schemas import CleanupRequest
 
 
@@ -32,23 +32,7 @@ def perform_cleanup(session: Session, request: CleanupRequest) -> dict[str, int]
     deleted_purchase_statuses = 0
     deleted_expenses = 0
     try:
-        target_expense_id_rows = session.exec(select(Expense.id).where(*filters)).all()
-        target_expense_ids = [
-            int(row[0]) if hasattr(row, "__getitem__") else int(row)
-            for row in target_expense_id_rows
-        ]
-        if target_expense_ids:
-            session.exec(
-                delete(ExpenseAttachment).where(
-                    ExpenseAttachment.expense_id.in_(target_expense_ids)
-                )
-            )
-
-        expense_query = delete(Expense)
-        for condition in filters:
-            expense_query = expense_query.where(condition)
-        result = session.exec(expense_query)
-        deleted_expenses = result.rowcount if result else 0
+        _, deleted_expenses = delete_expenses_with_attachments(session, filters)
 
         if request.reset_plans:
             purchase_status_query = delete(PurchaseFormStatus)
