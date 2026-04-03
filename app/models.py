@@ -240,6 +240,8 @@ class WarrantyItem(TimestampMixin, SQLModel, table=True):
     speed: Optional[str] = Field(default=None, nullable=True)
     commitment_end_date: Optional[date] = Field(default=None, nullable=True)
     billing_account_number: Optional[str] = Field(default=None, nullable=True)
+    plan_entry_id: Optional[int] = Field(default=None, foreign_key="plan_entries.id", nullable=True, index=True)
+    workflow_status: str = Field(default="Aktif", nullable=False)
     reminder_days: Optional[int] = Field(default=30, nullable=True)
     remind_days: Optional[int] = Field(default=30, nullable=True)
     remind_days_before: Optional[int] = Field(default=30, nullable=True)

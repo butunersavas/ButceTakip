@@ -170,6 +170,8 @@ def ensure_warranty_schema(inspector) -> None:
         "speed TEXT",
         "commitment_end_date DATE",
         "billing_account_number TEXT",
+        "plan_entry_id INTEGER",
+        "workflow_status TEXT DEFAULT 'Aktif'",
     ):
         column_name = column.split()[0]
         if column_name not in warranty_columns:
