@@ -543,6 +543,7 @@ export default function ExpensesView() {
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       setErrorMessage(null);
+      setSaveFeedback("Harcama silindi.");
     },
     onError: (error: unknown) => {
       console.error(error);

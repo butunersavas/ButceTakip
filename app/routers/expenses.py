@@ -1,6 +1,7 @@
 from datetime import date, datetime
 import ipaddress
 import logging
+import os
 from io import BytesIO
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -12,7 +13,7 @@ from sqlalchemy.orm import aliased
 from sqlmodel import Session, select
 
 from app.dependencies import get_current_user, get_db_session
-from app.models import BudgetItem, Expense, ExpenseStatus, PlanEntry, Scenario, User
+from app.models import BudgetItem, Expense, ExpenseAttachment, ExpenseStatus, PlanEntry, Scenario, User
 from app.schemas import ExpenseCreate, ExpenseRead, ExpenseUpdate, PlannedAmountResponse
 
 router = APIRouter(prefix="/expenses", tags=["Expenses"])
@@ -475,8 +476,30 @@ def delete_expense(
     owner_id = expense.created_by_user_id or expense.created_by_id
     if owner_id not in (None, current_user.id) and not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Not allowed")
-    session.delete(expense)
-    session.commit()
+    try:
+        attachments = session.exec(
+            select(ExpenseAttachment).where(ExpenseAttachment.expense_id == expense_id)
+        ).all()
+        for attachment in attachments:
+            if attachment.storage_path and os.path.exists(attachment.storage_path):
+                try:
+                    os.remove(attachment.storage_path)
+                except OSError as exc:
+                    logger.warning(
+                        "Expense attachment file could not be deleted",
+                        extra={"attachment_id": attachment.id, "error": str(exc)},
+                    )
+            session.delete(attachment)
+        session.flush()
+        session.delete(expense)
+        session.commit()
+    except SQLAlchemyError:
+        session.rollback()
+        logger.exception("Expense could not be deleted", extra={"expense_id": expense_id})
+        raise HTTPException(
+            status_code=400,
+            detail="Harcama silinirken bir sorun oluştu. Lütfen tekrar deneyin.",
+        )
 
 
 @router.get("/planned-amount", response_model=PlannedAmountResponse)

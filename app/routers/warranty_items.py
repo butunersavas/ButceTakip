@@ -25,6 +25,7 @@ router = APIRouter(prefix="/warranty-items", tags=["Warranty Items"])
 logger = logging.getLogger(__name__)
 
 TYPE_SPECIFIC_FIELDS: dict[WarrantyItemType, set[str]] = {
+    WarrantyItemType.WARRANTY: set(),
     WarrantyItemType.DEVICE: set(),
     WarrantyItemType.MAINTENANCE: set(),
     WarrantyItemType.LICENSE: {"domain", "issuer", "certificate_issuer", "renewal_owner", "renewal_responsible"},
@@ -88,12 +89,10 @@ def _calculate_days_left(end_date: date | None, today: date | None = None) -> in
 def _calculate_status(days_left: int | None) -> str | None:
     if days_left is None:
         return None
-    if days_left < 0:
+    if days_left <= 0:
         return "Süresi Geçti"
     if days_left <= 30:
-        return "Kritik"
-    if days_left <= 60:
-        return "Yaklaşıyor"
+        return "Yakında Yenile"
     return "Aktif"
 
 
