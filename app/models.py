@@ -17,6 +17,7 @@ class ExpenseStatus(str, enum.Enum):
 
 
 class WarrantyItemType(str, enum.Enum):
+    WARRANTY = "WARRANTY"
     DEVICE = "DEVICE"
     MAINTENANCE = "MAINTENANCE"
     SERVICE = "SERVICE"
@@ -195,7 +196,10 @@ class Expense(TimestampMixin, SQLModel, table=True):
         back_populates="expenses_updated",
         sa_relationship_kwargs={"foreign_keys": "[Expense.updated_by_id]"},
     )
-    attachments: list["ExpenseAttachment"] = Relationship(back_populates="expense")
+    attachments: list["ExpenseAttachment"] = Relationship(
+        back_populates="expense",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"},
+    )
 
 
 class ExpenseAttachment(SQLModel, table=True):

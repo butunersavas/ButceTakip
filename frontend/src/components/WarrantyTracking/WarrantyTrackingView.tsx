@@ -7,8 +7,13 @@ import {
   CardActionArea,
   CardContent,
   Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Grid,
   IconButton,
+  InputAdornment,
   MenuItem,
   Stack,
   TextField,
@@ -17,20 +22,14 @@ import {
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import DownloadIcon from "@mui/icons-material/Download";
-import { DataGrid, type GridColDef } from "@mui/x-data-grid";
+import SearchIcon from "@mui/icons-material/Search";
+import { DataGrid, type GridColDef, type GridPaginationModel } from "@mui/x-data-grid";
 import axios from "axios";
 
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS } from "../../constants/pagination";
 
-type WarrantyItemType =
-  | "DEVICE"
-  | "MAINTENANCE"
-  | "SERVICE"
-  | "LICENSE"
-  | "DOMAIN_SSL"
-  | "CERTIFICATE"
-  | "CONTRACT";
+type WarrantyItemType = "WARRANTY" | "CERTIFICATE" | "CONTRACT";
 
 type WarrantyItem = {
   id: number | string;
@@ -70,7 +69,7 @@ type WarrantyItem = {
   updated_at?: string | null;
   days_left?: number | null;
   status_label?: string;
-  status_key?: "expired" | "critical" | "approaching" | "ok" | "unknown";
+  status_key?: "expired" | "warning" | "ok" | "unknown";
   type_label?: string;
   certificate_issuer_display?: string;
   domain_display?: string;
@@ -108,45 +107,25 @@ type WarrantyItemForm = {
 };
 
 const typeOptions: Array<{ value: WarrantyItemType; label: string }> = [
-  { value: "DEVICE", label: "Cihaz" },
-  { value: "MAINTENANCE", label: "Bakım" },
-  { value: "SERVICE", label: "Hizmet" },
-  { value: "LICENSE", label: "Lisans" },
+  { value: "WARRANTY", label: "Garanti" },
   { value: "CERTIFICATE", label: "Sertifika" },
   { value: "CONTRACT", label: "Sözleşme" },
 ];
 
 const typeSpecificFormFields: Record<WarrantyItemType, Array<keyof WarrantyItemForm>> = {
-  DEVICE: [],
-  MAINTENANCE: [],
-  LICENSE: ["domain", "issuer", "renewal_responsible", "reminder_days"],
-  SERVICE: [
-    "tax_number",
-    "service_type",
-    "subscription_circuit_number",
-    "location_name",
-    "service_number",
-    "speed",
-    "commitment_end_date",
-    "billing_account_number",
-  ],
+  WARRANTY: ["domain", "issuer", "renewal_responsible", "reminder_days"],
   CERTIFICATE: ["issuer", "ssl_certificate", "certificate_type", "contract_end_date", "vendor_company"],
   CONTRACT: ["vendor_company", "tax_number", "service_type", "contract_end_date", "commitment_end_date", "billing_account_number"],
-  DOMAIN_SSL: ["domain", "issuer", "renewal_responsible", "reminder_days"],
 };
 
 const typeSpecificColumnFields: Record<WarrantyItemType, string[]> = {
-  DEVICE: ["name", "location"],
-  MAINTENANCE: ["name", "location"],
-  LICENSE: ["name", "location", "domain", "certificate_issuer", "renewal_responsible"],
-  SERVICE: ["name", "location", "service_type", "service_number", "location_name", "speed", "billing_account_number"],
+  WARRANTY: ["name", "location", "domain", "certificate_issuer", "renewal_responsible"],
   CERTIFICATE: ["name", "location", "certificate_issuer", "ssl_certificate", "certificate_type", "vendor_company"],
   CONTRACT: ["name", "location", "vendor_company", "tax_number", "service_type", "contract_end_date"],
-  DOMAIN_SSL: ["name", "location", "domain", "certificate_issuer", "renewal_responsible"],
 };
 
 const INITIAL_FORM_STATE: WarrantyItemForm = {
-  type: "DEVICE",
+  type: "WARRANTY",
   name: "",
   location: "",
   end_date: "",
@@ -228,17 +207,15 @@ const calcDaysLeft = (endDate: string | null): number | null => {
 
 const calcStatus = (daysLeft: number | null) => {
   if (daysLeft === null) return { label: "-", key: "unknown" as const };
-  if (daysLeft < 0) return { label: "Süresi Geçti", key: "expired" as const };
-  if (daysLeft <= 30) return { label: "Kritik", key: "critical" as const };
-  if (daysLeft <= 60) return { label: "Yaklaşıyor", key: "approaching" as const };
+  if (daysLeft <= 0) return { label: "Süresi Geçti", key: "expired" as const };
+  if (daysLeft <= 30) return { label: "Yakında Yenile", key: "warning" as const };
   return { label: "Aktif", key: "ok" as const };
 };
 
 const mapStatusKey = (status?: string | null) => {
   const normalized = status?.toLowerCase?.() ?? "";
   if (normalized.includes("süresi geçti")) return "expired" as const;
-  if (normalized.includes("kritik")) return "critical" as const;
-  if (normalized.includes("yaklaşıyor")) return "approaching" as const;
+  if (normalized.includes("yakında yenile") || normalized.includes("kritik")) return "warning" as const;
   if (normalized.includes("aktif")) return "ok" as const;
   return "unknown" as const;
 };
@@ -253,10 +230,7 @@ const formatDate = (value: string | null | undefined) => {
 };
 
 const formatTypeLabel = (value?: string | null) => {
-  if (value === "DEVICE") return "Cihaz";
-  if (value === "MAINTENANCE") return "Bakım";
-  if (value === "SERVICE") return "Hizmet";
-  if (value === "LICENSE" || value === "DOMAIN_SSL") return "Lisans";
+  if (value === "WARRANTY" || value === "DEVICE" || value === "MAINTENANCE" || value === "SERVICE" || value === "LICENSE" || value === "DOMAIN_SSL") return "Garanti";
   if (value === "CERTIFICATE") return "Sertifika";
   if (value === "CONTRACT") return "Sözleşme";
   return value ?? "-";
@@ -294,6 +268,13 @@ const toDisplayText = (value: string | null | undefined) => {
     return trimmed ? trimmed : "-";
   }
   return String(value);
+};
+
+const normalizeWarrantyType = (value: unknown): WarrantyItemType => {
+  const normalized = String(value ?? "").trim().toUpperCase();
+  if (normalized === "CERTIFICATE") return "CERTIFICATE";
+  if (normalized === "CONTRACT") return "CONTRACT";
+  return "WARRANTY";
 };
 
 const normalizeWarrantyRow = (row: any): WarrantyItem => {
@@ -343,7 +324,7 @@ const normalizeWarrantyRow = (row: any): WarrantyItem => {
   return {
     ...row,
     id,
-    type: row?.type ?? row?.device_type ?? row?.asset_type ?? "",
+    type: normalizeWarrantyType(row?.type ?? row?.device_type ?? row?.asset_type),
     start_date: start,
     end_date: end,
     days_left,
@@ -381,6 +362,11 @@ export default function WarrantyTrackingView() {
   const [success, setSuccess] = useState<string | null>(null);
   const [editingItem, setEditingItem] = useState<WarrantyItem | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [searchText, setSearchText] = useState("");
+  const [paginationModel, setPaginationModel] = useState<GridPaginationModel>({
+    page: 0,
+    pageSize: DEFAULT_PAGE_SIZE,
+  });
   const tableRef = useRef<HTMLDivElement | null>(null);
   const hasLoggedWarrantyResponse = useRef(false);
   const [selectedWarrantyFilter, setSelectedWarrantyFilter] = useState<
@@ -389,11 +375,16 @@ export default function WarrantyTrackingView() {
   const [selectedTypeFilter, setSelectedTypeFilter] = useState<WarrantyItemType | "ALL">("ALL");
   const [form, setForm] = useState<WarrantyItemForm>(INITIAL_FORM_STATE);
 
-  const isLicenseType = form.type === "LICENSE" || form.type === "DOMAIN_SSL";
-  const isCertificateType = form.type === "CERTIFICATE" || form.type === "DOMAIN_SSL";
+  const isWarrantyType = form.type === "WARRANTY";
+  const isCertificateType = form.type === "CERTIFICATE";
   const isContractType = form.type === "CONTRACT";
-  const nameLabel = isLicenseType ? "Lisans / Domain" : "Ad";
+  const nameLabel = isWarrantyType ? "Cihaz / Ürün Adı" : isCertificateType ? "Sertifika Adı" : "Sözleşme Adı";
   const locationLabel = "Lokasyon";
+  const endDateLabel = isContractType
+    ? "Sözleşme Bitiş Tarihi"
+    : isCertificateType
+      ? "Sertifika Bitiş Tarihi"
+      : "Garanti Bitiş Tarihi";
   const handleExportXlsx = useCallback(() => {
     const exportFile = async () => {
       try {
@@ -454,48 +445,73 @@ export default function WarrantyTrackingView() {
   const summary = useMemo(() => {
     const totals = {
       total: typeFilteredItems.length,
-      critical: 0,
-      upcoming: 0,
+      warning: 0,
       expired: 0,
     };
     typeFilteredItems.forEach((item) => {
       const daysLeft = item.days_left ?? calcDaysLeft(item.end_date);
-      const remindDaysBefore =
-        item.reminder_days ??
-        item.remind_days ??
-        item.remind_days_before ??
-        30;
       if (daysLeft === null) {
         return;
       }
-      if (daysLeft < 0) {
+      if (daysLeft <= 0) {
         totals.expired += 1;
       } else if (daysLeft <= 30) {
-        totals.critical += 1;
-      } else if (daysLeft <= 60) {
-        totals.upcoming += 1;
+        totals.warning += 1;
       }
     });
     return totals;
   }, [typeFilteredItems]);
 
-  const filteredItems = useMemo(() => {
+  const statusFilteredItems = useMemo(() => {
     if (!selectedWarrantyFilter) return typeFilteredItems;
     if (selectedWarrantyFilter === "CRITICAL") {
-      return typeFilteredItems.filter((item) => item.status_key === "critical");
+      return typeFilteredItems.filter((item) => item.status_key === "warning");
     }
     if (selectedWarrantyFilter === "NEAR") {
-      return typeFilteredItems.filter((item) => item.status_key === "approaching");
+      return typeFilteredItems.filter((item) => item.status_key === "warning");
     }
     return typeFilteredItems.filter((item) => item.status_key === "expired");
   }, [typeFilteredItems, selectedWarrantyFilter]);
 
+  const filteredItems = useMemo(() => {
+    const normalizedSearch = searchText.trim().toLocaleLowerCase("tr-TR");
+    if (!normalizedSearch) {
+      return statusFilteredItems;
+    }
+    return statusFilteredItems.filter((item) => {
+      const fields = [
+        item.name,
+        item.vendor_company,
+        item.location,
+        item.location_name,
+        item.type_label,
+        item.status_label,
+        item.tax_number,
+        item.service_number,
+        item.subscription_circuit_number,
+        item.billing_account_number,
+        item.ssl_certificate,
+        item.service_type,
+        item.note,
+      ];
+      return fields.some((field) =>
+        String(field ?? "")
+          .toLocaleLowerCase("tr-TR")
+          .includes(normalizedSearch)
+      );
+    });
+  }, [searchText, statusFilteredItems]);
+
   const activeFilterLabel = useMemo(() => {
     if (!selectedWarrantyFilter) return null;
-    if (selectedWarrantyFilter === "CRITICAL") return "Kritik";
-    if (selectedWarrantyFilter === "NEAR") return "Yaklaşıyor";
+    if (selectedWarrantyFilter === "CRITICAL") return "Yakında Yenile";
+    if (selectedWarrantyFilter === "NEAR") return "Yakında Yenile";
     return "Süresi Geçti";
   }, [selectedWarrantyFilter]);
+
+  useEffect(() => {
+    setPaginationModel((prev) => ({ ...prev, page: 0 }));
+  }, [searchText, selectedWarrantyFilter, selectedTypeFilter]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -567,7 +583,7 @@ export default function WarrantyTrackingView() {
     setEditingItem(item);
     setIsFormOpen(true);
     setForm({
-      type: item.type || "DEVICE",
+      type: item.type || "WARRANTY",
       name: item.name,
       location: item.location,
       end_date: normalizeDateInput(item.end_date) ?? "",
@@ -736,7 +752,7 @@ export default function WarrantyTrackingView() {
       },
       {
         field: "end_date",
-        headerName: "Bitiş Tarihi",
+        headerName: "Garanti/Sertifika/Sözleşme Bitiş",
         flex: 0.9,
         valueGetter: (_value, row) => {
           const r = row as any;
@@ -770,13 +786,11 @@ export default function WarrantyTrackingView() {
                     color: "text.primary",
                   },
                 }
-              : statusKey === "critical"
+              : statusKey === "warning"
                 ? { color: "error" as const }
-                : statusKey === "approaching"
-                  ? { color: "warning" as const }
-                  : statusKey === "ok"
-                    ? { color: "success" as const }
-                    : { color: "default" as const };
+                : statusKey === "ok"
+                  ? { color: "success" as const }
+                  : { color: "default" as const };
           const label = daysLeft === null ? "-" : `${daysLeft} gün`;
           return <Chip size="small" {...chipProps} label={label} />;
         },
@@ -889,17 +903,14 @@ export default function WarrantyTrackingView() {
           variant="contained"
           sx={{ mt: 2 }}
           onClick={() => {
-            setIsFormOpen((prev) => {
-              const next = !prev;
-              setError(null);
-              setSuccess(null);
-              setEditingItem(null);
-              setForm(INITIAL_FORM_STATE);
-              return next;
-            });
+            setError(null);
+            setSuccess(null);
+            setEditingItem(null);
+            setForm(INITIAL_FORM_STATE);
+            setIsFormOpen(true);
           }}
         >
-          {isFormOpen ? "Formu Kapat" : "Garanti Ekle"}
+          Yeni Garanti Kaydı
         </Button>
         <Button variant="outlined" sx={{ mt: 2, ml: 1 }} startIcon={<DownloadIcon />} onClick={handleExportXlsx}>
           Excel Dışa Aktar
@@ -928,8 +939,7 @@ export default function WarrantyTrackingView() {
       <Grid container spacing={2} alignItems="stretch">
         {[
           { label: "Toplam", value: summary.total, color: "primary", filter: null },
-          { label: "Kritik", value: summary.critical, color: "error", filter: "CRITICAL" as const },
-          { label: "Yaklaşıyor", value: summary.upcoming, color: "warning", filter: "NEAR" as const },
+          { label: "Yakında Yenile", value: summary.warning, color: "warning", filter: "CRITICAL" as const },
           { label: "Süresi Geçti", value: summary.expired, color: "grey", filter: "EXPIRED" as const },
         ].map((item) => {
           const isSelected = selectedWarrantyFilter === item.filter;
@@ -983,6 +993,20 @@ export default function WarrantyTrackingView() {
               <Typography variant="h6" fontWeight={600} gutterBottom>
                 Garanti Kayıtları
               </Typography>
+              <TextField
+                fullWidth
+                value={searchText}
+                onChange={(event) => setSearchText(event.target.value)}
+                placeholder="Garanti kayıtlarında ara..."
+                sx={{ mb: 2 }}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchIcon fontSize="small" />
+                    </InputAdornment>
+                  ),
+                }}
+              />
               {activeFilterLabel && (
                 <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
                   <Chip
@@ -997,7 +1021,9 @@ export default function WarrantyTrackingView() {
                 </Stack>
               )}
               {(filteredItems ?? []).length === 0 ? (
-                <Alert severity="info">Henüz garanti kaydı yok.</Alert>
+                <Alert severity="info">
+                  {searchText.trim() ? "Aramanızla eşleşen kayıt bulunamadı." : "Henüz garanti kaydı yok."}
+                </Alert>
               ) : (
                 <DataGrid
                   rows={filteredItems ?? []}
@@ -1007,21 +1033,18 @@ export default function WarrantyTrackingView() {
                   disableRowSelectionOnClick
                   autoHeight
                   pageSizeOptions={PAGE_SIZE_OPTIONS}
-                  initialState={{ pagination: { paginationModel: { pageSize: DEFAULT_PAGE_SIZE, page: 0 } } }}
+                  paginationModel={paginationModel}
+                  onPaginationModelChange={setPaginationModel}
                   sx={{ border: "none" }}
                 />
               )}
             </CardContent>
           </Card>
         </Grid>
-        {isFormOpen && (
-          <Grid item xs={12}>
-            <Card variant="outlined">
-              <CardContent>
-                <Typography variant="h6" fontWeight={600} gutterBottom>
-                  {editingItem ? "Kaydı Güncelle" : "Yeni Garanti Kaydı"}
-                </Typography>
-                <Box component="form" onSubmit={handleSubmit} sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        <Dialog open={isFormOpen} onClose={() => setIsFormOpen(false)} fullWidth maxWidth="md">
+          <DialogTitle>{editingItem ? "Kaydı Güncelle" : "Yeni Garanti Kaydı"}</DialogTitle>
+          <Box component="form" onSubmit={handleSubmit}>
+            <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
                   <TextField
                     select
                     label="Tip"
@@ -1048,7 +1071,7 @@ export default function WarrantyTrackingView() {
                     onChange={(event) => setForm((prev) => ({ ...prev, location: event.target.value }))}
                     required
                   />
-                  {isLicenseType && (
+                  {isWarrantyType && (
                     <>
                       <TextField
                         label="Domain (FQDN)"
@@ -1086,6 +1109,11 @@ export default function WarrantyTrackingView() {
                   {isCertificateType && (
                     <>
                       <TextField
+                        label="Sertifika Sağlayıcı"
+                        value={form.issuer}
+                        onChange={(event) => setForm((prev) => ({ ...prev, issuer: event.target.value }))}
+                      />
+                      <TextField
                         label="SSL Sertifikası"
                         value={form.ssl_certificate}
                         onChange={(event) => setForm((prev) => ({ ...prev, ssl_certificate: event.target.value }))}
@@ -1109,7 +1137,7 @@ export default function WarrantyTrackingView() {
                       />
                     </>
                   )}
-                  {(form.type === "SERVICE" || isContractType) && (
+                  {isContractType && (
                     <>
                       <TextField label="VKN" value={form.tax_number} onChange={(event) => setForm((prev) => ({ ...prev, tax_number: event.target.value }))} />
                       <TextField label="Hizmet Türü" value={form.service_type} onChange={(event) => setForm((prev) => ({ ...prev, service_type: event.target.value }))} />
@@ -1128,7 +1156,7 @@ export default function WarrantyTrackingView() {
                     </>
                   )}
                   <TextField
-                    label="Bitiş Tarihi"
+                    label={endDateLabel}
                     type="date"
                     value={form.end_date}
                     onChange={(event) => setForm((prev) => ({ ...prev, end_date: event.target.value }))}
@@ -1159,37 +1187,27 @@ export default function WarrantyTrackingView() {
                     multiline
                     minRows={3}
                   />
-                  <Stack direction="row" spacing={1} justifyContent="flex-end">
-                    <Button
-                      variant="text"
-                      onClick={() => {
-                        setEditingItem(null);
-                        setForm(INITIAL_FORM_STATE);
-                        setIsFormOpen(false);
-                      }}
-                    >
-                      İptal
-                    </Button>
-                    <Button variant="contained" type="submit" disabled={submitting}>
-                      {editingItem ? "Güncelle" : "Kaydet"}
-                    </Button>
-                  </Stack>
-                </Box>
-                {error && (
-                  <Alert severity="error" sx={{ mt: 2 }}>
-                    {error}
-                  </Alert>
-                )}
-                {success && (
-                  <Alert severity="success" sx={{ mt: 2 }}>
-                    {success}
-                  </Alert>
-                )}
-              </CardContent>
-            </Card>
-          </Grid>
-        )}
+                {error && <Alert severity="error">{error}</Alert>}
+              </DialogContent>
+              <DialogActions sx={{ px: 3, pb: 2 }}>
+                <Button
+                  variant="text"
+                  onClick={() => {
+                    setEditingItem(null);
+                    setForm(INITIAL_FORM_STATE);
+                    setIsFormOpen(false);
+                  }}
+                >
+                  İptal
+                </Button>
+                <Button variant="contained" type="submit" disabled={submitting}>
+                  {editingItem ? "Güncelle" : "Kaydet"}
+                </Button>
+              </DialogActions>
+            </Box>
+          </Dialog>
       </Grid>
+      {success && <Alert severity="success">{success}</Alert>}
     </Stack>
   );
 }

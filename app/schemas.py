@@ -32,8 +32,8 @@ def _normalize_warranty_type_alias(value: str | None) -> str | None:
     if not isinstance(value, str):
         return value
     normalized = value.strip().upper()
-    if normalized == "DOMAIN_SSL":
-        return "LICENSE"
+    if normalized in {"DEVICE", "MAINTENANCE", "SERVICE", "LICENSE", "DOMAIN_SSL"}:
+        return "WARRANTY"
     if normalized in {"SSL", "CERT"}:
         return "CERTIFICATE"
     return normalized
