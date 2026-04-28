@@ -200,20 +200,22 @@ def _sync_plan_purchase_requested(
     plan_entry_id: int | None,
     workflow_status: str | None,
     current_user: User,
-) -> None:
-    if not plan_entry_id:
-        return
+) -> int | None:
+    if not plan_entry_id or plan_entry_id <= 0:
+        return None
     plan_entry = session.get(PlanEntry, plan_entry_id)
     if not plan_entry:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="İlişkili plan kaydı bulunamadı.",
+        logger.warning(
+            "Plan entry relation skipped because record was not found.",
+            extra={"plan_entry_id": plan_entry_id},
         )
+        return None
     should_mark_purchased = _is_completed_status(workflow_status)
     plan_entry.purchase_requested = should_mark_purchased
     plan_entry.purchase_requested_at = datetime.utcnow() if should_mark_purchased else None
     plan_entry.purchase_requested_by = current_user.username if should_mark_purchased else None
     session.add(plan_entry)
+    return plan_entry.id
 
 
 def _ensure_warranty_id_sequence(session: Session) -> None:
@@ -305,6 +307,9 @@ def create_warranty_item(
         item_data.setdefault("remind_days_before", remind_days_value)
         item_data.setdefault("reminder_days", remind_days_value)
         item_data.setdefault("remind_days", remind_days_value)
+    submitted_plan_entry_id = item_data.get("plan_entry_id")
+    if submitted_plan_entry_id is not None and submitted_plan_entry_id <= 0:
+        item_data["plan_entry_id"] = None
     item_data = _sanitize_type_specific_fields(item_data, item_data.get("type"))
     item_data.setdefault("workflow_status", "Aktif")
     item = WarrantyItem(
@@ -316,7 +321,7 @@ def create_warranty_item(
     )
     try:
         _ensure_warranty_id_sequence(session)
-        _sync_plan_purchase_requested(
+        item.plan_entry_id = _sync_plan_purchase_requested(
             session=session,
             plan_entry_id=item.plan_entry_id,
             workflow_status=item.workflow_status,
@@ -376,6 +381,10 @@ def update_warranty_item(
         update_data.setdefault("remind_days_before", remind_days_value)
         update_data.setdefault("reminder_days", remind_days_value)
         update_data.setdefault("remind_days", remind_days_value)
+    if "plan_entry_id" in update_data:
+        submitted_plan_entry_id = update_data.get("plan_entry_id")
+        if submitted_plan_entry_id is not None and submitted_plan_entry_id <= 0:
+            update_data["plan_entry_id"] = None
     target_type = update_data.get("type") or item.type
     update_data = _sanitize_type_specific_fields(update_data, target_type)
     previous_plan_entry_id = item.plan_entry_id
@@ -394,7 +403,7 @@ def update_warranty_item(
                 workflow_status=None,
                 current_user=current_user,
             )
-        _sync_plan_purchase_requested(
+        item.plan_entry_id = _sync_plan_purchase_requested(
             session=session,
             plan_entry_id=item.plan_entry_id,
             workflow_status=item.workflow_status,

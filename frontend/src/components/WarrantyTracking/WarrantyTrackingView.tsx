@@ -22,6 +22,7 @@ import {
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import DownloadIcon from "@mui/icons-material/Download";
+import ContentCopyOutlinedIcon from "@mui/icons-material/ContentCopyOutlined";
 import SearchIcon from "@mui/icons-material/Search";
 import { DataGrid, type GridColDef, type GridPaginationModel } from "@mui/x-data-grid";
 import axios from "axios";
@@ -105,6 +106,7 @@ type WarrantyItemForm = {
   plan_entry_id: string;
   workflow_status: string;
 };
+type WarrantyFormMode = "create" | "edit" | "copy";
 
 const typeOptions: Array<{ value: WarrantyItemType; label: string }> = [
   { value: "WARRANTY", label: "Garanti" },
@@ -361,6 +363,7 @@ export default function WarrantyTrackingView() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [editingItem, setEditingItem] = useState<WarrantyItem | null>(null);
+  const [formMode, setFormMode] = useState<WarrantyFormMode>("create");
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [searchText, setSearchText] = useState("");
   const [paginationModel, setPaginationModel] = useState<GridPaginationModel>({
@@ -513,76 +516,8 @@ export default function WarrantyTrackingView() {
     setPaginationModel((prev) => ({ ...prev, page: 0 }));
   }, [searchText, selectedWarrantyFilter, selectedTypeFilter]);
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!form.name.trim() || !form.location.trim() || !form.end_date) {
-      setError("Tip, ad, lokasyon ve bitiş tarihi zorunludur.");
-      return;
-    }
-
-    setSubmitting(true);
-    setError(null);
-    setSuccess(null);
-
-    try {
-      const normalizedEndDate = normalizeDateInput(form.end_date);
-      const reminderValue = form.reminder_days ? Number(form.reminder_days) : null;
-      const payload = sanitizePayloadByType({
-        type: form.type,
-        name: form.name.trim(),
-        location: form.location.trim(),
-        domain: form.domain.trim() || null,
-        end_date: normalizedEndDate,
-        note: form.note.trim() || null,
-        issuer: form.issuer.trim() || null,
-        renewal_responsible: form.renewal_responsible.trim() || null,
-        reminder_days: Number.isFinite(reminderValue) ? reminderValue : null,
-        ssl_certificate: form.ssl_certificate.trim() || null,
-        certificate_type: form.certificate_type.trim() || null,
-        contract_end_date: normalizeDateInput(form.contract_end_date) || null,
-        vendor_company: form.vendor_company.trim() || null,
-        tax_number: form.tax_number.trim() || null,
-        service_type: form.service_type.trim() || null,
-        subscription_circuit_number: form.subscription_circuit_number.trim() || null,
-        location_name: form.location_name.trim() || null,
-        service_number: form.service_number.trim() || null,
-        speed: form.speed.trim() || null,
-        commitment_end_date: normalizeDateInput(form.commitment_end_date) || null,
-        billing_account_number: form.billing_account_number.trim() || null,
-        plan_entry_id: form.plan_entry_id ? Number(form.plan_entry_id) : null,
-        workflow_status: form.workflow_status.trim() || "Aktif",
-      }, form.type);
-      delete (payload as { id?: unknown }).id;
-
-      if (editingItem) {
-        await client.put(`/warranty-items/${editingItem.id}`, payload);
-        setSuccess("Garanti kaydı güncellendi.");
-      } else {
-        await client.post("/warranty-items", payload);
-        setSuccess("Garanti kaydı eklendi.");
-      }
-
-      setForm(INITIAL_FORM_STATE);
-      setEditingItem(null);
-      setIsFormOpen(false);
-      await loadItems();
-    } catch (err) {
-      console.error(err);
-      if (axios.isAxiosError(err)) {
-        const detail = (err.response?.data as { detail?: string } | undefined)?.detail;
-        setError(detail || "Garanti kaydı kaydedilemedi.");
-      } else {
-        setError("Garanti kaydı kaydedilemedi.");
-      }
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleEdit = useCallback((item: WarrantyItem) => {
-    setEditingItem(item);
-    setIsFormOpen(true);
-    setForm({
+  const populateFormFromItem = useCallback(
+    (item: WarrantyItem, mode: WarrantyFormMode): WarrantyItemForm => ({
       type: item.type || "WARRANTY",
       name: item.name,
       location: item.location,
@@ -611,10 +546,100 @@ export default function WarrantyTrackingView() {
       speed: item.speed ?? "",
       commitment_end_date: normalizeDateInput(item.commitment_end_date) ?? "",
       billing_account_number: item.billing_account_number ?? "",
-      plan_entry_id: item.plan_entry_id != null ? String(item.plan_entry_id) : "",
+      plan_entry_id: mode === "edit" && item.plan_entry_id != null ? String(item.plan_entry_id) : "",
       workflow_status: item.workflow_status ?? "Aktif",
-    });
-  }, []);
+    }),
+    []
+  );
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!form.name.trim() || !form.location.trim() || !form.end_date) {
+      setError("Tip, ad, lokasyon ve bitiş tarihi zorunludur.");
+      return;
+    }
+
+    setSubmitting(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const normalizedEndDate = normalizeDateInput(form.end_date);
+      const reminderValue = form.reminder_days ? Number(form.reminder_days) : null;
+      const normalizedPlanEntryId = Number(form.plan_entry_id);
+      const parsedPlanEntryId =
+        form.plan_entry_id.trim() && Number.isFinite(normalizedPlanEntryId) && normalizedPlanEntryId > 0
+          ? normalizedPlanEntryId
+          : null;
+      const payload = sanitizePayloadByType({
+        type: form.type,
+        name: form.name.trim(),
+        location: form.location.trim(),
+        domain: form.domain.trim() || null,
+        end_date: normalizedEndDate,
+        note: form.note.trim() || null,
+        issuer: form.issuer.trim() || null,
+        renewal_responsible: form.renewal_responsible.trim() || null,
+        reminder_days: Number.isFinite(reminderValue) ? reminderValue : null,
+        ssl_certificate: form.ssl_certificate.trim() || null,
+        certificate_type: form.certificate_type.trim() || null,
+        contract_end_date: normalizeDateInput(form.contract_end_date) || null,
+        vendor_company: form.vendor_company.trim() || null,
+        tax_number: form.tax_number.trim() || null,
+        service_type: form.service_type.trim() || null,
+        subscription_circuit_number: form.subscription_circuit_number.trim() || null,
+        location_name: form.location_name.trim() || null,
+        service_number: form.service_number.trim() || null,
+        speed: form.speed.trim() || null,
+        commitment_end_date: normalizeDateInput(form.commitment_end_date) || null,
+        billing_account_number: form.billing_account_number.trim() || null,
+        plan_entry_id: parsedPlanEntryId,
+        workflow_status: form.workflow_status.trim() || "Aktif",
+      }, form.type);
+      delete (payload as { id?: unknown }).id;
+      if (parsedPlanEntryId == null) {
+        delete (payload as { plan_entry_id?: unknown }).plan_entry_id;
+      }
+
+      if (formMode === "edit" && editingItem) {
+        await client.put(`/warranty-items/${editingItem.id}`, payload);
+        setSuccess("Garanti kaydı güncellendi.");
+      } else {
+        await client.post("/warranty-items", payload);
+        setSuccess(formMode === "copy" ? "Kayıt kopyalanarak oluşturuldu." : "Garanti kaydı eklendi.");
+      }
+
+      setForm(INITIAL_FORM_STATE);
+      setEditingItem(null);
+      setFormMode("create");
+      setIsFormOpen(false);
+      await loadItems();
+    } catch (err) {
+      console.error(err);
+      if (axios.isAxiosError(err)) {
+        const detail = (err.response?.data as { detail?: string } | undefined)?.detail;
+        setError(detail || "Garanti kaydı kaydedilemedi.");
+      } else {
+        setError("Garanti kaydı kaydedilemedi.");
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleEdit = useCallback((item: WarrantyItem) => {
+    setFormMode("edit");
+    setEditingItem(item);
+    setIsFormOpen(true);
+    setForm(populateFormFromItem(item, "edit"));
+  }, [populateFormFromItem]);
+
+  const handleCopy = useCallback((item: WarrantyItem) => {
+    setFormMode("copy");
+    setEditingItem(null);
+    setIsFormOpen(true);
+    setForm(populateFormFromItem(item, "copy"));
+  }, [populateFormFromItem]);
 
   const handleDelete = useCallback(async (item: WarrantyItem) => {
     setSubmitting(true);
@@ -626,6 +651,7 @@ export default function WarrantyTrackingView() {
       setSuccess("Garanti kaydı silindi.");
       if (editingItem?.id === item.id) {
         setEditingItem(null);
+        setFormMode("create");
         setForm(INITIAL_FORM_STATE);
         setIsFormOpen(false);
       }
@@ -865,6 +891,9 @@ export default function WarrantyTrackingView() {
               <IconButton size="small" onClick={() => handleEdit(params.row)}>
                 <EditOutlinedIcon fontSize="small" />
               </IconButton>
+              <IconButton size="small" onClick={() => handleCopy(params.row)}>
+                <ContentCopyOutlinedIcon fontSize="small" />
+              </IconButton>
               <IconButton size="small" color="error" onClick={() => handleDelete(params.row)}>
                 <DeleteOutlineOutlinedIcon fontSize="small" />
               </IconButton>
@@ -887,7 +916,7 @@ export default function WarrantyTrackingView() {
       return alwaysVisible.has(column.field) || shouldShow(column.field);
     });
   },
-    [handleDelete, handleEdit, selectedTypeFilter]
+    [handleCopy, handleDelete, handleEdit, selectedTypeFilter]
   );
 
   return (
@@ -906,6 +935,7 @@ export default function WarrantyTrackingView() {
             setError(null);
             setSuccess(null);
             setEditingItem(null);
+            setFormMode("create");
             setForm(INITIAL_FORM_STATE);
             setIsFormOpen(true);
           }}
@@ -1042,7 +1072,13 @@ export default function WarrantyTrackingView() {
           </Card>
         </Grid>
         <Dialog open={isFormOpen} onClose={() => setIsFormOpen(false)} fullWidth maxWidth="md">
-          <DialogTitle>{editingItem ? "Kaydı Güncelle" : "Yeni Garanti Kaydı"}</DialogTitle>
+          <DialogTitle>
+            {formMode === "edit"
+              ? "Kaydı Güncelle"
+              : formMode === "copy"
+                ? "Garanti Kaydını Kopyala"
+                : "Yeni Garanti Kaydı"}
+          </DialogTitle>
           <Box component="form" onSubmit={handleSubmit}>
             <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
                   <TextField
@@ -1194,6 +1230,7 @@ export default function WarrantyTrackingView() {
                   variant="text"
                   onClick={() => {
                     setEditingItem(null);
+                    setFormMode("create");
                     setForm(INITIAL_FORM_STATE);
                     setIsFormOpen(false);
                   }}
@@ -1201,7 +1238,7 @@ export default function WarrantyTrackingView() {
                   İptal
                 </Button>
                 <Button variant="contained" type="submit" disabled={submitting}>
-                  {editingItem ? "Güncelle" : "Kaydet"}
+                  {formMode === "edit" ? "Güncelle" : "Kaydet"}
                 </Button>
               </DialogActions>
             </Box>
