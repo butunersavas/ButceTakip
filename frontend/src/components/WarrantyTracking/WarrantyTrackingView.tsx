@@ -675,6 +675,29 @@ export default function WarrantyTrackingView() {
       const shouldShow = (field: string) => !typeFields || typeFields.includes(field);
       return [
       {
+        field: "actions",
+        headerName: "İşlemler",
+        width: 150,
+        minWidth: 150,
+        sortable: false,
+        renderCell: (params) => {
+          if (!params?.row) return null;
+          return (
+            <Stack direction="row" spacing={0.5}>
+              <IconButton size="small" onClick={() => handleEdit(params.row)}>
+                <EditOutlinedIcon fontSize="small" />
+              </IconButton>
+              <IconButton size="small" onClick={() => handleCopy(params.row)}>
+                <ContentCopyOutlinedIcon fontSize="small" />
+              </IconButton>
+              <IconButton size="small" color="error" onClick={() => handleDelete(params.row)}>
+                <DeleteOutlineOutlinedIcon fontSize="small" />
+              </IconButton>
+            </Stack>
+          );
+        },
+      },
+      {
         field: "type",
         headerName: "Tip",
         flex: 0.7,
@@ -877,28 +900,6 @@ export default function WarrantyTrackingView() {
           const r = row as any;
           const value = r?.note ?? "-";
           return toDisplayText(value);
-        },
-      },
-      {
-        field: "actions",
-        headerName: "İşlemler",
-        flex: 0.7,
-        sortable: false,
-        renderCell: (params) => {
-          if (!params?.row) return null;
-          return (
-            <Stack direction="row" spacing={1}>
-              <IconButton size="small" onClick={() => handleEdit(params.row)}>
-                <EditOutlinedIcon fontSize="small" />
-              </IconButton>
-              <IconButton size="small" onClick={() => handleCopy(params.row)}>
-                <ContentCopyOutlinedIcon fontSize="small" />
-              </IconButton>
-              <IconButton size="small" color="error" onClick={() => handleDelete(params.row)}>
-                <DeleteOutlineOutlinedIcon fontSize="small" />
-              </IconButton>
-            </Stack>
-          );
         },
       },
     ].filter((column) => {
