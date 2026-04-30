@@ -920,6 +920,15 @@ export default function WarrantyTrackingView() {
     [handleCopy, handleDelete, handleEdit, selectedTypeFilter]
   );
 
+  const tableMinWidth = useMemo(() => {
+    return columns.reduce((total, column) => {
+      if (typeof column.width === "number") return total + column.width;
+      if (typeof column.minWidth === "number") return total + column.minWidth;
+      if (typeof column.flex === "number") return total + Math.round(column.flex * 160);
+      return total + 140;
+    }, 0);
+  }, [columns]);
+
   return (
     <Stack spacing={3}>
       <Box>
@@ -1056,18 +1065,22 @@ export default function WarrantyTrackingView() {
                   {searchText.trim() ? "Aramanızla eşleşen kayıt bulunamadı." : "Henüz garanti kaydı yok."}
                 </Alert>
               ) : (
-                <DataGrid
-                  rows={filteredItems ?? []}
-                  getRowId={(row) => row?.id}
-                  columns={columns}
-                  loading={loading}
-                  disableRowSelectionOnClick
-                  autoHeight
-                  pageSizeOptions={PAGE_SIZE_OPTIONS}
-                  paginationModel={paginationModel}
-                  onPaginationModelChange={setPaginationModel}
-                  sx={{ border: "none" }}
-                />
+                <Box sx={{ width: "100%", overflowX: "auto", overflowY: "hidden" }}>
+                  <Box sx={{ minWidth: tableMinWidth }}>
+                    <DataGrid
+                      rows={filteredItems ?? []}
+                      getRowId={(row) => row?.id}
+                      columns={columns}
+                      loading={loading}
+                      disableRowSelectionOnClick
+                      autoHeight
+                      pageSizeOptions={PAGE_SIZE_OPTIONS}
+                      paginationModel={paginationModel}
+                      onPaginationModelChange={setPaginationModel}
+                      sx={{ border: "none" }}
+                    />
+                  </Box>
+                </Box>
               )}
             </CardContent>
           </Card>
