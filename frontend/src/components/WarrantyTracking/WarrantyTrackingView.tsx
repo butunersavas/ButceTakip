@@ -678,18 +678,20 @@ export default function WarrantyTrackingView() {
       {
         field: "type",
         headerName: "Tip",
-        flex: 0.7,
+        width: 130,
+        minWidth: 130,
         valueGetter: (_value, row) => {
           const r = row as any;
           return formatTypeLabel(r?.type);
         },
       },
-      { field: "name", headerName: "Ad", flex: 1.2 },
-      { field: "location", headerName: "Lokasyon", flex: 1 },
+      { field: "name", headerName: "Ad", width: 200, minWidth: 180 },
+      { field: "location", headerName: "Lokasyon", width: 180, minWidth: 160 },
       {
         field: "certificate_issuer",
         headerName: "Sertifika Sağlayıcı",
-        flex: 1,
+        width: 210,
+        minWidth: 180,
         valueGetter: (_value, row) => {
           const r = row as any;
           const value = r?.certificate_issuer ?? r?.issuer ?? r?.certificateIssuer ?? "-";
@@ -699,7 +701,8 @@ export default function WarrantyTrackingView() {
       {
         field: "domain",
         headerName: "Domain",
-        flex: 1,
+        width: 190,
+        minWidth: 160,
         valueGetter: (_value, row) => {
           const r = row as any;
           const value = r?.domain ?? "-";
@@ -709,7 +712,8 @@ export default function WarrantyTrackingView() {
       {
         field: "renewal_responsible",
         headerName: "Yenileme Sorumlusu",
-        flex: 1,
+        width: 210,
+        minWidth: 180,
         valueGetter: (_value, row) => {
           const r = row as any;
           const value =
@@ -720,67 +724,78 @@ export default function WarrantyTrackingView() {
       {
         field: "service_type",
         headerName: "Hizmet Türü",
-        flex: 1,
+        width: 170,
+        minWidth: 150,
         valueGetter: (_value, row) => toDisplayText((row as any)?.service_type ?? "-"),
       },
       {
         field: "service_number",
         headerName: "Hizmet No",
-        flex: 0.8,
+        width: 150,
+        minWidth: 130,
         valueGetter: (_value, row) => toDisplayText((row as any)?.service_number ?? "-"),
       },
       {
         field: "location_name",
         headerName: "Lokasyon Adı",
-        flex: 1,
+        width: 190,
+        minWidth: 170,
         valueGetter: (_value, row) => toDisplayText((row as any)?.location_name ?? "-"),
       },
       {
         field: "speed",
         headerName: "Hız",
-        flex: 0.7,
+        width: 140,
+        minWidth: 120,
         valueGetter: (_value, row) => toDisplayText((row as any)?.speed ?? "-"),
       },
       {
         field: "billing_account_number",
         headerName: "Fatura Hesap No",
-        flex: 1,
+        width: 190,
+        minWidth: 170,
         valueGetter: (_value, row) => toDisplayText((row as any)?.billing_account_number ?? "-"),
       },
       {
         field: "ssl_certificate",
         headerName: "SSL Sertifikası",
-        flex: 1,
+        width: 180,
+        minWidth: 160,
         valueGetter: (_value, row) => toDisplayText((row as any)?.ssl_certificate ?? "-"),
       },
       {
         field: "certificate_type",
         headerName: "Sertifika Türü",
-        flex: 1,
+        width: 180,
+        minWidth: 160,
         valueGetter: (_value, row) => toDisplayText((row as any)?.certificate_type ?? "-"),
       },
       {
         field: "vendor_company",
         headerName: "Firma",
-        flex: 1,
+        width: 190,
+        minWidth: 170,
         valueGetter: (_value, row) => toDisplayText((row as any)?.vendor_company ?? "-"),
       },
       {
         field: "tax_number",
         headerName: "VKN",
-        flex: 0.8,
+        width: 150,
+        minWidth: 130,
         valueGetter: (_value, row) => toDisplayText((row as any)?.tax_number ?? "-"),
       },
       {
         field: "contract_end_date",
         headerName: "Sözleşme Bitiş",
-        flex: 0.9,
+        width: 170,
+        minWidth: 150,
         valueGetter: (_value, row) => formatDate((row as any)?.contract_end_date ?? null),
       },
       {
         field: "end_date",
         headerName: "Garanti/Sertifika/Sözleşme Bitiş",
-        flex: 0.9,
+        width: 230,
+        minWidth: 210,
         valueGetter: (_value, row) => {
           const r = row as any;
           const value = r?.end_date ?? r?.endDate ?? r?.expiration_date ?? "-";
@@ -790,7 +805,8 @@ export default function WarrantyTrackingView() {
       {
         field: "updated_at",
         headerName: "Son Güncelleme",
-        flex: 0.9,
+        width: 170,
+        minWidth: 150,
         valueGetter: (_value, row) => {
           const r = row as any;
           return formatDate(r?.updated_at ?? r?.updatedAt ?? null);
@@ -799,7 +815,7 @@ export default function WarrantyTrackingView() {
       {
         field: "days_left",
         headerName: "Kalan Gün",
-        flex: 0.8,
+        width: 150,
         minWidth: 130,
         sortable: false,
         renderCell: (params) => {
@@ -826,7 +842,7 @@ export default function WarrantyTrackingView() {
       {
         field: "status",
         headerName: "Durum",
-        flex: 1,
+        width: 220,
         minWidth: 180,
         sortable: false,
         renderCell: (params) => {
@@ -854,7 +870,7 @@ export default function WarrantyTrackingView() {
       {
         field: "created_by_name",
         headerName: "Kaydı Giren",
-        flex: 1,
+        width: 200,
         minWidth: 170,
         valueGetter: (_value, row) => {
           const r = row as any;
@@ -865,7 +881,7 @@ export default function WarrantyTrackingView() {
       {
         field: "updated_by_name",
         headerName: "Son Güncelleyen",
-        flex: 1,
+        width: 210,
         minWidth: 180,
         valueGetter: (_value, row) => {
           const r = row as any;
@@ -876,7 +892,7 @@ export default function WarrantyTrackingView() {
       {
         field: "note",
         headerName: "Not",
-        flex: 1.2,
+        width: 260,
         minWidth: 220,
         sortable: false,
         valueGetter: (_value, row) => {
@@ -888,13 +904,23 @@ export default function WarrantyTrackingView() {
       {
         field: "actions",
         headerName: "İşlemler",
-        width: 150,
-        minWidth: 150,
+        width: 140,
+        minWidth: 130,
         sortable: false,
         renderCell: (params) => {
           if (!params?.row) return null;
           return (
-            <Stack direction="row" spacing={0.5} sx={{ minWidth: 120, flexWrap: "nowrap" }}>
+            <Stack
+              direction="row"
+              spacing={0.5}
+              sx={{
+                minWidth: 130,
+                flexWrap: "nowrap",
+                alignItems: "center",
+                whiteSpace: "nowrap",
+                overflow: "visible",
+              }}
+            >
               <IconButton size="small" onClick={() => handleEdit(params.row)}>
                 <EditOutlinedIcon fontSize="small" />
               </IconButton>
@@ -1072,8 +1098,9 @@ export default function WarrantyTrackingView() {
                   {searchText.trim() ? "Aramanızla eşleşen kayıt bulunamadı." : "Henüz garanti kaydı yok."}
                 </Alert>
               ) : (
-                <Box sx={{ width: "100%" }}>
-                  <DataGrid
+                <Box sx={{ width: "100%", overflowX: "auto", overflowY: "hidden" }}>
+                  <Box sx={{ minWidth: `${tableMinWidth}px` }}>
+                    <DataGrid
                     rows={filteredItems ?? []}
                     getRowId={(row) => row?.id}
                     columns={columns}
@@ -1085,17 +1112,22 @@ export default function WarrantyTrackingView() {
                     onPaginationModelChange={setPaginationModel}
                     sx={{
                       border: "none",
-                      minWidth: tableMinWidth,
+                      width: `${tableMinWidth}px`,
+                      minWidth: `${tableMinWidth}px`,
                       "& .MuiDataGrid-main": {
-                        overflowX: "auto",
+                        overflowX: "visible",
                       },
                       "& .MuiDataGrid-virtualScroller": {
-                        overflowX: "auto",
+                        overflowX: "auto !important",
+                      },
+                      "& .MuiDataGrid-columnHeaders": {
+                        minWidth: `${tableMinWidth}px`,
                       },
                       "& .MuiDataGrid-cell": { py: 1 },
                       "& .MuiDataGrid-cell:focus, & .MuiDataGrid-columnHeader:focus": { outline: "none" },
                     }}
                   />
+                  </Box>
                 </Box>
               )}
             </CardContent>
