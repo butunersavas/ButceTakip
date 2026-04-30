@@ -673,7 +673,43 @@ export default function WarrantyTrackingView() {
       const activeType = selectedTypeFilter === "ALL" ? null : selectedTypeFilter;
       const typeFields = activeType ? typeSpecificColumnFields[activeType] : null;
       const shouldShow = (field: string) => !typeFields || typeFields.includes(field);
-      return [
+      const actionsColumn: GridColDef = {
+        field: "actions",
+        headerName: "İşlemler",
+        width: 150,
+        minWidth: 150,
+        sortable: false,
+        filterable: false,
+        disableColumnMenu: true,
+        renderCell: (params) => {
+          if (!params?.row) return null;
+          return (
+            <Stack
+              direction="row"
+              spacing={0.5}
+              sx={{
+                minWidth: 140,
+                flexWrap: "nowrap",
+                alignItems: "center",
+                whiteSpace: "nowrap",
+                overflow: "visible",
+              }}
+            >
+              <IconButton size="small" onClick={() => handleEdit(params.row)}>
+                <EditOutlinedIcon fontSize="small" />
+              </IconButton>
+              <IconButton size="small" onClick={() => handleCopy(params.row)}>
+                <ContentCopyOutlinedIcon fontSize="small" />
+              </IconButton>
+              <IconButton size="small" color="error" onClick={() => handleDelete(params.row)}>
+                <DeleteOutlineOutlinedIcon fontSize="small" />
+              </IconButton>
+            </Stack>
+          );
+        },
+      };
+
+      const baseColumns: GridColDef[] = [
       
       {
         field: "type",
@@ -901,39 +937,6 @@ export default function WarrantyTrackingView() {
           return toDisplayText(value);
         },
       },
-      {
-        field: "actions",
-        headerName: "İşlemler",
-        width: 140,
-        minWidth: 130,
-        sortable: false,
-        renderCell: (params) => {
-          if (!params?.row) return null;
-          return (
-            <Stack
-              direction="row"
-              spacing={0.5}
-              sx={{
-                minWidth: 130,
-                flexWrap: "nowrap",
-                alignItems: "center",
-                whiteSpace: "nowrap",
-                overflow: "visible",
-              }}
-            >
-              <IconButton size="small" onClick={() => handleEdit(params.row)}>
-                <EditOutlinedIcon fontSize="small" />
-              </IconButton>
-              <IconButton size="small" onClick={() => handleCopy(params.row)}>
-                <ContentCopyOutlinedIcon fontSize="small" />
-              </IconButton>
-              <IconButton size="small" color="error" onClick={() => handleDelete(params.row)}>
-                <DeleteOutlineOutlinedIcon fontSize="small" />
-              </IconButton>
-            </Stack>
-          );
-        },
-      },
     ].filter((column) => {
       const alwaysVisible = new Set([
         "type",
@@ -944,10 +947,10 @@ export default function WarrantyTrackingView() {
         "created_by_name",
         "updated_by_name",
         "note",
-        "actions",
       ]);
       return alwaysVisible.has(column.field) || shouldShow(column.field);
     });
+      return [...baseColumns, actionsColumn];
   },
     [handleCopy, handleDelete, handleEdit, selectedTypeFilter]
   );
