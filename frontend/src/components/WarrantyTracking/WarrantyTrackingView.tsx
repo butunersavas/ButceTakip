@@ -674,29 +674,7 @@ export default function WarrantyTrackingView() {
       const typeFields = activeType ? typeSpecificColumnFields[activeType] : null;
       const shouldShow = (field: string) => !typeFields || typeFields.includes(field);
       return [
-      {
-        field: "actions",
-        headerName: "İşlemler",
-        width: 150,
-        minWidth: 150,
-        sortable: false,
-        renderCell: (params) => {
-          if (!params?.row) return null;
-          return (
-            <Stack direction="row" spacing={0.5}>
-              <IconButton size="small" onClick={() => handleEdit(params.row)}>
-                <EditOutlinedIcon fontSize="small" />
-              </IconButton>
-              <IconButton size="small" onClick={() => handleCopy(params.row)}>
-                <ContentCopyOutlinedIcon fontSize="small" />
-              </IconButton>
-              <IconButton size="small" color="error" onClick={() => handleDelete(params.row)}>
-                <DeleteOutlineOutlinedIcon fontSize="small" />
-              </IconButton>
-            </Stack>
-          );
-        },
-      },
+      
       {
         field: "type",
         headerName: "Tip",
@@ -902,6 +880,29 @@ export default function WarrantyTrackingView() {
           return toDisplayText(value);
         },
       },
+      {
+        field: "actions",
+        headerName: "İşlemler",
+        width: 150,
+        minWidth: 150,
+        sortable: false,
+        renderCell: (params) => {
+          if (!params?.row) return null;
+          return (
+            <Stack direction="row" spacing={0.5} sx={{ minWidth: 120, flexWrap: "nowrap" }}>
+              <IconButton size="small" onClick={() => handleEdit(params.row)}>
+                <EditOutlinedIcon fontSize="small" />
+              </IconButton>
+              <IconButton size="small" onClick={() => handleCopy(params.row)}>
+                <ContentCopyOutlinedIcon fontSize="small" />
+              </IconButton>
+              <IconButton size="small" color="error" onClick={() => handleDelete(params.row)}>
+                <DeleteOutlineOutlinedIcon fontSize="small" />
+              </IconButton>
+            </Stack>
+          );
+        },
+      },
     ].filter((column) => {
       const alwaysVisible = new Set([
         "type",
@@ -921,12 +922,13 @@ export default function WarrantyTrackingView() {
   );
 
   const tableMinWidth = useMemo(() => {
-    return columns.reduce((total, column) => {
+    const calculatedWidth = columns.reduce((total, column) => {
       if (typeof column.width === "number") return total + column.width;
       if (typeof column.minWidth === "number") return total + column.minWidth;
       if (typeof column.flex === "number") return total + Math.round(column.flex * 160);
       return total + 140;
     }, 0);
+    return Math.max(calculatedWidth, 1400);
   }, [columns]);
 
   return (
@@ -1065,7 +1067,19 @@ export default function WarrantyTrackingView() {
                   {searchText.trim() ? "Aramanızla eşleşen kayıt bulunamadı." : "Henüz garanti kaydı yok."}
                 </Alert>
               ) : (
-                <Box sx={{ width: "100%", overflowX: "auto", overflowY: "hidden" }}>
+                <Box
+                  sx={{
+                    width: "100%",
+                    overflowX: "auto",
+                    overflowY: "hidden",
+                    pb: 0.5,
+                    "&::-webkit-scrollbar": { height: 10 },
+                    "&::-webkit-scrollbar-thumb": {
+                      backgroundColor: "rgba(120,120,120,0.45)",
+                      borderRadius: 8,
+                    },
+                  }}
+                >
                   <Box sx={{ minWidth: tableMinWidth }}>
                     <DataGrid
                       rows={filteredItems ?? []}
@@ -1077,7 +1091,12 @@ export default function WarrantyTrackingView() {
                       pageSizeOptions={PAGE_SIZE_OPTIONS}
                       paginationModel={paginationModel}
                       onPaginationModelChange={setPaginationModel}
-                      sx={{ border: "none" }}
+                      sx={{
+                        border: "none",
+                        minWidth: tableMinWidth,
+                        "& .MuiDataGrid-cell": { py: 1 },
+                        "& .MuiDataGrid-cell:focus, & .MuiDataGrid-columnHeader:focus": { outline: "none" },
+                      }}
                     />
                   </Box>
                 </Box>
