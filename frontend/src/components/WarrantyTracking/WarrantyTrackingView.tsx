@@ -800,6 +800,7 @@ export default function WarrantyTrackingView() {
         field: "days_left",
         headerName: "Kalan Gün",
         flex: 0.8,
+        minWidth: 130,
         sortable: false,
         renderCell: (params) => {
           const daysLeft = params?.row?.days_left ?? null;
@@ -826,6 +827,7 @@ export default function WarrantyTrackingView() {
         field: "status",
         headerName: "Durum",
         flex: 1,
+        minWidth: 180,
         sortable: false,
         renderCell: (params) => {
           const row = params?.row;
@@ -853,6 +855,7 @@ export default function WarrantyTrackingView() {
         field: "created_by_name",
         headerName: "Kaydı Giren",
         flex: 1,
+        minWidth: 170,
         valueGetter: (_value, row) => {
           const r = row as any;
           const value = r?.created_by_name ?? r?.createdByName ?? "-";
@@ -863,6 +866,7 @@ export default function WarrantyTrackingView() {
         field: "updated_by_name",
         headerName: "Son Güncelleyen",
         flex: 1,
+        minWidth: 180,
         valueGetter: (_value, row) => {
           const r = row as any;
           const value = r?.updated_by_name ?? r?.updatedByName ?? "-";
@@ -873,6 +877,7 @@ export default function WarrantyTrackingView() {
         field: "note",
         headerName: "Not",
         flex: 1.2,
+        minWidth: 220,
         sortable: false,
         valueGetter: (_value, row) => {
           const r = row as any;
@@ -1067,38 +1072,30 @@ export default function WarrantyTrackingView() {
                   {searchText.trim() ? "Aramanızla eşleşen kayıt bulunamadı." : "Henüz garanti kaydı yok."}
                 </Alert>
               ) : (
-                <Box
-                  sx={{
-                    width: "100%",
-                    overflowX: "auto",
-                    overflowY: "hidden",
-                    pb: 0.5,
-                    "&::-webkit-scrollbar": { height: 10 },
-                    "&::-webkit-scrollbar-thumb": {
-                      backgroundColor: "rgba(120,120,120,0.45)",
-                      borderRadius: 8,
-                    },
-                  }}
-                >
-                  <Box sx={{ minWidth: tableMinWidth }}>
-                    <DataGrid
-                      rows={filteredItems ?? []}
-                      getRowId={(row) => row?.id}
-                      columns={columns}
-                      loading={loading}
-                      disableRowSelectionOnClick
-                      autoHeight
-                      pageSizeOptions={PAGE_SIZE_OPTIONS}
-                      paginationModel={paginationModel}
-                      onPaginationModelChange={setPaginationModel}
-                      sx={{
-                        border: "none",
-                        minWidth: tableMinWidth,
-                        "& .MuiDataGrid-cell": { py: 1 },
-                        "& .MuiDataGrid-cell:focus, & .MuiDataGrid-columnHeader:focus": { outline: "none" },
-                      }}
-                    />
-                  </Box>
+                <Box sx={{ width: "100%" }}>
+                  <DataGrid
+                    rows={filteredItems ?? []}
+                    getRowId={(row) => row?.id}
+                    columns={columns}
+                    loading={loading}
+                    disableRowSelectionOnClick
+                    autoHeight
+                    pageSizeOptions={PAGE_SIZE_OPTIONS}
+                    paginationModel={paginationModel}
+                    onPaginationModelChange={setPaginationModel}
+                    sx={{
+                      border: "none",
+                      minWidth: tableMinWidth,
+                      "& .MuiDataGrid-main": {
+                        overflowX: "auto",
+                      },
+                      "& .MuiDataGrid-virtualScroller": {
+                        overflowX: "auto",
+                      },
+                      "& .MuiDataGrid-cell": { py: 1 },
+                      "& .MuiDataGrid-cell:focus, & .MuiDataGrid-columnHeader:focus": { outline: "none" },
+                    }}
+                  />
                 </Box>
               )}
             </CardContent>
