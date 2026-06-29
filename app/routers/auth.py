@@ -8,7 +8,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, select
 
 from app.config import get_settings
-from app.dependencies import get_current_user, get_db_session
+from app.dependencies import VIEWER_ROLES, get_current_user, get_db_session
 from app.models import User
 from app.schemas import ChangePasswordRequest, CurrentUserResponse, Token, UserCreate, UserRead
 from app.utils.security import create_access_token, get_password_hash, verify_password
@@ -41,6 +41,7 @@ def authenticate_user(session: Session, username: str, password: str) -> User | 
 def _create_user(session: Session, user_in: UserCreate) -> User:
     validate_username(user_in.username, user_in.is_admin)
     username = user_in.username.strip().lower()
+    role = "admin" if user_in.is_admin else user_in.role
 
     existing_user = session.exec(select(User).where(User.username == username)).first()
     if existing_user:
@@ -51,6 +52,7 @@ def _create_user(session: Session, user_in: UserCreate) -> User:
         full_name=user_in.full_name,
         hashed_password=get_password_hash(user_in.password),
         is_admin=user_in.is_admin,
+        role=role,
         is_active=user_in.is_active if user_in.is_active is not None else True,
     )
     session.add(user)
@@ -137,7 +139,7 @@ async def login_for_access_token(
                 headers={"WWW-Authenticate": "Bearer"},
             )
         access_token = create_access_token(
-            data={"sub": str(user.id), "is_admin": user.is_admin},
+            data={"sub": str(user.id), "is_admin": user.is_admin, "role": user.role},
             expires_delta=timedelta(minutes=settings.access_token_expire_minutes),
         )
         return Token(access_token=access_token)
@@ -185,10 +187,13 @@ def change_password(
 @router.get("/me/", response_model=CurrentUserResponse, include_in_schema=False)
 def read_current_user(current_user: User = Depends(get_current_user)) -> CurrentUserResponse:
     """Return the authenticated user's profile information."""
+    raw_role = (current_user.role or ("admin" if current_user.is_admin else "user")).strip().lower()
+    role = "viewer" if raw_role in VIEWER_ROLES else "admin" if current_user.is_admin or raw_role == "admin" else "user"
     return CurrentUserResponse(
         id=current_user.id,
         username=current_user.username,
         full_name=current_user.full_name,
         is_admin=current_user.is_admin,
+        role=role,
         is_active=current_user.is_active,
     )

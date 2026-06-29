@@ -13,13 +13,13 @@ type FiltersBarProps = {
 export default function FiltersBar({ title = "Filtreler", onApply, onReset, children }: FiltersBarProps) {
   return (
     <Card>
-      <CardContent sx={{ py: 1.5, px: 2.5 }}>
+      <CardContent sx={{ py: 1.5, px: { xs: 1.5, sm: 2.5 } }}>
         <Stack
-          direction="row"
-          spacing={1}
-          alignItems="center"
+          direction={{ xs: "column", lg: "row" }}
+          spacing={1.25}
+          alignItems={{ xs: "stretch", lg: "center" }}
           flexWrap="wrap"
-          sx={{ rowGap: 1 }}
+          sx={{ rowGap: 1, width: "100%" }}
         >
           <Typography variant="subtitle2" fontWeight={700} sx={{ minWidth: "fit-content" }}>
             {title}
@@ -30,12 +30,29 @@ export default function FiltersBar({ title = "Filtreler", onApply, onReset, chil
               alignItems: "center",
               gap: 1,
               flexWrap: "wrap",
-              flex: 1
+              flex: 1,
+              minWidth: 0,
+              "& > .MuiFormControl-root, & > .MuiAutocomplete-root": {
+                flex: { xs: "1 1 100%", sm: "1 1 180px" },
+                minWidth: { xs: "100%", sm: 160 }
+              }
             }}
           >
             {children}
           </Box>
-          <Stack direction="row" spacing={1} alignItems="center">
+          <Stack
+            direction="row"
+            spacing={1}
+            alignItems="center"
+            justifyContent={{ xs: "flex-end", lg: "flex-start" }}
+            flexWrap="wrap"
+            sx={{
+              ml: { lg: "auto" },
+              flexShrink: 0,
+              rowGap: 1,
+              "& .MuiButton-root": { height: 40, whiteSpace: "nowrap" }
+            }}
+          >
             {onApply && (
               <Button
                 size="small"

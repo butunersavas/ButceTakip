@@ -62,6 +62,7 @@ def init_default_admin(session: Session) -> None:
             full_name=admin_full_name,
             hashed_password=hashed_password,
             is_admin=True,
+            role="admin",
             is_active=True,
         )
         logger.info("Default admin created.")
@@ -69,6 +70,7 @@ def init_default_admin(session: Session) -> None:
         user.email = admin_email
         user.full_name = admin_full_name
         user.is_admin = True
+        user.role = "admin"
         user.is_active = True
         user.hashed_password = hashed_password
         logger.info("Default admin exists.")
@@ -81,7 +83,23 @@ def init_default_admin(session: Session) -> None:
 def ensure_warranty_schema(inspector) -> None:
     if not inspector.has_table("warranty_items"):
         return
-    warranty_columns = {column["name"] for column in inspector.get_columns("warranty_items")}
+    warranty_column_info = {column["name"]: column for column in inspector.get_columns("warranty_items")}
+    warranty_columns = set(warranty_column_info)
+    is_postgres = engine.dialect.name == "postgresql"
+    if (
+        is_postgres
+        and "location" in warranty_column_info
+        and not warranty_column_info["location"].get("nullable", True)
+    ):
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE warranty_items ALTER COLUMN location DROP NOT NULL"))
+    if (
+        is_postgres
+        and "end_date" in warranty_column_info
+        and not warranty_column_info["end_date"].get("nullable", True)
+    ):
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE warranty_items ALTER COLUMN end_date DROP NOT NULL"))
     if "domain" not in warranty_columns:
         with engine.begin() as connection:
             connection.execute(text("ALTER TABLE warranty_items ADD COLUMN domain TEXT"))
@@ -107,6 +125,39 @@ def ensure_warranty_schema(inspector) -> None:
     if "renewal_responsible" not in warranty_columns:
         with engine.begin() as connection:
             connection.execute(text("ALTER TABLE warranty_items ADD COLUMN renewal_responsible TEXT"))
+    if "purchased_from" not in warranty_columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE warranty_items ADD COLUMN purchased_from TEXT"))
+    if "brand" not in warranty_columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE warranty_items ADD COLUMN brand TEXT"))
+    if "model" not in warranty_columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE warranty_items ADD COLUMN model TEXT"))
+    if "serial_number" not in warranty_columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE warranty_items ADD COLUMN serial_number TEXT"))
+    if "asset_tag" not in warranty_columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE warranty_items ADD COLUMN asset_tag TEXT"))
+    if "service_code" not in warranty_columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE warranty_items ADD COLUMN service_code TEXT"))
+    if "ordered_product_model" not in warranty_columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE warranty_items ADD COLUMN ordered_product_model TEXT"))
+    if "price" not in warranty_columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE warranty_items ADD COLUMN price NUMERIC(14, 2)"))
+    if "shipment_date" not in warranty_columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE warranty_items ADD COLUMN shipment_date DATE"))
+    if "end_of_service_life" not in warranty_columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE warranty_items ADD COLUMN end_of_service_life DATE"))
+    if "status" not in warranty_columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE warranty_items ADD COLUMN status TEXT"))
     if "reminder_days" not in warranty_columns:
         with engine.begin() as connection:
             connection.execute(
@@ -157,26 +208,6 @@ def ensure_warranty_schema(inspector) -> None:
     if "updated_by_user_id" not in warranty_columns:
         with engine.begin() as connection:
             connection.execute(text("ALTER TABLE warranty_items ADD COLUMN updated_by_user_id INTEGER"))
-    for column in (
-        "ssl_certificate TEXT",
-        "certificate_type TEXT",
-        "contract_end_date DATE",
-        "vendor_company TEXT",
-        "tax_number TEXT",
-        "service_type TEXT",
-        "subscription_circuit_number TEXT",
-        "location_name TEXT",
-        "service_number TEXT",
-        "speed TEXT",
-        "commitment_end_date DATE",
-        "billing_account_number TEXT",
-        "plan_entry_id INTEGER",
-        "workflow_status TEXT DEFAULT 'Aktif'",
-    ):
-        column_name = column.split()[0]
-        if column_name not in warranty_columns:
-            with engine.begin() as connection:
-                connection.execute(text(f"ALTER TABLE warranty_items ADD COLUMN {column}"))
 
 
 def _apply_schema_upgrades() -> None:
@@ -212,13 +243,30 @@ def _apply_schema_upgrades() -> None:
                 connection.execute(text("ALTER TABLE budget_items ADD COLUMN map_category TEXT"))
 
     if inspector.has_table("expenses"):
-        expense_columns = {column["name"] for column in inspector.get_columns("expenses")}
+        expense_column_info = {column["name"]: column for column in inspector.get_columns("expenses")}
+        expense_columns = set(expense_column_info)
+        if (
+            is_postgres
+            and "budget_item_id" in expense_column_info
+            and not expense_column_info["budget_item_id"].get("nullable", True)
+        ):
+            with engine.begin() as connection:
+                connection.execute(text("ALTER TABLE expenses ALTER COLUMN budget_item_id DROP NOT NULL"))
         if "client_hostname" not in expense_columns:
             with engine.begin() as connection:
                 connection.execute(text("ALTER TABLE expenses ADD COLUMN client_hostname TEXT"))
         if "kaydi_giren_kullanici" not in expense_columns:
             with engine.begin() as connection:
                 connection.execute(text("ALTER TABLE expenses ADD COLUMN kaydi_giren_kullanici TEXT"))
+        for column_name in (
+            "budget_outside_title",
+            "budget_outside_department",
+            "budget_outside_capex_opex",
+            "budget_outside_asset_type",
+        ):
+            if column_name not in expense_columns:
+                with engine.begin() as connection:
+                    connection.execute(text(f"ALTER TABLE expenses ADD COLUMN {column_name} TEXT"))
         if "is_out_of_budget" not in expense_columns:
             with engine.begin() as connection:
                 connection.execute(
@@ -279,39 +327,22 @@ def _apply_schema_upgrades() -> None:
         if "purchase_requested_by" not in plan_columns:
             with engine.begin() as connection:
                 connection.execute(text("ALTER TABLE plan_entries ADD COLUMN purchase_requested_by TEXT"))
+        if "unused_amount" not in plan_columns:
+            with engine.begin() as connection:
+                connection.execute(
+                    text("ALTER TABLE plan_entries ADD COLUMN unused_amount FLOAT DEFAULT 0")
+                )
+        if "unused_reason" not in plan_columns:
+            with engine.begin() as connection:
+                connection.execute(text("ALTER TABLE plan_entries ADD COLUMN unused_reason TEXT"))
+        if "unused_note" not in plan_columns:
+            with engine.begin() as connection:
+                connection.execute(text("ALTER TABLE plan_entries ADD COLUMN unused_note TEXT"))
+        if "unused_updated_at" not in plan_columns:
+            with engine.begin() as connection:
+                connection.execute(text("ALTER TABLE plan_entries ADD COLUMN unused_updated_at TIMESTAMP"))
 
     ensure_warranty_schema(inspector)
-
-    if not inspector.has_table("expense_attachments"):
-        with engine.begin() as connection:
-            connection.execute(
-                text(
-                    "CREATE TABLE expense_attachments ("
-                    "id INTEGER PRIMARY KEY, "
-                    "expense_id INTEGER NOT NULL, "
-                    "filename TEXT NOT NULL, "
-                    "stored_filename TEXT NOT NULL UNIQUE, "
-                    "content_type TEXT NOT NULL, "
-                    "size_bytes INTEGER NOT NULL, "
-                    "storage_path TEXT NOT NULL, "
-                    "uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL, "
-                    "uploaded_by TEXT NULL, "
-                    "FOREIGN KEY(expense_id) REFERENCES expenses(id)"
-                    ")"
-                )
-            )
-            connection.execute(
-                text(
-                    "CREATE INDEX IF NOT EXISTS ix_expense_attachments_expense_id "
-                    "ON expense_attachments(expense_id)"
-                )
-            )
-            connection.execute(
-                text(
-                    "CREATE INDEX IF NOT EXISTS ix_expense_attachments_uploaded_at "
-                    "ON expense_attachments(uploaded_at)"
-                )
-            )
 
     if inspector.has_table("users"):
         user_columns = {column["name"] for column in inspector.get_columns("users")}
@@ -331,3 +362,17 @@ def _apply_schema_upgrades() -> None:
         if "is_admin" not in user_columns:
             with engine.begin() as connection:
                 connection.execute(text("ALTER TABLE users ADD COLUMN is_admin BOOLEAN DEFAULT 0"))
+        if "role" not in user_columns:
+            with engine.begin() as connection:
+                connection.execute(text("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user'"))
+                connection.execute(
+                    text("UPDATE users SET role = CASE WHEN is_admin THEN 'admin' ELSE 'user' END")
+                )
+        else:
+            with engine.begin() as connection:
+                connection.execute(
+                    text(
+                        "UPDATE users SET role = CASE WHEN is_admin THEN 'admin' ELSE 'user' END "
+                        "WHERE role IS NULL OR role = ''"
+                    )
+                )

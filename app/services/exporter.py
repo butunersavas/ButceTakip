@@ -1,7 +1,5 @@
-import logging
 import csv
 import io
-import calendar
 from datetime import date
 from typing import Literal
 
@@ -10,80 +8,36 @@ from openpyxl import Workbook
 from sqlalchemy import func
 from sqlmodel import Session, select
 
-from app.models import BudgetItem, Expense, ExpenseStatus, PlanEntry, Scenario
+from app.models import BudgetItem, Expense, ExpenseStatus, PlanEntry, PurchaseFormStatusExt, Scenario
 from app.services.analytics import compute_quarterly_summary
 from app.schemas import PurchaseFormPreparedReportItem
 
 
 CURRENCY_SYMBOL = "$"
-logger = logging.getLogger(__name__)
 
-EXPORT_COLUMN_DEFINITIONS: list[tuple[str, str]] = [
-    ("type", "type"),
-    ("budget_code", "budget_code"),
-    ("budget_name", "budget_name"),
-    ("scenario", "scenario"),
-    ("year", "year"),
-    ("month", "month"),
-    ("amount", "amount"),
-    ("date", "date"),
-    ("quantity", "quantity"),
-    ("unit_price", "unit_price"),
-    ("vendor", "vendor"),
-    ("description", "description"),
-    ("department", "Departman"),
-    ("status", "status"),
-    ("out_of_budget", "out_of_budget"),
-    ("capex_opex", "capex_opex"),
-    ("asset_type", "asset_type"),
-    ("record_owner", "kaydi_giren_kullanici"),
+EXPORT_HEADERS = [
+    "type",
+    "budget_code",
+    "budget_name",
+    "scenario",
+    "year",
+    "month",
+    "amount",
+    "date",
+    "quantity",
+    "unit_price",
+    "vendor",
+    "description",
+    "Departman",
+    "out_of_budget",
+    "capex_opex",
+    "asset_type",
 ]
-DEFAULT_EXPORT_COLUMN_KEYS = [key for key, _ in EXPORT_COLUMN_DEFINITIONS]
-EXPORT_COLUMN_HEADER_MAP = dict(EXPORT_COLUMN_DEFINITIONS)
 
 
 def _format_currency(value: float) -> str:
-    amount = 0 if value is None else float(value)
-    formatted = f"{amount:,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
-    return f"{formatted}{CURRENCY_SYMBOL}"
-
-
-def _normalize_columns(columns: list[str] | None) -> list[str]:
-    if not columns:
-        return DEFAULT_EXPORT_COLUMN_KEYS
-    valid = [column for column in columns if column in EXPORT_COLUMN_HEADER_MAP]
-    return valid or DEFAULT_EXPORT_COLUMN_KEYS
-
-
-def _resolve_date_bounds(
-    year: int,
-    month: int | None = None,
-    start_date: date | None = None,
-    end_date: date | None = None,
-) -> tuple[date, date]:
-    if start_date and end_date:
-        if start_date > end_date:
-            raise ValueError("Başlangıç tarihi bitiş tarihinden büyük olamaz.")
-        return start_date, end_date
-    if start_date and not end_date:
-        return start_date, date(year, 12, 31)
-    if end_date and not start_date:
-        return date(year, 1, 1), end_date
-    if month is not None:
-        return date(year, month, 1), date(year, month, calendar.monthrange(year, month)[1])
-    return date(year, 1, 1), date(year, 12, 31)
-
-
-def _resolve_month_bounds(
-    year: int,
-    month: int | None = None,
-    start_date: date | None = None,
-    end_date: date | None = None,
-) -> tuple[int, int] | None:
-    if start_date or end_date or month is not None:
-        start, end = _resolve_date_bounds(year, month, start_date, end_date)
-        return start.month, end.month
-    return None
+    formatted = f"{value:,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
+    return f"{CURRENCY_SYMBOL}{formatted}"
 
 
 def _get_expenses(
@@ -91,28 +45,15 @@ def _get_expenses(
     year: int,
     scenario_id: int | None = None,
     budget_item_id: int | None = None,
-    month: int | None = None,
-    department: str | None = None,
-    start_date: date | None = None,
-    end_date: date | None = None,
 ) -> list[Expense]:
-    date_start, date_end = _resolve_date_bounds(year, month, start_date, end_date)
     query = select(Expense).where(
-        Expense.expense_date >= date_start,
-        Expense.expense_date <= date_end,
+        Expense.expense_date >= date(year, 1, 1),
+        Expense.expense_date <= date(year, 12, 31),
     )
     if scenario_id is not None:
         query = query.where(Expense.scenario_id == scenario_id)
     if budget_item_id is not None:
         query = query.where(Expense.budget_item_id == budget_item_id)
-    if department is not None:
-        department_items = select(PlanEntry.budget_item_id).where(
-            PlanEntry.year == year,
-            PlanEntry.department == department,
-        )
-        if scenario_id is not None:
-            department_items = department_items.where(PlanEntry.scenario_id == scenario_id)
-        query = query.where(Expense.budget_item_id.in_(department_items))
     query = query.order_by(Expense.expense_date)
     return session.exec(query).all()
 
@@ -130,32 +71,30 @@ def _append_plan_rows(
     plans: list[PlanEntry],
     budget_items: dict[int, BudgetItem],
     scenarios: dict[int, Scenario],
-    columns: list[str],
 ):
     for plan in plans:
         budget_item = budget_items.get(plan.budget_item_id)
         scenario = scenarios.get(plan.scenario_id) if plan.scenario_id else None
-        row_map = {
-            "type": "plan",
-            "budget_code": budget_item.code if budget_item else "",
-            "budget_name": budget_item.name if budget_item else "",
-            "scenario": scenario.name if scenario else "",
-            "year": plan.year,
-            "month": plan.month,
-            "amount": _format_currency(plan.amount),
-            "date": "",
-            "quantity": "",
-            "unit_price": "",
-            "vendor": "",
-            "description": "",
-            "department": plan.department or "",
-            "status": "",
-            "out_of_budget": "false",
-            "capex_opex": budget_item.map_category if budget_item and budget_item.map_category else "",
-            "asset_type": budget_item.map_attribute if budget_item and budget_item.map_attribute else "",
-            "record_owner": "",
-        }
-        sheet.append([row_map.get(column, "") for column in columns])
+        sheet.append(
+            [
+                "plan",
+                budget_item.code if budget_item else "",
+                budget_item.name if budget_item else "",
+                scenario.name if scenario else "",
+                plan.year,
+                plan.month,
+                plan.amount,
+                "",
+                "",
+                "",
+                "",
+                "",
+                plan.department or "",
+                "false",
+                budget_item.map_category if budget_item and budget_item.map_category else "",
+                budget_item.map_attribute if budget_item and budget_item.map_attribute else "",
+            ]
+        )
 
 
 def _append_expense_rows(
@@ -163,32 +102,41 @@ def _append_expense_rows(
     expenses: list[Expense],
     budget_items: dict[int, BudgetItem],
     scenarios: dict[int, Scenario],
-    columns: list[str],
 ):
     for expense in expenses:
         budget_item = budget_items.get(expense.budget_item_id)
         scenario = scenarios.get(expense.scenario_id) if expense.scenario_id else None
-        row_map = {
-            "type": "expense",
-            "budget_code": budget_item.code if budget_item else "",
-            "budget_name": budget_item.name if budget_item else "",
-            "scenario": scenario.name if scenario else "",
-            "year": expense.expense_date.year,
-            "month": expense.expense_date.month,
-            "amount": _format_currency(expense.amount),
-            "date": expense.expense_date.isoformat(),
-            "quantity": expense.quantity,
-            "unit_price": _format_currency(expense.unit_price),
-            "vendor": expense.vendor or "",
-            "description": expense.description or "",
-            "department": "",
-            "status": expense.status.value,
-            "out_of_budget": "true" if expense.is_out_of_budget else "false",
-            "capex_opex": budget_item.map_category if budget_item and budget_item.map_category else "",
-            "asset_type": budget_item.map_attribute if budget_item and budget_item.map_attribute else "",
-            "record_owner": expense.kaydi_giren_kullanici or "",
-        }
-        sheet.append([row_map.get(column, "") for column in columns])
+        budget_name = budget_item.name if budget_item else (expense.budget_outside_title or "")
+        map_category = (
+            budget_item.map_category
+            if budget_item and budget_item.map_category
+            else expense.budget_outside_capex_opex or ""
+        )
+        map_attribute = (
+            budget_item.map_attribute
+            if budget_item and budget_item.map_attribute
+            else expense.budget_outside_asset_type or ""
+        )
+        sheet.append(
+            [
+                "expense",
+                budget_item.code if budget_item else "",
+                budget_name,
+                scenario.name if scenario else "",
+                expense.expense_date.year,
+                expense.expense_date.month,
+                expense.amount,
+                expense.expense_date.isoformat(),
+                expense.quantity,
+                expense.unit_price,
+                expense.vendor or "",
+                expense.description or "",
+                "",
+                "true" if expense.is_out_of_budget else "false",
+                map_category,
+                map_attribute,
+            ]
+        )
 
 
 def get_purchase_forms_prepared(
@@ -197,40 +145,44 @@ def get_purchase_forms_prepared(
     scenario_id: int | None = None,
     month: int | None = None,
     department: str | None = None,
-    budget_item_id: int | None = None,
-    capex_opex: str | None = None,
 ) -> list[PurchaseFormPreparedReportItem]:
-    query = select(PlanEntry, BudgetItem).join(BudgetItem, PlanEntry.budget_item_id == BudgetItem.id).where(
-        PlanEntry.year == year,
-        PlanEntry.purchase_requested.is_(True),
+    normalized_budget_code = func.upper(func.trim(PurchaseFormStatusExt.budget_code))
+    normalized_item_code = func.upper(func.trim(BudgetItem.code))
+    query = (
+        select(
+            BudgetItem.id,
+            PurchaseFormStatusExt.budget_code,
+            BudgetItem.name,
+            PurchaseFormStatusExt.year,
+            PurchaseFormStatusExt.month,
+            PurchaseFormStatusExt.scenario_id,
+            PurchaseFormStatusExt.department,
+        )
+        .select_from(PurchaseFormStatusExt)
+        .outerjoin(BudgetItem, normalized_item_code == normalized_budget_code)
+        .where(PurchaseFormStatusExt.year == year)
+        .where(PurchaseFormStatusExt.is_form_prepared.is_(True))
     )
 
     if scenario_id is not None:
-        query = query.where(PlanEntry.scenario_id == scenario_id)
+        query = query.where(PurchaseFormStatusExt.scenario_id == scenario_id)
     if month is not None:
-        query = query.where(PlanEntry.month == month)
+        query = query.where(PurchaseFormStatusExt.month == month)
     if department is not None:
-        query = query.where(PlanEntry.department == department)
-    if budget_item_id is not None:
-        query = query.where(PlanEntry.budget_item_id == budget_item_id)
-    if capex_opex:
-        query = query.where(func.lower(func.coalesce(BudgetItem.map_category, "")) == capex_opex.lower())
+        query = query.where(PurchaseFormStatusExt.department == department)
 
-    rows = session.exec(query.order_by(PlanEntry.month, BudgetItem.code)).all()
+    rows = session.exec(query.order_by(PurchaseFormStatusExt.month, PurchaseFormStatusExt.budget_code)).all()
     return [
         PurchaseFormPreparedReportItem(
-            budget_item_id=budget_item.id,
-            budget_code=budget_item.code,
-            budget_name=budget_item.name or budget_item.code,
-            year=plan.year,
-            month=plan.month,
-            scenario_id=plan.scenario_id,
-            department=plan.department or None,
-            amount=plan.amount,
-            capex_opex=budget_item.map_category,
-            purchase_requested_at=plan.purchase_requested_at,
+            budget_item_id=budget_item_id,
+            budget_code=code,
+            budget_name=name or code,
+            year=form_year,
+            month=month,
+            scenario_id=form_scenario_id,
+            department=form_department or None,
         )
-        for plan, budget_item in rows
+        for budget_item_id, code, name, form_year, month, form_scenario_id, form_department in rows
     ]
 
 
@@ -295,8 +247,16 @@ def export_csv(
     expenses = _get_expenses(session, year, scenario_id, budget_item_id)
     for expense in expenses:
         budget_item = budget_items.get(expense.budget_item_id)
-        map_attribute = budget_item.map_attribute if budget_item else ""
-        map_category = budget_item.map_category if budget_item else ""
+        map_attribute = (
+            budget_item.map_attribute
+            if budget_item and budget_item.map_attribute
+            else expense.budget_outside_asset_type or ""
+        )
+        map_category = (
+            budget_item.map_category
+            if budget_item and budget_item.map_category
+            else expense.budget_outside_capex_opex or ""
+        )
         writer.writerow(
             [
                 "expense",
@@ -327,17 +287,11 @@ def export_xlsx(
     year: int,
     scenario_id: int | None = None,
     budget_item_id: int | None = None,
-    month: int | None = None,
-    department: str | None = None,
-    start_date: date | None = None,
-    end_date: date | None = None,
-    columns: list[str] | None = None,
 ) -> Response:
     wb = Workbook()
     plan_sheet = wb.active
     plan_sheet.title = "BudgetData"
-    selected_columns = _normalize_columns(columns)
-    plan_sheet.append([EXPORT_COLUMN_HEADER_MAP[column] for column in selected_columns])
+    plan_sheet.append(EXPORT_HEADERS)
     budget_items = _get_budget_item_map(session)
     scenarios = _get_scenario_map(session)
     plan_query = select(PlanEntry).where(PlanEntry.year == year)
@@ -345,22 +299,13 @@ def export_xlsx(
         plan_query = plan_query.where(PlanEntry.scenario_id == scenario_id)
     if budget_item_id is not None:
         plan_query = plan_query.where(PlanEntry.budget_item_id == budget_item_id)
-    if department is not None:
-        plan_query = plan_query.where(PlanEntry.department == department)
-    month_bounds = _resolve_month_bounds(year, month, start_date, end_date)
-    if month_bounds:
-        plan_query = plan_query.where(PlanEntry.month >= month_bounds[0], PlanEntry.month <= month_bounds[1])
     plans = session.exec(plan_query).all()
-    _append_plan_rows(plan_sheet, plans, budget_items, scenarios, selected_columns)
+    _append_plan_rows(plan_sheet, plans, budget_items, scenarios)
 
-    expenses = _get_expenses(
-        session, year, scenario_id, budget_item_id, month, department, start_date, end_date
-    )
-    _append_expense_rows(plan_sheet, expenses, budget_items, scenarios, selected_columns)
+    expenses = _get_expenses(session, year, scenario_id, budget_item_id)
+    _append_expense_rows(plan_sheet, expenses, budget_items, scenarios)
     output = io.BytesIO()
     wb.save(output)
-    output.seek(0)
-    logger.info("export_debug export_type=%s year=%s scenario=%s budget_item=%s row_count=%s", "budget_xlsx", year, scenario_id, budget_item_id, len(plans) + len(expenses))
     response = Response(
         content=output.getvalue(),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -374,17 +319,10 @@ def export_filtered_expenses_xlsx(
     year: int,
     scenario_id: int | None = None,
     budget_item_id: int | None = None,
-    month: int | None = None,
-    department: str | None = None,
-    start_date: date | None = None,
-    end_date: date | None = None,
-    columns: list[str] | None = None,
     *,
     filter_type: Literal["out_of_budget", "cancelled"],
 ) -> Response:
-    expenses = _get_expenses(
-        session, year, scenario_id, budget_item_id, month, department, start_date, end_date
-    )
+    expenses = _get_expenses(session, year, scenario_id, budget_item_id)
     budget_items = _get_budget_item_map(session)
     scenarios = _get_scenario_map(session)
     if filter_type == "out_of_budget":
@@ -399,14 +337,11 @@ def export_filtered_expenses_xlsx(
     wb = Workbook()
     sheet = wb.active
     sheet.title = sheet_title
-    selected_columns = _normalize_columns(columns)
-    sheet.append([EXPORT_COLUMN_HEADER_MAP[column] for column in selected_columns])
-    _append_expense_rows(sheet, filtered, budget_items, scenarios, selected_columns)
+    sheet.append(EXPORT_HEADERS)
+    _append_expense_rows(sheet, filtered, budget_items, scenarios)
 
     output = io.BytesIO()
     wb.save(output)
-    output.seek(0)
-    logger.info("export_debug export_type=%s year=%s scenario=%s budget_item=%s filter_type=%s row_count=%s", "filtered_expenses_xlsx", year, scenario_id, budget_item_id, filter_type, len(filtered))
     response = Response(
         content=output.getvalue(),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -421,10 +356,8 @@ def export_purchase_forms_prepared_xlsx(
     scenario_id: int | None = None,
     month: int | None = None,
     department: str | None = None,
-    budget_item_id: int | None = None,
-    capex_opex: str | None = None,
 ) -> Response:
-    items = get_purchase_forms_prepared(session, year, scenario_id, month, department, budget_item_id, capex_opex)
+    items = get_purchase_forms_prepared(session, year, scenario_id, month, department)
     wb = Workbook()
     sheet = wb.active
     sheet.title = "PreparedPurchaseForms"
@@ -434,10 +367,6 @@ def export_purchase_forms_prepared_xlsx(
         "Year",
         "Month",
         "Scenario ID",
-        "Department",
-        "Capex/Opex",
-        "Amount",
-        "Purchase Requested At",
     ])
 
     for item in items:
@@ -448,17 +377,11 @@ def export_purchase_forms_prepared_xlsx(
                 item.year,
                 item.month,
                 item.scenario_id or "",
-                item.department or "",
-                item.capex_opex or "",
-                _format_currency(item.amount),
-                item.purchase_requested_at.isoformat() if item.purchase_requested_at else "",
             ]
         )
 
     output = io.BytesIO()
     wb.save(output)
-    output.seek(0)
-    logger.info("export_debug export_type=%s year=%s month=%s scenario=%s department=%s budget_item=%s capex_opex=%s row_count=%s", "purchase_forms_prepared_xlsx", year, month, scenario_id, department, budget_item_id, capex_opex, len(items))
     response = Response(
         content=output.getvalue(),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -509,24 +432,8 @@ def export_quarterly_xlsx(
     year: int,
     scenario_id: int | None = None,
     budget_item_id: int | None = None,
-    month: int | None = None,
-    department: str | None = None,
-    start_date: date | None = None,
-    end_date: date | None = None,
 ) -> Response:
-    summary = compute_quarterly_summary(session, year, scenario_id, budget_item_id, department)
-    if month is not None:
-        summary = [
-            entry
-            for entry in summary
-            if ((entry.quarter - 1) * 3 + 1) <= month <= (entry.quarter * 3)
-        ]
-    if start_date and end_date:
-        allowed_quarters = {
-            ((m - 1) // 3) + 1
-            for m in range(start_date.month, end_date.month + 1)
-        }
-        summary = [entry for entry in summary if entry.quarter in allowed_quarters]
+    summary = compute_quarterly_summary(session, year, scenario_id, budget_item_id)
     wb = Workbook()
     sheet = wb.active
     sheet.title = "Quarterly Summary"
@@ -551,52 +458,9 @@ def export_quarterly_xlsx(
         )
     output = io.BytesIO()
     wb.save(output)
-    output.seek(0)
-    logger.info("export_debug export_type=%s year=%s scenario=%s budget_item=%s row_count=%s", "quarterly_xlsx", year, scenario_id, budget_item_id, len(summary))
     response = Response(
         content=output.getvalue(),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
     response.headers["Content-Disposition"] = "attachment; filename=quarterly_summary.xlsx"
     return response
-
-
-def get_export_preview_summary(
-    session: Session,
-    year: int,
-    scenario_id: int | None = None,
-    budget_item_id: int | None = None,
-    month: int | None = None,
-    department: str | None = None,
-    start_date: date | None = None,
-    end_date: date | None = None,
-) -> dict[str, float | int]:
-    plan_query = select(PlanEntry).where(PlanEntry.year == year)
-    if scenario_id is not None:
-        plan_query = plan_query.where(PlanEntry.scenario_id == scenario_id)
-    if budget_item_id is not None:
-        plan_query = plan_query.where(PlanEntry.budget_item_id == budget_item_id)
-    if department is not None:
-        plan_query = plan_query.where(PlanEntry.department == department)
-    month_bounds = _resolve_month_bounds(year, month, start_date, end_date)
-    if month_bounds:
-        plan_query = plan_query.where(PlanEntry.month >= month_bounds[0], PlanEntry.month <= month_bounds[1])
-    plans = session.exec(plan_query).all()
-
-    expenses = _get_expenses(
-        session, year, scenario_id, budget_item_id, month, department, start_date, end_date
-    )
-    planned = float(sum(plan.amount for plan in plans))
-    actual = float(sum(expense.amount for expense in expenses if expense.status == ExpenseStatus.RECORDED and not expense.is_out_of_budget))
-    out_of_budget = float(sum(expense.amount for expense in expenses if expense.status == ExpenseStatus.RECORDED and expense.is_out_of_budget))
-    cancelled = float(sum(expense.amount for expense in expenses if expense.status == ExpenseStatus.CANCELLED))
-    return {
-        "total_plan": planned,
-        "total_actual": actual,
-        "total_out_of_budget": out_of_budget,
-        "total_cancelled": cancelled,
-        "record_count": len(plans) + len(expenses),
-        "quarterly_data_count": len(plans) + len(expenses),
-        "out_of_budget_count": len([expense for expense in expenses if expense.is_out_of_budget]),
-        "cancelled_count": len([expense for expense in expenses if expense.status == ExpenseStatus.CANCELLED]),
-    }

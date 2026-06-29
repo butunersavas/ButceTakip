@@ -51,7 +51,25 @@ PLACEHOLDER_VALUES = {"-", "—"}
 def _normalize_header_key(key: str) -> str:
     """Return a simplified, comparable representation of a column name."""
 
-    return re.sub(r"[^a-z0-9]+", "_", key.strip().lower())
+    turkish_map = str.maketrans(
+        {
+            "ı": "i",
+            "İ": "i",
+            "ş": "s",
+            "Ş": "s",
+            "ğ": "g",
+            "Ğ": "g",
+            "ü": "u",
+            "Ü": "u",
+            "ö": "o",
+            "Ö": "o",
+            "ç": "c",
+            "Ç": "c",
+        }
+    )
+    normalized = unicodedata.normalize("NFKD", key.strip().translate(turkish_map).casefold())
+    ascii_text = normalized.encode("ascii", "ignore").decode("ascii")
+    return re.sub(r"[^a-z0-9]+", "_", ascii_text).strip("_")
 
 
 def _normalize_placeholder(value: Any) -> Any:
@@ -131,6 +149,7 @@ def _extract_map_attribute(data: dict[str, Any]) -> str | None:
     return _extract_column_value(
         data,
         "map_attribute",
+        "attribute",
         "map nitelik",
         "map-nitelik",
         "mapnitelik",
@@ -145,7 +164,10 @@ def _extract_map_category(data: dict[str, Any]) -> str | None:
     return _extract_column_value(
         data,
         "map_category",
+        "category",
         "map category",
+        "Map Capex/Opex",
+        "Capex/Opex",
         "map kategori",
         "map_kategori",
         "map-capex or opex",
@@ -153,6 +175,7 @@ def _extract_map_category(data: dict[str, Any]) -> str | None:
         "map_capex_or_opex",
         "map_capex_opex",
         "map capex/opex",
+        "capex/opex",
         "capex_opex",
         "capex-opex",
         "capex / opex",
@@ -214,13 +237,13 @@ def _parse_month_header(header: str) -> tuple[int, int] | None:
 
 
 def _find_header_index(headers: list[str], *candidates: str) -> int | None:
-    lowered = [header.lower() for header in headers]
+    lowered = [_normalize_header_key(header) for header in headers]
     for candidate in candidates:
-        candidate_lower = candidate.lower()
+        candidate_lower = _normalize_header_key(candidate)
         if candidate_lower in lowered:
             return lowered.index(candidate_lower)
     for index, header in enumerate(lowered):
-        if any(candidate_lower in header for candidate_lower in map(str.lower, candidates)):
+        if any(_normalize_header_key(candidate) in header for candidate in candidates):
             return index
     return None
 
@@ -256,9 +279,17 @@ def _coerce_float(value: Any, field: str) -> float:
         raise ValueError(f"Missing value for {field}")
     if isinstance(value, (int, float)):
         return float(value)
-    text = str(value).strip()
+    text = str(value).strip().replace("\xa0", "")
     if not text:
         raise ValueError(f"Missing value for {field}")
+    text = re.sub(r"\s+", "", text)
+    if "," in text and "." in text:
+        if text.rfind(",") > text.rfind("."):
+            text = text.replace(".", "").replace(",", ".")
+        else:
+            text = text.replace(",", "")
+    else:
+        text = text.replace(",", ".")
     return float(text)
 
 
@@ -282,6 +313,14 @@ def _get_value(data: dict[str, Any], *keys: str) -> Any:
             value = _normalize_placeholder(data[key])
             if value not in (None, ""):
                 return value
+    normalized_data: dict[str, Any] = {}
+    for raw_key, value in data.items():
+        if isinstance(raw_key, str):
+            normalized_data.setdefault(_normalize_header_key(raw_key), value)
+    for key in keys:
+        value = _normalize_placeholder(normalized_data.get(_normalize_header_key(key)))
+        if value not in (None, ""):
+            return value
     return None
 
 
@@ -324,7 +363,7 @@ def _import_plan_list(data: list[dict], session: Session) -> int:
             plan = PlanEntry(
                 year=int(entry["year"]),
                 month=int(entry["month"]),
-                amount=float(entry["amount"]),
+                amount=_coerce_float(entry["amount"], "amount"),
                 scenario_id=scenario.id,
                 budget_item_id=item.id,
                 department=department,
@@ -354,7 +393,7 @@ def _import_year_month_structure(data: dict, session: Session) -> int:
             plan = PlanEntry(
                 year=year,
                 month=int(month_str),
-                amount=float(amount),
+                amount=_coerce_float(amount, "amount"),
                 scenario_id=scenario.id,
                 budget_item_id=item.id,
                 department=department,
@@ -416,19 +455,28 @@ def _import_pivot_style_rows(
 
     code_index = _find_header_index(headers_raw, "budget_code", "budget code", "kod", "code")
     map_index = _find_header_index(
-        headers_raw, "map attribute", "map_attribute", "map nitelik", "map", "nitelik"
+        headers_raw,
+        "map attribute",
+        "map_attribute",
+        "attribute",
+        "map nitelik",
+        "map",
+        "nitelik",
     )
     map_category_index = _find_header_index(
         headers_raw,
         "map capex or opex",
         "map_category",
+        "category",
         "map capex",
+        "capex/opex",
         "capex_opex",
         "map tür",
         "map tur",
     )
     scenario_index = _find_header_index(headers_raw, "scenario", "senaryo", "bench")
     type_index = _find_header_index(headers_raw, "type", "tip", "type export")
+    department_index = _find_header_index(headers_raw, "department", "departman", "Departman")
 
     for row in data_rows:
         if not row or name_index >= len(row):
@@ -480,6 +528,12 @@ def _import_pivot_style_rows(
             # Currently only plan rows are supported
             continue
 
+        department_value: str | None = None
+        if department_index is not None and department_index < len(row):
+            department_cell = _normalize_placeholder(row[department_index])
+            if department_cell not in (None, ""):
+                department_value = str(department_cell).strip() or None
+
         item = _ensure_budget_item(
             session, budget_code, name, map_attribute_value, map_category_value
         )
@@ -491,7 +545,7 @@ def _import_pivot_style_rows(
             if amount in (None, "", 0):
                 continue
             try:
-                amount_value = float(amount)
+                amount_value = _coerce_float(amount, "amount")
             except (TypeError, ValueError):
                 continue
             scenario = _get_or_create_scenario(session, scenario_value, year)
@@ -501,6 +555,7 @@ def _import_pivot_style_rows(
                 amount=amount_value,
                 scenario_id=scenario.id,
                 budget_item_id=item.id,
+                department=department_value,
             )
             session.add(plan)
             session.commit()
@@ -518,23 +573,30 @@ def import_csv(file: UploadFile, session: Session) -> ImportSummary:
     summary = ImportSummary()
     for row in reader:
         try:
-            entry_type = row.get("type", "plan").lower()
+            entry_type = str(_get_value(row, "type", "tip") or "plan").lower()
             map_attribute = _extract_map_attribute(row)
             map_category = _extract_map_category(row)
             department = _extract_department(row)
+            budget_code = _coerce_str(
+                _get_value(row, "budget_code", "budget code", "kod"),
+                "budget_code",
+            )
+            budget_name = _get_value(row, "budget_name", "budget name", "ad")
+            scenario_name = _get_value(row, "scenario", "senaryo")
+            year_value = _coerce_int(_get_value(row, "year", "yil", "yıl"), "year")
             if entry_type == "plan":
                 item = _ensure_budget_item(
                     session,
-                    row["budget_code"],
-                    row.get("budget_name"),
+                    budget_code,
+                    budget_name,
                     map_attribute,
                     map_category,
                 )
-                scenario = _get_or_create_scenario(session, row.get("scenario"), int(row["year"]))
+                scenario = _get_or_create_scenario(session, scenario_name, year_value)
                 plan = PlanEntry(
-                    year=int(row["year"]),
-                    month=int(row["month"]),
-                    amount=float(row["amount"]),
+                    year=year_value,
+                    month=_coerce_int(_get_value(row, "month", "ay"), "month"),
+                    amount=_coerce_float(_get_value(row, "amount", "tutar"), "amount"),
                     scenario_id=scenario.id,
                     budget_item_id=item.id,
                     department=department,
@@ -545,22 +607,26 @@ def import_csv(file: UploadFile, session: Session) -> ImportSummary:
             elif entry_type == "expense":
                 item = _ensure_budget_item(
                     session,
-                    row["budget_code"],
-                    row.get("budget_name"),
+                    budget_code,
+                    budget_name,
                     map_attribute,
                     map_category,
                 )
-                scenario = _get_or_create_scenario(session, row.get("scenario"), int(row["year"]))
+                scenario = _get_or_create_scenario(session, scenario_name, year_value)
+                amount_value = _coerce_float(_get_value(row, "amount", "tutar"), "amount")
+                quantity_value = _get_value(row, "quantity", "adet")
+                unit_price_value = _get_value(row, "unit_price", "birim fiyat")
                 expense = Expense(
                     budget_item_id=item.id,
                     scenario_id=scenario.id,
-                    expense_date=date.fromisoformat(row["date"]),
-                    amount=float(row["amount"]),
-                    quantity=float(row.get("quantity", 1) or 1),
-                    unit_price=float(row.get("unit_price", 0) or 0),
-                    vendor=row.get("vendor"),
-                    description=row.get("description"),
-                    is_out_of_budget=row.get("out_of_budget", "false").lower() == "true",
+                    expense_date=_coerce_date(_get_value(row, "date", "tarih"), "date"),
+                    amount=amount_value,
+                    quantity=_coerce_float(quantity_value, "quantity") if quantity_value not in (None, "") else 1.0,
+                    unit_price=_coerce_float(unit_price_value, "unit_price") if unit_price_value not in (None, "") else 0.0,
+                    vendor=_get_value(row, "vendor", "satici", "satıcı"),
+                    description=_get_value(row, "description", "aciklama", "açıklama"),
+                    is_out_of_budget=str(_get_value(row, "out_of_budget", "butce_disi", "bütçe dışı") or "false").lower()
+                    == "true",
                 )
                 session.add(expense)
                 session.commit()
@@ -616,7 +682,7 @@ def import_xlsx(file: UploadFile, session: Session) -> ImportSummary:
             row[header] = values[index] if index < len(values) else None
         if not row:
             continue
-        entry_type = str(row.get("type") or "plan").lower()
+        entry_type = str(_get_value(row, "type", "tip") or "plan").lower()
         map_attribute = _extract_map_attribute(row)
         map_category = _extract_map_category(row)
         department = _extract_department(row)
@@ -627,7 +693,7 @@ def import_xlsx(file: UploadFile, session: Session) -> ImportSummary:
             )
             budget_name = _get_value(row, "budget_name", "budget name", "ad")
             scenario_name = _get_value(row, "scenario", "senaryo")
-            year_value = _coerce_int(_get_value(row, "year", "yıl"), "year")
+            year_value = _coerce_int(_get_value(row, "year", "yil", "yıl"), "year")
 
             if entry_type == "plan":
                 month_value = _coerce_int(_get_value(row, "month", "ay"), "month")
@@ -661,11 +727,11 @@ def import_xlsx(file: UploadFile, session: Session) -> ImportSummary:
                     scenario_id=scenario.id,
                     expense_date=_coerce_date(date_value, "date"),
                     amount=amount_value,
-                    quantity=float(quantity_value) if quantity_value not in (None, "") else 1.0,
-                    unit_price=float(unit_price_value) if unit_price_value not in (None, "") else 0.0,
-                    vendor=_get_value(row, "vendor", "satıcı"),
-                    description=_get_value(row, "description", "açıklama"),
-                    is_out_of_budget=str(_get_value(row, "out_of_budget", "bütçe_dışı") or "false").lower()
+                    quantity=_coerce_float(quantity_value, "quantity") if quantity_value not in (None, "") else 1.0,
+                    unit_price=_coerce_float(unit_price_value, "unit_price") if unit_price_value not in (None, "") else 0.0,
+                    vendor=_get_value(row, "vendor", "satici", "satıcı"),
+                    description=_get_value(row, "description", "aciklama", "açıklama"),
+                    is_out_of_budget=str(_get_value(row, "out_of_budget", "butce_disi", "bütçe dışı", "bütçe_dışı") or "false").lower()
                     == "true",
                 )
                 session.add(expense)

@@ -1,10 +1,11 @@
 from datetime import date, datetime
-from typing import Optional
+from decimal import Decimal, InvalidOperation
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, root_validator, validator
 from sqlmodel import SQLModel
 
-from app.models import ExpenseStatus, PurchaseTrackingStatus, WarrantyItemType
+from app.models import ExpenseStatus, WarrantyItemType
 
 PLACEHOLDER_VALUES = {"-", "—"}
 
@@ -28,15 +29,60 @@ def _reject_placeholder(value: str | None, field: str) -> str | None:
     return value
 
 
-def _normalize_warranty_type_alias(value: str | None) -> str | None:
-    if not isinstance(value, str):
+def _parse_flexible_date(value: date | datetime | str | None, field_name: str) -> date | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
         return value
-    normalized = value.strip().upper()
-    if normalized in {"DEVICE", "MAINTENANCE", "SERVICE", "LICENSE", "DOMAIN_SSL"}:
-        return "WARRANTY"
-    if normalized in {"SSL", "CERT"}:
-        return "CERTIFICATE"
-    return normalized
+    if isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            return None
+        iso_candidate = raw[:10]
+        for fmt in ("%Y-%m-%d", "%d.%m.%Y", "%d/%m/%Y", "%d-%m-%Y", "%Y/%m/%d"):
+            try:
+                candidate = iso_candidate if fmt == "%Y-%m-%d" else raw.replace("\\", "/")
+                return datetime.strptime(candidate, fmt).date()
+            except ValueError:
+                continue
+        try:
+            return datetime.fromisoformat(raw).date()
+        except ValueError as exc:
+            raise ValueError(f"{field_name} must be a valid date") from exc
+    raise ValueError(f"Invalid {field_name}")
+
+
+def _parse_decimal_value(value: Decimal | int | float | str | None) -> Decimal | None:
+    if value is None:
+        return None
+    if isinstance(value, Decimal):
+        return value
+    if isinstance(value, (int, float)):
+        return Decimal(str(value))
+    if isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            return None
+        cleaned = raw.replace("\u00a0", " ")
+        cleaned = cleaned.replace("TRY", "").replace("TL", "").replace("$", "")
+        cleaned = cleaned.replace("USD", "").replace("EUR", "")
+        cleaned = "".join(ch for ch in cleaned if ch.isdigit() or ch in ",.-")
+        if not cleaned or cleaned in {"-", ".", ","}:
+            return None
+        if "," in cleaned and "." in cleaned:
+            decimal_separator = "," if cleaned.rfind(",") > cleaned.rfind(".") else "."
+            thousands_separator = "." if decimal_separator == "," else ","
+            cleaned = cleaned.replace(thousands_separator, "")
+            cleaned = cleaned.replace(decimal_separator, ".")
+        elif "," in cleaned:
+            cleaned = cleaned.replace(".", "").replace(",", ".")
+        try:
+            return Decimal(cleaned)
+        except InvalidOperation as exc:
+            raise ValueError("price must be a valid decimal") from exc
+    raise ValueError("price must be a valid decimal")
 
 
 class Token(BaseModel):
@@ -54,10 +100,26 @@ class UserBase(BaseModel):
     full_name: str | None = None
     is_active: bool = True
     is_admin: bool = False
+    role: Literal["admin", "user", "viewer", "readonly", "read_only"] = "user"
 
     @validator("username")
     def normalize_username(cls, value: str) -> str:  # noqa: D417
         return value.strip().lower()
+
+    @root_validator
+    def normalize_role_flags(cls, values: dict) -> dict:  # noqa: D417
+        is_admin = bool(values.get("is_admin"))
+        role = values.get("role") or ("admin" if is_admin else "user")
+        if role in {"readonly", "read_only"}:
+            role = "viewer"
+        if is_admin:
+            values["role"] = "admin"
+        elif role == "admin":
+            values["is_admin"] = True
+            values["role"] = "admin"
+        else:
+            values["role"] = role
+        return values
 
 
 class UserCreate(UserBase):
@@ -75,6 +137,7 @@ class UserUpdate(BaseModel):
     full_name: str | None = None
     is_active: bool | None = None
     is_admin: bool | None = None
+    role: Literal["admin", "user", "viewer", "readonly", "read_only"] | None = None
     password: str | None = None
 
 
@@ -83,6 +146,7 @@ class CurrentUserResponse(BaseModel):
     username: str
     full_name: str | None = None
     is_admin: bool
+    role: Literal["admin", "user", "viewer"] = "user"
     is_active: bool = True
 
     class Config:
@@ -124,6 +188,22 @@ class BudgetItemBase(BaseModel):
     map_attribute: Optional[str] = None
     map_category: Optional[str] = None
 
+    @root_validator(pre=True)
+    def normalize_map_aliases(cls, values: dict) -> dict:  # noqa: D417
+        if not isinstance(values, dict):
+            return values
+        if "map_category" not in values:
+            for key in ("category", "capex_opex", "capexOpex", "Capex/Opex", "Map Capex/Opex"):
+                if key in values:
+                    values["map_category"] = values.get(key)
+                    break
+        if "map_attribute" not in values:
+            for key in ("attribute", "nitelik", "Nitelik", "Map Nitelik", "asset_type", "assetType"):
+                if key in values:
+                    values["map_attribute"] = values.get(key)
+                    break
+        return values
+
     @validator("code", "name", pre=True)
     def validate_required_text(cls, value: str | None, field) -> str:  # noqa: D417
         value = _reject_placeholder(value, field.name)
@@ -147,6 +227,22 @@ class BudgetItemUpdate(BaseModel):
     map_attribute: Optional[str] = None
     map_category: Optional[str] = None
 
+    @root_validator(pre=True)
+    def normalize_update_map_aliases(cls, values: dict) -> dict:  # noqa: D417
+        if not isinstance(values, dict):
+            return values
+        if "map_category" not in values:
+            for key in ("category", "capex_opex", "capexOpex", "Capex/Opex", "Map Capex/Opex"):
+                if key in values:
+                    values["map_category"] = values.get(key)
+                    break
+        if "map_attribute" not in values:
+            for key in ("attribute", "nitelik", "Nitelik", "Map Nitelik", "asset_type", "assetType"):
+                if key in values:
+                    values["map_attribute"] = values.get(key)
+                    break
+        return values
+
     @validator("code", "name", pre=True)
     def validate_update_text(cls, value: str | None, field) -> str | None:  # noqa: D417
         value = _reject_placeholder(value, field.name)
@@ -164,6 +260,10 @@ class BudgetItemRead(BudgetItemBase):
 
     class Config:
         orm_mode = True
+
+
+class DeleteDependencyInfo(BaseModel):
+    related_file_count: int = 0
 
 
 class PlanEntryBase(BaseModel):
@@ -189,6 +289,71 @@ class PlanEntryCreate(PlanEntryBase):
     pass
 
 
+class PlanManualCreate(BaseModel):
+    year: int
+    month: int
+    amount: float
+    scenario_id: int
+    budget_item_id: Optional[int] = None
+    budget_code: Optional[str] = None
+    budget_name: Optional[str] = None
+    department: str | None = Field(default=None, max_length=100)
+    map_category: Optional[str] = None
+    map_attribute: Optional[str] = None
+    description: Optional[str] = None
+    merge_mode: str = "merge"
+
+    @root_validator(pre=True)
+    def normalize_manual_aliases(cls, values: dict) -> dict:  # noqa: D417
+        if not isinstance(values, dict):
+            return values
+        if "map_category" not in values:
+            for key in ("category", "capex_opex", "capexOpex", "Capex/Opex", "Map Capex/Opex"):
+                if key in values:
+                    values["map_category"] = values.get(key)
+                    break
+        if "map_attribute" not in values:
+            for key in ("attribute", "nitelik", "Nitelik", "Map Nitelik", "asset_type", "assetType"):
+                if key in values:
+                    values["map_attribute"] = values.get(key)
+                    break
+        if "department" not in values:
+            for key in ("departman", "Departman", "department_name", "departmentName"):
+                if key in values:
+                    values["department"] = values.get(key)
+                    break
+        return values
+
+    @validator("month")
+    def validate_month(cls, value: int) -> int:
+        if not 1 <= value <= 12:
+            raise ValueError("Month must be between 1 and 12")
+        return value
+
+    @validator("amount")
+    def validate_positive_amount(cls, value: float) -> float:
+        if value <= 0:
+            raise ValueError("Amount must be greater than zero")
+        return value
+
+    @validator(
+        "budget_code",
+        "budget_name",
+        "department",
+        "map_category",
+        "map_attribute",
+        "description",
+        pre=True,
+    )
+    def normalize_optional_text(cls, value: str | None) -> str | None:  # noqa: D417
+        return _normalize_placeholder(value)
+
+    @validator("merge_mode", pre=True)
+    def normalize_merge_mode(cls, value: str | None) -> str:  # noqa: D417
+        raw = (value or "merge").strip().lower()
+        return raw if raw in {"merge", "separate"} else "merge"
+
+
 class PlanEntryUpdate(BaseModel):
     year: Optional[int] = None
     month: Optional[int] = None
@@ -199,6 +364,39 @@ class PlanEntryUpdate(BaseModel):
 
     @validator("department", pre=True)
     def normalize_update_department(cls, value: str | None) -> str | None:  # noqa: D417
+        return _normalize_placeholder(value)
+
+
+class PlanUnusedUpdate(BaseModel):
+    amount: float
+    reason: Optional[str] = None
+    note: Optional[str] = None
+    unused_updated_at: Optional[datetime] = None
+
+    @validator("amount", pre=True)
+    def normalize_amount(cls, value: float | str | None) -> float:  # noqa: D417
+        if value is None:
+            raise ValueError("Amount is required")
+        if isinstance(value, (int, float)):
+            parsed = float(value)
+        else:
+            raw = str(value).strip()
+            if not raw:
+                raise ValueError("Amount is required")
+            if "," in raw and "." in raw:
+                raw = raw.replace(".", "").replace(",", ".")
+            else:
+                raw = raw.replace(",", ".")
+            try:
+                parsed = float(raw)
+            except ValueError as exc:
+                raise ValueError("Amount must be a number") from exc
+        if parsed < 0:
+            raise ValueError("Amount must be non-negative")
+        return parsed
+
+    @validator("reason", "note", pre=True)
+    def normalize_unused_text(cls, value: str | None) -> str | None:  # noqa: D417
         return _normalize_placeholder(value)
 
 
@@ -219,6 +417,22 @@ class PlanEntryRead(SQLModel, table=False):
     map_capex_opex: Optional[str] = None
     map_nitelik: Optional[str] = None
     nitelik: Optional[str] = None
+    transfer_in_amount: float = 0
+    transfer_out_amount: float = 0
+    revised_amount: float = 0
+    actual_amount: float = 0
+    unused_amount: float = 0
+    available_amount: float = 0
+    scope_revised_amount: float = 0
+    scope_actual_amount: float = 0
+    scope_unused_amount: float = 0
+    scope_cancelled_amount: float = 0
+    scope_available_amount: float = 0
+    cancelled_amount: float = 0
+    is_cancelled: bool = False
+    unused_reason: Optional[str] = None
+    unused_note: Optional[str] = None
+    unused_updated_at: datetime | None = None
     is_form_prepared: bool = False
     purchase_requested: bool = False
     purchase_requested_at: datetime | None = None
@@ -231,6 +445,80 @@ class PlanAggregateRead(BaseModel):
     budget_item_id: int
     month: int
     total_amount: float
+    original_amount: float = 0
+    transfer_in_amount: float = 0
+    transfer_out_amount: float = 0
+    unused_amount: float = 0
+    scenario_id: Optional[int] = None
+    budget_code: Optional[str] = None
+    budget_name: Optional[str] = None
+    department: Optional[str] = None
+    department_name: Optional[str] = None
+    capex_opex: Optional[str] = None
+    asset_type: Optional[str] = None
+    map_capex_opex: Optional[str] = None
+    map_nitelik: Optional[str] = None
+    nitelik: Optional[str] = None
+
+
+class BudgetTransferCreate(BaseModel):
+    source_budget_item_id: int
+    source_year: int
+    source_month: int
+    source_scenario_id: int
+    target_budget_item_id: int
+    target_year: int
+    target_month: int
+    target_scenario_id: int
+    amount: float
+    reason: str
+
+    @validator("source_month", "target_month")
+    def validate_transfer_month(cls, value: int) -> int:
+        if not 1 <= value <= 12:
+            raise ValueError("Month must be between 1 and 12")
+        return value
+
+    @validator("amount")
+    def validate_transfer_amount(cls, value: float) -> float:
+        if value <= 0:
+            raise ValueError("Amount must be greater than zero")
+        return value
+
+    @validator("reason")
+    def validate_transfer_reason(cls, value: str) -> str:
+        if not value or not value.strip():
+            raise ValueError("Reason is required")
+        return value.strip()
+
+
+class BudgetTransferRead(BaseModel):
+    id: int
+    source_budget_item_id: int
+    source_year: int
+    source_month: int
+    source_scenario_id: int
+    target_budget_item_id: int
+    target_year: int
+    target_month: int
+    target_scenario_id: int
+    amount: float
+    reason: str
+    created_by_id: Optional[int] = None
+    created_at: datetime
+    is_cancelled: bool = False
+    source_budget_name: Optional[str] = None
+    target_budget_name: Optional[str] = None
+
+    class Config:
+        orm_mode = True
+
+
+class BudgetAvailableRead(BaseModel):
+    revised_amount: float
+    actual_amount: float
+    unused_amount: float = 0
+    available_amount: float
 
 
 class PurchaseReminder(BaseModel):
@@ -261,9 +549,6 @@ class PurchaseFormPreparedReportItem(BaseModel):
     month: int
     scenario_id: int | None = None
     department: str | None = None
-    amount: float = 0
-    capex_opex: str | None = None
-    purchase_requested_at: datetime | None = None
 
 
 class DashboardPurchaseAlertItem(BaseModel):
@@ -290,50 +575,8 @@ class PurchaseAlertSetRequest(BaseModel):
     requested: bool
 
 
-
-
-class PurchaseTrackingRead(BaseModel):
-    id: int | None = None
-    plan_item_id: int
-    status: str
-    updated_at: datetime | None = None
-    updated_by: str | None = None
-    note: str | None = None
-    is_active: bool = True
-    year: int
-    month: int
-    department: str | None = None
-    scenario_id: int
-    budget_item_id: int
-    budget_code: str | None = None
-    budget_name: str | None = None
-    amount: float
-    purchase_requested: bool = False
-    purchase_requested_at: datetime | None = None
-
-
-class PurchaseTrackingUpdateRequest(BaseModel):
-    status: str
-    note: str | None = None
-
-    @validator("status")
-    def validate_status(cls, value: str) -> str:
-        allowed = {
-            PurchaseTrackingStatus.SURAT_YONETIM_IMZA.value,
-            PurchaseTrackingStatus.BCC_YONETIM_IMZA.value,
-            PurchaseTrackingStatus.SURAT_SATINALMA.value,
-            PurchaseTrackingStatus.ORDER_PENDING.value,
-            PurchaseTrackingStatus.COMPLETED.value,
-            PurchaseTrackingStatus.CANCELLED.value,
-            PurchaseTrackingStatus.TALEP_OLUSTURULDU.value,
-        }
-        if value not in allowed:
-            raise ValueError("Geçersiz takip durumu")
-        return value
-
-
 class ExpenseBase(BaseModel):
-    budget_item_id: int
+    budget_item_id: Optional[int] = None
     scenario_id: int | None = Field(default=None, alias="scenario")
     expense_date: date = Field(alias="date")
     amount: float | None = None
@@ -343,6 +586,15 @@ class ExpenseBase(BaseModel):
     description: Optional[str] = None
     status: ExpenseStatus = ExpenseStatus.RECORDED
     is_out_of_budget: bool = Field(default=False, alias="out_of_budget")
+    budget_outside_title: Optional[str] = None
+    budget_outside_department: Optional[str] = None
+    budget_outside_capex_opex: Optional[str] = None
+    budget_outside_asset_type: Optional[str] = None
+    mark_plan_purchased: bool = True
+    allocation_mode: str = "single"
+    allocation_start_month: Optional[int] = None
+    allocation_month_count: Optional[int] = None
+    allocation_method: Optional[str] = None
     client_hostname: Optional[str] = None
     kaydi_giren_kullanici: Optional[str] = None
 
@@ -384,9 +636,35 @@ class ExpenseBase(BaseModel):
             raise ValueError("Value must be non-negative")
         return value
 
-    @validator("vendor", "description", "client_hostname", "kaydi_giren_kullanici", pre=True)
+    @validator(
+        "vendor",
+        "description",
+        "client_hostname",
+        "kaydi_giren_kullanici",
+        "budget_outside_title",
+        "budget_outside_department",
+        "budget_outside_capex_opex",
+        "budget_outside_asset_type",
+        pre=True,
+    )
     def normalize_expense_text(cls, value: str | None) -> str | None:  # noqa: D417
         return _normalize_placeholder(value)
+
+    @root_validator
+    def validate_budget_binding(cls, values: dict) -> dict:
+        if values.get("is_out_of_budget"):
+            if not values.get("budget_outside_title"):
+                raise ValueError("budget_outside_title is required for out-of-budget expenses")
+            values["budget_item_id"] = None
+            values["mark_plan_purchased"] = False
+            values["allocation_mode"] = "single"
+            values["allocation_start_month"] = None
+            values["allocation_month_count"] = None
+            values["allocation_method"] = None
+            return values
+        if not values.get("budget_item_id"):
+            raise ValueError("budget_item_id is required")
+        return values
 
     class Config:
         allow_population_by_field_name = True
@@ -394,6 +672,56 @@ class ExpenseBase(BaseModel):
 
 class ExpenseCreate(ExpenseBase):
     pass
+
+
+class ExpenseUnusedBudgetCreate(BaseModel):
+    budget_item_id: int
+    scenario_id: int | None = Field(default=None, alias="scenario")
+    expense_date: date = Field(alias="date")
+    amount: float
+    reason: Optional[str] = None
+    note: Optional[str] = None
+
+    @validator("expense_date", pre=True)
+    def parse_unused_expense_date(cls, value: date | str) -> date:  # noqa: D417
+        if isinstance(value, date):
+            return value
+        if isinstance(value, str):
+            parsed = value.strip()
+            if not parsed:
+                raise ValueError("Date is required")
+            try:
+                return date.fromisoformat(parsed[:10])
+            except ValueError as exc:
+                raise ValueError("Date must be in YYYY-MM-DD format") from exc
+        raise ValueError("Date must be in YYYY-MM-DD format")
+
+    @validator("amount", pre=True)
+    def validate_unused_amount(cls, value: float | str | None) -> float:
+        if value is None:
+            raise ValueError("Amount must be greater than zero")
+        if isinstance(value, str):
+            raw = value.strip()
+            if not raw:
+                raise ValueError("Amount must be greater than zero")
+            if "," in raw and "." in raw:
+                raw = raw.replace(".", "").replace(",", ".")
+            else:
+                raw = raw.replace(",", ".")
+            try:
+                value = float(raw)
+            except ValueError as exc:
+                raise ValueError("Value must be a number") from exc
+        if value <= 0:
+            raise ValueError("Amount must be greater than zero")
+        return value
+
+    @validator("reason", "note", pre=True)
+    def normalize_unused_text(cls, value: str | None) -> str | None:  # noqa: D417
+        return _normalize_placeholder(value)
+
+    class Config:
+        allow_population_by_field_name = True
 
 
 class ExpenseUpdate(BaseModel):
@@ -408,6 +736,15 @@ class ExpenseUpdate(BaseModel):
     status: Optional[ExpenseStatus] = None
     status: Optional[ExpenseStatus] = None
     is_out_of_budget: Optional[bool] = None
+    budget_outside_title: Optional[str] = None
+    budget_outside_department: Optional[str] = None
+    budget_outside_capex_opex: Optional[str] = None
+    budget_outside_asset_type: Optional[str] = None
+    mark_plan_purchased: Optional[bool] = None
+    allocation_mode: Optional[str] = None
+    allocation_start_month: Optional[int] = None
+    allocation_month_count: Optional[int] = None
+    allocation_method: Optional[str] = None
     client_hostname: Optional[str] = None
     kaydi_giren_kullanici: Optional[str] = None
 
@@ -431,7 +768,17 @@ class ExpenseUpdate(BaseModel):
                 raise ValueError("expense_date must be YYYY-MM-DD or DD.MM.YYYY") from exc
         raise ValueError("Invalid expense_date")
 
-    @validator("vendor", "description", "client_hostname", "kaydi_giren_kullanici", pre=True)
+    @validator(
+        "vendor",
+        "description",
+        "client_hostname",
+        "kaydi_giren_kullanici",
+        "budget_outside_title",
+        "budget_outside_department",
+        "budget_outside_capex_opex",
+        "budget_outside_asset_type",
+        pre=True,
+    )
     def normalize_update_expense_text(cls, value: str | None) -> str | None:  # noqa: D417
         return _normalize_placeholder(value)
 
@@ -457,19 +804,59 @@ class ExpenseUpdate(BaseModel):
         return parsed
 
 
+class ExpenseAllocationRead(BaseModel):
+    year: int
+    month: int
+    allocated_amount: float
+    plan_amount: Optional[float] = None
+    actual_amount: Optional[float] = None
+    unused_amount: Optional[float] = None
+    available_amount: Optional[float] = None
+    saving_amount: Optional[float] = None
+    scope_plan_amount: Optional[float] = None
+    scope_actual_amount: Optional[float] = None
+    scope_unused_amount: Optional[float] = None
+    scope_remaining_amount: Optional[float] = None
+    scope_saving_amount: Optional[float] = None
+    scope_overrun_amount: Optional[float] = None
+
+    class Config:
+        orm_mode = True
+
+
 class ExpenseRead(SQLModel, table=False):
     id: int
     scenario_id: Optional[int] = None
-    budget_item_id: int
+    budget_item_id: Optional[int] = None
     budget_code: Optional[str] = None
+    budget_outside_title: Optional[str] = None
+    budget_outside_department: Optional[str] = None
+    budget_outside_capex_opex: Optional[str] = None
+    budget_outside_asset_type: Optional[str] = None
     expense_date: Optional[date] = Field(default=None, alias="date")
     amount: Optional[float] = None
     quantity: Optional[float] = None
     unit_price: Optional[float] = None
     vendor: Optional[str] = None
     description: Optional[str] = None
+    status: Optional[ExpenseStatus] = None
     is_out_of_budget: Optional[bool] = Field(default=None, alias="out_of_budget")
     is_cancelled: Optional[bool] = None
+    plan_amount: Optional[float] = None
+    actual_amount: Optional[float] = None
+    saving_amount: Optional[float] = None
+    unused_amount: Optional[float] = None
+    available_amount: Optional[float] = None
+    scope_plan_amount: Optional[float] = None
+    scope_actual_amount: Optional[float] = None
+    scope_unused_amount: Optional[float] = None
+    scope_remaining_amount: Optional[float] = None
+    scope_saving_amount: Optional[float] = None
+    scope_overrun_amount: Optional[float] = None
+    attachment_count: int = 0
+    has_attachment: bool = False
+    allocation_count: int = 0
+    allocations: list[ExpenseAllocationRead] = Field(default_factory=list)
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     scenario_name: Optional[str] = None
@@ -477,39 +864,35 @@ class ExpenseRead(SQLModel, table=False):
     department: Optional[str] = None
     capex_opex: Optional[str] = None
     asset_type: Optional[str] = None
+    map_capex_opex: Optional[str] = None
+    map_nitelik: Optional[str] = None
+    nitelik: Optional[str] = None
     created_by_name: Optional[str] = None
     updated_by_name: Optional[str] = None
     created_by_username: Optional[str] = None
     updated_by_username: Optional[str] = None
-    planned_amount: Optional[float] = None
-    spent_amount: Optional[float] = None
-    saving_amount: Optional[float] = None
-    saving_pct: Optional[float] = None
 
     class Config:
         orm_mode = True
         allow_population_by_field_name = True
 
 
-
-
 class ExpenseAttachmentRead(BaseModel):
     id: int
     expense_id: int
-    filename: str
+    file_name: str
     content_type: str
     size_bytes: int
-    uploaded_at: datetime
-    uploaded_by: str | None = None
-    download_url: str
+    created_at: Optional[datetime] = None
 
     class Config:
         orm_mode = True
 
+
 class WarrantyItemBase(BaseModel):
     type: WarrantyItemType
     name: str
-    location: str
+    location: Optional[str] = None
     domain: Optional[str] = None
     end_date: Optional[date] = Field(default=None, alias="endDate")
     note: Optional[str] = Field(default=None, alias="notes")
@@ -517,29 +900,22 @@ class WarrantyItemBase(BaseModel):
     certificate_issuer: Optional[str] = Field(default=None, alias="certificateIssuer")
     renewal_owner: Optional[str] = Field(default=None, alias="renewal_owner")
     renewal_responsible: Optional[str] = Field(default=None, alias="renewalResponsible")
-    ssl_certificate: Optional[str] = None
-    certificate_type: Optional[str] = None
-    contract_end_date: Optional[date] = None
-    vendor_company: Optional[str] = None
-    tax_number: Optional[str] = None
-    service_type: Optional[str] = None
-    subscription_circuit_number: Optional[str] = None
-    location_name: Optional[str] = None
-    service_number: Optional[str] = None
-    speed: Optional[str] = None
-    commitment_end_date: Optional[date] = None
-    billing_account_number: Optional[str] = None
-    plan_entry_id: Optional[int] = None
-    workflow_status: str = "Aktif"
+    purchased_from: Optional[str] = Field(default=None, alias="purchasedFrom")
+    brand: Optional[str] = None
+    model: Optional[str] = None
+    serial_number: Optional[str] = Field(default=None, alias="serialNumber")
+    asset_tag: Optional[str] = Field(default=None, alias="assetTag")
+    service_code: Optional[str] = Field(default=None, alias="serviceCode")
+    ordered_product_model: Optional[str] = Field(default=None, alias="orderedProductModel")
+    price: Optional[Decimal] = None
+    shipment_date: Optional[date] = Field(default=None, alias="shipmentDate")
+    end_of_service_life: Optional[date] = Field(default=None, alias="endOfServiceLife")
+    status: Optional[str] = None
     reminder_days: Optional[int] = Field(default=30, ge=0)
     remind_days: Optional[int] = Field(default=30, ge=0)
     remind_days_before: Optional[int] = Field(default=30, ge=0)
 
-    @validator("type", pre=True)
-    def normalize_warranty_type(cls, value: WarrantyItemType | str) -> WarrantyItemType | str:  # noqa: D417
-        return _normalize_warranty_type_alias(value)
-
-    @validator("name", "location", pre=True)
+    @validator("name", pre=True)
     def validate_required_warranty_text(cls, value: str | None, field) -> str:  # noqa: D417
         value = _reject_placeholder(value, field.name)
         if value is None or (isinstance(value, str) and not value.strip()):
@@ -547,35 +923,29 @@ class WarrantyItemBase(BaseModel):
         return value.strip() if isinstance(value, str) else value
 
     @validator(
+        "location",
         "domain",
         "note",
         "issuer",
         "certificate_issuer",
         "renewal_owner",
         "renewal_responsible",
-        "ssl_certificate",
-        "certificate_type",
-        "vendor_company",
-        "tax_number",
-        "service_type",
-        "subscription_circuit_number",
-        "location_name",
-        "service_number",
-        "speed",
-        "billing_account_number",
+        "purchased_from",
+        "brand",
+        "model",
+        "serial_number",
+        "asset_tag",
+        "service_code",
+        "ordered_product_model",
+        "status",
         pre=True,
     )
     def normalize_warranty_text(cls, value: str | None) -> str | None:  # noqa: D417
         return _normalize_placeholder(value)
 
-    @validator("workflow_status", pre=True)
-    def normalize_workflow_status(cls, value: str | None) -> str:  # noqa: D417
-        if value is None:
-            return "Aktif"
-        if isinstance(value, str):
-            trimmed = value.strip()
-            return trimmed or "Aktif"
-        return str(value)
+    @validator("price", pre=True)
+    def parse_price(cls, value: Decimal | int | float | str | None) -> Decimal | None:  # noqa: D417
+        return _parse_decimal_value(value)
 
     @root_validator(pre=True)
     def normalize_warranty_aliases(cls, values: dict) -> dict:  # noqa: D417
@@ -601,27 +971,27 @@ class WarrantyItemBase(BaseModel):
             values["end_date"] = values.get("endDate")
         if "expiration_date" in values and "end_date" not in values:
             values["end_date"] = values.get("expiration_date")
+        if "purchasedFrom" in values and "purchased_from" not in values:
+            values["purchased_from"] = values.get("purchasedFrom")
+        if "serialNumber" in values and "serial_number" not in values:
+            values["serial_number"] = values.get("serialNumber")
+        if "assetTag" in values and "asset_tag" not in values:
+            values["asset_tag"] = values.get("assetTag")
+        if "serviceCode" in values and "service_code" not in values:
+            values["service_code"] = values.get("serviceCode")
+        if "orderedProductModel" in values and "ordered_product_model" not in values:
+            values["ordered_product_model"] = values.get("orderedProductModel")
+        if "shipmentDate" in values and "shipment_date" not in values:
+            values["shipment_date"] = values.get("shipmentDate")
+        if "endOfServiceLife" in values and "end_of_service_life" not in values:
+            values["end_of_service_life"] = values.get("endOfServiceLife")
+        if "support_end_date" in values and "end_date" not in values:
+            values["end_date"] = values.get("support_end_date")
         return values
 
-    @validator("end_date", pre=True)
-    def parse_end_date(cls, value: date | str | None) -> date | None:  # noqa: D417
-        if isinstance(value, date):
-            return value
-        if value is None:
-            return None
-        if isinstance(value, str):
-            raw = value.strip()
-            if not raw:
-                return None
-            try:
-                return datetime.strptime(raw, "%Y-%m-%d").date()
-            except ValueError:
-                pass
-            try:
-                return datetime.strptime(raw, "%d.%m.%Y").date()
-            except ValueError as exc:
-                raise ValueError("end_date must be YYYY-MM-DD or DD.MM.YYYY") from exc
-        raise ValueError("Invalid end_date")
+    @validator("end_date", "shipment_date", "end_of_service_life", pre=True)
+    def parse_warranty_dates(cls, value: date | datetime | str | None, field) -> date | None:  # noqa: D417
+        return _parse_flexible_date(value, field.name)
 
 
 class WarrantyItemCreate(WarrantyItemBase):
@@ -640,28 +1010,21 @@ class WarrantyItemUpdate(BaseModel):
     certificate_issuer: Optional[str] = Field(default=None, alias="certificateIssuer")
     renewal_owner: Optional[str] = Field(default=None, alias="renewal_owner")
     renewal_responsible: Optional[str] = Field(default=None, alias="renewalResponsible")
-    ssl_certificate: Optional[str] = None
-    certificate_type: Optional[str] = None
-    contract_end_date: Optional[date] = None
-    vendor_company: Optional[str] = None
-    tax_number: Optional[str] = None
-    service_type: Optional[str] = None
-    subscription_circuit_number: Optional[str] = None
-    location_name: Optional[str] = None
-    service_number: Optional[str] = None
-    speed: Optional[str] = None
-    commitment_end_date: Optional[date] = None
-    billing_account_number: Optional[str] = None
-    plan_entry_id: Optional[int] = None
-    workflow_status: Optional[str] = None
+    purchased_from: Optional[str] = Field(default=None, alias="purchasedFrom")
+    brand: Optional[str] = None
+    model: Optional[str] = None
+    serial_number: Optional[str] = Field(default=None, alias="serialNumber")
+    asset_tag: Optional[str] = Field(default=None, alias="assetTag")
+    service_code: Optional[str] = Field(default=None, alias="serviceCode")
+    ordered_product_model: Optional[str] = Field(default=None, alias="orderedProductModel")
+    price: Optional[Decimal] = None
+    shipment_date: Optional[date] = Field(default=None, alias="shipmentDate")
+    end_of_service_life: Optional[date] = Field(default=None, alias="endOfServiceLife")
+    status: Optional[str] = None
     reminder_days: Optional[int] = None
     remind_days: Optional[int] = None
     remind_days_before: Optional[int] = None
     is_active: Optional[bool] = None
-
-    @validator("type", pre=True)
-    def normalize_warranty_type(cls, value: WarrantyItemType | str | None) -> WarrantyItemType | str | None:  # noqa: D417
-        return _normalize_warranty_type_alias(value)
 
     @validator("name", "location", pre=True)
     def validate_update_warranty_text(cls, value: str | None, field) -> str | None:  # noqa: D417
@@ -677,29 +1040,22 @@ class WarrantyItemUpdate(BaseModel):
         "certificate_issuer",
         "renewal_owner",
         "renewal_responsible",
-        "ssl_certificate",
-        "certificate_type",
-        "vendor_company",
-        "tax_number",
-        "service_type",
-        "subscription_circuit_number",
-        "location_name",
-        "service_number",
-        "speed",
-        "billing_account_number",
+        "purchased_from",
+        "brand",
+        "model",
+        "serial_number",
+        "asset_tag",
+        "service_code",
+        "ordered_product_model",
+        "status",
         pre=True,
     )
     def normalize_update_warranty_text(cls, value: str | None) -> str | None:  # noqa: D417
         return _normalize_placeholder(value)
 
-    @validator("workflow_status", pre=True)
-    def normalize_update_workflow_status(cls, value: str | None) -> str | None:  # noqa: D417
-        if value is None:
-            return None
-        if isinstance(value, str):
-            trimmed = value.strip()
-            return trimmed or None
-        return str(value)
+    @validator("price", pre=True)
+    def parse_price(cls, value: Decimal | int | float | str | None) -> Decimal | None:  # noqa: D417
+        return _parse_decimal_value(value)
 
     @root_validator(pre=True)
     def normalize_warranty_aliases(cls, values: dict) -> dict:  # noqa: D417
@@ -727,27 +1083,27 @@ class WarrantyItemUpdate(BaseModel):
             values["end_date"] = values.get("expiration_date")
         if "renewal_owner" not in values and "renewalResponsible" in values:
             values["renewal_owner"] = values.get("renewalResponsible")
+        if "purchasedFrom" in values and "purchased_from" not in values:
+            values["purchased_from"] = values.get("purchasedFrom")
+        if "serialNumber" in values and "serial_number" not in values:
+            values["serial_number"] = values.get("serialNumber")
+        if "assetTag" in values and "asset_tag" not in values:
+            values["asset_tag"] = values.get("assetTag")
+        if "serviceCode" in values and "service_code" not in values:
+            values["service_code"] = values.get("serviceCode")
+        if "orderedProductModel" in values and "ordered_product_model" not in values:
+            values["ordered_product_model"] = values.get("orderedProductModel")
+        if "shipmentDate" in values and "shipment_date" not in values:
+            values["shipment_date"] = values.get("shipmentDate")
+        if "endOfServiceLife" in values and "end_of_service_life" not in values:
+            values["end_of_service_life"] = values.get("endOfServiceLife")
+        if "support_end_date" in values and "end_date" not in values:
+            values["end_date"] = values.get("support_end_date")
         return values
 
-    @validator("end_date", pre=True)
-    def parse_end_date(cls, value: date | str | None) -> date | None:  # noqa: D417
-        if value is None:
-            return None
-        if isinstance(value, date):
-            return value
-        if isinstance(value, str):
-            raw = value.strip()
-            if not raw:
-                return None
-            try:
-                return datetime.strptime(raw, "%Y-%m-%d").date()
-            except ValueError:
-                pass
-            try:
-                return datetime.strptime(raw, "%d.%m.%Y").date()
-            except ValueError as exc:
-                raise ValueError("end_date must be YYYY-MM-DD or DD.MM.YYYY") from exc
-        raise ValueError("Invalid end_date")
+    @validator("end_date", "shipment_date", "end_of_service_life", pre=True)
+    def parse_warranty_dates(cls, value: date | datetime | str | None, field) -> date | None:  # noqa: D417
+        return _parse_flexible_date(value, field.name)
 
     class Config:
         allow_population_by_field_name = True
@@ -757,7 +1113,7 @@ class WarrantyItemRead(SQLModel, table=False):
     id: int
     type: WarrantyItemType
     name: str
-    location: str
+    location: Optional[str] = None
     domain: Optional[str] = None
     end_date: Optional[date] = None
     note: Optional[str] = None
@@ -765,20 +1121,16 @@ class WarrantyItemRead(SQLModel, table=False):
     certificate_issuer: Optional[str] = None
     renewal_owner: Optional[str] = None
     renewal_responsible: Optional[str] = None
-    ssl_certificate: Optional[str] = None
-    certificate_type: Optional[str] = None
-    contract_end_date: Optional[date] = None
-    vendor_company: Optional[str] = None
-    tax_number: Optional[str] = None
-    service_type: Optional[str] = None
-    subscription_circuit_number: Optional[str] = None
-    location_name: Optional[str] = None
-    service_number: Optional[str] = None
-    speed: Optional[str] = None
-    commitment_end_date: Optional[date] = None
-    billing_account_number: Optional[str] = None
-    plan_entry_id: Optional[int] = None
-    workflow_status: str = "Aktif"
+    purchased_from: Optional[str] = None
+    brand: Optional[str] = None
+    model: Optional[str] = None
+    serial_number: Optional[str] = None
+    asset_tag: Optional[str] = None
+    service_code: Optional[str] = None
+    ordered_product_model: Optional[str] = None
+    price: Optional[Decimal] = None
+    shipment_date: Optional[date] = None
+    end_of_service_life: Optional[date] = None
     reminder_days: Optional[int] = None
     remind_days: Optional[int] = None
     remind_days_before: Optional[int] = None
@@ -793,6 +1145,7 @@ class WarrantyItemRead(SQLModel, table=False):
     updated_by_username: Optional[str] = None
     days_left: Optional[int] = None
     status: Optional[str] = None
+    computed_status: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
@@ -809,7 +1162,9 @@ class DashboardSummary(BaseModel):
     planned: float
     actual: float
     saving: float
-    saving_amount: float | None = None
+    remaining: float = 0
+    unused: float = 0
+    cancelled: float = 0
 
 
 class DashboardKPI(BaseModel):
@@ -818,60 +1173,138 @@ class DashboardKPI(BaseModel):
     total_remaining: float
     total_saving: float
     total_overrun: float
+    total_unused: float = 0
+    total_negotiated_saving: float = 0
+    total_other_saving: float = 0
+    total_combined_saving: float = 0
+    total_cancelled: float = 0
+    realized_plan_inside_amount: float = 0
+    capex_realized_plan_inside_amount: float = 0
+    opex_realized_plan_inside_amount: float = 0
+    unclassified_realized_plan_inside_amount: float = 0
+    remaining_available_amount: float = 0
+    capex_remaining_available_amount: float = 0
+    opex_remaining_available_amount: float = 0
+    unclassified_remaining_available_amount: float = 0
+    negotiated_saving_amount: float = 0
+    capex_negotiated_saving_amount: float = 0
+    opex_negotiated_saving_amount: float = 0
+    unclassified_negotiated_saving_amount: float = 0
+    other_saving_amount: float = 0
+    capex_other_saving_amount: float = 0
+    opex_other_saving_amount: float = 0
+    unclassified_other_saving_amount: float = 0
+    canceled_budget_amount: float = 0
+    capex_canceled_budget_amount: float = 0
+    opex_canceled_budget_amount: float = 0
+    unclassified_canceled_budget_amount: float = 0
+    overrun_amount: float = 0
+    capex_overrun_amount: float = 0
+    opex_overrun_amount: float = 0
+    unclassified_overrun_amount: float = 0
+    budget_outside_amount: float = 0
+    capex_budget_outside_amount: float = 0
+    opex_budget_outside_amount: float = 0
+    unclassified_budget_outside_amount: float = 0
+    reconciliation_total: float = 0
+    capex_reconciliation_total: float = 0
+    opex_reconciliation_total: float = 0
+    unclassified_reconciliation_total: float = 0
+    reconciliation_difference: float = 0
+    capex_reconciliation_difference: float = 0
+    opex_reconciliation_difference: float = 0
+    unclassified_reconciliation_difference: float = 0
+    capex_total_plan_amount: float = 0
+    opex_total_plan_amount: float = 0
+    unclassified_total_plan_amount: float = 0
+
+
+class BudgetReconciliationRead(BaseModel):
+    total_plan_amount: float
+    capex_total_plan_amount: float
+    opex_total_plan_amount: float
+    unclassified_total_plan_amount: float
+    realized_plan_inside_amount: float
+    capex_realized_plan_inside_amount: float
+    opex_realized_plan_inside_amount: float
+    unclassified_realized_plan_inside_amount: float
+    remaining_available_amount: float
+    capex_remaining_available_amount: float
+    opex_remaining_available_amount: float
+    unclassified_remaining_available_amount: float
+    negotiated_saving_amount: float
+    capex_negotiated_saving_amount: float
+    opex_negotiated_saving_amount: float
+    unclassified_negotiated_saving_amount: float
+    other_saving_amount: float
+    capex_other_saving_amount: float
+    opex_other_saving_amount: float
+    unclassified_other_saving_amount: float
+    canceled_budget_amount: float
+    capex_canceled_budget_amount: float
+    opex_canceled_budget_amount: float
+    unclassified_canceled_budget_amount: float
+    overrun_amount: float
+    capex_overrun_amount: float
+    opex_overrun_amount: float
+    unclassified_overrun_amount: float
+    budget_outside_amount: float
+    capex_budget_outside_amount: float
+    opex_budget_outside_amount: float
+    unclassified_budget_outside_amount: float
+    reconciliation_total: float
+    capex_reconciliation_total: float
+    opex_reconciliation_total: float
+    unclassified_reconciliation_total: float
+    reconciliation_difference: float
+    capex_reconciliation_difference: float
+    opex_reconciliation_difference: float
+    unclassified_reconciliation_difference: float
 
 
 class DashboardResponse(BaseModel):
     kpi: DashboardKPI
     monthly: list[DashboardSummary]
-
-
-class SavingsResponse(BaseModel):
-    year: int
-    scenario_id: int | None = None
-    month: int | None = None
-    planned_amount: float
-    actual_amount: float
-    saving_amount: float
-
-
-class SavingsItem(BaseModel):
-    budget_item_id: int
-    budget_code: str
-    budget_name: str
-    department: str | None = None
-    planned_amount: float
-    spent_amount: float
-    saving_amount: float
-    saving_pct: float
-
-
-class SavingsItemsResponse(BaseModel):
-    total_saving: float
-    saving_item_count: int
-    items: list[SavingsItem]
-
-
-class PlannedAmountResponse(BaseModel):
-    year: int
-    scenario_id: int | None = None
-    month: int | None = None
-    planned_amount: float
-    actual_amount: float
-    saving_amount: float
+    reconciliation: BudgetReconciliationRead | None = None
 
 
 class OverBudgetSummary(BaseModel):
     over_total: float
     over_item_count: int
+    total_revised_plan: float = 0
+    total_actual: float = 0
+    total_valid_actual: float = 0
+    remaining_total: float = 0
+    remaining_item_count: int = 0
+    saving_total: float = 0
+    saving_item_count: int = 0
+    unused_total: float = 0
+    unused_item_count: int = 0
+    negotiated_saving_total: float = 0
+    negotiated_saving_item_count: int = 0
+    other_saving_total: float = 0
+    other_saving_item_count: int = 0
+    total_saving_total: float = 0
+    total_saving_item_count: int = 0
 
 
 class OverBudgetItem(BaseModel):
+    budget_item_id: int
     budget_code: str
     budget_name: str
+    months: list[int] = Field(default_factory=list)
+    capex_opex: Optional[str] = None
+    asset_type: Optional[str] = None
+    department: Optional[str] = None
     plan: float
     actual: float
     over: float
     over_pct: float
+    unused_amount: float = 0
+    available_amount: float = 0
+    reason: Optional[str] = None
+    note: Optional[str] = None
+    unused_updated_at: Optional[datetime] = None
     year: int
     month: int | None = None
     scenario: int | None = None
@@ -880,6 +1313,9 @@ class OverBudgetItem(BaseModel):
 class OverBudgetResponse(BaseModel):
     summary: OverBudgetSummary
     items: list[OverBudgetItem]
+    saving_items: list[OverBudgetItem] = Field(default_factory=list)
+    remaining_items: list[OverBudgetItem] = Field(default_factory=list)
+    unused_items: list[OverBudgetItem] = Field(default_factory=list)
 
 
 class SpendMonthlySummary(BaseModel):
@@ -889,6 +1325,7 @@ class SpendMonthlySummary(BaseModel):
     within_plan_total: float
     over_total: float
     remaining_total: float
+    unused_total: float = 0
 
 
 class SpendTrendMonth(BaseModel):

@@ -15,6 +15,7 @@ export interface AuthUser {
   username: string;
   full_name: string | null;
   is_admin: boolean;
+  role?: "admin" | "user" | "viewer" | string;
   is_active: boolean;
 }
 

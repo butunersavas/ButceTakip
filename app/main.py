@@ -2,7 +2,7 @@ import logging
 import os
 from uuid import uuid4
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy import text
@@ -12,23 +12,24 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.config import get_settings
 from app.database import engine, init_db
+from app.dependencies import is_viewer_user
+from app.models import User
 from app.routers import (
     auth,
     backup,
     budget_items,
     dashboard,
-    expense_attachments,
     expenses,
     import_export,
     plans,
     purchase_alerts,
     purchase_reminders,
-    purchase_tracking,
     reports,
     scenarios,
     users,
     warranty_items,
 )
+from app.utils.security import decode_access_token
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -59,6 +60,30 @@ if trusted_hosts:
     )
 
 
+@app.middleware("http")
+async def readonly_user_guard(request: Request, call_next):
+    if request.method.upper() in {"POST", "PUT", "PATCH", "DELETE"}:
+        path = request.url.path.rstrip("/")
+        if path != f"{API_PREFIX}/auth/token":
+            authorization = request.headers.get("authorization", "")
+            scheme, _, token = authorization.partition(" ")
+            if scheme.lower() == "bearer" and token:
+                try:
+                    token_data = decode_access_token(token)
+                    with Session(engine) as session:
+                        user = session.get(User, token_data.user_id)
+                        if is_viewer_user(user):
+                            return JSONResponse(
+                                status_code=status.HTTP_403_FORBIDDEN,
+                                content={
+                                    "detail": "Bu kullanıcı yalnızca görüntüleme yetkisine sahiptir."
+                                },
+                            )
+                except Exception:
+                    pass
+    return await call_next(request)
+
+
 @app.on_event("startup")
 def on_startup() -> None:
     init_db()
@@ -77,7 +102,10 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 @app.exception_handler(IntegrityError)
 async def integrity_error_handler(request: Request, exc: IntegrityError) -> JSONResponse:
     logger.exception("Integrity error on %s", request.url.path)
-    return JSONResponse(status_code=400, content={"detail": str(exc.orig) if exc.orig else "Integrity error"})
+    return JSONResponse(
+        status_code=400,
+        content={"detail": "Bu kayıt bağlı başka veriler nedeniyle silinemedi."},
+    )
 
 
 @app.exception_handler(SQLAlchemyError)
@@ -92,10 +120,8 @@ app.include_router(scenarios.router, prefix=API_PREFIX)
 app.include_router(budget_items.router, prefix=API_PREFIX)
 app.include_router(plans.router, prefix=API_PREFIX)
 app.include_router(expenses.router, prefix=API_PREFIX)
-app.include_router(expense_attachments.router, prefix=API_PREFIX)
 app.include_router(dashboard.router, prefix=API_PREFIX)
 app.include_router(purchase_alerts.router, prefix=API_PREFIX)
-app.include_router(purchase_tracking.router, prefix=API_PREFIX)
 app.include_router(import_export.router, prefix=API_PREFIX)
 app.include_router(purchase_reminders.router, prefix=API_PREFIX)
 app.include_router(reports.router, prefix=API_PREFIX)
