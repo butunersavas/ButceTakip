@@ -1,82 +1,32 @@
 from datetime import date, datetime
-from io import BytesIO
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
-from openpyxl import Workbook
 from sqlalchemy import func
-from sqlalchemy import text
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import aliased
 from sqlmodel import Session, select
 
 from app.dependencies import get_admin_user, get_current_user, get_db_session
-from app.models import PlanEntry, User, WarrantyItem, WarrantyItemType
+from app.models import User, WarrantyItem, WarrantyItemType
 from app.schemas import (
+    DeleteDependencyInfo,
     WarrantyItemCreate,
     WarrantyItemCriticalRead,
     WarrantyItemRead,
     WarrantyItemUpdate,
 )
+from app.services.related_records import count_related_file_records, delete_related_file_records
+from app.services.warranty_import import (
+    build_template_workbook,
+    confirm_warranty_import,
+    preview_warranty_import,
+)
 
 router = APIRouter(prefix="/warranty-items", tags=["Warranty Items"])
 logger = logging.getLogger(__name__)
-
-TYPE_SPECIFIC_FIELDS: dict[WarrantyItemType, set[str]] = {
-    WarrantyItemType.WARRANTY: set(),
-    WarrantyItemType.DEVICE: set(),
-    WarrantyItemType.MAINTENANCE: set(),
-    WarrantyItemType.LICENSE: {"domain", "issuer", "certificate_issuer", "renewal_owner", "renewal_responsible"},
-    WarrantyItemType.CERTIFICATE: {
-        "issuer",
-        "certificate_issuer",
-        "ssl_certificate",
-        "certificate_type",
-        "contract_end_date",
-        "vendor_company",
-    },
-    WarrantyItemType.SERVICE: {
-        "tax_number",
-        "service_type",
-        "subscription_circuit_number",
-        "location_name",
-        "service_number",
-        "speed",
-        "commitment_end_date",
-        "billing_account_number",
-    },
-    WarrantyItemType.CONTRACT: {
-        "vendor_company",
-        "tax_number",
-        "service_type",
-        "contract_end_date",
-        "commitment_end_date",
-        "billing_account_number",
-    },
-    WarrantyItemType.DOMAIN_SSL: {"domain", "issuer", "certificate_issuer", "renewal_owner", "renewal_responsible"},
-}
-
-ALL_TYPE_DEPENDENT_FIELDS = {
-    "domain",
-    "issuer",
-    "certificate_issuer",
-    "renewal_owner",
-    "renewal_responsible",
-    "ssl_certificate",
-    "certificate_type",
-    "contract_end_date",
-    "vendor_company",
-    "tax_number",
-    "service_type",
-    "subscription_circuit_number",
-    "location_name",
-    "service_number",
-    "speed",
-    "commitment_end_date",
-    "billing_account_number",
-}
 
 
 def _calculate_days_left(end_date: date | None, today: date | None = None) -> int | None:
@@ -88,11 +38,11 @@ def _calculate_days_left(end_date: date | None, today: date | None = None) -> in
 
 def _calculate_status(days_left: int | None) -> str | None:
     if days_left is None:
-        return None
-    if days_left <= 0:
-        return "Süresi Geçti"
-    if days_left <= 30:
-        return "Yakında Yenile"
+        return "Bilinmiyor"
+    if days_left < 0:
+        return "Süresi Dolmuş"
+    if days_left <= 90:
+        return "Yaklaşıyor"
     return "Aktif"
 
 
@@ -156,6 +106,14 @@ def _build_warranty_read(
     read_item.certificate_issuer = _normalize_output_text(read_item.certificate_issuer)
     read_item.renewal_owner = _normalize_output_text(read_item.renewal_owner)
     read_item.renewal_responsible = _normalize_output_text(read_item.renewal_responsible)
+    read_item.purchased_from = _normalize_output_text(read_item.purchased_from)
+    read_item.brand = _normalize_output_text(read_item.brand)
+    read_item.model = _normalize_output_text(read_item.model)
+    read_item.serial_number = _normalize_output_text(read_item.serial_number)
+    read_item.asset_tag = _normalize_output_text(read_item.asset_tag)
+    read_item.service_code = _normalize_output_text(read_item.service_code)
+    read_item.ordered_product_model = _normalize_output_text(read_item.ordered_product_model)
+    read_item.status = _normalize_output_text(read_item.status)
     remind_days_before = _resolve_remind_days(item)
     if read_item.remind_days_before is None:
         read_item.remind_days_before = remind_days_before
@@ -173,62 +131,94 @@ def _build_warranty_read(
         read_item.renewal_owner = read_item.renewal_responsible
     days_left = _calculate_days_left(item.end_date)
     read_item.days_left = days_left
-    read_item.status = _calculate_status(days_left)
+    read_item.computed_status = _calculate_status(days_left)
     return read_item
 
 
-def _sanitize_type_specific_fields(item_data: dict, target_type: WarrantyItemType | str | None) -> dict:
-    if not target_type:
-        return item_data
-    normalized_type = target_type if isinstance(target_type, WarrantyItemType) else WarrantyItemType(str(target_type))
-    allowed_fields = TYPE_SPECIFIC_FIELDS.get(normalized_type, set())
-    for field in ALL_TYPE_DEPENDENT_FIELDS:
-        if field not in allowed_fields and field in item_data:
-            item_data[field] = None
-    return item_data
-
-
-def _is_completed_status(workflow_status: str | None) -> bool:
-    if not workflow_status:
-        return False
-    normalized = workflow_status.strip().lower()
-    return normalized == "tamamlandı"
-
-
-def _sync_plan_purchase_requested(
-    session: Session,
-    plan_entry_id: int | None,
-    workflow_status: str | None,
-    current_user: User,
-) -> int | None:
-    if not plan_entry_id or plan_entry_id <= 0:
-        return None
-    plan_entry = session.get(PlanEntry, plan_entry_id)
-    if not plan_entry:
-        logger.warning(
-            "Plan entry relation skipped because record was not found.",
-            extra={"plan_entry_id": plan_entry_id},
-        )
-        return None
-    should_mark_purchased = _is_completed_status(workflow_status)
-    plan_entry.purchase_requested = should_mark_purchased
-    plan_entry.purchase_requested_at = datetime.utcnow() if should_mark_purchased else None
-    plan_entry.purchase_requested_by = current_user.username if should_mark_purchased else None
-    session.add(plan_entry)
-    return plan_entry.id
-
-
-def _ensure_warranty_id_sequence(session: Session) -> None:
-    if session.bind is None or session.bind.dialect.name != "postgresql":
-        return
-    session.exec(
-        text(
-            "SELECT setval("
-            "pg_get_serial_sequence('warranty_items','id'), "
-            "COALESCE(MAX(id),1), true"
-            ") FROM warranty_items"
-        )
+@router.get("/import/template")
+@router.get("/import/template/", include_in_schema=False)
+def download_warranty_import_template(
+    template_type: WarrantyItemType = Query(WarrantyItemType.DEVICE),
+    _: User = Depends(get_current_user),
+) -> StreamingResponse:
+    workbook_stream = build_template_workbook(template_type)
+    safe_type = template_type.value.lower() if hasattr(template_type, "value") else str(template_type).lower()
+    headers = {
+        "Content-Disposition": f'attachment; filename="garanti_{safe_type}_import_sablonu.xlsx"',
+        "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+        "Pragma": "no-cache",
+    }
+    return StreamingResponse(
+        workbook_stream,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers=headers,
     )
+
+
+@router.post("/import/preview")
+@router.post("/import/preview/", include_in_schema=False)
+async def preview_warranty_import_file(
+    file: UploadFile = File(...),
+    default_type: WarrantyItemType = Form(WarrantyItemType.DEVICE),
+    session: Session = Depends(get_db_session),
+    _: User = Depends(get_admin_user),
+) -> dict:
+    filename = file.filename or "garanti_bakim_import.xlsx"
+    if not filename.lower().endswith((".xlsx", ".xlsm")):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Sadece .xlsx veya .xlsm dosyaları destekleniyor.",
+        )
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Excel dosyası boş.")
+    try:
+        return preview_warranty_import(session=session, content=content, filename=filename, default_type=default_type)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Warranty import preview failed")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Excel önizleme sırasında hata oluştu: {exc}",
+        ) from exc
+
+
+@router.post("/import/confirm")
+@router.post("/import/confirm/", include_in_schema=False)
+async def confirm_warranty_import_file(
+    file: UploadFile = File(...),
+    default_type: WarrantyItemType = Form(WarrantyItemType.DEVICE),
+    session: Session = Depends(get_db_session),
+    current_user: User = Depends(get_admin_user),
+) -> dict:
+    filename = file.filename or "garanti_bakim_import.xlsx"
+    if not filename.lower().endswith((".xlsx", ".xlsm")):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Sadece .xlsx veya .xlsm dosyaları destekleniyor.",
+        )
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Excel dosyası boş.")
+    try:
+        return confirm_warranty_import(
+            session=session,
+            content=content,
+            filename=filename,
+            current_user=current_user,
+            default_type=default_type,
+        )
+    except ValueError as exc:
+        session.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except Exception as exc:
+        session.rollback()
+        logger.exception("Warranty import confirm failed")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Excel import sırasında hata oluştu: {exc}",
+        ) from exc
 
 
 @router.get("", response_model=list[WarrantyItemRead])
@@ -285,13 +275,7 @@ def create_warranty_item(
     current_user: User = Depends(get_admin_user),
 ) -> WarrantyItemRead:
     item_data = item_in.dict()
-    item_data.pop("id", None)
     logger.debug("Warranty item create payload: %s", item_data)
-    if item_data.get("end_date") is None:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="end_date is required",
-        )
     if item_data.get("certificate_issuer") and not item_data.get("issuer"):
         item_data["issuer"] = item_data["certificate_issuer"]
     if item_data.get("renewal_responsible") and not item_data.get("renewal_owner"):
@@ -307,11 +291,6 @@ def create_warranty_item(
         item_data.setdefault("remind_days_before", remind_days_value)
         item_data.setdefault("reminder_days", remind_days_value)
         item_data.setdefault("remind_days", remind_days_value)
-    submitted_plan_entry_id = item_data.get("plan_entry_id")
-    if submitted_plan_entry_id is not None and submitted_plan_entry_id <= 0:
-        item_data["plan_entry_id"] = None
-    item_data = _sanitize_type_specific_fields(item_data, item_data.get("type"))
-    item_data.setdefault("workflow_status", "Aktif")
     item = WarrantyItem(
         **item_data,
         created_by_id=current_user.id,
@@ -320,29 +299,16 @@ def create_warranty_item(
         updated_by_user_id=current_user.id,
     )
     try:
-        _ensure_warranty_id_sequence(session)
-        item.plan_entry_id = _sync_plan_purchase_requested(
-            session=session,
-            plan_entry_id=item.plan_entry_id,
-            workflow_status=item.workflow_status,
-            current_user=current_user,
-        )
         session.add(item)
         session.commit()
         session.refresh(item)
-    except IntegrityError:
-        logger.exception("Failed to create warranty item due to integrity error")
-        session.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Garanti kaydı oluşturulamadı. Kimlik/benzersizlik hatası oluştu.",
-        )
-    except SQLAlchemyError:
+    except SQLAlchemyError as exc:
         logger.exception("Failed to create warranty item")
         session.rollback()
+        detail = str(exc.orig) if getattr(exc, "orig", None) else "DB constraint error"
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Garanti kaydı oluşturulamadı.",
+            detail=detail,
         )
     user_map = _build_user_map(session, [item])
     created_id = item.created_by_id or item.created_by_user_id
@@ -381,13 +347,6 @@ def update_warranty_item(
         update_data.setdefault("remind_days_before", remind_days_value)
         update_data.setdefault("reminder_days", remind_days_value)
         update_data.setdefault("remind_days", remind_days_value)
-    if "plan_entry_id" in update_data:
-        submitted_plan_entry_id = update_data.get("plan_entry_id")
-        if submitted_plan_entry_id is not None and submitted_plan_entry_id <= 0:
-            update_data["plan_entry_id"] = None
-    target_type = update_data.get("type") or item.type
-    update_data = _sanitize_type_specific_fields(update_data, target_type)
-    previous_plan_entry_id = item.plan_entry_id
     for field, value in update_data.items():
         setattr(item, field, value)
     if item.created_by_id is None:
@@ -396,19 +355,6 @@ def update_warranty_item(
     item.updated_by_id = current_user.id
     item.updated_at = datetime.utcnow()
     try:
-        if previous_plan_entry_id and previous_plan_entry_id != item.plan_entry_id:
-            _sync_plan_purchase_requested(
-                session=session,
-                plan_entry_id=previous_plan_entry_id,
-                workflow_status=None,
-                current_user=current_user,
-            )
-        item.plan_entry_id = _sync_plan_purchase_requested(
-            session=session,
-            plan_entry_id=item.plan_entry_id,
-            workflow_status=item.workflow_status,
-            current_user=current_user,
-        )
         session.add(item)
         session.commit()
         session.refresh(item)
@@ -429,21 +375,48 @@ def update_warranty_item(
     )
 
 
+@router.get("/{item_id}/delete-info", response_model=DeleteDependencyInfo)
+@router.get("/{item_id}/delete-info/", response_model=DeleteDependencyInfo, include_in_schema=False)
+def get_warranty_delete_info(
+    item_id: int,
+    session: Session = Depends(get_db_session),
+    current_user: User = Depends(get_admin_user),
+) -> DeleteDependencyInfo:
+    item = session.get(WarrantyItem, item_id)
+    if not item:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Warranty item not found")
+    return DeleteDependencyInfo(
+        related_file_count=count_related_file_records(session, "warranty_items", item_id)
+    )
+
+
 @router.delete("/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
 @router.delete("/{item_id}/", status_code=status.HTTP_204_NO_CONTENT, include_in_schema=False)
 def delete_warranty_item(
     item_id: int,
+    delete_related: bool = Query(False),
     session: Session = Depends(get_db_session),
     current_user: User = Depends(get_admin_user),
 ) -> None:
     item = session.get(WarrantyItem, item_id)
     if not item:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Warranty item not found")
+    related_file_count = count_related_file_records(session, "warranty_items", item_id)
+    if related_file_count and not delete_related:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Bu kayda bağlı {related_file_count} ek/dosya var. "
+                "Silmeden önce onay verin."
+            ),
+        )
     item.is_active = False
     item.updated_by_user_id = current_user.id
     item.updated_by_id = current_user.id
     item.updated_at = datetime.utcnow()
     try:
+        if delete_related:
+            delete_related_file_records(session, "warranty_items", item_id)
         session.add(item)
         session.commit()
     except SQLAlchemyError:
@@ -487,6 +460,16 @@ def list_critical_warranty_items(
                     certificate_issuer=item.certificate_issuer or item.issuer,
                     renewal_owner=item.renewal_owner,
                     renewal_responsible=item.renewal_responsible or item.renewal_owner,
+                    purchased_from=item.purchased_from,
+                    brand=item.brand,
+                    model=item.model,
+                    serial_number=item.serial_number,
+                    asset_tag=item.asset_tag,
+                    service_code=item.service_code,
+                    ordered_product_model=item.ordered_product_model,
+                    price=item.price,
+                    shipment_date=item.shipment_date,
+                    end_of_service_life=item.end_of_service_life,
                     reminder_days=item.reminder_days or item.remind_days or item.remind_days_before or 30,
                     remind_days_before=item.remind_days_before
                     or item.remind_days
@@ -501,94 +484,11 @@ def list_critical_warranty_items(
                     updated_by_name=user_map.get(updated_id) if updated_id else None,
                     created_by_username=user_map.get(created_id) if created_id else None,
                     updated_by_username=user_map.get(updated_id) if updated_id else None,
-                    status=_calculate_status(days_left),
+                    status=item.status,
+                    computed_status=_calculate_status(days_left),
                     created_at=item.created_at,
                     updated_at=item.updated_at,
                     days_left=days_left,
                 )
             )
     return critical_items
-
-
-@router.get("/export/xlsx")
-def export_warranty_items_xlsx(
-    include_inactive: bool = False,
-    item_type: str | None = None,
-    session: Session = Depends(get_db_session),
-    _: User = Depends(get_current_user),
-):
-    query = select(WarrantyItem).order_by(WarrantyItem.end_date.asc())
-    if not include_inactive:
-        query = query.where(WarrantyItem.is_active.is_(True))
-    if item_type:
-        query = query.where(WarrantyItem.type == item_type)
-    items = session.exec(query).all()
-
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "WarrantyItems"
-    ws.append(
-        [
-            "id",
-            "type",
-            "name",
-            "location",
-            "domain",
-            "issuer",
-            "renewal_responsible",
-            "ssl_certificate",
-            "certificate_type",
-            "contract_end_date",
-            "vendor_company",
-            "tax_number",
-            "service_type",
-            "subscription_circuit_number",
-            "location_name",
-            "service_number",
-            "speed",
-            "commitment_end_date",
-            "billing_account_number",
-            "end_date",
-            "days_left",
-            "status",
-            "is_active",
-        ]
-    )
-    for item in items:
-        days_left = _calculate_days_left(item.end_date)
-        ws.append(
-            [
-                item.id,
-                item.type.value if item.type else "",
-                item.name,
-                item.location,
-                item.domain or "",
-                item.issuer or item.certificate_issuer or "",
-                item.renewal_responsible or item.renewal_owner or "",
-                item.ssl_certificate or "",
-                item.certificate_type or "",
-                item.contract_end_date.isoformat() if item.contract_end_date else "",
-                item.vendor_company or "",
-                item.tax_number or "",
-                item.service_type or "",
-                item.subscription_circuit_number or "",
-                item.location_name or "",
-                item.service_number or "",
-                item.speed or "",
-                item.commitment_end_date.isoformat() if item.commitment_end_date else "",
-                item.billing_account_number or "",
-                item.end_date.isoformat() if item.end_date else "",
-                days_left if days_left is not None else "",
-                _calculate_status(days_left) or "",
-                item.is_active,
-            ]
-        )
-
-    output = BytesIO()
-    wb.save(output)
-    output.seek(0)
-    return StreamingResponse(
-        output,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": 'attachment; filename="warranty_items.xlsx"'},
-    )

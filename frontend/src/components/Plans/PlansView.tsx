@@ -19,19 +19,20 @@ import {
   Tooltip,
   Typography
 } from "@mui/material";
-import Autocomplete, { createFilterOptions } from "@mui/material/Autocomplete";
+import Autocomplete, { createFilterOptions, type FilterOptionsState } from "@mui/material/Autocomplete";
+import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/DeleteOutline";
+import SwapHorizIcon from "@mui/icons-material/SwapHoriz";
 import { DataGrid, GridColDef } from "@mui/x-data-grid";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import axios from "axios";
 
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import usePersistentState from "../../hooks/usePersistentState";
 import { useAuth } from "../../context/AuthContext";
 import { formatBudgetItemLabel, stripBudgetCode } from "../../utils/budgetLabel";
 import { formatBudgetItemMeta } from "../../utils/budgetItem";
-import { formatMoney } from "../../utils/formatMoney";
-import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS } from "../../constants/pagination";
 import FiltersBar from "../Filters/FiltersBar";
 
 interface Scenario {
@@ -47,6 +48,10 @@ interface BudgetItem {
   map_category?: string | null;
   map_attribute?: string | null;
 }
+
+type BudgetSelectOption = BudgetItem & {
+  isNewBudgetOption?: boolean;
+};
 
 interface PlanEntry {
   id: number;
@@ -73,6 +78,22 @@ interface PlanEntry {
   is_form_prepared?: boolean | null;
   purchase_requested?: boolean | null;
   purchase_requested_at?: string | null;
+  transfer_in_amount?: number | null;
+  transfer_out_amount?: number | null;
+  revised_amount?: number | null;
+  actual_amount?: number | null;
+  unused_amount?: number | null;
+  available_amount?: number | null;
+  scope_revised_amount?: number | null;
+  scope_actual_amount?: number | null;
+  scope_unused_amount?: number | null;
+  scope_cancelled_amount?: number | null;
+  scope_available_amount?: number | null;
+  cancelled_amount?: number | null;
+  is_cancelled?: boolean | null;
+  unused_reason?: string | null;
+  unused_note?: string | null;
+  unused_updated_at?: string | null;
   budget_item?: BudgetItem | null;
   budgetItem?: BudgetItem | null;
 }
@@ -83,8 +104,68 @@ type PlanMutationPayload = {
   month: number;
   amount: number;
   scenario_id: number;
-  budget_item_id: number;
+  budget_item_id?: number | null;
+  budget_code?: string | null;
+  budget_name?: string | null;
   department?: string | null;
+  map_category?: string | null;
+  map_attribute?: string | null;
+  description?: string | null;
+  merge_mode?: "merge" | "separate";
+};
+
+interface DeleteDependencyInfo {
+  related_file_count: number;
+}
+
+type DeletePlanPayload = {
+  planId: number;
+  deleteRelated: boolean;
+};
+
+interface BudgetTransfer {
+  id: number;
+  source_budget_item_id: number;
+  source_year: number;
+  source_month: number;
+  source_scenario_id: number;
+  target_budget_item_id: number;
+  target_year: number;
+  target_month: number;
+  target_scenario_id: number;
+  amount: number;
+  reason: string;
+  created_at?: string | null;
+  is_cancelled: boolean;
+  source_budget_name?: string | null;
+  target_budget_name?: string | null;
+}
+
+interface BudgetAvailable {
+  revised_amount: number;
+  actual_amount: number;
+  unused_amount?: number;
+  available_amount: number;
+}
+
+type PlanUnusedPayload = {
+  planId: number;
+  amount: number;
+  reason?: string | null;
+  note?: string | null;
+};
+
+type BudgetTransferPayload = {
+  source_budget_item_id: number;
+  source_year: number;
+  source_month: number;
+  source_scenario_id: number;
+  target_budget_item_id: number;
+  target_year: number;
+  target_month: number;
+  target_scenario_id: number;
+  amount: number;
+  reason: string;
 };
 
 const monthOptions = [
@@ -102,8 +183,19 @@ const monthOptions = [
   "Aralık"
 ];
 
+const unusedReasonOptions = [
+  "Alımdan vazgeçildi",
+  "İhtiyaç kalmadı",
+  "Proje iptal/ertelendi",
+  "Başka bütçeden karşılandı",
+  "Diğer"
+];
+
 function formatCurrency(value: number) {
-  return formatMoney(value ?? 0);
+  return `$${new Intl.NumberFormat("tr-TR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(value ?? 0)}`;
 }
 
 function formatCapexLabel(value?: string | null) {
@@ -113,10 +205,30 @@ function formatCapexLabel(value?: string | null) {
   return normalized.charAt(0).toUpperCase() + normalized.slice(1).toLowerCase();
 }
 
+function parseLocaleNumber(value: FormDataEntryValue | string | null) {
+  if (value === null) return NaN;
+  const raw = value.toString().trim();
+  if (!raw) return NaN;
+  let normalized = raw.replace(/\s/g, "");
+  if (normalized.includes(",") && normalized.includes(".")) {
+    normalized =
+      normalized.lastIndexOf(",") > normalized.lastIndexOf(".")
+        ? normalized.replace(/\./g, "").replace(",", ".")
+        : normalized.replace(/,/g, "");
+  } else {
+    normalized = normalized.replace(",", ".");
+  }
+  return Number(normalized);
+}
+
 export default function PlansView() {
   const client = useAuthorizedClient();
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const isViewer = ["viewer", "readonly", "read_only"].includes(
+    String(user?.role ?? "").toLowerCase()
+  );
+  const canManagePlans = Boolean(user?.is_admin) && !isViewer;
 
   const currentYear = new Date().getFullYear();
   const [year, setYear] = usePersistentState<number>("plans:year", currentYear);
@@ -129,9 +241,49 @@ export default function PlansView() {
   const [editingPlan, setEditingPlan] = useState<PlanEntry | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [formBudgetItemId, setFormBudgetItemId] = useState<number | null>(null);
+  const [formBudgetItemText, setFormBudgetItemText] = useState("");
+  const [formDepartment, setFormDepartment] = useState("");
+  const [formMapCategory, setFormMapCategory] = useState("");
+  const [formMapAttribute, setFormMapAttribute] = useState("");
+  const [formMergeMode, setFormMergeMode] = useState<"merge" | "separate">("merge");
+  const [formYear, setFormYear] = useState<number>(year);
+  const [formScenarioId, setFormScenarioId] = useState<number | "">(scenarioId ?? "");
+  const [isNewBudgetMode, setIsNewBudgetMode] = useState(false);
+  const [transferDialogOpen, setTransferDialogOpen] = useState(false);
+  const [transferError, setTransferError] = useState<string | null>(null);
+  const [transferSourceBudgetItemId, setTransferSourceBudgetItemId] = useState<number | null>(null);
+  const [transferSourceYear, setTransferSourceYear] = useState<number>(currentYear);
+  const [transferSourceMonth, setTransferSourceMonth] = useState<number>(new Date().getMonth() + 1);
+  const [transferSourceScenarioId, setTransferSourceScenarioId] = useState<number | null>(null);
+  const [transferTargetBudgetItemId, setTransferTargetBudgetItemId] = useState<number | null>(null);
+  const [transferTargetYear, setTransferTargetYear] = useState<number>(currentYear);
+  const [transferTargetMonth, setTransferTargetMonth] = useState<number>(new Date().getMonth() + 1);
+  const [transferTargetScenarioId, setTransferTargetScenarioId] = useState<number | null>(null);
+  const [transferAmount, setTransferAmount] = useState("");
+  const [transferReason, setTransferReason] = useState("");
+  const [unusedDialogPlan, setUnusedDialogPlan] = useState<PlanEntry | null>(null);
+  const [unusedAmount, setUnusedAmount] = useState("");
+  const [unusedReason, setUnusedReason] = useState(unusedReasonOptions[0]);
+  const [unusedNote, setUnusedNote] = useState("");
+  const [unusedError, setUnusedError] = useState<string | null>(null);
   const [listError, setListError] = useState<string | null>(null);
-  const [saveFeedback, setSaveFeedback] = useState<string | null>(null);
-  const [exporting, setExporting] = useState(false);
+  const [toast, setToast] = useState<{
+    message: string;
+    severity: "success" | "error";
+  } | null>(null);
+
+  const resolveApiErrorMessage = useCallback((error: unknown, fallback: string) => {
+    if (axios.isAxiosError(error)) {
+      const detail =
+        (error.response?.data as { detail?: string; message?: string } | undefined)?.detail ||
+        (error.response?.data as { detail?: string; message?: string } | undefined)?.message;
+      if (detail) {
+        return detail;
+      }
+    }
+    return fallback;
+  }, []);
+
   const { data: scenarios } = useQuery<Scenario[]>({
     queryKey: ["scenarios"],
     queryFn: async () => {
@@ -148,20 +300,87 @@ export default function PlansView() {
     return map;
   }, [scenarios]);
 
+  const findDefaultScenarioForYear = useCallback(
+    (targetYear: number) => {
+      const yearScenarios = (scenarios ?? []).filter((scenario) => scenario.year === targetYear);
+      return (
+        yearScenarios.find((scenario) => scenario.name?.trim().toLowerCase() === "temel") ??
+        yearScenarios[0] ??
+        null
+      );
+    },
+    [scenarios]
+  );
+
   useEffect(() => {
     if (!scenarios?.length) return;
     setScenarioId((previous) => {
-      if (previous && scenarios.some((scenario) => scenario.id === previous)) {
+      const previousScenario = previous ? scenarioById.get(previous) : null;
+      if (previousScenario?.year === year) {
         return previous;
       }
 
-      const defaultScenario =
-        scenarios.find((scenario) => scenario.name?.trim().toLowerCase() === "temel") ||
-        scenarios.find((scenario) => scenario.year === year) ||
-        scenarios[0];
-      return defaultScenario?.id ?? null;
+      return findDefaultScenarioForYear(year)?.id ?? null;
     });
-  }, [scenarios, setScenarioId, year]);
+  }, [findDefaultScenarioForYear, scenarioById, scenarios, setScenarioId, year]);
+
+  const formScenarioOptions = useMemo(
+    () => (scenarios ?? []).filter((scenario) => scenario.year === formYear),
+    [formYear, scenarios]
+  );
+  const formScenarioSelectValue = useMemo(() => {
+    if (!formScenarioId) return "";
+    return formScenarioOptions.some((scenario) => scenario.id === Number(formScenarioId))
+      ? formScenarioId
+      : "";
+  }, [formScenarioId, formScenarioOptions]);
+
+  useEffect(() => {
+    if (!dialogOpen || !scenarios) return;
+    setFormScenarioId((previous) => {
+      const previousScenario = previous ? scenarioById.get(Number(previous)) : null;
+      if (previousScenario?.year === formYear) {
+        return previous;
+      }
+      return findDefaultScenarioForYear(formYear)?.id ?? "";
+    });
+  }, [dialogOpen, findDefaultScenarioForYear, formYear, scenarioById, scenarios]);
+
+  const ensureScenarioForYear = useCallback(
+    async (targetYear: number, candidateId?: number | "") => {
+      if (candidateId) {
+        const candidate = scenarioById.get(Number(candidateId));
+        if (candidate?.year === targetYear) {
+          return candidate.id;
+        }
+      }
+
+      const existing = findDefaultScenarioForYear(targetYear);
+      if (existing) {
+        return existing.id;
+      }
+
+      const { data: latestScenarios } = await client.get<Scenario[]>("/scenarios");
+      const latestYearScenarios = latestScenarios.filter((scenario) => scenario.year === targetYear);
+      const latestExisting =
+        latestYearScenarios.find((scenario) => scenario.name?.trim().toLowerCase() === "temel") ??
+        latestYearScenarios[0] ??
+        null;
+      if (latestExisting) {
+        queryClient.invalidateQueries({ queryKey: ["scenarios"] });
+        return latestExisting.id;
+      }
+
+      const { data } = await client.post<Scenario>("/scenarios", {
+        name: "Temel",
+        year: targetYear,
+        description: `${targetYear} temel senaryosu`
+      });
+      queryClient.invalidateQueries({ queryKey: ["scenarios"] });
+      return data.id;
+    },
+    [client, findDefaultScenarioForYear, queryClient, scenarioById]
+  );
 
   const { data: budgetItems } = useQuery<BudgetItem[]>({
     queryKey: ["budget-items"],
@@ -170,6 +389,38 @@ export default function PlansView() {
       return data;
     }
   });
+
+  const newBudgetOption = useMemo<BudgetSelectOption>(
+    () => ({
+      id: -1,
+      code: "__new_budget__",
+      name: "Yeni Bütçe",
+      isNewBudgetOption: true
+    }),
+    []
+  );
+
+  const budgetSelectOptions = useMemo<BudgetSelectOption[]>(
+    () => [newBudgetOption, ...((budgetItems ?? []) as BudgetSelectOption[])],
+    [budgetItems, newBudgetOption]
+  );
+
+  const budgetDialogFilterOptions = useMemo(() => {
+    const filter = createFilterOptions<BudgetSelectOption>({
+      stringify: (option) => {
+        const name = stripBudgetCode(option.name ?? "");
+        const meta = option.isNewBudgetOption ? "yeni bütçe yeni plan" : formatBudgetItemMeta(option);
+        return `${option.code ?? ""} ${name} ${meta}`;
+      }
+    });
+    return (options: BudgetSelectOption[], params: FilterOptionsState<BudgetSelectOption>) => {
+      const filteredOptions = filter(
+        options.filter((option) => !option.isNewBudgetOption),
+        params
+      );
+      return [newBudgetOption, ...filteredOptions];
+    };
+  }, [newBudgetOption]);
 
   const plansQuery = useQuery<PlanEntry[]>({
     queryKey: [
@@ -193,6 +444,45 @@ export default function PlansView() {
     }
   });
 
+  const transfersQuery = useQuery<BudgetTransfer[]>({
+    queryKey: ["budget-transfers", year, scenarioId],
+    queryFn: async () => {
+      const params: Record<string, number> = { year };
+      if (scenarioId) params.scenario_id = scenarioId;
+      const { data } = await client.get<BudgetTransfer[]>("/plans/transfers", { params });
+      return data;
+    }
+  });
+
+  const transferAvailableQuery = useQuery<BudgetAvailable>({
+    queryKey: [
+      "budget-transfer-available",
+      transferSourceBudgetItemId,
+      transferSourceYear,
+      transferSourceMonth,
+      transferSourceScenarioId
+    ],
+    enabled:
+      transferDialogOpen &&
+      Boolean(
+        transferSourceBudgetItemId &&
+          transferSourceYear &&
+          transferSourceMonth &&
+          transferSourceScenarioId
+      ),
+    queryFn: async () => {
+      const { data } = await client.get<BudgetAvailable>("/plans/transfers/available", {
+        params: {
+          budget_item_id: transferSourceBudgetItemId,
+          year: transferSourceYear,
+          month: transferSourceMonth,
+          scenario_id: transferSourceScenarioId
+        }
+      });
+      return data;
+    }
+  });
+
   useEffect(() => {
     if (plansQuery.isError) {
       const error = plansQuery.error as any;
@@ -208,54 +498,240 @@ export default function PlansView() {
         const { data } = await client.put<PlanEntry>(`/plans/${id}`, body);
         return data;
       }
-      const { data } = await client.post<PlanEntry>("/plans", payload);
+      const { data } = await client.post<PlanEntry>("/plans/manual", payload);
       return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["plans"] });
       queryClient.invalidateQueries({ queryKey: ["plan-aggregate"] });
+      queryClient.invalidateQueries({ queryKey: ["budget-items"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       setDialogOpen(false);
       setFormError(null);
-      setSaveFeedback("Değişiklikler kaydedildi.");
+      setToast({ message: "Kayıt kaydedildi.", severity: "success" });
     }
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (planId: number) => {
-      await client.delete(`/plans/${planId}`);
+    mutationFn: async ({ planId, deleteRelated }: DeletePlanPayload) => {
+      await client.delete(`/plans/${planId}`, {
+        params: { delete_related: deleteRelated }
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["plans"] });
       queryClient.invalidateQueries({ queryKey: ["plan-aggregate"] });
+      setToast({ message: "Kayıt silindi.", severity: "success" });
+    },
+    onError: (error) => {
+      setToast({
+        message: resolveApiErrorMessage(error, "Plan kaydı silinemedi."),
+        severity: "error"
+      });
     }
   });
 
-  const handleEdit = useCallback((plan: PlanEntry) => {
-    setEditingPlan(plan);
-    setFormBudgetItemId(plan.budget_item_id ?? null);
+  const transferMutation = useMutation({
+    mutationFn: async (payload: BudgetTransferPayload) => {
+      const { data } = await client.post<BudgetTransfer>("/plans/transfers", payload);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["plans"] });
+      queryClient.invalidateQueries({ queryKey: ["plan-aggregate"] });
+      queryClient.invalidateQueries({ queryKey: ["budget-transfers"] });
+      queryClient.invalidateQueries({ queryKey: ["budget-transfer-available"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      setTransferDialogOpen(false);
+      setTransferError(null);
+      setToast({ message: "Bütçe aktarımı kaydedildi.", severity: "success" });
+    },
+    onError: (error) => {
+      setTransferError(resolveApiErrorMessage(error, "Bütçe aktarımı kaydedilemedi."));
+    }
+  });
+
+  const unusedMutation = useMutation({
+    mutationFn: async ({ planId, amount, reason, note }: PlanUnusedPayload) => {
+      const { data } = await client.post<PlanEntry>(`/plans/${planId}/unused`, {
+        amount,
+        reason,
+        note
+      });
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["plans"] });
+      queryClient.invalidateQueries({ queryKey: ["plan-aggregate"] });
+      queryClient.invalidateQueries({ queryKey: ["budget-transfer-available"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      setUnusedDialogPlan(null);
+      setUnusedError(null);
+      setToast({ message: "Kullanılmayacak bütçe kaydedildi.", severity: "success" });
+    },
+    onError: (error) => {
+      setUnusedError(resolveApiErrorMessage(error, "Kullanılmayacak bütçe kaydedilemedi."));
+    }
+  });
+
+  const clearUnusedMutation = useMutation({
+    mutationFn: async (planId: number) => {
+      const { data } = await client.delete<PlanEntry>(`/plans/${planId}/unused`);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["plans"] });
+      queryClient.invalidateQueries({ queryKey: ["plan-aggregate"] });
+      queryClient.invalidateQueries({ queryKey: ["budget-transfer-available"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      setToast({ message: "Kullanılmayacak bütçe bilgisi kaldırıldı.", severity: "success" });
+    },
+    onError: (error) => {
+      setToast({
+        message: resolveApiErrorMessage(error, "Kullanılmayacak bütçe bilgisi kaldırılamadı."),
+        severity: "error"
+      });
+    }
+  });
+
+  const cancelTransferMutation = useMutation({
+    mutationFn: async (transferId: number) => {
+      const { data } = await client.delete<BudgetTransfer>(`/plans/transfers/${transferId}`);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["plans"] });
+      queryClient.invalidateQueries({ queryKey: ["plan-aggregate"] });
+      queryClient.invalidateQueries({ queryKey: ["budget-transfers"] });
+      queryClient.invalidateQueries({ queryKey: ["budget-transfer-available"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      setToast({ message: "Bütçe aktarımı iptal edildi.", severity: "success" });
+    },
+    onError: (error) => {
+      setTransferError(resolveApiErrorMessage(error, "Bütçe aktarımı iptal edilemedi."));
+    }
+  });
+
+  const findDepartmentForBudgetItem = useCallback(
+    (itemId?: number | null) => {
+      if (!itemId) return "";
+      const matchingPlan = plansQuery.data?.find((plan) => {
+        const department = plan.department ?? plan.department_name ?? plan.departmentName;
+        return plan.budget_item_id === itemId && Boolean(department?.trim());
+      });
+      return matchingPlan?.department ?? matchingPlan?.department_name ?? matchingPlan?.departmentName ?? "";
+    },
+    [plansQuery.data]
+  );
+
+  const applyFormBudgetItem = useCallback((item: BudgetItem | null) => {
+    setIsNewBudgetMode(false);
+    setFormBudgetItemId(item?.id ?? null);
+    setFormBudgetItemText(item ? stripBudgetCode(item.name ?? "") : "");
+    setFormDepartment(item ? findDepartmentForBudgetItem(item.id) : "");
+    setFormMapCategory((item?.map_category ?? "").toLowerCase());
+    setFormMapAttribute(item?.map_attribute ?? "");
+  }, [findDepartmentForBudgetItem]);
+
+  const handleCreate = useCallback(() => {
+    setEditingPlan(null);
+    const selectedItem = budgetItems?.find((item) => item.id === budgetItemId) ?? null;
+    setFormYear(year);
+    setFormScenarioId(findDefaultScenarioForYear(year)?.id ?? "");
+    setIsNewBudgetMode(false);
+    applyFormBudgetItem(selectedItem);
+    setFormMergeMode("merge");
     setDialogOpen(true);
     setFormError(null);
-  }, []);
+  }, [applyFormBudgetItem, budgetItemId, budgetItems, findDefaultScenarioForYear, year]);
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleEdit = useCallback((plan: PlanEntry) => {
+    const item = budgetItems?.find((budgetItem) => budgetItem.id === plan.budget_item_id) ?? null;
+    const budgetItemText =
+      stripBudgetCode(plan.budget_name ?? "") ||
+      (item ? stripBudgetCode(item.name ?? "") : "") ||
+      plan.budget_code ||
+      "";
+    setEditingPlan(plan);
+    setFormYear(plan.year);
+    setFormScenarioId(plan.scenario_id ?? "");
+    setIsNewBudgetMode(false);
+    setFormBudgetItemId(plan.budget_item_id ?? null);
+    setFormBudgetItemText(budgetItemText);
+    setFormDepartment(plan.department ?? plan.department_name ?? plan.departmentName ?? "");
+    setFormMapCategory((plan.map_capex_opex ?? plan.capex_opex ?? "").toLowerCase());
+    setFormMapAttribute(plan.map_nitelik ?? plan.asset_type ?? "");
+    setFormMergeMode("merge");
+    setDialogOpen(true);
+    setFormError(null);
+  }, [budgetItems]);
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!formBudgetItemId) {
-      setFormError("Bütçe kalemi seçmelisiniz.");
+    const formData = new FormData(event.currentTarget);
+    const amount = parseLocaleNumber(formData.get("amount"));
+    const formYearValue = Number(formData.get("year"));
+    const formMonth = Number(formData.get("month"));
+    const selectedScenarioId = formScenarioId ? Number(formScenarioId) : "";
+    const budgetItemName = formBudgetItemText.trim();
+    const departmentValue = formDepartment.trim();
+    const mapCategoryValue = formMapCategory.trim();
+    const mapAttributeValue = formMapAttribute.trim();
+
+    if (!budgetItemName) {
+      setFormError("Bütçe kalemi boş olamaz.");
       return;
     }
-    const formData = new FormData(event.currentTarget);
+    if (editingPlan && !formBudgetItemId) {
+      setFormError("Güncelleme için mevcut bir bütçe kalemi seçmelisiniz.");
+      return;
+    }
+    if (!Number.isFinite(formYearValue) || formYearValue <= 0) {
+      setFormError("Yıl alanı boş olamaz.");
+      return;
+    }
+    if (!Number.isFinite(formMonth) || formMonth < 1 || formMonth > 12) {
+      setFormError("Ay alanı boş olamaz.");
+      return;
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setFormError("Tutar 0'dan büyük olmalı.");
+      return;
+    }
+    if (!editingPlan && !formBudgetItemId && (!departmentValue || !mapCategoryValue || !mapAttributeValue)) {
+      setFormError("Yeni bütçe kalemi için Departman, Capex/Opex ve Nitelik alanları zorunludur.");
+      return;
+    }
+
+    let resolvedScenarioId: number;
+    try {
+      resolvedScenarioId = await ensureScenarioForYear(formYearValue, selectedScenarioId);
+      setFormScenarioId(resolvedScenarioId);
+    } catch (error) {
+      setFormError(`Temel (${formYearValue}) senaryosu hazırlanamadı.`);
+      return;
+    }
+
     const payload: PlanMutationPayload = {
       id: editingPlan?.id ?? undefined,
-      year: Number(formData.get("year")) || year,
-      month: Number(formData.get("month")),
-      amount: Number(formData.get("amount")),
-      scenario_id: Number(formData.get("scenario_id")),
-      budget_item_id: formBudgetItemId
+      year: formYearValue,
+      month: formMonth,
+      amount,
+      scenario_id: resolvedScenarioId,
+      budget_item_id: formBudgetItemId,
+      department: departmentValue || null
     };
 
-    const departmentValue = (formData.get("department") || "").toString().trim();
-    if (departmentValue) {
-      payload.department = departmentValue;
+    if (!editingPlan) {
+      payload.budget_name = budgetItemName;
+      payload.map_category = mapCategoryValue || null;
+      payload.map_attribute = mapAttributeValue || null;
+      payload.description = (formData.get("description") || "").toString().trim() || null;
+      payload.merge_mode = (formData.get("merge_mode") || "merge") as "merge" | "separate";
     }
 
     mutation.mutate(payload, {
@@ -265,21 +741,189 @@ export default function PlansView() {
     });
   };
 
-  const handleDelete = useCallback((planId: number) => {
+  const handleDelete = useCallback(async (planId: number) => {
     if (!user?.is_admin) return;
-    const confirmed = window.confirm(
-      "Plan kaydını silmek istediğinize emin misiniz? Bu işlem geri alınamaz."
-    );
-    if (confirmed) {
-      deleteMutation.mutate(planId);
+    let relatedFileCount: number | null = null;
+    try {
+      const { data } = await client.get<DeleteDependencyInfo>(`/plans/${planId}/delete-info`);
+      relatedFileCount = data.related_file_count ?? 0;
+    } catch (error) {
+      console.error(error);
     }
-  }, [deleteMutation, user?.is_admin]);
+
+    const confirmMessage =
+      relatedFileCount === null
+        ? "Bu kaydı silmek istediğinize emin misiniz? Bağlı ek/dosya varsa ekler de silinecek. Devam etmek istiyor musunuz?"
+        : relatedFileCount > 0
+          ? `Bu kayda bağlı ${relatedFileCount} ek/dosya var. Silerseniz ekler de silinecek. Devam etmek istiyor musunuz?`
+          : "Plan kaydını silmek istediğinize emin misiniz? Bu işlem geri alınamaz.";
+    const confirmed = window.confirm(confirmMessage);
+    if (confirmed) {
+      deleteMutation.mutate({
+        planId,
+        deleteRelated: relatedFileCount === null || relatedFileCount > 0
+      });
+    }
+  }, [client, deleteMutation, user?.is_admin]);
+
+  const handleOpenUnusedDialog = useCallback((plan: PlanEntry) => {
+    const currentUnused = Number(plan.unused_amount ?? 0);
+    const availableAmount = Number(plan.scope_available_amount ?? plan.available_amount ?? 0);
+    const defaultAmount = currentUnused > 0 ? currentUnused : Math.max(availableAmount, 0);
+    setUnusedDialogPlan(plan);
+    setUnusedAmount(defaultAmount ? String(defaultAmount) : "");
+    setUnusedReason(plan.unused_reason || unusedReasonOptions[0]);
+    setUnusedNote(plan.unused_note || "");
+    setUnusedError(null);
+  }, []);
+
+  const handleUnusedSubmit = useCallback((event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!unusedDialogPlan) return;
+    const amount = parseLocaleNumber(unusedAmount);
+    if (!Number.isFinite(amount) || amount < 0) {
+      setUnusedError("Kullanılmayacak tutar negatif olamaz.");
+      return;
+    }
+    unusedMutation.mutate({
+      planId: unusedDialogPlan.id,
+      amount,
+      reason: unusedReason || null,
+      note: unusedNote.trim() || null
+    });
+  }, [unusedAmount, unusedDialogPlan, unusedMutation, unusedNote, unusedReason]);
+
+  const handleClearUnused = useCallback((plan: PlanEntry) => {
+    if (!user?.is_admin) return;
+    const confirmed = window.confirm("Kullanılmayacak bütçe bilgisi kaldırılacak. Devam etmek istiyor musunuz?");
+    if (confirmed) {
+      clearUnusedMutation.mutate(plan.id);
+    }
+  }, [clearUnusedMutation, user?.is_admin]);
+
+  const handleOpenTransferDialog = useCallback(() => {
+    const defaultScenarioId =
+      scenarioId ??
+      scenarios?.find((scenario) => scenario.year === year)?.id ??
+      scenarios?.[0]?.id ??
+      null;
+    const defaultMonth =
+      typeof monthFilter === "number" && monthFilter >= 1 && monthFilter <= 12
+        ? monthFilter
+        : new Date().getMonth() + 1;
+
+    setTransferSourceBudgetItemId(budgetItemId ?? null);
+    setTransferTargetBudgetItemId(null);
+    setTransferSourceYear(year);
+    setTransferTargetYear(year);
+    setTransferSourceMonth(defaultMonth);
+    setTransferTargetMonth(defaultMonth);
+    setTransferSourceScenarioId(defaultScenarioId);
+    setTransferTargetScenarioId(defaultScenarioId);
+    setTransferAmount("");
+    setTransferReason("");
+    setTransferError(null);
+    setTransferDialogOpen(true);
+  }, [budgetItemId, monthFilter, scenarioId, scenarios, year]);
+
+  const handleTransferSubmit = useCallback((event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const amount = parseLocaleNumber(transferAmount);
+    if (!transferSourceBudgetItemId) {
+      setTransferError("Kaynak bütçe kalemi seçmelisiniz.");
+      return;
+    }
+    if (!transferTargetBudgetItemId) {
+      setTransferError("Hedef bütçe kalemi seçmelisiniz.");
+      return;
+    }
+    if (!transferSourceScenarioId || !transferTargetScenarioId) {
+      setTransferError("Kaynak ve hedef senaryo seçmelisiniz.");
+      return;
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setTransferError("Aktarım tutarı 0'dan büyük olmalı.");
+      return;
+    }
+    if (!transferReason.trim()) {
+      setTransferError("Aktarım nedeni zorunludur.");
+      return;
+    }
+    if (
+      transferSourceBudgetItemId === transferTargetBudgetItemId &&
+      transferSourceYear === transferTargetYear &&
+      transferSourceMonth === transferTargetMonth &&
+      transferSourceScenarioId === transferTargetScenarioId
+    ) {
+      setTransferError("Kaynak ve hedef aynı olamaz.");
+      return;
+    }
+    const availableAmount = transferAvailableQuery.data?.available_amount;
+    if (availableAmount !== undefined && amount > availableAmount + 0.005) {
+      setTransferError("Aktarım tutarı kaynak kullanılabilir bütçeden fazla olamaz.");
+      return;
+    }
+
+    const sourceMonthLabel = monthOptions[transferSourceMonth - 1] ?? transferSourceMonth;
+    const targetMonthLabel = monthOptions[transferTargetMonth - 1] ?? transferTargetMonth;
+    const confirmed = window.confirm(
+      `${formatCurrency(amount)} tutarı ${transferSourceYear} ${sourceMonthLabel} kaynağından ${transferTargetYear} ${targetMonthLabel} hedefine aktarılacak. Devam etmek istiyor musunuz?`
+    );
+    if (!confirmed) return;
+
+    transferMutation.mutate({
+      source_budget_item_id: transferSourceBudgetItemId,
+      source_year: transferSourceYear,
+      source_month: transferSourceMonth,
+      source_scenario_id: transferSourceScenarioId,
+      target_budget_item_id: transferTargetBudgetItemId,
+      target_year: transferTargetYear,
+      target_month: transferTargetMonth,
+      target_scenario_id: transferTargetScenarioId,
+      amount,
+      reason: transferReason.trim()
+    });
+  }, [
+    transferAmount,
+    transferAvailableQuery.data?.available_amount,
+    transferMutation,
+    transferReason,
+    transferSourceBudgetItemId,
+    transferSourceMonth,
+    transferSourceScenarioId,
+    transferSourceYear,
+    transferTargetBudgetItemId,
+    transferTargetMonth,
+    transferTargetScenarioId,
+    transferTargetYear
+  ]);
+
+  const handleCancelTransfer = useCallback((transfer: BudgetTransfer) => {
+    if (!user?.is_admin) return;
+    const confirmed = window.confirm("Bu bütçe aktarımı iptal edilecek. Devam etmek istiyor musunuz?");
+    if (confirmed) {
+      cancelTransferMutation.mutate(transfer.id);
+    }
+  }, [cancelTransferMutation, user?.is_admin]);
 
   const rows = useMemo(() => {
     const mapped =
       plansQuery.data?.map((plan) => ({
         ...plan,
         amount: Number(plan.amount) || 0,
+        transfer_in_amount: Number(plan.transfer_in_amount) || 0,
+        transfer_out_amount: Number(plan.transfer_out_amount) || 0,
+        revised_amount: Number(plan.revised_amount ?? plan.amount) || 0,
+        actual_amount: Number(plan.actual_amount) || 0,
+        unused_amount: Number(plan.unused_amount) || 0,
+        cancelled_amount: Number(plan.cancelled_amount) || 0,
+        is_cancelled: Boolean(plan.is_cancelled),
+        available_amount: Number(plan.available_amount) || 0,
+        scope_revised_amount: Number(plan.scope_revised_amount ?? plan.revised_amount ?? plan.amount) || 0,
+        scope_actual_amount: Number(plan.scope_actual_amount ?? plan.actual_amount) || 0,
+        scope_unused_amount: Number(plan.scope_unused_amount ?? plan.unused_amount) || 0,
+        scope_cancelled_amount: Number(plan.scope_cancelled_amount ?? plan.cancelled_amount) || 0,
+        scope_available_amount: Number(plan.scope_available_amount ?? plan.available_amount) || 0,
         budget_item_id: plan?.budget_item_id ?? null
       })) ?? [];
 
@@ -289,10 +933,11 @@ export default function PlansView() {
 
     return mapped.filter((row) => {
       const matchesMonth = monthFilter === "" || row.month === monthFilter;
-      const matchesDepartment = !departmentFilter || row.department === departmentFilter;
+      const rowDepartment = row.department ?? row.department_name ?? row.departmentName ?? "-";
+      const matchesDepartment = !departmentFilter || rowDepartment === departmentFilter;
       return matchesMonth && matchesDepartment;
     });
-  }, [plansQuery.data, monthFilter, departmentFilter]);
+  }, [departmentFilter, monthFilter, plansQuery.data]);
 
   const budgetFilterOptions = useMemo(
     () =>
@@ -388,12 +1033,13 @@ export default function PlansView() {
   const departmentOptions = useMemo(() => {
     const options = new Set<string>();
     plansQuery.data?.forEach((plan) => {
-      if (plan.department) {
-        options.add(plan.department);
+      const department = getPlanDisplayValues(plan).department;
+      if (department && department !== "-") {
+        options.add(department);
       }
     });
     return Array.from(options).sort((a, b) => a.localeCompare(b, "tr"));
-  }, [plansQuery.data]);
+  }, [getPlanDisplayValues, plansQuery.data]);
 
   const MONTH_NAMES_TR = [
     "",
@@ -417,6 +1063,7 @@ export default function PlansView() {
         field: "scenario",
         headerName: "Senaryo",
         flex: 1,
+        minWidth: 160,
         valueGetter: (_value, row) => {
           const r = row as any;
           return getPlanDisplayValues(r).scenario;
@@ -425,15 +1072,8 @@ export default function PlansView() {
       {
         field: "budget",
         headerName: "Bütçe Kalemi",
-        flex: 1.6,
+        flex: 1.4,
         minWidth: 260,
-        renderCell: ({ value }) => (
-          <Tooltip title={value || "-"}>
-            <Typography variant="body2" noWrap title={String(value ?? "-")}>
-              {String(value ?? "-")}
-            </Typography>
-          </Tooltip>
-        ),
         valueGetter: (_value, row) => {
           const r = row as any;
           return getPlanDisplayValues(r).budgetLabel;
@@ -441,9 +1081,9 @@ export default function PlansView() {
       },
       {
         field: "capex_opex",
-        headerName: "Map Capex/Opex",
-        flex: 0.9,
-        minWidth: 150,
+        headerName: "Capex/Opex",
+        width: 180,
+        minWidth: 170,
         valueGetter: (_value, row) => {
           const r = row as any;
           return getPlanDisplayValues(r).capexOpex;
@@ -451,14 +1091,9 @@ export default function PlansView() {
       },
       {
         field: "asset_type",
-        headerName: "Map Nitelik",
-        flex: 1.1,
-        minWidth: 180,
-        renderCell: ({ value }) => (
-          <Typography variant="body2" noWrap title={String(value ?? "-")}>
-            {String(value ?? "-")}
-          </Typography>
-        ),
+        headerName: "Nitelik",
+        width: 210,
+        minWidth: 190,
         valueGetter: (_value, row) => {
           const r = row as any;
           return getPlanDisplayValues(r).nitelik;
@@ -467,8 +1102,8 @@ export default function PlansView() {
       {
         field: "department",
         headerName: "Departman",
-        flex: 0.9,
-        minWidth: 170,
+        width: 200,
+        minWidth: 180,
         valueGetter: (_value, row) => {
           const r = row as any;
           return getPlanDisplayValues(r).department;
@@ -478,8 +1113,7 @@ export default function PlansView() {
       {
         field: "month",
         headerName: "Ay",
-        minWidth: 120,
-        flex: 0.6,
+        width: 120,
         valueGetter: (_value, row) => {
           const r = row as any;
           const raw = r?.month;
@@ -487,24 +1121,28 @@ export default function PlansView() {
           // month zaten sayıysa
           if (typeof raw === "number") {
             if (raw >= 1 && raw <= 12) {
-              return MONTH_NAMES_TR[raw];
+              return raw;
             }
-            return "";
+            return 0;
           }
 
           // string geldiyse sayıya dönüştürmeyi dene
           const num = Number(raw);
           if (Number.isFinite(num) && num >= 1 && num <= 12) {
-            return MONTH_NAMES_TR[num];
+            return num;
           }
 
           // Hiçbiri değilse boş bırak
-          return "";
+          return 0;
+        },
+        renderCell: ({ row }) => {
+          const monthNumber = Number((row as any)?.month);
+          return MONTH_NAMES_TR[monthNumber] ?? "";
         },
       },
       {
         field: "amount",
-        headerName: "Tutar",
+        headerName: "Orijinal Plan",
         width: 140,
         renderCell: ({ row }) => {
           const raw = row.amount;
@@ -526,6 +1164,89 @@ export default function PlansView() {
 
           return formatCurrency(num);
         },
+      },
+      {
+        field: "transfer_in_amount",
+        headerName: "Gelen Aktarım",
+        width: 150,
+        renderCell: ({ row }) => formatCurrency(Number((row as any).transfer_in_amount) || 0)
+      },
+      {
+        field: "transfer_out_amount",
+        headerName: "Çıkan Aktarım",
+        width: 150,
+        renderCell: ({ row }) => formatCurrency(Number((row as any).transfer_out_amount) || 0)
+      },
+      {
+        field: "revised_amount",
+        headerName: "Toplam Bütçe",
+        width: 150,
+        renderCell: ({ row }) =>
+          formatCurrency(Number((row as any).revised_amount ?? (row as any).amount) || 0)
+      },
+      {
+        field: "actual_amount",
+        headerName: "Kapsam Harcaması",
+        width: 150,
+        renderCell: ({ row }) =>
+          formatCurrency(Number((row as any).scope_actual_amount ?? (row as any).actual_amount) || 0)
+      },
+      {
+        field: "unused_amount",
+        headerName: "Kullanılmayacak",
+        width: 170,
+        renderCell: ({ row }) => {
+          const value = Number((row as any).unused_amount) || 0;
+          return value > 0 ? (
+            <Chip
+              size="small"
+              color="warning"
+              variant="outlined"
+              label={formatCurrency(value)}
+            />
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              -
+            </Typography>
+          );
+        }
+      },
+      {
+        field: "available_amount",
+        headerName: "Kapsam Kalan",
+        width: 190,
+        renderCell: ({ row }) => {
+          const value = Number((row as any).scope_available_amount ?? (row as any).available_amount) || 0;
+          return (
+            <Typography
+              variant="body2"
+              color={value < 0 ? "error.main" : "text.primary"}
+              fontWeight={600}
+            >
+              {formatCurrency(value)}
+            </Typography>
+          );
+        }
+      },
+      {
+        field: "status",
+        headerName: "Durum",
+        width: 130,
+        valueGetter: (_value, row) => {
+          const value = Number((row as any).scope_cancelled_amount ?? (row as any).cancelled_amount) || 0;
+          return value > 0 ? "İptal" : "Aktif";
+        },
+        renderCell: ({ row }) => {
+          const cancelled = Number((row as any).scope_cancelled_amount ?? (row as any).cancelled_amount) || 0;
+          return (
+            <Chip
+              size="small"
+              label={cancelled > 0 ? "İptal" : "Aktif"}
+              color={cancelled > 0 ? "error" : "success"}
+              variant={cancelled > 0 ? "filled" : "outlined"}
+            />
+          );
+        }
       },
       {
         field: "is_form_prepared",
@@ -571,70 +1292,137 @@ export default function PlansView() {
         field: "actions",
         headerName: "İşlemler",
         sortable: false,
-        width: 140,
+        width: 330,
+        minWidth: 320,
+        align: "center",
+        headerAlign: "center",
+        filterable: false,
+        disableColumnMenu: true,
+        cellClassName: "sticky-actions-cell",
+        headerClassName: "sticky-actions-header",
         renderCell: ({ row }) => (
-          <Stack direction="row" spacing={1}>
-            <Tooltip title="Güncelle">
-              <span>
-                <IconButton
+          <Stack direction="row" spacing={0.75} justifyContent="center" sx={{ width: "100%" }}>
+            {isViewer ? (
+              <Chip size="small" label="Sadece görüntüleme" variant="outlined" />
+            ) : (
+              <>
+                <Button
                   size="small"
-                  onClick={() => handleEdit(row)}
-                  disabled={!user?.is_admin}
+                  variant="outlined"
+                  color="warning"
+                  onClick={() => handleOpenUnusedDialog(row)}
+                  disabled={!canManagePlans}
+                  sx={{ whiteSpace: "nowrap" }}
                 >
-                  <EditIcon fontSize="small" />
-                </IconButton>
-              </span>
-            </Tooltip>
-            <Tooltip title="Sil">
-              <span>
-                <IconButton
-                  size="small"
-                  color="error"
-                  onClick={() => handleDelete(row.id)}
-                  disabled={!user?.is_admin}
-                >
-                  <DeleteIcon fontSize="small" />
-                </IconButton>
-              </span>
-            </Tooltip>
+                  Kullanılmayacak
+                </Button>
+                {Number((row as any).unused_amount ?? 0) > 0 ? (
+                  <Button
+                    size="small"
+                    variant="text"
+                    color="inherit"
+                    onClick={() => handleClearUnused(row)}
+                    disabled={!canManagePlans || clearUnusedMutation.isPending}
+                    sx={{ whiteSpace: "nowrap" }}
+                  >
+                    Geri Al
+                  </Button>
+                ) : null}
+                <Tooltip title="Güncelle">
+                  <span>
+                    <IconButton
+                      size="small"
+                      onClick={() => handleEdit(row)}
+                      disabled={!canManagePlans}
+                    >
+                      <EditIcon fontSize="small" />
+                    </IconButton>
+                  </span>
+                </Tooltip>
+                <Tooltip title="Sil">
+                  <span>
+                    <IconButton
+                      size="small"
+                      color="error"
+                      onClick={() => handleDelete(row.id)}
+                      disabled={!canManagePlans}
+                    >
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </span>
+                </Tooltip>
+              </>
+            )}
           </Stack>
         )
       }
     ];
-  }, [getPlanDisplayValues, handleDelete, handleEdit, user?.is_admin]);
+  }, [
+    canManagePlans,
+    clearUnusedMutation.isPending,
+    getPlanDisplayValues,
+    handleClearUnused,
+    handleDelete,
+    handleEdit,
+    handleOpenUnusedDialog,
+    isViewer
+  ]);
 
-  const filteredTotal = useMemo(() => {
-    return rows.reduce((sum, plan) => sum + (Number(plan.amount) || 0), 0);
+  const planTableTotals = useMemo(() => {
+    const scopeMap = new Map<
+      string,
+      {
+        amount: number;
+        transferIn: number;
+        transferOut: number;
+        actual: number;
+        unused: number;
+        cancelled: number;
+      }
+    >();
+    rows.forEach((plan) => {
+      const key = [
+        plan.budget_item_id ?? "none",
+        plan.scenario_id ?? "none",
+        plan.year,
+        plan.month
+      ].join("-");
+      const current =
+        scopeMap.get(key) ??
+        {
+          amount: 0,
+          transferIn: Number(plan.transfer_in_amount) || 0,
+          transferOut: Number(plan.transfer_out_amount) || 0,
+          actual: Number(plan.scope_actual_amount ?? plan.actual_amount) || 0,
+          unused: 0,
+          cancelled: Number(plan.scope_cancelled_amount ?? plan.cancelled_amount) || 0
+        };
+      current.amount += Number(plan.amount) || 0;
+      current.unused += Number(plan.unused_amount) || 0;
+      scopeMap.set(key, current);
+    });
+
+    return Array.from(scopeMap.values()).reduce(
+      (totals, scope) => {
+        const totalBudget = scope.amount + scope.transferIn - scope.transferOut;
+        const available = Math.max(totalBudget - scope.actual - scope.unused - scope.cancelled, 0);
+        return {
+          totalBudget: totals.totalBudget + totalBudget,
+          actual: totals.actual + scope.actual,
+          unused: totals.unused + scope.unused,
+          cancelled: totals.cancelled + scope.cancelled,
+          available: totals.available + available
+        };
+      },
+      { totalBudget: 0, actual: 0, unused: 0, cancelled: 0, available: 0 }
+    );
   }, [rows]);
 
-  const formattedFilteredTotal = formatCurrency(filteredTotal);
+  const transferAvailable = transferAvailableQuery.data;
+  const recentTransfers = transfersQuery.data?.slice(0, 6) ?? [];
 
   const handleApplyFilters = () => {
     plansQuery.refetch();
-  };
-
-  const handleExportXlsx = async () => {
-    const params = new URLSearchParams();
-    params.set("year", String(year));
-    if (scenarioId) params.set("scenario_id", String(scenarioId));
-    try {
-      setExporting(true);
-      const response = await client.get<Blob>(`/plans/export/xlsx?${params.toString()}`, {
-        responseType: "blob"
-      });
-      const blobUrl = URL.createObjectURL(response.data);
-      const link = document.createElement("a");
-      link.href = blobUrl;
-      link.download = `planlar-${year}.xlsx`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(blobUrl);
-    } catch (error: any) {
-      setListError(error?.response?.data?.detail ?? "Excel dışa aktarma sırasında bir hata oluştu.");
-    } finally {
-      setExporting(false);
-    }
   };
 
   const handleResetFilters = () => {
@@ -645,6 +1433,13 @@ export default function PlansView() {
     setBudgetItemId(null);
     setCapexOpex("");
     setFormBudgetItemId(null);
+    setFormBudgetItemText("");
+    setFormDepartment("");
+    setFormMapCategory("");
+    setFormMapAttribute("");
+    setFormYear(currentYear);
+    setFormScenarioId("");
+    setIsNewBudgetMode(false);
     setTimeout(() => {
       plansQuery.refetch();
     }, 0);
@@ -662,7 +1457,7 @@ export default function PlansView() {
             const value = event.target.value;
             setYear(value ? Number(value) : currentYear);
           }}
-          sx={{ minWidth: 110, "& .MuiInputBase-root": { height: 40 } }}
+          sx={{ minWidth: { xs: "100%", sm: 110 }, flex: "0 1 120px", "& .MuiInputBase-root": { height: 40 } }}
         />
         <TextField
           select
@@ -672,7 +1467,7 @@ export default function PlansView() {
           onChange={(event) =>
             setScenarioId(event.target.value ? Number(event.target.value) : null)
           }
-          sx={{ minWidth: 260, "& .MuiInputBase-root": { height: 40 } }}
+          sx={{ minWidth: { xs: "100%", sm: 240 }, flex: "1 1 240px", "& .MuiInputBase-root": { height: 40 } }}
         >
           <MenuItem value="">Tümü</MenuItem>
           {scenarios?.map((scenario) => (
@@ -691,7 +1486,7 @@ export default function PlansView() {
               event.target.value ? Number(event.target.value) : ""
             )
           }
-          sx={{ minWidth: 160, "& .MuiInputBase-root": { height: 40 } }}
+          sx={{ minWidth: { xs: "100%", sm: 150 }, flex: "0 1 150px", "& .MuiInputBase-root": { height: 40 } }}
         >
           <MenuItem value="">Tümü</MenuItem>
           {monthOptions.map((label, index) => (
@@ -706,7 +1501,7 @@ export default function PlansView() {
           size="small"
           value={departmentFilter}
           onChange={(event) => setDepartmentFilter(event.target.value)}
-          sx={{ minWidth: 180, "& .MuiInputBase-root": { height: 40 } }}
+          sx={{ minWidth: { xs: "100%", sm: 170 }, flex: "0 1 180px", "& .MuiInputBase-root": { height: 40 } }}
         >
           <MenuItem value="">Tümü</MenuItem>
           {departmentOptions.map((name) => (
@@ -722,7 +1517,7 @@ export default function PlansView() {
           getOptionLabel={(option) => formatBudgetItemLabel(option) || "-"}
           filterOptions={budgetFilterOptions}
           isOptionEqualToValue={(option, value) => option.id === value.id}
-          sx={{ minWidth: 320, flex: 1, "& .MuiInputBase-root": { height: 40 } }}
+          sx={{ minWidth: { xs: "100%", sm: 280 }, flex: "1 1 320px", "& .MuiInputBase-root": { height: 40 } }}
           renderOption={(props, option) => {
             const meta = formatBudgetItemMeta(option);
             return (
@@ -750,7 +1545,7 @@ export default function PlansView() {
           size="small"
           value={capexOpex}
           onChange={(event) => setCapexOpex(event.target.value as "" | "capex" | "opex")}
-          sx={{ minWidth: 170, "& .MuiInputBase-root": { height: 40 } }}
+          sx={{ minWidth: { xs: "100%", sm: 160 }, flex: "0 1 170px", "& .MuiInputBase-root": { height: 40 } }}
         >
           <MenuItem value="">Tümü</MenuItem>
           <MenuItem value="capex">Capex</MenuItem>
@@ -765,25 +1560,94 @@ export default function PlansView() {
               <Stack
                 direction={{ xs: "column", sm: "row" }}
                 justifyContent="space-between"
-                alignItems={{ xs: "flex-start", sm: "center" }}
-                spacing={1}
-                mb={1}
+                alignItems={{ xs: "stretch", sm: "center" }}
+                spacing={1.5}
+                mb={1.5}
+                sx={{ gap: 1.5 }}
               >
                 <Typography variant="subtitle1" fontWeight={600}>
                   Plan Kayıtları
                 </Typography>
-                <Stack direction="row" spacing={2} alignItems="center">
-                  <Typography variant="body2" color="text.secondary">
-                    Seçili filtrelere göre plan toplamı:{" "}
-                    <Box component="span" fontWeight={700} color="text.primary">
-                      {formattedFilteredTotal}
-                    </Box>
-                  </Typography>
-                  <Button variant="outlined" size="small" onClick={() => void handleExportXlsx()} disabled={exporting}>
-                    Excel Dışa Aktar
-                  </Button>
+                <Stack
+                  direction="row"
+                  spacing={1}
+                  alignItems="center"
+                  justifyContent={{ xs: "flex-start", sm: "flex-end" }}
+                  flexWrap="wrap"
+                  sx={{
+                    rowGap: 1,
+                    minWidth: 0,
+                    "& .MuiButton-root": { height: 40, whiteSpace: "nowrap" }
+                  }}
+                >
+                  {!isViewer && (
+                    <>
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        startIcon={<SwapHorizIcon />}
+                        onClick={handleOpenTransferDialog}
+                        disabled={!canManagePlans}
+                      >
+                        Bütçe Aktar
+                      </Button>
+                      <Button
+                        variant="contained"
+                        size="small"
+                        startIcon={<AddIcon />}
+                        onClick={handleCreate}
+                        disabled={!canManagePlans}
+                      >
+                        Yeni Plan Ekle
+                      </Button>
+                    </>
+                  )}
                 </Stack>
               </Stack>
+              <Grid container spacing={1.5} sx={{ mb: 2 }}>
+                {[
+                  {
+                    label: "Toplam Bütçe",
+                    value: formatCurrency(planTableTotals.totalBudget),
+                    color: "primary.main"
+                  },
+                  {
+                    label: "Gerçekleşen",
+                    value: formatCurrency(planTableTotals.actual),
+                    color: "success.main"
+                  },
+                  {
+                    label: "Kullanılmayacak",
+                    value: formatCurrency(planTableTotals.unused),
+                    color: "warning.main"
+                  },
+                  {
+                    label: "Kalan Kullanılabilir",
+                    value: formatCurrency(planTableTotals.available),
+                    color: "text.primary"
+                  }
+                ].map((item) => (
+                  <Grid item xs={12} sm={6} md={3} key={item.label}>
+                    <Box
+                      sx={{
+                        border: "1px solid",
+                        borderColor: "divider",
+                        borderRadius: 1,
+                        bgcolor: "background.default",
+                        p: 1.25,
+                        minHeight: 72
+                      }}
+                    >
+                      <Typography variant="caption" color="text.secondary">
+                        {item.label}
+                      </Typography>
+                      <Typography variant="subtitle1" fontWeight={700} color={item.color}>
+                        {item.value}
+                      </Typography>
+                    </Box>
+                  </Grid>
+                ))}
+              </Grid>
               <Box sx={{ width: "100%", overflowX: "auto" }}>
                 <DataGrid
                   autoHeight
@@ -793,10 +1657,11 @@ export default function PlansView() {
                   getRowId={(row) => row.id ?? `${row.year}-${row.month}-${row.budget_item_id}`}
                   disableRowSelectionOnClick
                   initialState={{
-                    pagination: { paginationModel: { pageSize: DEFAULT_PAGE_SIZE, page: 0 } }
+                    pagination: { paginationModel: { pageSize: 12, page: 0 } }
                   }}
-                  pageSizeOptions={PAGE_SIZE_OPTIONS}
+                  pageSizeOptions={[12, 20, 30, 50, 100]}
                   sx={{
+                    minWidth: 2730,
                     border: "none",
                     "& .MuiDataGrid-main": {
                       overflowX: "auto"
@@ -806,6 +1671,17 @@ export default function PlansView() {
                     },
                     "& .MuiDataGrid-virtualScrollerContent": {
                       overflowX: "visible"
+                    },
+                    "& .sticky-actions-cell, & .sticky-actions-header": {
+                      position: "sticky",
+                      right: 0,
+                      zIndex: 2,
+                      backgroundColor: "background.paper",
+                      overflow: "visible",
+                      boxShadow: "-8px 0 12px -12px rgba(15, 23, 42, 0.45)"
+                    },
+                    "& .sticky-actions-header": {
+                      zIndex: 3
                     }
                   }}
                 />
@@ -815,77 +1691,576 @@ export default function PlansView() {
         </Grid>
       </Grid>
 
-      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} fullWidth maxWidth="sm">
+      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} fullWidth maxWidth="md">
         <DialogTitle>{editingPlan ? "Plan Kaydını Güncelle" : "Yeni Plan Kaydı"}</DialogTitle>
-        <form onSubmit={handleSubmit}>
-          <DialogContent>
+        <form key={editingPlan?.id ?? "new-plan"} onSubmit={handleSubmit}>
+          <DialogContent sx={{ pt: 2 }}>
             <Stack spacing={2.5}>
               {formError && <Alert severity="error">{formError}</Alert>}
-              <TextField
-                label="Yıl"
-                name="year"
-                type="number"
-                defaultValue={editingPlan?.year ?? year}
-                required
-              />
-              <TextField
-                select
-                label="Ay"
-                name="month"
-                defaultValue={editingPlan?.month ?? 1}
-                required
-              >
-                {monthOptions.map((label, index) => (
-                  <MenuItem key={label} value={index + 1}>
-                    {label}
-                  </MenuItem>
-                ))}
-              </TextField>
-              <TextField
-                label="Tutar"
-                name="amount"
-                type="number"
-                inputProps={{ min: 0, step: 1 }}
-                fullWidth
-                defaultValue={editingPlan?.amount ?? 0}
-                required
-              />
-              <TextField
-                select
-                label="Senaryo"
-                name="scenario_id"
-                defaultValue={editingPlan?.scenario_id ?? scenarioId ?? ""}
-                required
-              >
-                {scenarios?.map((scenario) => (
-                  <MenuItem key={scenario.id} value={scenario.id}>
-                    {scenario.name} ({scenario.year})
-                  </MenuItem>
-                ))}
-              </TextField>
-              <Autocomplete
-                options={budgetItems ?? []}
-                value={budgetItems?.find((item) => item.id === formBudgetItemId) ?? null}
-                onChange={(_, value) => setFormBudgetItemId(value?.id ?? null)}
-                getOptionLabel={(option) => formatBudgetItemLabel(option) || "-"}
-                filterOptions={budgetFilterOptions}
-                isOptionEqualToValue={(option, value) => option.id === value.id}
-                renderInput={(params) => (
-                  <TextField {...params} label="Bütçe Kalemi" required fullWidth />
+              <Grid container spacing={2}>
+                <Grid item xs={12}>
+                  <Autocomplete<BudgetSelectOption, false, false, true>
+                    freeSolo
+                    options={budgetSelectOptions}
+                    filterOptions={budgetDialogFilterOptions}
+                    value={
+                      isNewBudgetMode
+                        ? newBudgetOption
+                        : budgetItems?.find((item) => item.id === formBudgetItemId) ?? null
+                    }
+                    inputValue={
+                      isNewBudgetMode && !formBudgetItemText ? "Yeni Bütçe" : formBudgetItemText
+                    }
+                    onInputChange={(_, value, reason) => {
+                      if (reason === "reset") {
+                        return;
+                      }
+                      setFormBudgetItemText(value);
+                      if (reason === "input") {
+                        setIsNewBudgetMode(true);
+                        setFormBudgetItemId(null);
+                        setFormDepartment("");
+                        setFormMapCategory("");
+                        setFormMapAttribute("");
+                      } else if (reason === "clear") {
+                        setIsNewBudgetMode(false);
+                        setFormBudgetItemId(null);
+                        setFormDepartment("");
+                        setFormMapCategory("");
+                        setFormMapAttribute("");
+                      }
+                    }}
+                    onChange={(_, value) => {
+                      if (typeof value === "string") {
+                        setIsNewBudgetMode(true);
+                        setFormBudgetItemId(null);
+                        setFormBudgetItemText(value);
+                        setFormDepartment("");
+                        setFormMapCategory("");
+                        setFormMapAttribute("");
+                        return;
+                      }
+                      if (value?.isNewBudgetOption) {
+                        setIsNewBudgetMode(true);
+                        setFormBudgetItemId(null);
+                        setFormBudgetItemText("");
+                        setFormDepartment("");
+                        setFormMapCategory("");
+                        setFormMapAttribute("");
+                        return;
+                      }
+                      applyFormBudgetItem(value);
+                    }}
+                    getOptionLabel={(option) =>
+                      typeof option === "string"
+                        ? option
+                        : option.isNewBudgetOption
+                          ? "Yeni Bütçe"
+                          : stripBudgetCode(option.name ?? "") || formatBudgetItemLabel(option) || ""
+                    }
+                    isOptionEqualToValue={(option, value) =>
+                      typeof value !== "string" && option.id === value.id
+                    }
+                    renderOption={(props, option) => {
+                      if (option.isNewBudgetOption) {
+                        return (
+                          <li {...props} key={option.id}>
+                            <Stack direction="row" spacing={1} alignItems="center">
+                              <AddIcon fontSize="small" color="primary" />
+                              <Stack spacing={0.2}>
+                                <Typography variant="body2" fontWeight={700}>
+                                  Yeni Bütçe
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                  Yeni bütçe kalemi oluştur
+                                </Typography>
+                              </Stack>
+                            </Stack>
+                          </li>
+                        );
+                      }
+                      const meta = formatBudgetItemMeta(option);
+                      return (
+                        <li {...props} key={option.id}>
+                          <Stack spacing={0.2}>
+                            <Typography variant="body2" fontWeight={600}>
+                              {formatBudgetItemLabel(option) || "-"}
+                            </Typography>
+                            {meta && (
+                              <Typography variant="caption" color="text.secondary">
+                                {meta}
+                              </Typography>
+                            )}
+                          </Stack>
+                        </li>
+                      );
+                    }}
+                    renderInput={(params) => (
+                      <TextField {...params} label="Bütçe Kalemi / Plan" required fullWidth />
+                    )}
+                  />
+                </Grid>
+                {isNewBudgetMode && !editingPlan && (
+                  <Grid item xs={12}>
+                    <Alert severity="info">
+                      Yeni bütçe kalemi oluşturulacak. Bütçe adı, departman, Capex/Opex ve nitelik
+                      alanlarını doldurun.
+                    </Alert>
+                  </Grid>
                 )}
-              />
-              <TextField
-                label="Departman"
-                name="department"
-                defaultValue={editingPlan?.department ?? ""}
-                placeholder="Opsiyonel"
-              />
+                {isNewBudgetMode && !editingPlan && (
+                  <Grid item xs={12} md={8}>
+                    <TextField
+                      label="Yeni Bütçe Adı"
+                      value={formBudgetItemText}
+                      onChange={(event) => setFormBudgetItemText(event.target.value)}
+                      required
+                      fullWidth
+                    />
+                  </Grid>
+                )}
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    label="Yıl"
+                    name="year"
+                    type="number"
+                    value={formYear}
+                    onChange={(event) => {
+                      const nextYear = event.target.value ? Number(event.target.value) : currentYear;
+                      setFormYear(nextYear);
+                      setFormScenarioId(findDefaultScenarioForYear(nextYear)?.id ?? "");
+                    }}
+                    required
+                    fullWidth
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    select
+                    label="Ay"
+                    name="month"
+                    defaultValue={editingPlan?.month ?? 1}
+                    required
+                    fullWidth
+                  >
+                    {monthOptions.map((label, index) => (
+                      <MenuItem key={label} value={index + 1}>
+                        {label}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    select
+                    label="Senaryo"
+                    name="scenario_id"
+                    value={formScenarioSelectValue}
+                    onChange={(event) =>
+                      setFormScenarioId(event.target.value ? Number(event.target.value) : "")
+                    }
+                    required={formScenarioOptions.length > 0}
+                    helperText={
+                      formScenarioOptions.length === 0
+                        ? `Temel (${formYear}) senaryosu kaydet sırasında oluşturulacak.`
+                        : undefined
+                    }
+                    fullWidth
+                  >
+                    {formScenarioOptions.length === 0 && (
+                      <MenuItem value="" disabled>
+                        Temel ({formYear}) oluşturulacak
+                      </MenuItem>
+                    )}
+                    {formScenarioOptions.map((scenario) => (
+                      <MenuItem key={scenario.id} value={scenario.id}>
+                        {scenario.name} ({scenario.year})
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    label="Departman"
+                    name="department"
+                    value={formDepartment}
+                    onChange={(event) => setFormDepartment(event.target.value)}
+                    required={!editingPlan && !formBudgetItemId}
+                    fullWidth
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    select
+                    label="Capex/Opex"
+                    name="map_category"
+                    value={formMapCategory}
+                    onChange={(event) => setFormMapCategory(event.target.value)}
+                    required={!editingPlan && !formBudgetItemId}
+                    disabled={Boolean(editingPlan)}
+                    fullWidth
+                  >
+                    <MenuItem value="">Seçiniz</MenuItem>
+                    <MenuItem value="capex">Capex</MenuItem>
+                    <MenuItem value="opex">Opex</MenuItem>
+                  </TextField>
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    label="Nitelik"
+                    name="map_attribute"
+                    value={formMapAttribute}
+                    onChange={(event) => setFormMapAttribute(event.target.value)}
+                    required={!editingPlan && !formBudgetItemId}
+                    disabled={Boolean(editingPlan)}
+                    fullWidth
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    label="Tutar"
+                    name="amount"
+                    type="text"
+                    inputProps={{ inputMode: "decimal" }}
+                    fullWidth
+                    defaultValue={editingPlan?.amount ?? ""}
+                    required
+                  />
+                </Grid>
+                {!editingPlan && (
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      select
+                      label="Aynı plan varsa"
+                      name="merge_mode"
+                      value={formMergeMode}
+                      onChange={(event) =>
+                        setFormMergeMode(event.target.value as "merge" | "separate")
+                      }
+                      fullWidth
+                    >
+                      <MenuItem value="merge">Mevcut plana ekle</MenuItem>
+                      <MenuItem value="separate">Ayrı satır oluştur</MenuItem>
+                    </TextField>
+                  </Grid>
+                )}
+                {!editingPlan && (
+                  <Grid item xs={12}>
+                    <TextField label="Açıklama / Not" name="description" fullWidth />
+                  </Grid>
+                )}
+              </Grid>
             </Stack>
           </DialogContent>
-          <DialogActions>
+          <DialogActions sx={{ px: 3, pb: 2.5, gap: 1, flexWrap: "wrap" }}>
             <Button onClick={() => setDialogOpen(false)}>Vazgeç</Button>
             <Button type="submit" variant="contained" disabled={mutation.isPending}>
               Kaydet
+            </Button>
+          </DialogActions>
+        </form>
+      </Dialog>
+      <Dialog
+        open={Boolean(unusedDialogPlan)}
+        onClose={() => setUnusedDialogPlan(null)}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>Kalanı Kullanılmayacak İşaretle</DialogTitle>
+        <form onSubmit={handleUnusedSubmit}>
+          <DialogContent sx={{ pt: 2 }}>
+            <Stack spacing={2}>
+              {unusedError && <Alert severity="error">{unusedError}</Alert>}
+              {unusedDialogPlan && (
+                <Alert severity="info">
+                  {getPlanDisplayValues(unusedDialogPlan).budgetLabel} ·{" "}
+                  {unusedDialogPlan.year} {monthOptions[(unusedDialogPlan.month ?? 1) - 1]}
+                </Alert>
+              )}
+              <Grid container spacing={1.5}>
+                {[
+                  {
+                    label: "Plan Bütçe",
+                    value: formatCurrency(Number(unusedDialogPlan?.revised_amount ?? unusedDialogPlan?.amount ?? 0))
+                  },
+                  {
+                    label: "Gerçekleşen Harcama",
+                    value: formatCurrency(
+                      Number(unusedDialogPlan?.scope_actual_amount ?? unusedDialogPlan?.actual_amount ?? 0)
+                    )
+                  },
+                  {
+                    label: "Mevcut Kullanılmayacak",
+                    value: formatCurrency(Number(unusedDialogPlan?.unused_amount ?? 0))
+                  },
+                  {
+                    label: "Kalan Kullanılabilir Bütçe",
+                    value: formatCurrency(
+                      Number(unusedDialogPlan?.scope_available_amount ?? unusedDialogPlan?.available_amount ?? 0)
+                    )
+                  }
+                ].map((item) => (
+                  <Grid item xs={12} sm={6} key={item.label}>
+                    <Box
+                      sx={{
+                        border: "1px solid",
+                        borderColor: "divider",
+                        borderRadius: 1,
+                        p: 1.25,
+                        bgcolor: "background.default"
+                      }}
+                    >
+                      <Typography variant="caption" color="text.secondary">
+                        {item.label}
+                      </Typography>
+                      <Typography variant="body2" fontWeight={700}>
+                        {item.value}
+                      </Typography>
+                    </Box>
+                  </Grid>
+                ))}
+              </Grid>
+              <TextField
+                label="Kullanılmayacak Tutar"
+                type="text"
+                inputProps={{ inputMode: "decimal" }}
+                value={unusedAmount}
+                onChange={(event) => setUnusedAmount(event.target.value)}
+                required
+                fullWidth
+                helperText="Varsayılan olarak kalan kullanılabilir bütçe gelir; daha düşük tutar girebilirsiniz."
+              />
+              <TextField
+                select
+                label="Sebep"
+                value={unusedReason}
+                onChange={(event) => setUnusedReason(event.target.value)}
+                fullWidth
+              >
+                {unusedReasonOptions.map((reason) => (
+                  <MenuItem key={reason} value={reason}>
+                    {reason}
+                  </MenuItem>
+                ))}
+              </TextField>
+              <TextField
+                label="Açıklama"
+                value={unusedNote}
+                onChange={(event) => setUnusedNote(event.target.value)}
+                multiline
+                minRows={3}
+                fullWidth
+              />
+            </Stack>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 2.5, gap: 1, flexWrap: "wrap" }}>
+            <Button onClick={() => setUnusedDialogPlan(null)}>Vazgeç</Button>
+            <Button type="submit" variant="contained" disabled={unusedMutation.isPending}>
+              Kaydet
+            </Button>
+          </DialogActions>
+        </form>
+      </Dialog>
+      <Dialog open={transferDialogOpen} onClose={() => setTransferDialogOpen(false)} fullWidth maxWidth="md">
+        <DialogTitle>Bütçe Aktarımı</DialogTitle>
+        <form onSubmit={handleTransferSubmit}>
+          <DialogContent sx={{ pt: 2 }}>
+            <Stack spacing={2.5}>
+              {transferError && <Alert severity="error">{transferError}</Alert>}
+              <Grid container spacing={2}>
+                <Grid item xs={12} md={6}>
+                  <Autocomplete
+                    options={budgetItems ?? []}
+                    value={budgetItems?.find((item) => item.id === transferSourceBudgetItemId) ?? null}
+                    onChange={(_, value) => setTransferSourceBudgetItemId(value?.id ?? null)}
+                    getOptionLabel={(option) => formatBudgetItemLabel(option) || "-"}
+                    filterOptions={budgetFilterOptions}
+                    isOptionEqualToValue={(option, value) => option.id === value.id}
+                    renderInput={(params) => (
+                      <TextField {...params} label="Kaynak Bütçe Kalemi" required fullWidth />
+                    )}
+                  />
+                </Grid>
+                <Grid item xs={12} md={6}>
+                  <Autocomplete
+                    options={budgetItems ?? []}
+                    value={budgetItems?.find((item) => item.id === transferTargetBudgetItemId) ?? null}
+                    onChange={(_, value) => setTransferTargetBudgetItemId(value?.id ?? null)}
+                    getOptionLabel={(option) => formatBudgetItemLabel(option) || "-"}
+                    filterOptions={budgetFilterOptions}
+                    isOptionEqualToValue={(option, value) => option.id === value.id}
+                    renderInput={(params) => (
+                      <TextField {...params} label="Hedef Bütçe Kalemi" required fullWidth />
+                    )}
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    select
+                    label="Kaynak Ay"
+                    value={transferSourceMonth}
+                    onChange={(event) => setTransferSourceMonth(Number(event.target.value))}
+                    required
+                    fullWidth
+                  >
+                    {monthOptions.map((label, index) => (
+                      <MenuItem key={label} value={index + 1}>
+                        {label}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                </Grid>
+                <Grid item xs={12} md={8}>
+                  <Alert severity="info">
+                    Kaynak yıl ve kaynak senaryo mevcut Plan Yönetimi filtrelerinden alınır:{" "}
+                    {transferSourceYear} / {scenarioById.get(transferSourceScenarioId ?? 0)?.name ?? "-"}
+                  </Alert>
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    label="Hedef Yıl"
+                    type="number"
+                    value={transferTargetYear}
+                    onChange={(event) => setTransferTargetYear(Number(event.target.value) || currentYear)}
+                    required
+                    fullWidth
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    select
+                    label="Hedef Ay"
+                    value={transferTargetMonth}
+                    onChange={(event) => setTransferTargetMonth(Number(event.target.value))}
+                    required
+                    fullWidth
+                  >
+                    {monthOptions.map((label, index) => (
+                      <MenuItem key={label} value={index + 1}>
+                        {label}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    select
+                    label="Hedef Senaryo"
+                    value={transferTargetScenarioId ?? ""}
+                    onChange={(event) =>
+                      setTransferTargetScenarioId(event.target.value ? Number(event.target.value) : null)
+                    }
+                    required
+                    fullWidth
+                  >
+                    {scenarios?.map((scenario) => (
+                      <MenuItem key={scenario.id} value={scenario.id}>
+                        {scenario.name} ({scenario.year})
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    label="Aktarım Tutarı"
+                    type="text"
+                    inputProps={{ inputMode: "decimal" }}
+                    value={transferAmount}
+                    onChange={(event) => setTransferAmount(event.target.value)}
+                    required
+                    fullWidth
+                  />
+                </Grid>
+                <Grid item xs={12} md={8}>
+                  <TextField
+                    label="Aktarım Nedeni"
+                    value={transferReason}
+                    onChange={(event) => setTransferReason(event.target.value)}
+                    required
+                    fullWidth
+                  />
+                </Grid>
+                <Grid item xs={12}>
+                  <Alert severity="info">
+                    Kaynak toplam bütçe: {formatCurrency(transferAvailable?.revised_amount ?? 0)} ·
+                    Gerçekleşen: {formatCurrency(transferAvailable?.actual_amount ?? 0)} ·
+                    Kullanılmayacak: {formatCurrency(transferAvailable?.unused_amount ?? 0)} ·
+                    Kullanılabilir: {formatCurrency(transferAvailable?.available_amount ?? 0)}
+                  </Alert>
+                </Grid>
+              </Grid>
+
+              <Box>
+                <Typography variant="subtitle2" fontWeight={600} gutterBottom>
+                  Son Aktarımlar
+                </Typography>
+                <Stack spacing={1}>
+                  {recentTransfers.length === 0 && (
+                    <Typography variant="body2" color="text.secondary">
+                      Kayıt bulunamadı.
+                    </Typography>
+                  )}
+                  {recentTransfers.map((transfer) => {
+                    const sourceName =
+                      transfer.source_budget_name ??
+                      budgetItemById.get(transfer.source_budget_item_id)?.name ??
+                      "-";
+                    const targetName =
+                      transfer.target_budget_name ??
+                      budgetItemById.get(transfer.target_budget_item_id)?.name ??
+                      "-";
+                    const sourceScenario =
+                      scenarioById.get(transfer.source_scenario_id)?.name ?? transfer.source_scenario_id;
+                    const targetScenario =
+                      scenarioById.get(transfer.target_scenario_id)?.name ?? transfer.target_scenario_id;
+                    return (
+                      <Box
+                        key={transfer.id}
+                        sx={{
+                          border: "1px solid",
+                          borderColor: "divider",
+                          borderRadius: 1,
+                          p: 1.25
+                        }}
+                      >
+                        <Stack
+                          direction={{ xs: "column", sm: "row" }}
+                          justifyContent="space-between"
+                          alignItems={{ xs: "flex-start", sm: "center" }}
+                          spacing={1}
+                        >
+                          <Box>
+                            <Typography variant="body2" fontWeight={600}>
+                              {formatCurrency(Number(transfer.amount) || 0)}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {stripBudgetCode(sourceName)} ({transfer.source_year} {monthOptions[transfer.source_month - 1]}, {sourceScenario}) →{" "}
+                              {stripBudgetCode(targetName)} ({transfer.target_year} {monthOptions[transfer.target_month - 1]}, {targetScenario})
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary" display="block">
+                              {transfer.reason}
+                            </Typography>
+                          </Box>
+                          <Button
+                            size="small"
+                            color="error"
+                            onClick={() => handleCancelTransfer(transfer)}
+                            disabled={!user?.is_admin || cancelTransferMutation.isPending}
+                          >
+                            İptal Et
+                          </Button>
+                        </Stack>
+                      </Box>
+                    );
+                  })}
+                </Stack>
+              </Box>
+            </Stack>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 2.5, gap: 1, flexWrap: "wrap" }}>
+            <Button onClick={() => setTransferDialogOpen(false)}>Vazgeç</Button>
+            <Button type="submit" variant="contained" disabled={transferMutation.isPending}>
+              Aktar
             </Button>
           </DialogActions>
         </form>
@@ -901,13 +2276,13 @@ export default function PlansView() {
         </Alert>
       </Snackbar>
       <Snackbar
-        open={Boolean(saveFeedback)}
-        autoHideDuration={2500}
-        onClose={() => setSaveFeedback(null)}
+        open={Boolean(toast)}
+        autoHideDuration={4000}
+        onClose={() => setToast(null)}
         anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
       >
-        <Alert severity="success" onClose={() => setSaveFeedback(null)} sx={{ width: "100%" }}>
-          {saveFeedback}
+        <Alert severity={toast?.severity ?? "success"} onClose={() => setToast(null)} sx={{ width: "100%" }}>
+          {toast?.message}
         </Alert>
       </Snackbar>
     </Stack>

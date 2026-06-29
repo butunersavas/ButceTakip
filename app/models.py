@@ -1,8 +1,9 @@
 import enum
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy import UniqueConstraint
+from sqlalchemy import Column, LargeBinary, Numeric, UniqueConstraint
 from sqlmodel import Field, Relationship, SQLModel
 
 
@@ -17,13 +18,8 @@ class ExpenseStatus(str, enum.Enum):
 
 
 class WarrantyItemType(str, enum.Enum):
-    WARRANTY = "WARRANTY"
     DEVICE = "DEVICE"
-    MAINTENANCE = "MAINTENANCE"
     SERVICE = "SERVICE"
-    LICENSE = "LICENSE"
-    CERTIFICATE = "CERTIFICATE"
-    CONTRACT = "CONTRACT"
     DOMAIN_SSL = "DOMAIN_SSL"
 
 
@@ -37,6 +33,7 @@ class User(TimestampMixin, SQLModel, table=True):
     hashed_password: str = Field(nullable=False)
     is_active: bool = Field(default=True, nullable=False)
     is_admin: bool = Field(default=False, nullable=False)
+    role: str = Field(default="user", nullable=False)
 
     expenses_created: list["Expense"] = Relationship(
         back_populates="created_by",
@@ -96,34 +93,33 @@ class PlanEntry(TimestampMixin, SQLModel, table=True):
     purchase_requested: bool = Field(default=False, nullable=False)
     purchase_requested_at: Optional[datetime] = Field(default=None, nullable=True)
     purchase_requested_by: Optional[str] = Field(default=None, nullable=True)
+    unused_amount: float = Field(default=0, nullable=False)
+    unused_reason: Optional[str] = Field(default=None, nullable=True)
+    unused_note: Optional[str] = Field(default=None, nullable=True)
+    unused_updated_at: Optional[datetime] = Field(default=None, nullable=True)
 
     scenario: Scenario = Relationship(back_populates="plans")
     budget_item: BudgetItem = Relationship(back_populates="plans")
-    purchase_trackings: list["PurchaseRequestTracking"] = Relationship(back_populates="plan_entry")
 
 
-class PurchaseTrackingStatus(str, enum.Enum):
-    TALEP_OLUSTURULDU = "TALEP_OLUSTURULDU"
-    SURAT_YONETIM_IMZA = "SURAT_YONETIM_IMZA"
-    BCC_YONETIM_IMZA = "BCC_YONETIM_IMZA"
-    SURAT_SATINALMA = "SURAT_SATINALMA"
-    ORDER_PENDING = "ORDER_PENDING"
-    COMPLETED = "COMPLETED"
-    CANCELLED = "CANCELLED"
-
-
-class PurchaseRequestTracking(SQLModel, table=True):
-    __tablename__ = "purchase_request_tracking"
+class BudgetTransfer(TimestampMixin, SQLModel, table=True):
+    __tablename__ = "budget_transfers"
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    plan_item_id: int = Field(foreign_key="plan_entries.id", index=True, nullable=False)
-    status: str = Field(default=PurchaseTrackingStatus.TALEP_OLUSTURULDU.value, nullable=False)
-    updated_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
-    updated_by: Optional[str] = Field(default=None, nullable=True)
-    note: Optional[str] = Field(default=None, nullable=True)
-    is_active: bool = Field(default=True, nullable=False)
-
-    plan_entry: PlanEntry = Relationship(back_populates="purchase_trackings")
+    source_budget_item_id: int = Field(foreign_key="budget_items.id", nullable=False, index=True)
+    source_year: int = Field(nullable=False, index=True)
+    source_month: int = Field(nullable=False, ge=1, le=12, index=True)
+    source_scenario_id: int = Field(foreign_key="scenarios.id", nullable=False, index=True)
+    target_budget_item_id: int = Field(foreign_key="budget_items.id", nullable=False, index=True)
+    target_year: int = Field(nullable=False, index=True)
+    target_month: int = Field(nullable=False, ge=1, le=12, index=True)
+    target_scenario_id: int = Field(foreign_key="scenarios.id", nullable=False, index=True)
+    amount: float = Field(nullable=False)
+    reason: str = Field(nullable=False)
+    created_by_id: Optional[int] = Field(default=None, foreign_key="users.id")
+    is_cancelled: bool = Field(default=False, nullable=False, index=True)
+    cancelled_at: datetime | None = Field(default=None)
+    cancelled_by_id: Optional[int] = Field(default=None, foreign_key="users.id")
 
 
 class PurchaseFormStatus(SQLModel, table=True):
@@ -168,9 +164,18 @@ class Expense(TimestampMixin, SQLModel, table=True):
     __tablename__ = "expenses"
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    budget_item_id: int = Field(foreign_key="budget_items.id", nullable=False, index=True)
+    budget_item_id: Optional[int] = Field(
+        default=None,
+        foreign_key="budget_items.id",
+        nullable=True,
+        index=True,
+    )
     scenario_id: Optional[int] = Field(default=None, foreign_key="scenarios.id")
     budget_code: Optional[str] = Field(default=None, nullable=True)
+    budget_outside_title: Optional[str] = Field(default=None, nullable=True)
+    budget_outside_department: Optional[str] = Field(default=None, nullable=True)
+    budget_outside_capex_opex: Optional[str] = Field(default=None, nullable=True)
+    budget_outside_asset_type: Optional[str] = Field(default=None, nullable=True)
     expense_date: date = Field(nullable=False, index=True)
     amount: float = Field(nullable=False)
     quantity: float = Field(default=1, nullable=False)
@@ -186,7 +191,7 @@ class Expense(TimestampMixin, SQLModel, table=True):
     client_hostname: Optional[str] = Field(default=None, nullable=True)
     kaydi_giren_kullanici: Optional[str] = Field(default=None, nullable=True)
 
-    budget_item: BudgetItem = Relationship(back_populates="expenses")
+    budget_item: Optional[BudgetItem] = Relationship(back_populates="expenses")
     scenario: Optional[Scenario] = Relationship(back_populates="expenses")
     created_by: Optional[User] = Relationship(
         back_populates="expenses_created",
@@ -196,24 +201,37 @@ class Expense(TimestampMixin, SQLModel, table=True):
         back_populates="expenses_updated",
         sa_relationship_kwargs={"foreign_keys": "[Expense.updated_by_id]"},
     )
-    attachments: list["ExpenseAttachment"] = Relationship(
-        back_populates="expense",
-        sa_relationship_kwargs={"cascade": "all, delete-orphan"},
+    attachments: list["ExpenseAttachment"] = Relationship(back_populates="expense")
+    allocations: list["ExpenseAllocation"] = Relationship(back_populates="expense")
+
+
+class ExpenseAllocation(TimestampMixin, SQLModel, table=True):
+    __tablename__ = "expense_allocations"
+    __table_args__ = (
+        UniqueConstraint("expense_id", "year", "month", name="uq_expense_allocation_month"),
     )
 
+    id: Optional[int] = Field(default=None, primary_key=True)
+    expense_id: int = Field(foreign_key="expenses.id", nullable=False, index=True)
+    budget_item_id: int = Field(foreign_key="budget_items.id", nullable=False, index=True)
+    scenario_id: int = Field(foreign_key="scenarios.id", nullable=False, index=True)
+    year: int = Field(nullable=False, index=True)
+    month: int = Field(nullable=False, ge=1, le=12, index=True)
+    allocated_amount: float = Field(nullable=False)
 
-class ExpenseAttachment(SQLModel, table=True):
+    expense: Expense = Relationship(back_populates="allocations")
+
+
+class ExpenseAttachment(TimestampMixin, SQLModel, table=True):
     __tablename__ = "expense_attachments"
 
     id: Optional[int] = Field(default=None, primary_key=True)
     expense_id: int = Field(foreign_key="expenses.id", nullable=False, index=True)
-    filename: str = Field(nullable=False)
-    stored_filename: str = Field(nullable=False, unique=True, index=True)
-    content_type: str = Field(nullable=False)
-    size_bytes: int = Field(nullable=False)
-    storage_path: str = Field(nullable=False)
-    uploaded_at: datetime = Field(default_factory=datetime.utcnow, nullable=False, index=True)
-    uploaded_by: Optional[str] = Field(default=None, nullable=True)
+    file_name: str = Field(nullable=False)
+    content_type: str = Field(default="application/pdf", nullable=False)
+    size_bytes: int = Field(default=0, nullable=False)
+    content: bytes = Field(sa_column=Column(LargeBinary, nullable=False))
+    uploaded_by_id: Optional[int] = Field(default=None, foreign_key="users.id")
 
     expense: Expense = Relationship(back_populates="attachments")
 
@@ -224,28 +242,28 @@ class WarrantyItem(TimestampMixin, SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     type: WarrantyItemType = Field(nullable=False)
     name: str = Field(nullable=False)
-    location: str = Field(nullable=False)
+    location: Optional[str] = Field(default=None, nullable=True)
     domain: Optional[str] = Field(default=None, nullable=True)
-    end_date: date = Field(nullable=False)
+    end_date: Optional[date] = Field(default=None, nullable=True)
     note: Optional[str] = Field(default=None)
     issuer: Optional[str] = Field(default=None, nullable=True)
     certificate_issuer: Optional[str] = Field(default=None, nullable=True)
     renewal_owner: Optional[str] = Field(default=None, nullable=True)
     renewal_responsible: Optional[str] = Field(default=None, nullable=True)
-    ssl_certificate: Optional[str] = Field(default=None, nullable=True)
-    certificate_type: Optional[str] = Field(default=None, nullable=True)
-    contract_end_date: Optional[date] = Field(default=None, nullable=True)
-    vendor_company: Optional[str] = Field(default=None, nullable=True)
-    tax_number: Optional[str] = Field(default=None, nullable=True)
-    service_type: Optional[str] = Field(default=None, nullable=True)
-    subscription_circuit_number: Optional[str] = Field(default=None, nullable=True)
-    location_name: Optional[str] = Field(default=None, nullable=True)
-    service_number: Optional[str] = Field(default=None, nullable=True)
-    speed: Optional[str] = Field(default=None, nullable=True)
-    commitment_end_date: Optional[date] = Field(default=None, nullable=True)
-    billing_account_number: Optional[str] = Field(default=None, nullable=True)
-    plan_entry_id: Optional[int] = Field(default=None, foreign_key="plan_entries.id", nullable=True, index=True)
-    workflow_status: str = Field(default="Aktif", nullable=False)
+    purchased_from: Optional[str] = Field(default=None, nullable=True)
+    brand: Optional[str] = Field(default=None, nullable=True)
+    model: Optional[str] = Field(default=None, nullable=True)
+    serial_number: Optional[str] = Field(default=None, nullable=True, index=True)
+    asset_tag: Optional[str] = Field(default=None, nullable=True, index=True)
+    service_code: Optional[str] = Field(default=None, nullable=True, index=True)
+    ordered_product_model: Optional[str] = Field(default=None, nullable=True)
+    price: Optional[Decimal] = Field(
+        default=None,
+        sa_column=Column(Numeric(14, 2), nullable=True),
+    )
+    shipment_date: Optional[date] = Field(default=None, nullable=True)
+    end_of_service_life: Optional[date] = Field(default=None, nullable=True)
+    status: Optional[str] = Field(default=None, nullable=True)
     reminder_days: Optional[int] = Field(default=30, nullable=True)
     remind_days: Optional[int] = Field(default=30, nullable=True)
     remind_days_before: Optional[int] = Field(default=30, nullable=True)

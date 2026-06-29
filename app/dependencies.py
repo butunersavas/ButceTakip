@@ -8,6 +8,13 @@ from app.models import User
 from app.utils.security import decode_access_token, oauth2_scheme
 
 
+VIEWER_ROLES = {"viewer", "readonly", "read_only"}
+
+
+def is_viewer_user(user: User | None) -> bool:
+    return bool(user and not user.is_admin and (user.role or "").strip().lower() in VIEWER_ROLES)
+
+
 def get_db_session() -> Session:
     with get_session() as session:
         yield session
@@ -22,15 +29,27 @@ def get_current_user(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Inactive user")
 
     # Best-effort metadata update: auth flow should not fail if this write fails.
-    try:
-        user.updated_at = datetime.utcnow()
-        session.add(user)
-        session.commit()
-        session.refresh(user)
-    except Exception:
-        session.rollback()
+    if not is_viewer_user(user):
+        try:
+            user.updated_at = datetime.utcnow()
+            session.add(user)
+            session.commit()
+            session.refresh(user)
+        except Exception:
+            session.rollback()
 
     return user
+
+
+def get_write_user(current_user: User = Depends(get_current_user)) -> User:
+    """Reject read-only users for endpoints that modify data."""
+
+    if is_viewer_user(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bu kullanıcı yalnızca görüntüleme yetkisine sahiptir.",
+        )
+    return current_user
 
 
 def get_admin_user(current_user: User = Depends(get_current_user)) -> User:

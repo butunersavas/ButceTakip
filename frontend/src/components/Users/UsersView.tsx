@@ -14,6 +14,7 @@ import {
   FormControlLabel,
   Grid,
   IconButton,
+  MenuItem,
   Stack,
   TextField,
   Typography
@@ -26,13 +27,13 @@ import axios from "axios";
 
 import { useAuth } from "../../context/AuthContext";
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
-import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS } from "../../constants/pagination";
 
 type UserRead = {
   id: number;
   username: string;
   full_name?: string | null;
   is_admin: boolean;
+  role?: "admin" | "user" | "viewer" | string;
   is_active: boolean;
 };
 
@@ -41,12 +42,14 @@ type UserCreate = {
   full_name?: string;
   password: string;
   is_admin: boolean;
+  role: "admin" | "user" | "viewer";
   is_active: boolean;
 };
 
 type UserUpdate = {
   full_name?: string | null;
   is_admin?: boolean;
+  role?: "admin" | "user" | "viewer";
   is_active?: boolean;
   password?: string;
 };
@@ -67,6 +70,7 @@ export default function UsersView() {
     full_name: "",
     password: "",
     is_admin: false,
+    role: "user",
     is_active: true
   });
 
@@ -116,11 +120,19 @@ export default function UsersView() {
       const payload: UserCreate = {
         ...form,
         username: form.username.trim().toLowerCase(),
-        full_name: form.full_name?.trim() || ""
+        full_name: form.full_name?.trim() || "",
+        is_admin: form.role === "admin"
       };
       await client.post<UserRead>("/users", payload);
       setSuccess("Kullanıcı başarıyla oluşturuldu.");
-      setForm({ username: "", full_name: "", password: "", is_admin: false, is_active: true });
+      setForm({
+        username: "",
+        full_name: "",
+        password: "",
+        is_admin: false,
+        role: "user",
+        is_active: true
+      });
       await loadUsers();
     } catch (err) {
       console.error(err);
@@ -146,10 +158,14 @@ export default function UsersView() {
     setError(null);
     setSuccess(null);
 
+    const selectedRole =
+      (editingUser.role as "admin" | "user" | "viewer" | undefined) ||
+      (editingUser.is_admin ? "admin" : "user");
     const payload: UserUpdate = {
       full_name: editingUser.full_name,
       is_active: editingUser.is_active,
-      is_admin: editingUser.is_admin
+      role: selectedRole,
+      is_admin: selectedRole === "admin"
     };
 
     try {
@@ -203,14 +219,25 @@ export default function UsersView() {
   const columns: GridColDef[] = [
     { field: "username", headerName: "Kullanıcı Adı", flex: 1 },
     { field: "full_name", headerName: "Ad Soyad", flex: 1 },
+    {
+      field: "role",
+      headerName: "Rol",
+      width: 130,
+      valueGetter: (_value, row) =>
+        ((row as UserRead).role || ((row as UserRead).is_admin ? "admin" : "user")).toString()
+    },
     { field: "is_admin", headerName: "Admin", width: 120, type: "boolean" },
     { field: "is_active", headerName: "Aktif", width: 120, type: "boolean" },
     {
       field: "actions",
       headerName: "İşlemler",
       width: 140,
+      minWidth: 140,
+      align: "center",
+      headerAlign: "center",
       sortable: false,
       filterable: false,
+      disableColumnMenu: true,
       renderCell: (params) => (
         <Box sx={{ display: "flex", gap: 1 }}>
           <IconButton size="small" onClick={() => handleEditClick(params.row as UserRead)}>
@@ -220,6 +247,7 @@ export default function UsersView() {
             size="small"
             color="error"
             onClick={() => handleDeleteClick(params.row as UserRead)}
+            disabled={(params.row as UserRead).id === user?.id}
           >
             <DeleteIcon fontSize="small" />
           </IconButton>
@@ -254,15 +282,18 @@ export default function UsersView() {
                   <CircularProgress />
                 </Box>
               ) : (
-                <DataGrid
-                  rows={users ?? []}
-                  columns={columns}
-                  autoHeight
-                  disableRowSelectionOnClick
-                  pageSizeOptions={PAGE_SIZE_OPTIONS}
-                  initialState={{ pagination: { paginationModel: { pageSize: DEFAULT_PAGE_SIZE } } }}
-                  getRowId={(row) => row.id}
-                />
+                <Box sx={{ width: "100%", overflowX: "auto" }}>
+                  <DataGrid
+                    rows={users ?? []}
+                    columns={columns}
+                    autoHeight
+                    disableRowSelectionOnClick
+                    pageSizeOptions={[10, 25, 50]}
+                    initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
+                    getRowId={(row) => row.id}
+                    sx={{ minWidth: 720 }}
+                  />
+                </Box>
               )}
             </CardContent>
           </Card>
@@ -301,15 +332,22 @@ export default function UsersView() {
                   required
                   helperText="En az 8 karakter"
                 />
-                <FormControlLabel
-                  control={
-                    <Checkbox
-                      checked={form.is_admin}
-                      onChange={(event) => setForm((prev) => ({ ...prev, is_admin: event.target.checked }))}
-                    />
+                <TextField
+                  select
+                  label="Rol"
+                  value={form.role}
+                  onChange={(event) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      role: event.target.value as "admin" | "user" | "viewer",
+                      is_admin: event.target.value === "admin"
+                    }))
                   }
-                  label="Admin"
-                />
+                >
+                  <MenuItem value="user">Kullanıcı</MenuItem>
+                  <MenuItem value="viewer">Sadece Görüntüleme</MenuItem>
+                  <MenuItem value="admin">Admin</MenuItem>
+                </TextField>
                 <FormControlLabel
                   control={
                     <Checkbox
@@ -349,17 +387,28 @@ export default function UsersView() {
             fullWidth
             margin="normal"
           />
-          <FormControlLabel
-            control={
-              <Checkbox
-                checked={!!editingUser?.is_admin}
-                onChange={(e) =>
-                  setEditingUser((prev) => (prev ? { ...prev, is_admin: e.target.checked } : prev))
-                }
-              />
+          <TextField
+            select
+            label="Rol"
+            value={editingUser?.role || (editingUser?.is_admin ? "admin" : "user")}
+            onChange={(e) =>
+              setEditingUser((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      role: e.target.value as "admin" | "user" | "viewer",
+                      is_admin: e.target.value === "admin"
+                    }
+                  : prev
+              )
             }
-            label="Admin yetkisi"
-          />
+            fullWidth
+            margin="normal"
+          >
+            <MenuItem value="user">Kullanıcı</MenuItem>
+            <MenuItem value="viewer">Sadece Görüntüleme</MenuItem>
+            <MenuItem value="admin">Admin</MenuItem>
+          </TextField>
           <FormControlLabel
             control={
               <Checkbox

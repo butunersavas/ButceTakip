@@ -31,7 +31,6 @@ import CloudOutlinedIcon from "@mui/icons-material/CloudOutlined";
 import CleaningServicesOutlinedIcon from "@mui/icons-material/CleaningServicesOutlined";
 import PeopleOutlineOutlinedIcon from "@mui/icons-material/PeopleOutlineOutlined";
 import VerifiedOutlinedIcon from "@mui/icons-material/VerifiedOutlined";
-import LocalShippingOutlinedIcon from "@mui/icons-material/LocalShippingOutlined";
 import MenuIcon from "@mui/icons-material/Menu";
 import DarkModeIcon from "@mui/icons-material/DarkModeOutlined";
 import LightModeIcon from "@mui/icons-material/LightModeOutlined";
@@ -98,19 +97,9 @@ export default function AppLayout({ children }: AppLayoutProps) {
         icon: <CloudOutlinedIcon />,
         path: "/reports",
       },
-      {
-        label: "Satın Alma Takip",
-        icon: <LocalShippingOutlinedIcon />,
-        path: "/purchase-tracking",
-      },
     ];
 
     if (user?.is_admin) {
-      items.push({
-        label: "Garanti Takibi",
-        icon: <VerifiedOutlinedIcon />,
-        path: "/warranty-tracking",
-      });
       items.push(
         {
           label: "Temizleme Araçları",
@@ -123,6 +112,11 @@ export default function AppLayout({ children }: AppLayoutProps) {
           label: "Kullanıcı Yönetimi",
           icon: <PeopleOutlineOutlinedIcon />,
           path: "/users",
+        },
+        {
+          label: "Garanti Takibi",
+          icon: <VerifiedOutlinedIcon />,
+          path: "/warranty-tracking",
         }
       );
     }
@@ -149,6 +143,15 @@ export default function AppLayout({ children }: AppLayoutProps) {
     const initials = parts.slice(0, 2).map((part) => part.charAt(0).toUpperCase());
     return initials.join("") || source.charAt(0).toUpperCase();
   }, [user?.full_name, user?.username]);
+  const isViewer = ["viewer", "readonly", "read_only"].includes(
+    String(user?.role ?? "").toLowerCase()
+  );
+  const userRoleLabel =
+    isViewer
+      ? "Sadece görüntüleme"
+      : user?.is_admin
+        ? "Yönetici"
+        : "Kullanıcı";
 
   const handlePasswordChange = async () => {
     if (newPassword !== newPasswordAgain) {
@@ -243,7 +246,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 {userDisplayName}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                {user?.is_admin ? "Yönetici" : "Kullanıcı"}
+                {userRoleLabel}
               </Typography>
             </Box>
             <Button variant="outlined" color="primary" size="small" onClick={(event) => setUserMenuAnchor(event.currentTarget)}>
@@ -345,14 +348,16 @@ export default function AppLayout({ children }: AppLayoutProps) {
           anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
           transformOrigin={{ vertical: "top", horizontal: "right" }}
         >
-          <MenuItem
-            onClick={() => {
-              setIsChangePasswordOpen(true);
-              setUserMenuAnchor(null);
-            }}
-          >
-            Şifremi Değiştir
-          </MenuItem>
+          {!isViewer && (
+            <MenuItem
+              onClick={() => {
+                setIsChangePasswordOpen(true);
+                setUserMenuAnchor(null);
+              }}
+            >
+              Şifremi Değiştir
+            </MenuItem>
+          )}
           <MenuItem
             onClick={() => {
               logout();

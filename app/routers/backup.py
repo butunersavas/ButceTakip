@@ -1,6 +1,9 @@
+import json
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy import inspect, text
 from sqlalchemy.exc import SQLAlchemyError
@@ -33,22 +36,34 @@ def _backup_tables(session: Session, table_names: list[str]) -> dict[str, list[d
     return {name: _fetch_table_rows(session, name) for name in table_names}
 
 
+def _backup_response(payload: dict[str, Any], filename: str) -> Response:
+    content = json.dumps(jsonable_encoder(payload), ensure_ascii=False, separators=(",", ":"))
+    return Response(
+        content=content.encode("utf-8"),
+        media_type="application/json; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Length": str(len(content.encode("utf-8"))),
+        },
+    )
+
+
 @router.get("/full")
 def download_full_backup(
     session: Session = Depends(get_db_session),
     _: User = Depends(get_admin_user),
-) -> dict[str, dict[str, list[dict[str, Any]]]]:
+) -> Response:
     table_names = _get_table_names(session)
-    return {"tables": _backup_tables(session, table_names)}
+    return _backup_response({"tables": _backup_tables(session, table_names)}, "butce_tam_yedek.json")
 
 
 @router.get("/users")
 def download_users_backup(
     session: Session = Depends(get_db_session),
     _: User = Depends(get_admin_user),
-) -> dict[str, dict[str, list[dict[str, Any]]]]:
+) -> Response:
     table_names = [name for name in _get_table_names(session) if name == "users"]
-    return {"tables": _backup_tables(session, table_names)}
+    return _backup_response({"tables": _backup_tables(session, table_names)}, "butce_kullanicilar_yedek.json")
 
 
 @router.post("/restore/full")
