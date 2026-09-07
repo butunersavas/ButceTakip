@@ -1,81 +1,66 @@
-﻿# BütçeTakip - Codex Çalışma Kuralları
+# BütçeTakip — Codex Çalışma Talimatları
 
-Bu repoda çalışırken aşağıdaki kurallar korunmalıdır.
+Bu repository kurumsal **BütçeTakip / Bütçe Yönetimi** uygulamasıdır.
 
-## Kritik güvenlik kuralları
+## Her görevden önce zorunlu okuma
+1. `AGENTS.md`
+2. `docs/PROJECT_CONTEXT.md`
+3. `docs/BUSINESS_RULES.md`
+4. `docs/WORKLOG.md` dosyasının en güncel bölümü
+5. Değişiklik yapılacak mevcut kaynak kod
 
-- DB volume silinmez.
-- docker compose down -v kullanılmaz.
-- docker volume prune kullanılmaz.
-- docker system prune --volumes kullanılmaz.
-- Veri kaybına neden olacak işlem yapılmaz.
-- Bütçe, Harcama, Dashboard, Raporlama ve mutabakat hesapları gereksiz yere değiştirilmez.
-- Canlı import veya veri yazma işleminden önce DB yedeği alınmalıdır.
-- Import işlemleri önce dry-run / önizleme yapmalıdır.
-- Kullanıcı onayı olmadan DB’ye yazılmamalıdır.
+Mevcut kodu incelemeden eski mimari veya davranış varsayma.
 
-## Garanti Takibi kuralları
+## Ortamları kesin ayır
 
-Garanti Takibi ekranında üç ayrı kayıt tipi vardır:
+### LOCAL / geliştirme
+- Frontend: `http://localhost:5173`
+- API: `http://localhost:8000`
+- PostgreSQL host portu: `5433`
+- Container'lar: `butce_frontend`, `butce_api`, `butce_db`
 
-1. Cihaz
-2. Domain
-3. Lisans Destek
+Local rebuild/recreate **canlı deploy değildir**.
 
-Bu üç tip birbirine karıştırılmamalıdır.
+### CANLI / production
+Bilinen canlı ortam:
+- Sunucu IP: `172.24.2.128`
+- Frontend: `http://172.24.2.128:5173`
+- API: port `8000`
+- DB host portu: `5433`
+- Compose project: `butcetakip-main`
+- Working directory: `/opt/ButceTakip/images/ButceTakip-main 0104/ButceTakip-main`
 
-### Cihaz alanları
+Kullanıcı açıkça “canlıya deploy et” demeden canlı sunucuya, canlı DB'ye, canlı container'lara veya canlı `.env` dosyasına dokunma.
 
-- Alınan Kurum
-- Ürün
-- Marka
-- Model
-- Seri No
-- Demirbaş
-- Ekspres Servis Kodu
-- Ordered Product Model
-- Fiyat
-- Gönderim Tarihi
-- Destek Sonu Tarihi
-- End of Service Life
-- Durum
-- Not
+## Veri güvenliği
+- `docker compose down -v` kullanma.
+- DB volume silme.
+- Gerçek veriyi test amacıyla silme.
+- `.env`, parola, token veya secret commit etme.
+- Admin parolasını kaynak koda yazma.
+- Mevcut parasal değerleri kurla dönüştürme.
 
-### Domain alanları
+## Çalışma yaklaşımı
+- Önce mevcut implementasyonu bul.
+- Frontend + backend + import/export + raporlama kullanım noktalarını birlikte ara.
+- Ortak helper/service varsa tekrar kullan.
+- UI'da buton gizlemek backend yetkilendirmesinin yerine geçmez.
+- Hesaplama değişikliklerinde regression senaryosu ekle.
+- Build başarılı olsa bile davranışı local uygulamada doğrula.
 
-- DOMAİN ADLARI
-- SÖZLEŞME BİTİŞ TARİHİ
-- SÖZLEŞME KALAN GÜN SAYISI
-- İLGİLİ FİRMA
-- HİZMET ALINAN HOSTİNG FİRMASI
+## Para birimi standardı
+BütçeTakip'in standart para birimi **USD**'dir.
+- UI: `$`
+- Default currency gerekiyorsa: `USD`
+- `TL`, `TRY`, `₺` parasal bağlamda kalmamalı.
+- Türkçe sayı biçimi kullanılabilir: `$150.058,00`
+- Numeric değer değişmez; kur dönüşümü yapılmaz.
+- `tr-TR` sayı/tarih biçimi için kullanılabilir.
 
-### Lisans Destek alanları
-
-- Alınan Kurum
-- Ürün
-- Lisans Adedi
-- Fiyat
-- Alım Tarihi
-- Bitiş Tarihi
-- Destek Kalan Gün
-- Garanti Süresi Uzatma İşlemi Yapıldı Mı?
-
-## Şablon ve import kuralları
-
-- Şablon İndir butonu aktif seçili tipe göre çalışmalıdır.
-- Cihaz seçiliyse Cihaz şablonu inmeli.
-- Domain seçiliyse Domain şablonu inmeli.
-- Lisans Destek seçiliyse Lisans Destek şablonu inmeli.
-- Her üç şablonda aynı Cihaz başlıkları gelmemelidir.
-- Import işlemi seçili tipe göre yapılmalıdır.
-- Cihaz import bilgileri Domain veya Lisans Destek tarafına yansımamalıdır.
-- Domain import bilgileri Cihaz veya Lisans Destek tarafına yansımamalıdır.
-- Lisans Destek import bilgileri Cihaz veya Domain tarafına yansımamalıdır.
-- Duplicate kayıtlar tekrar eklenmemelidir.
-
-## Ekran kuralları
-
-- Kayıt Ekle butonu hangi tip seçiliyse o tipe ait formu açmalıdır.
-- Tablo kolonları seçili tipe göre değişmelidir.
-- Kendisine ait olmayan bilgiler farklı sekmelerde görünmemelidir.
-- Bilgi ve görüntü kirliliği oluşturulmamalıdır.
+## Görev sonunda
+1. Değiştirilen dosyaları raporla.
+2. Kök nedeni ve düzeltmeyi özetle.
+3. Test/build sonucunu yaz.
+4. Pending konuları belirt.
+5. `docs/WORKLOG.md` içine tarihli kayıt ekle.
+6. Kullanıcı açıkça istemedikçe canlı deploy yapma.
