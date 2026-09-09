@@ -3,6 +3,7 @@ import {
   Alert,
   Button,
   Card,
+  CardActionArea,
   CardContent,
   Box,
   Chip,
@@ -24,9 +25,11 @@ import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/DeleteOutline";
 import SwapHorizIcon from "@mui/icons-material/SwapHoriz";
-import { DataGrid, GridColDef } from "@mui/x-data-grid";
+import UndoOutlinedIcon from "@mui/icons-material/UndoOutlined";
+import { DataGrid, GridColDef, type GridPaginationModel } from "@mui/x-data-grid";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
+import { useSearchParams } from "react-router-dom";
 
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import usePersistentState from "../../hooks/usePersistentState";
@@ -34,6 +37,9 @@ import { useAuth } from "../../context/AuthContext";
 import { formatBudgetItemLabel, stripBudgetCode } from "../../utils/budgetLabel";
 import { formatBudgetItemMeta } from "../../utils/budgetItem";
 import FiltersBar from "../Filters/FiltersBar";
+import { formatCurrency } from "../../utils/currency";
+import { formatUnusedReason, normalizeUnusedReason, UNUSED_REASON_OPTIONS } from "../../utils/unusedReason";
+import UnusedBudgetDialog from "../common/UnusedBudgetDialog";
 
 interface Scenario {
   id: number;
@@ -112,6 +118,8 @@ type PlanMutationPayload = {
   map_attribute?: string | null;
   description?: string | null;
   merge_mode?: "merge" | "separate";
+  unused_reason?: string | null;
+  unused_note?: string | null;
 };
 
 interface DeleteDependencyInfo {
@@ -191,13 +199,6 @@ const unusedReasonOptions = [
   "Diğer"
 ];
 
-function formatCurrency(value: number) {
-  return `$${new Intl.NumberFormat("tr-TR", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  }).format(value ?? 0)}`;
-}
-
 function formatCapexLabel(value?: string | null) {
   if (!value) return null;
   const normalized = value.toString().trim();
@@ -229,6 +230,19 @@ export default function PlansView() {
     String(user?.role ?? "").toLowerCase()
   );
   const canManagePlans = Boolean(user?.is_admin) && !isViewer;
+  const [searchParams, setSearchParams] = useSearchParams();
+  type PlanCardFilter = "" | "actual" | "unused" | "available";
+  const initialCard = searchParams.get("card") as PlanCardFilter | null;
+  const [activeCard, setActiveCard] = useState<PlanCardFilter>(
+    initialCard && ["actual", "unused", "available"].includes(initialCard) ? initialCard : ""
+  );
+  const [paginationModel, setPaginationModel] = useState<GridPaginationModel>({ pageSize: 12, page: 0 });
+  useEffect(() => {
+    const card = searchParams.get("card") as PlanCardFilter | null;
+    const next = card && ["actual", "unused", "available"].includes(card) ? card : "";
+    setActiveCard(next);
+    setPaginationModel((current) => ({ ...current, page: 0 }));
+  }, [searchParams]);
 
   const currentYear = new Date().getFullYear();
   const [year, setYear] = usePersistentState<number>("plans:year", currentYear);
@@ -246,6 +260,8 @@ export default function PlansView() {
   const [formMapCategory, setFormMapCategory] = useState("");
   const [formMapAttribute, setFormMapAttribute] = useState("");
   const [formMergeMode, setFormMergeMode] = useState<"merge" | "separate">("merge");
+  const [formUnusedReason, setFormUnusedReason] = useState("");
+  const [formUnusedNote, setFormUnusedNote] = useState("");
   const [formYear, setFormYear] = useState<number>(year);
   const [formScenarioId, setFormScenarioId] = useState<number | "">(scenarioId ?? "");
   const [isNewBudgetMode, setIsNewBudgetMode] = useState(false);
@@ -262,6 +278,7 @@ export default function PlansView() {
   const [transferAmount, setTransferAmount] = useState("");
   const [transferReason, setTransferReason] = useState("");
   const [unusedDialogPlan, setUnusedDialogPlan] = useState<PlanEntry | null>(null);
+  const [purchaseRevertPlan, setPurchaseRevertPlan] = useState<PlanEntry | null>(null);
   const [unusedAmount, setUnusedAmount] = useState("");
   const [unusedReason, setUnusedReason] = useState(unusedReasonOptions[0]);
   const [unusedNote, setUnusedNote] = useState("");
@@ -506,6 +523,8 @@ export default function PlansView() {
       queryClient.invalidateQueries({ queryKey: ["plan-aggregate"] });
       queryClient.invalidateQueries({ queryKey: ["budget-items"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["pending-budget-actions"] });
+      queryClient.invalidateQueries({ queryKey: ["purchase-pending"] });
       setDialogOpen(false);
       setFormError(null);
       setToast({ message: "Kayıt kaydedildi.", severity: "success" });
@@ -597,6 +616,29 @@ export default function PlansView() {
     }
   });
 
+  const purchaseRevertMutation = useMutation({
+    mutationFn: async (planId: number) => {
+      const { data } = await client.patch(`/plan-items/${planId}/purchase-requested`, {
+        requested: false
+      });
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["plans"] });
+      queryClient.invalidateQueries({ queryKey: ["pending-budget-actions"] });
+      queryClient.invalidateQueries({ queryKey: ["purchase-pending"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      setPurchaseRevertPlan(null);
+      setToast({ message: "Talep durumu geri alındı.", severity: "success" });
+    },
+    onError: (error) => {
+      setToast({
+        message: resolveApiErrorMessage(error, "Talep durumu geri alınamadı."),
+        severity: "error"
+      });
+    }
+  });
+
   const cancelTransferMutation = useMutation({
     mutationFn: async (transferId: number) => {
       const { data } = await client.delete<BudgetTransfer>(`/plans/transfers/${transferId}`);
@@ -645,6 +687,8 @@ export default function PlansView() {
     setIsNewBudgetMode(false);
     applyFormBudgetItem(selectedItem);
     setFormMergeMode("merge");
+    setFormUnusedReason("");
+    setFormUnusedNote("");
     setDialogOpen(true);
     setFormError(null);
   }, [applyFormBudgetItem, budgetItemId, budgetItems, findDefaultScenarioForYear, year]);
@@ -666,6 +710,8 @@ export default function PlansView() {
     setFormMapCategory((plan.map_capex_opex ?? plan.capex_opex ?? "").toLowerCase());
     setFormMapAttribute(plan.map_nitelik ?? plan.asset_type ?? "");
     setFormMergeMode("merge");
+    setFormUnusedReason(normalizeUnusedReason(plan.unused_reason));
+    setFormUnusedNote(plan.unused_note ?? "");
     setDialogOpen(true);
     setFormError(null);
   }, [budgetItems]);
@@ -726,6 +772,11 @@ export default function PlansView() {
       department: departmentValue || null
     };
 
+    if (editingPlan && Number(editingPlan.unused_amount ?? 0) > 0) {
+      payload.unused_reason = formUnusedReason || null;
+      payload.unused_note = formUnusedNote.trim() || null;
+    }
+
     if (!editingPlan) {
       payload.budget_name = budgetItemName;
       payload.map_category = mapCategoryValue || null;
@@ -767,11 +818,8 @@ export default function PlansView() {
   }, [client, deleteMutation, user?.is_admin]);
 
   const handleOpenUnusedDialog = useCallback((plan: PlanEntry) => {
-    const currentUnused = Number(plan.unused_amount ?? 0);
-    const availableAmount = Number(plan.scope_available_amount ?? plan.available_amount ?? 0);
-    const defaultAmount = currentUnused > 0 ? currentUnused : Math.max(availableAmount, 0);
     setUnusedDialogPlan(plan);
-    setUnusedAmount(defaultAmount ? String(defaultAmount) : "");
+    setUnusedAmount("");
     setUnusedReason(plan.unused_reason || unusedReasonOptions[0]);
     setUnusedNote(plan.unused_note || "");
     setUnusedError(null);
@@ -781,8 +829,17 @@ export default function PlansView() {
     event.preventDefault();
     if (!unusedDialogPlan) return;
     const amount = parseLocaleNumber(unusedAmount);
-    if (!Number.isFinite(amount) || amount < 0) {
-      setUnusedError("Kullanılmayacak tutar negatif olamaz.");
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setUnusedError("Kullanılmayacak tutar 0'dan büyük olmalı.");
+      return;
+    }
+    const maximum = Number(unusedDialogPlan.unused_amount ?? 0) + Number(
+      unusedDialogPlan.scope_available_amount ?? unusedDialogPlan.available_amount ?? 0
+    );
+    if (amount > maximum + 0.005) {
+      setUnusedError(
+        `Kullanılmayacak tutar kalan kullanılabilir bütçeden fazla olamaz. Maksimum tutar: ${formatCurrency(maximum)}`
+      );
       return;
     }
     unusedMutation.mutate({
@@ -906,7 +963,7 @@ export default function PlansView() {
     }
   }, [cancelTransferMutation, user?.is_admin]);
 
-  const rows = useMemo(() => {
+  const baseRows = useMemo(() => {
     const mapped =
       plansQuery.data?.map((plan) => ({
         ...plan,
@@ -938,6 +995,22 @@ export default function PlansView() {
       return matchesMonth && matchesDepartment;
     });
   }, [departmentFilter, monthFilter, plansQuery.data]);
+
+  const rows = useMemo(() => {
+    if (activeCard === "actual") return baseRows.filter((row) => Number(row.scope_actual_amount ?? row.actual_amount) > 0);
+    if (activeCard === "unused") return baseRows.filter((row) => Number(row.unused_amount) > 0);
+    if (activeCard === "available") return baseRows.filter((row) => Number(row.scope_available_amount ?? row.available_amount) > 0);
+    return baseRows;
+  }, [activeCard, baseRows]);
+
+  const handleCardFilter = useCallback((card: PlanCardFilter) => {
+    const next = activeCard === card ? "" : card;
+    setActiveCard(next);
+    setPaginationModel((current) => ({ ...current, page: 0 }));
+    const nextParams = new URLSearchParams(searchParams);
+    if (next) nextParams.set("card", next); else nextParams.delete("card");
+    setSearchParams(nextParams);
+  }, [activeCard, searchParams, setSearchParams]);
 
   const budgetFilterOptions = useMemo(
     () =>
@@ -1186,7 +1259,7 @@ export default function PlansView() {
       },
       {
         field: "actual_amount",
-        headerName: "Kapsam Harcaması",
+        headerName: "Harcanan",
         width: 150,
         renderCell: ({ row }) =>
           formatCurrency(Number((row as any).scope_actual_amount ?? (row as any).actual_amount) || 0)
@@ -1198,12 +1271,19 @@ export default function PlansView() {
         renderCell: ({ row }) => {
           const value = Number((row as any).unused_amount) || 0;
           return value > 0 ? (
-            <Chip
-              size="small"
-              color="warning"
-              variant="outlined"
-              label={formatCurrency(value)}
-            />
+            <Stack spacing={0.25} alignItems="flex-start">
+              <Chip size="small" color="warning" variant="outlined" label={formatCurrency(value)} />
+              <Typography variant="caption" color="text.secondary" noWrap>
+                {formatUnusedReason((row as any).unused_reason, "Sebep belirtilmemiş")}
+              </Typography>
+              {(row as any).unused_note ? (
+                <Tooltip title={String((row as any).unused_note)}>
+                  <Typography variant="caption" color="text.secondary" noWrap sx={{ maxWidth: 150 }}>
+                    Not: {String((row as any).unused_note)}
+                  </Typography>
+                </Tooltip>
+              ) : null}
+            </Stack>
           ) : (
             <Typography variant="body2" color="text.secondary">
               -
@@ -1213,7 +1293,7 @@ export default function PlansView() {
       },
       {
         field: "available_amount",
-        headerName: "Kapsam Kalan",
+        headerName: "Kalan Kullanılabilir",
         width: 190,
         renderCell: ({ row }) => {
           const value = Number((row as any).scope_available_amount ?? (row as any).available_amount) || 0;
@@ -1231,62 +1311,30 @@ export default function PlansView() {
       {
         field: "status",
         headerName: "Durum",
-        width: 130,
+        width: 190,
         valueGetter: (_value, row) => {
-          const value = Number((row as any).scope_cancelled_amount ?? (row as any).cancelled_amount) || 0;
-          return value > 0 ? "İptal" : "Aktif";
+          const unused = Number((row as any).unused_amount) || 0;
+          const available = Number((row as any).scope_available_amount ?? (row as any).available_amount) || 0;
+          return unused > 0 && available <= 0.005
+            ? "Kullanılmayacak"
+            : unused > 0
+              ? "Kısmen Kullanılmayacak"
+              : "Aktif";
         },
         renderCell: ({ row }) => {
-          const cancelled = Number((row as any).scope_cancelled_amount ?? (row as any).cancelled_amount) || 0;
+          const unused = Number((row as any).unused_amount) || 0;
+          const available = Number((row as any).scope_available_amount ?? (row as any).available_amount) || 0;
+          const full = unused > 0 && available <= 0.005;
+          const partial = unused > 0 && !full;
           return (
             <Chip
               size="small"
-              label={cancelled > 0 ? "İptal" : "Aktif"}
-              color={cancelled > 0 ? "error" : "success"}
-              variant={cancelled > 0 ? "filled" : "outlined"}
+              label={full ? "Kullanılmayacak" : partial ? "Kısmen Kullanılmayacak" : "Aktif"}
+              color={full ? "default" : partial ? "warning" : "success"}
+              variant={full ? "filled" : "outlined"}
             />
           );
         }
-      },
-      {
-        field: "is_form_prepared",
-        headerName: "Satın alındı",
-        width: 140,
-        valueGetter: (_value, row) => {
-          const r = row as any;
-          return Boolean(r?.is_form_prepared);
-        },
-        renderCell: ({ row }) => {
-          const prepared = Boolean((row as any)?.is_form_prepared);
-          return (
-            <Chip
-              size="small"
-              label={prepared ? "Evet" : "Hayır"}
-              color={prepared ? "success" : "default"}
-              variant={prepared ? "filled" : "outlined"}
-            />
-          );
-        },
-      },
-      {
-        field: "purchase_requested",
-        headerName: "Talep Oluşturuldu",
-        width: 170,
-        valueGetter: (_value, row) => {
-          const r = row as any;
-          return Boolean(r?.purchase_requested);
-        },
-        renderCell: ({ row }) => {
-          const requested = Boolean((row as any)?.purchase_requested);
-          return (
-            <Chip
-              size="small"
-              label={requested ? "Evet" : "Hayır"}
-              color={requested ? "success" : "default"}
-              variant={requested ? "filled" : "outlined"}
-            />
-          );
-        },
       },
       {
         field: "actions",
@@ -1328,6 +1376,20 @@ export default function PlansView() {
                     Geri Al
                   </Button>
                 ) : null}
+                {Boolean(row.purchase_requested || row.is_form_prepared) ? (
+                  <Tooltip title="Talep oluşturuldu işaretini geri al">
+                    <span>
+                      <IconButton
+                        size="small"
+                        color="primary"
+                        onClick={() => setPurchaseRevertPlan(row)}
+                        disabled={!canManagePlans || purchaseRevertMutation.isPending}
+                      >
+                        <UndoOutlinedIcon fontSize="small" />
+                      </IconButton>
+                    </span>
+                  </Tooltip>
+                ) : null}
                 <Tooltip title="Güncelle">
                   <span>
                     <IconButton
@@ -1365,7 +1427,8 @@ export default function PlansView() {
     handleDelete,
     handleEdit,
     handleOpenUnusedDialog,
-    isViewer
+    isViewer,
+    purchaseRevertMutation.isPending
   ]);
 
   const planTableTotals = useMemo(() => {
@@ -1380,7 +1443,7 @@ export default function PlansView() {
         cancelled: number;
       }
     >();
-    rows.forEach((plan) => {
+    baseRows.forEach((plan) => {
       const key = [
         plan.budget_item_id ?? "none",
         plan.scenario_id ?? "none",
@@ -1416,7 +1479,7 @@ export default function PlansView() {
       },
       { totalBudget: 0, actual: 0, unused: 0, cancelled: 0, available: 0 }
     );
-  }, [rows]);
+  }, [baseRows]);
 
   const transferAvailable = transferAvailableQuery.data;
   const recentTransfers = transfersQuery.data?.slice(0, 6) ?? [];
@@ -1432,6 +1495,11 @@ export default function PlansView() {
     setDepartmentFilter("");
     setBudgetItemId(null);
     setCapexOpex("");
+    setActiveCard("");
+    setPaginationModel((current) => ({ ...current, page: 0 }));
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("card");
+    setSearchParams(nextParams, { replace: true });
     setFormBudgetItemId(null);
     setFormBudgetItemText("");
     setFormDepartment("");
@@ -1607,44 +1675,50 @@ export default function PlansView() {
               <Grid container spacing={1.5} sx={{ mb: 2 }}>
                 {[
                   {
+                    id: "" as PlanCardFilter,
                     label: "Toplam Bütçe",
                     value: formatCurrency(planTableTotals.totalBudget),
                     color: "primary.main"
                   },
                   {
-                    label: "Gerçekleşen",
+                    id: "actual" as PlanCardFilter,
+                    label: "Harcanan",
                     value: formatCurrency(planTableTotals.actual),
                     color: "success.main"
                   },
                   {
+                    id: "unused" as PlanCardFilter,
                     label: "Kullanılmayacak",
                     value: formatCurrency(planTableTotals.unused),
                     color: "warning.main"
                   },
                   {
+                    id: "available" as PlanCardFilter,
                     label: "Kalan Kullanılabilir",
                     value: formatCurrency(planTableTotals.available),
                     color: "text.primary"
                   }
                 ].map((item) => (
                   <Grid item xs={12} sm={6} md={3} key={item.label}>
-                    <Box
-                      sx={{
-                        border: "1px solid",
-                        borderColor: "divider",
-                        borderRadius: 1,
-                        bgcolor: "background.default",
-                        p: 1.25,
-                        minHeight: 72
-                      }}
-                    >
-                      <Typography variant="caption" color="text.secondary">
-                        {item.label}
-                      </Typography>
-                      <Typography variant="subtitle1" fontWeight={700} color={item.color}>
-                        {item.value}
-                      </Typography>
-                    </Box>
+                    <CardActionArea onClick={() => handleCardFilter(item.id)} sx={{ borderRadius: 1 }}>
+                      <Box
+                        sx={{
+                          border: "1px solid",
+                          borderColor: activeCard === item.id ? "primary.main" : "divider",
+                          borderRadius: 1,
+                          bgcolor: activeCard === item.id ? "action.selected" : "background.default",
+                          p: 1.25,
+                          minHeight: 72
+                        }}
+                      >
+                        <Typography variant="caption" color="text.secondary">
+                          {item.label}
+                        </Typography>
+                        <Typography variant="subtitle1" fontWeight={700} color={item.color}>
+                          {item.value}
+                        </Typography>
+                      </Box>
+                    </CardActionArea>
                   </Grid>
                 ))}
               </Grid>
@@ -1656,12 +1730,11 @@ export default function PlansView() {
                   loading={plansQuery.isFetching}
                   getRowId={(row) => row.id ?? `${row.year}-${row.month}-${row.budget_item_id}`}
                   disableRowSelectionOnClick
-                  initialState={{
-                    pagination: { paginationModel: { pageSize: 12, page: 0 } }
-                  }}
+                  paginationModel={paginationModel}
+                  onPaginationModelChange={setPaginationModel}
                   pageSizeOptions={[12, 20, 30, 50, 100]}
                   sx={{
-                    minWidth: 2730,
+                    minWidth: 2200,
                     border: "none",
                     "& .MuiDataGrid-main": {
                       overflowX: "auto"
@@ -1927,6 +2000,41 @@ export default function PlansView() {
                     required
                   />
                 </Grid>
+                {editingPlan && Number(editingPlan.unused_amount ?? 0) > 0 && (
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      select
+                      label="Kullanılmayacak Sebebi"
+                      value={formUnusedReason}
+                      onChange={(event) => setFormUnusedReason(event.target.value)}
+                      helperText={!formUnusedReason ? "Sebep belirtilmemiş" : undefined}
+                      fullWidth
+                    >
+                      <MenuItem value="">
+                        <em>Sebep belirtilmemiş</em>
+                      </MenuItem>
+                      {UNUSED_REASON_OPTIONS.map((option) => (
+                        <MenuItem key={option.value} value={option.value}>
+                          {option.label}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                  </Grid>
+                )}
+                {editingPlan && Number(editingPlan.unused_amount ?? 0) > 0 && (
+                  <Grid item xs={12} md={8}>
+                    <TextField
+                      label="Kullanılmayacak Notu"
+                      value={formUnusedNote}
+                      onChange={(event) => setFormUnusedNote(event.target.value)}
+                      multiline
+                      minRows={2}
+                      inputProps={{ maxLength: 500 }}
+                      helperText={`${formUnusedNote.length}/500 · İsteğe bağlı açıklama ekleyebilirsiniz`}
+                      fullWidth
+                    />
+                  </Grid>
+                )}
                 {!editingPlan && (
                   <Grid item xs={12} md={4}>
                     <TextField
@@ -1961,12 +2069,50 @@ export default function PlansView() {
         </form>
       </Dialog>
       <Dialog
-        open={Boolean(unusedDialogPlan)}
+        open={Boolean(purchaseRevertPlan)}
+        onClose={() => {
+          if (!purchaseRevertMutation.isPending) setPurchaseRevertPlan(null);
+        }}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>Talep durumu geri alınsın mı?</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Bu bütçe kalemi tekrar Satın Alma Bekleyen durumuna alınacaktır. Harcama ve fatura
+            kayıtları etkilenmeyecektir.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => setPurchaseRevertPlan(null)}
+            disabled={purchaseRevertMutation.isPending}
+          >
+            Vazgeç
+          </Button>
+          <Button
+            variant="contained"
+            onClick={() => {
+              if (purchaseRevertPlan) purchaseRevertMutation.mutate(purchaseRevertPlan.id);
+            }}
+            disabled={!purchaseRevertPlan || purchaseRevertMutation.isPending}
+          >
+            Talebi Geri Al
+          </Button>
+        </DialogActions>
+      </Dialog>
+      <UnusedBudgetDialog
+        planId={unusedDialogPlan?.id ?? null}
+        onClose={() => setUnusedDialogPlan(null)}
+        onSuccess={(message) => setToast({ message, severity: "success" })}
+      />
+      <Dialog
+        open={false}
         onClose={() => setUnusedDialogPlan(null)}
         fullWidth
         maxWidth="sm"
       >
-        <DialogTitle>Kalanı Kullanılmayacak İşaretle</DialogTitle>
+        <DialogTitle>Kullanılmayacak Tutar</DialogTitle>
         <form onSubmit={handleUnusedSubmit}>
           <DialogContent sx={{ pt: 2 }}>
             <Stack spacing={2}>
@@ -2030,6 +2176,19 @@ export default function PlansView() {
                 fullWidth
                 helperText="Varsayılan olarak kalan kullanılabilir bütçe gelir; daha düşük tutar girebilirsiniz."
               />
+              <Button
+                variant="outlined"
+                onClick={() => {
+                  const maximum = Number(unusedDialogPlan?.unused_amount ?? 0) + Number(
+                    unusedDialogPlan?.scope_available_amount ?? unusedDialogPlan?.available_amount ?? 0
+                  );
+                  setUnusedAmount(String(maximum));
+                  setUnusedError(null);
+                }}
+                sx={{ alignSelf: "flex-start" }}
+              >
+                Tamamı
+              </Button>
               <TextField
                 select
                 label="Sebep"

@@ -1,4 +1,5 @@
 from datetime import datetime
+import logging
 import re
 import unicodedata
 
@@ -30,10 +31,17 @@ from app.schemas import (
     PlanEntryRead,
     PlanEntryUpdate,
     PlanUnusedUpdate,
+    PlanUnusedApply,
+    PlanUnusedOptionsRead,
 )
 from app.services.related_records import count_related_file_records, delete_related_file_records
+from app.services.budget_availability import calculate_budget_availability
 
 router = APIRouter(prefix="/plans", tags=["Plans"])
+logger = logging.getLogger(__name__)
+
+PlanScopeKey = tuple[int, int, int, int]
+PlanScopeTotals = dict[str, float]
 
 
 def _normalize_capex_opex(value: str | None) -> str | None:
@@ -246,14 +254,232 @@ def _available_budget_for_scope(
 ) -> BudgetAvailableRead:
     _, _, _, revised = _revised_plan_amount(session, budget_item_id, year, month, scenario_id)
     actual = _actual_amount_for_scope(session, budget_item_id, year, month, scenario_id)
-    cancelled = _cancelled_amount_for_scope(session, budget_item_id, year, month, scenario_id)
     unused = _unused_amount_for_scope(session, budget_item_id, year, month, scenario_id)
+    availability = calculate_budget_availability(revised, actual, unused)
     return BudgetAvailableRead(
-        revised_amount=revised,
-        actual_amount=actual,
-        unused_amount=unused,
-        available_amount=revised - actual - unused - cancelled,
+        revised_amount=availability.planned_amount,
+        actual_amount=availability.valid_expense_total,
+        unused_amount=availability.unused_amount,
+        available_amount=availability.available_amount,
     )
+
+
+def _scope_key(
+    budget_item_id: int,
+    year: int,
+    month: int,
+    scenario_id: int,
+) -> PlanScopeKey:
+    return (int(budget_item_id), int(year), int(month), int(scenario_id))
+
+
+def _scope_key_from_row(row: dict) -> PlanScopeKey:
+    return _scope_key(
+        row.get("budget_item_id"),
+        row.get("year"),
+        row.get("month"),
+        row.get("scenario_id"),
+    )
+
+
+def _empty_scope_totals() -> PlanScopeTotals:
+    return {
+        "original": 0.0,
+        "transfer_in": 0.0,
+        "transfer_out": 0.0,
+        "actual": 0.0,
+        "cancelled": 0.0,
+        "unused": 0.0,
+    }
+
+
+def _collect_plan_scope_totals(session: Session, rows: list) -> dict[PlanScopeKey, PlanScopeTotals]:
+    keys = {_scope_key_from_row(row._mapping) for row in rows}
+    if not keys:
+        return {}
+
+    totals = {key: _empty_scope_totals() for key in keys}
+    budget_item_ids = sorted({key[0] for key in keys})
+    years = sorted({key[1] for key in keys})
+    months = sorted({key[2] for key in keys})
+    scenario_ids = sorted({key[3] for key in keys})
+
+    plan_amount_rows = session.exec(
+        select(
+            PlanEntry.budget_item_id,
+            PlanEntry.year,
+            PlanEntry.month,
+            PlanEntry.scenario_id,
+            func.coalesce(func.sum(PlanEntry.amount), 0).label("amount"),
+        )
+        .where(PlanEntry.budget_item_id.in_(budget_item_ids))
+        .where(PlanEntry.year.in_(years))
+        .where(PlanEntry.month.in_(months))
+        .where(PlanEntry.scenario_id.in_(scenario_ids))
+        .group_by(
+            PlanEntry.budget_item_id,
+            PlanEntry.year,
+            PlanEntry.month,
+            PlanEntry.scenario_id,
+        )
+    ).all()
+    for row in plan_amount_rows:
+        key = _scope_key(row.budget_item_id, row.year, row.month, row.scenario_id)
+        if key in totals:
+            totals[key]["original"] = float(row.amount or 0)
+
+    unused_rows = session.exec(
+        select(
+            PlanEntry.budget_item_id,
+            PlanEntry.year,
+            PlanEntry.month,
+            PlanEntry.scenario_id,
+            func.coalesce(func.sum(PlanEntry.unused_amount), 0).label("amount"),
+        )
+        .where(PlanEntry.budget_item_id.in_(budget_item_ids))
+        .where(PlanEntry.year.in_(years))
+        .where(PlanEntry.month.in_(months))
+        .where(PlanEntry.scenario_id.in_(scenario_ids))
+        .group_by(
+            PlanEntry.budget_item_id,
+            PlanEntry.year,
+            PlanEntry.month,
+            PlanEntry.scenario_id,
+        )
+    ).all()
+    for row in unused_rows:
+        key = _scope_key(row.budget_item_id, row.year, row.month, row.scenario_id)
+        if key in totals:
+            totals[key]["unused"] = float(row.amount or 0)
+
+    incoming_rows = session.exec(
+        select(
+            BudgetTransfer.target_budget_item_id,
+            BudgetTransfer.target_year,
+            BudgetTransfer.target_month,
+            BudgetTransfer.target_scenario_id,
+            func.coalesce(func.sum(BudgetTransfer.amount), 0).label("amount"),
+        )
+        .where(BudgetTransfer.target_budget_item_id.in_(budget_item_ids))
+        .where(BudgetTransfer.target_year.in_(years))
+        .where(BudgetTransfer.target_month.in_(months))
+        .where(BudgetTransfer.target_scenario_id.in_(scenario_ids))
+        .where(BudgetTransfer.is_cancelled.is_(False))
+        .group_by(
+            BudgetTransfer.target_budget_item_id,
+            BudgetTransfer.target_year,
+            BudgetTransfer.target_month,
+            BudgetTransfer.target_scenario_id,
+        )
+    ).all()
+    for row in incoming_rows:
+        key = _scope_key(
+            row.target_budget_item_id,
+            row.target_year,
+            row.target_month,
+            row.target_scenario_id,
+        )
+        if key in totals:
+            totals[key]["transfer_in"] = float(row.amount or 0)
+
+    outgoing_rows = session.exec(
+        select(
+            BudgetTransfer.source_budget_item_id,
+            BudgetTransfer.source_year,
+            BudgetTransfer.source_month,
+            BudgetTransfer.source_scenario_id,
+            func.coalesce(func.sum(BudgetTransfer.amount), 0).label("amount"),
+        )
+        .where(BudgetTransfer.source_budget_item_id.in_(budget_item_ids))
+        .where(BudgetTransfer.source_year.in_(years))
+        .where(BudgetTransfer.source_month.in_(months))
+        .where(BudgetTransfer.source_scenario_id.in_(scenario_ids))
+        .where(BudgetTransfer.is_cancelled.is_(False))
+        .group_by(
+            BudgetTransfer.source_budget_item_id,
+            BudgetTransfer.source_year,
+            BudgetTransfer.source_month,
+            BudgetTransfer.source_scenario_id,
+        )
+    ).all()
+    for row in outgoing_rows:
+        key = _scope_key(
+            row.source_budget_item_id,
+            row.source_year,
+            row.source_month,
+            row.source_scenario_id,
+        )
+        if key in totals:
+            totals[key]["transfer_out"] = float(row.amount or 0)
+
+    allocated_rows = session.exec(
+        select(
+            ExpenseAllocation.budget_item_id,
+            ExpenseAllocation.year,
+            ExpenseAllocation.month,
+            ExpenseAllocation.scenario_id,
+            Expense.status,
+            func.coalesce(func.sum(ExpenseAllocation.allocated_amount), 0).label("amount"),
+        )
+        .select_from(ExpenseAllocation)
+        .join(Expense, Expense.id == ExpenseAllocation.expense_id)
+        .where(ExpenseAllocation.budget_item_id.in_(budget_item_ids))
+        .where(ExpenseAllocation.year.in_(years))
+        .where(ExpenseAllocation.month.in_(months))
+        .where(ExpenseAllocation.scenario_id.in_(scenario_ids))
+        .where(Expense.status.in_([ExpenseStatus.RECORDED, ExpenseStatus.CANCELLED]))
+        .where(Expense.is_out_of_budget.is_(False))
+        .group_by(
+            ExpenseAllocation.budget_item_id,
+            ExpenseAllocation.year,
+            ExpenseAllocation.month,
+            ExpenseAllocation.scenario_id,
+            Expense.status,
+        )
+    ).all()
+    for row in allocated_rows:
+        key = _scope_key(row.budget_item_id, row.year, row.month, row.scenario_id)
+        if key not in totals:
+            continue
+        total_key = "cancelled" if row.status == ExpenseStatus.CANCELLED else "actual"
+        totals[key][total_key] += float(row.amount or 0)
+
+    expense_year = func.extract("year", Expense.expense_date)
+    expense_month = func.extract("month", Expense.expense_date)
+    fallback_rows = session.exec(
+        select(
+            Expense.budget_item_id,
+            expense_year.label("year"),
+            expense_month.label("month"),
+            Expense.scenario_id,
+            Expense.status,
+            func.coalesce(func.sum(Expense.amount), 0).label("amount"),
+        )
+        .where(Expense.budget_item_id.in_(budget_item_ids))
+        .where(Expense.scenario_id.in_(scenario_ids))
+        .where(expense_year.in_(years))
+        .where(expense_month.in_(months))
+        .where(Expense.status.in_([ExpenseStatus.RECORDED, ExpenseStatus.CANCELLED]))
+        .where(Expense.is_out_of_budget.is_(False))
+        .where(~exists().where(ExpenseAllocation.expense_id == Expense.id))
+        .group_by(
+            Expense.budget_item_id,
+            expense_year,
+            expense_month,
+            Expense.scenario_id,
+            Expense.status,
+        )
+    ).all()
+    for row in fallback_rows:
+        if row.budget_item_id is None or row.scenario_id is None:
+            continue
+        key = _scope_key(row.budget_item_id, row.year, row.month, row.scenario_id)
+        if key not in totals:
+            continue
+        total_key = "cancelled" if row.status == ExpenseStatus.CANCELLED else "actual"
+        totals[key][total_key] += float(row.amount or 0)
+
+    return totals
 
 
 def _plan_read_query(capex_filter: str | None):
@@ -285,6 +511,7 @@ def _plan_read_query(capex_filter: str | None):
             func.coalesce(PurchaseFormStatusExt.is_form_prepared, False).label("is_form_prepared"),
             PlanEntry.purchase_requested,
             PlanEntry.purchase_requested_at,
+            PlanEntry.purchase_requested_by,
             PlanEntry.unused_amount,
             PlanEntry.unused_reason,
             PlanEntry.unused_note,
@@ -318,48 +545,61 @@ def _plan_read_query(capex_filter: str | None):
     return query
 
 
-def _build_plan_read(row: dict, session: Session) -> PlanEntryRead:
+def _build_plan_read(
+    row: dict,
+    session: Session,
+    scope_totals_by_key: dict[PlanScopeKey, PlanScopeTotals] | None = None,
+) -> PlanEntryRead:
     budget_code = row.get("plan_budget_code") or row.get("budget_code")
     budget_name = row.get("budget_name") or budget_code
     capex_value = row.get("capex_opex") or row.get("map_capex_opex")
     asset_value = row.get("asset_type") or row.get("map_nitelik")
     amount = float(row.get("amount") or 0)
-    _original_amount, transfer_in, transfer_out, scope_revised_amount = _revised_plan_amount(
-        session,
-        row.get("budget_item_id"),
-        row.get("year"),
-        row.get("month"),
-        row.get("scenario_id"),
-    )
-    actual_amount = _actual_amount_for_scope(
-        session,
-        row.get("budget_item_id"),
-        row.get("year"),
-        row.get("month"),
-        row.get("scenario_id"),
-    )
-    scope_cancelled_amount = _cancelled_amount_for_scope(
-        session,
-        row.get("budget_item_id"),
-        row.get("year"),
-        row.get("month"),
-        row.get("scenario_id"),
-    )
-    scope_unused_amount = _unused_amount_for_scope(
-        session,
-        row.get("budget_item_id"),
-        row.get("year"),
-        row.get("month"),
-        row.get("scenario_id"),
-    )
+    if scope_totals_by_key is not None:
+        scope_totals = scope_totals_by_key.get(_scope_key_from_row(row), _empty_scope_totals())
+        transfer_in = scope_totals["transfer_in"]
+        transfer_out = scope_totals["transfer_out"]
+        scope_revised_amount = scope_totals["original"] + transfer_in - transfer_out
+        actual_amount = scope_totals["actual"]
+        scope_cancelled_amount = scope_totals["cancelled"]
+        scope_unused_amount = scope_totals["unused"]
+    else:
+        _original_amount, transfer_in, transfer_out, scope_revised_amount = _revised_plan_amount(
+            session,
+            row.get("budget_item_id"),
+            row.get("year"),
+            row.get("month"),
+            row.get("scenario_id"),
+        )
+        actual_amount = _actual_amount_for_scope(
+            session,
+            row.get("budget_item_id"),
+            row.get("year"),
+            row.get("month"),
+            row.get("scenario_id"),
+        )
+        scope_cancelled_amount = _cancelled_amount_for_scope(
+            session,
+            row.get("budget_item_id"),
+            row.get("year"),
+            row.get("month"),
+            row.get("scenario_id"),
+        )
+        scope_unused_amount = _unused_amount_for_scope(
+            session,
+            row.get("budget_item_id"),
+            row.get("year"),
+            row.get("month"),
+            row.get("scenario_id"),
+        )
     row_unused_amount = float(row.get("unused_amount") or 0)
     revised_amount = amount + transfer_in - transfer_out
-    scope_available_amount = (
-        scope_revised_amount
-        - actual_amount
-        - scope_unused_amount
-        - scope_cancelled_amount
-    )
+    scope_available_amount = calculate_budget_availability(
+        scope_revised_amount, actual_amount, scope_unused_amount
+    ).available_amount
+    row_available_amount = calculate_budget_availability(
+        revised_amount, actual_amount, row_unused_amount
+    ).available_amount
     return PlanEntryRead(
         id=row.get("id"),
         year=row.get("year"),
@@ -382,7 +622,7 @@ def _build_plan_read(row: dict, session: Session) -> PlanEntryRead:
         revised_amount=revised_amount,
         actual_amount=actual_amount,
         unused_amount=row_unused_amount,
-        available_amount=revised_amount - actual_amount - row_unused_amount - scope_cancelled_amount,
+        available_amount=row_available_amount,
         scope_revised_amount=scope_revised_amount,
         scope_actual_amount=actual_amount,
         scope_unused_amount=scope_unused_amount,
@@ -396,6 +636,7 @@ def _build_plan_read(row: dict, session: Session) -> PlanEntryRead:
         is_form_prepared=row.get("is_form_prepared") or False,
         purchase_requested=row.get("purchase_requested") or False,
         purchase_requested_at=row.get("purchase_requested_at"),
+        purchase_requested_by=row.get("purchase_requested_by"),
     )
 
 
@@ -431,7 +672,8 @@ def list_plans(
     if department is not None:
         query = query.where(PlanEntry.department == department)
     rows = session.exec(query).all()
-    return [_build_plan_read(row._mapping, session) for row in rows]
+    scope_totals_by_key = _collect_plan_scope_totals(session, rows)
+    return [_build_plan_read(row._mapping, session, scope_totals_by_key) for row in rows]
 
 
 @router.get("/aggregate", response_model=list[PlanAggregateRead])
@@ -895,6 +1137,127 @@ def create_manual_plan_entry(
     return _fetch_plan_read(session, plan.id)
 
 
+def _remaining_plan_scopes(session: Session, plan: PlanEntry) -> list[tuple[PlanEntry, BudgetAvailableRead]]:
+    rows = session.exec(
+        select(PlanEntry)
+        .where(PlanEntry.budget_item_id == plan.budget_item_id)
+        .where(PlanEntry.scenario_id == plan.scenario_id)
+        .order_by(PlanEntry.year, PlanEntry.month, PlanEntry.id)
+    ).all()
+    first_by_scope: dict[tuple[int, int], PlanEntry] = {}
+    for row in rows:
+        if (row.year, row.month) < (plan.year, plan.month):
+            continue
+        first_by_scope.setdefault((row.year, row.month), row)
+    return [
+        (
+            row,
+            _available_budget_for_scope(
+                session, row.budget_item_id, row.year, row.month, row.scenario_id
+            ),
+        )
+        for row in first_by_scope.values()
+    ]
+
+
+@router.get("/{plan_id}/unused-options", response_model=PlanUnusedOptionsRead)
+def get_plan_unused_options(
+    plan_id: int,
+    session: Session = Depends(get_db_session),
+    _: User = Depends(get_current_user),
+) -> PlanUnusedOptionsRead:
+    plan = session.get(PlanEntry, plan_id)
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    scopes = _remaining_plan_scopes(session, plan)
+    current = next(
+        summary for row, summary in scopes if row.year == plan.year and row.month == plan.month
+    )
+    budget_item = session.get(BudgetItem, plan.budget_item_id)
+    return PlanUnusedOptionsRead(
+        plan_id=plan.id,
+        budget_name=(budget_item.name if budget_item else plan.budget_code),
+        total_budget=round(sum(item.revised_amount for _, item in scopes), 2),
+        spent_amount=round(sum(item.actual_amount for _, item in scopes), 2),
+        unused_amount=round(sum(item.unused_amount for _, item in scopes), 2),
+        current_month_available=current.available_amount,
+        total_remaining_available=round(sum(item.available_amount for _, item in scopes), 2),
+        unused_reason=plan.unused_reason,
+        unused_note=plan.unused_note,
+    )
+
+
+@router.post("/{plan_id}/unused-apply")
+def apply_plan_unused_budget(
+    plan_id: int,
+    payload: PlanUnusedApply,
+    session: Session = Depends(get_db_session),
+    _: User = Depends(get_admin_user),
+):
+    plan = session.get(PlanEntry, plan_id)
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    if payload.mode == "reason_only":
+        if float(plan.unused_amount or 0) <= 0:
+            raise HTTPException(status_code=400, detail="Düzenlenecek kullanılmayacak tutarı bulunamadı.")
+        plan.unused_reason = payload.reason
+        plan.unused_note = payload.note
+        plan.unused_updated_at = datetime.utcnow()
+        plan.updated_at = datetime.utcnow()
+        session.add(plan)
+        session.commit()
+        return {"detail": "Kullanılmayacak sebebi güncellendi.", "applied_amount": 0.0}
+    scopes = _remaining_plan_scopes(session, plan)
+    current_row, current = next(
+        pair for pair in scopes if pair[0].year == plan.year and pair[0].month == plan.month
+    )
+    if payload.mode == "current_month":
+        allocations = [(current_row, current.available_amount)]
+    elif payload.mode == "all_remaining":
+        allocations = [(row, summary.available_amount) for row, summary in scopes]
+    else:
+        requested = round(float(payload.amount or 0), 2)
+        if requested <= 0:
+            raise HTTPException(status_code=400, detail="Kullanılmayacak tutar 0'dan büyük olmalı.")
+        if requested > current.available_amount + 0.005:
+            logger.warning(
+                "Kullanılmayacak tutar validasyonu başarısız",
+                extra={
+                    "plan_id": plan_id,
+                    "planned_amount": current.revised_amount,
+                    "valid_expense_total": current.actual_amount,
+                    "existing_unused_amount": current.unused_amount,
+                    "calculated_available_amount": current.available_amount,
+                    "requested_unused_amount": requested,
+                },
+            )
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Kullanılmayacak tutar kalan kullanılabilir bütçeden fazla olamaz. "
+                    f"Maksimum tutar: ${current.available_amount:,.2f}"
+                ),
+            )
+        allocations = [(current_row, requested)]
+    now = datetime.utcnow()
+    applied = 0.0
+    for row, amount in allocations:
+        amount = round(float(amount or 0), 2)
+        if amount <= 0:
+            continue
+        row.unused_amount = round(float(row.unused_amount or 0) + amount, 2)
+        row.unused_reason = _clean_text(payload.reason) or row.unused_reason
+        row.unused_note = _clean_text(payload.note) or row.unused_note
+        row.unused_updated_at = now
+        row.updated_at = now
+        session.add(row)
+        applied += amount
+    if applied <= 0:
+        raise HTTPException(status_code=400, detail="Kullanılabilir bütçe bulunamadı.")
+    session.commit()
+    return {"detail": "Kullanılmayacak bütçe kaydedildi.", "applied_amount": round(applied, 2)}
+
+
 @router.post("/{plan_id}/unused", response_model=PlanEntryRead)
 @router.post("/{plan_id}/unused/", response_model=PlanEntryRead, include_in_schema=False)
 def mark_plan_unused_budget(
@@ -922,13 +1285,6 @@ def mark_plan_unused_budget(
         plan.month,
         plan.scenario_id,
     )
-    cancelled = _cancelled_amount_for_scope(
-        session,
-        plan.budget_item_id,
-        plan.year,
-        plan.month,
-        plan.scenario_id,
-    )
     other_unused = _unused_amount_for_scope(
         session,
         plan.budget_item_id,
@@ -937,16 +1293,29 @@ def mark_plan_unused_budget(
         plan.scenario_id,
         exclude_plan_id=plan.id,
     )
-    max_unused = max(
-        float(revised or 0) - float(actual or 0) - float(cancelled or 0) - other_unused,
-        0.0,
-    )
+    max_unused = calculate_budget_availability(revised, actual, other_unused).available_amount
+    if amount <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Kullanılmayacak tutar 0'dan büyük olmalı.",
+        )
     if amount > max_unused + 0.005:
+        logger.warning(
+            "Kullanılmayacak tutar validasyonu başarısız",
+            extra={
+                "plan_id": plan_id,
+                "planned_amount": float(revised or 0),
+                "valid_expense_total": float(actual or 0),
+                "existing_unused_amount": float(other_unused or 0),
+                "calculated_available_amount": max_unused,
+                "requested_unused_amount": amount,
+            },
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
                 "Kullanılmayacak tutar kalan kullanılabilir bütçeden fazla olamaz. "
-                f"Maksimum tutar: {max_unused:.2f}"
+                f"Maksimum tutar: ${max_unused:,.2f}"
             ),
         )
 
@@ -994,6 +1363,14 @@ def update_plan_entry(
     if not plan:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan not found")
     update_data = plan_in.dict(exclude_unset=True)
+    if (
+        any(update_data.get(field) is not None for field in ("unused_reason", "unused_note"))
+        and float(plan.unused_amount or 0) <= 0
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Kullanılmayacak sebebi yalnızca kullanılmayacak tutarı olan planlarda güncellenebilir.",
+        )
     if "budget_item_id" in update_data:
         budget_item = session.get(BudgetItem, update_data["budget_item_id"])
         if not budget_item:

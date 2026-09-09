@@ -47,6 +47,7 @@ import {
 } from "recharts";
 import { useNavigate } from "react-router-dom";
 import * as XLSX from "xlsx";
+import { formatUnusedReason } from "../../utils/unusedReason";
 
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import usePersistentState from "../../hooks/usePersistentState";
@@ -60,6 +61,7 @@ import WarningAmberOutlinedIcon from "@mui/icons-material/WarningAmberOutlined";
 import TaskAltIcon from "@mui/icons-material/TaskAlt";
 import RadioButtonUncheckedIcon from "@mui/icons-material/RadioButtonUnchecked";
 import FileDownloadOutlinedIcon from "@mui/icons-material/FileDownloadOutlined";
+import PendingActionsOutlinedIcon from "@mui/icons-material/PendingActionsOutlined";
 import { SummaryCard } from "./SummaryCard";
 import {
   COLOR_ACTUAL,
@@ -979,7 +981,8 @@ export default function DashboardView() {
         params: {
           year: debouncedFilters.year,
           scenario_id: debouncedFilters.scenarioId || undefined
-        }
+        },
+        suppressGlobalError: true
       });
       return data ?? [];
     }
@@ -989,7 +992,7 @@ export default function DashboardView() {
     let isMounted = true;
 
     const fetchWarrantyAlerts = async () => {
-      const { data } = await client.get("/warranty-items");
+      const { data } = await client.get("/warranty-items", { suppressGlobalError: true });
       return Array.isArray(data)
         ? data
         : (data as { items?: WarrantyAlertItem[] } | null)?.items ?? [];
@@ -999,6 +1002,7 @@ export default function DashboardView() {
       const today = new Date();
       const [purchaseResult, warrantyResult] = await Promise.allSettled([
         client.get<PurchaseAlertResponse>("/dashboard/purchase-alert", {
+          suppressGlobalError: true,
           params: {
             year: today.getFullYear(),
             month: today.getMonth() + 1
@@ -1016,9 +1020,6 @@ export default function DashboardView() {
 
       setPurchaseAlert(purchaseData);
       setWarrantyAlertItems(normalized);
-      if (purchaseData?.pending && purchaseData.pending > 0) {
-        setIsAlertsDialogOpen(true);
-      }
     };
 
     loadAlerts();
@@ -1098,14 +1099,14 @@ export default function DashboardView() {
       queryClient.invalidateQueries({ queryKey: ["plans"] });
       setPurchaseStatusFeedback({
         message: nextRequested
-          ? "Satın alma talebi işaretlendi."
-          : "Satın alma talebi geri alındı.",
+          ? "Kayıt Talep Oluşturuldu durumuna alındı."
+          : "Kayıt yeniden Bekleyen durumuna alındı.",
         severity: "success"
       });
     } catch (error) {
       console.error(error);
       setPurchaseStatusFeedback({
-        message: "Satın alma talebi güncellenirken hata oluştu.",
+        message: "Satın alma takip durumu güncellenemedi.",
         severity: "error"
       });
     } finally {
@@ -1138,7 +1139,8 @@ export default function DashboardView() {
       }
 
       const { data } = await client.get<RiskyItem[]>("/dashboard/risky-items", {
-        params
+        params,
+        suppressGlobalError: true
       });
 
       return data ?? [];
@@ -1210,7 +1212,8 @@ export default function DashboardView() {
         params.budget_code = selectedBudgetCode;
       }
       const { data } = await client.get<OverBudgetResponse>("/dashboard/overbudget", {
-        params
+        params,
+        suppressGlobalError: true
       });
       return data;
     },
@@ -1242,7 +1245,10 @@ export default function DashboardView() {
       if (debouncedFilters.department) params.department = debouncedFilters.department;
       if (debouncedFilters.capexOpex) params.capex_opex = debouncedFilters.capexOpex;
       if (debouncedFilters.selectedMonthKey) params.month_list = debouncedFilters.selectedMonthKey;
-      const { data } = await client.get<DashboardExpense[]>("/expenses", { params });
+      const { data } = await client.get<DashboardExpense[]>("/expenses", {
+        params,
+        suppressGlobalError: true
+      });
       return data.filter((expense) => Boolean(expense.is_out_of_budget ?? expense.out_of_budget));
     }
   });
@@ -1271,7 +1277,10 @@ export default function DashboardView() {
       if (debouncedFilters.department) params.department = debouncedFilters.department;
       if (debouncedFilters.capexOpex) params.capex_opex = debouncedFilters.capexOpex;
       if (debouncedFilters.selectedMonthKey) params.month_list = debouncedFilters.selectedMonthKey;
-      const { data } = await client.get<DashboardExpense[]>("/expenses", { params });
+      const { data } = await client.get<DashboardExpense[]>("/expenses", {
+        params,
+        suppressGlobalError: true
+      });
       return data.filter((expense) => expense.status === "cancelled" || expense.is_cancelled);
     },
     enabled: Boolean(debouncedFilters.year)
@@ -1338,7 +1347,10 @@ export default function DashboardView() {
       }
       if (debouncedFilters.department) params.department = debouncedFilters.department;
       if (debouncedFilters.capexOpex) params.capex_opex = debouncedFilters.capexOpex;
-      const { data } = await client.get("/dashboard/trend", { params });
+      const { data } = await client.get("/dashboard/trend", {
+        params,
+        suppressGlobalError: true
+      });
       if (import.meta.env.DEV && !hasLoggedTrendResponse.current) {
         console.debug("[Dashboard] Trend response", data);
         hasLoggedTrendResponse.current = true;
@@ -2175,8 +2187,8 @@ export default function DashboardView() {
       Harcama: toSafeNumber(item.actual),
       Kullanılmayacak: toSafeNumber(item.unused_amount ?? item.over),
       "Kalan Kullanılabilir": toSafeNumber(item.available_amount),
-      Sebep: item.reason || "-",
-      Açıklama: item.note || "-",
+      Sebep: formatUnusedReason(item.reason),
+      Not: item.note || "",
       "Güncelleme Tarihi": item.unused_updated_at
         ? new Date(item.unused_updated_at).toLocaleString("tr-TR")
         : "-"
@@ -2388,8 +2400,8 @@ export default function DashboardView() {
         ["Capex/Opex", item.capex_opex || "-"],
         ["Nitelik", item.asset_type || "-"],
         ["Kullanılmayacak Tutar", unusedAmount > 0 ? formatCurrency(unusedAmount) : "-"],
-        ["Sebep", item.reason || "-"],
-        ["Açıklama", item.note || "-"]
+        ["Sebep", formatUnusedReason(item.reason)],
+        ["Not", item.note || "-"]
       ]
     });
   };
@@ -3057,6 +3069,22 @@ export default function DashboardView() {
                   />
                 </Grid>
               ))}
+              <Grid item xs={12} sm={6} md={4}>
+                <SummaryCard
+                  title="Satın Alma Bekleyen"
+                  value={`${purchaseAlert?.pending ?? 0}`}
+                  subtitle="Bu ay bekleyen kayıt"
+                  icon={<PendingActionsOutlinedIcon sx={{ fontSize: 18, color: "common.white" }} />}
+                  iconColor="info.main"
+                  onClick={() =>
+                    navigate(
+                      `/pending-budget-actions?filter=purchase-pending&year=${purchaseAlert?.year ?? new Date().getFullYear()}&month=${
+                        purchaseAlert?.month ?? new Date().getMonth() + 1
+                      }`
+                    )
+                  }
+                />
+              </Grid>
             </Grid>
           </DashboardSectionBoundary>
           <Stack spacing={3}>
@@ -3947,7 +3975,7 @@ export default function DashboardView() {
                         {formatCurrency(toSafeNumber(item.unused_amount ?? item.over))}
                       </TableCell>
                       <TableCell align="right">{formatCurrency(toSafeNumber(item.available_amount))}</TableCell>
-                      <TableCell>{item.reason || "-"}</TableCell>
+                      <TableCell>{formatUnusedReason(item.reason)}</TableCell>
                       <TableCell>{item.note || "-"}</TableCell>
                       <TableCell>
                         {item.unused_updated_at
@@ -4153,7 +4181,16 @@ export default function DashboardView() {
             <Typography variant="body2" color="success.main" fontWeight={700}>
               Bu ay tüm satın alma talepleri tamamlandı (✓)
             </Typography>
-            <Button size="small" onClick={() => setIsAlertsDialogOpen(true)}>
+            <Button
+              size="small"
+              onClick={() =>
+                navigate(
+                  `/pending-budget-actions?filter=purchase-pending&year=${purchaseAlert?.year ?? new Date().getFullYear()}&month=${
+                    purchaseAlert?.month ?? new Date().getMonth() + 1
+                  }`
+                )
+              }
+            >
               Listeyi Gör
             </Button>
           </CardContent>
@@ -4244,7 +4281,7 @@ export default function DashboardView() {
                             size="small"
                             color={item.requested ? "success" : "warning"}
                             icon={item.requested ? <TaskAltIcon /> : <RadioButtonUncheckedIcon />}
-                            label={item.requested ? "Talep oluşturuldu" : "Talep bekliyor"}
+                            label={item.requested ? "Talep Oluşturuldu" : "Bekleyen"}
                           />
                         </TableCell>
                         {!isViewer && (
@@ -4256,7 +4293,7 @@ export default function DashboardView() {
                               disabled={savingPurchaseStatus === item.id}
                               onClick={() => void handleSetPurchaseRequested(item)}
                             >
-                              {item.requested ? "Geri Al" : "Talep Oluştur"}
+                              {item.requested ? "Geri Al" : "Talep Oluşturuldu"}
                             </Button>
                           </TableCell>
                         )}

@@ -27,6 +27,7 @@ import {
 import DashboardOutlinedIcon from "@mui/icons-material/DashboardOutlined";
 import TableChartOutlinedIcon from "@mui/icons-material/TableChartOutlined";
 import ReceiptLongOutlinedIcon from "@mui/icons-material/ReceiptLongOutlined";
+import PendingActionsOutlinedIcon from "@mui/icons-material/PendingActionsOutlined";
 import CloudOutlinedIcon from "@mui/icons-material/CloudOutlined";
 import CleaningServicesOutlinedIcon from "@mui/icons-material/CleaningServicesOutlined";
 import PeopleOutlineOutlinedIcon from "@mui/icons-material/PeopleOutlineOutlined";
@@ -93,6 +94,11 @@ export default function AppLayout({ children }: AppLayoutProps) {
         path: "/expenses",
       },
       {
+        label: "Bekleyen İşlemler",
+        icon: <PendingActionsOutlinedIcon />,
+        path: "/pending-budget-actions",
+      },
+      {
         label: "Raporlama",
         icon: <CloudOutlinedIcon />,
         path: "/reports",
@@ -101,18 +107,6 @@ export default function AppLayout({ children }: AppLayoutProps) {
 
     if (user?.is_admin) {
       items.push(
-        {
-          label: "Temizleme Araçları",
-          icon: <CleaningServicesOutlinedIcon />,
-          path: "/cleanup",
-          isSelected: (currentLocation) => currentLocation.pathname === "/cleanup" && !currentLocation.hash,
-          to: "/cleanup",
-        },
-        {
-          label: "Kullanıcı Yönetimi",
-          icon: <PeopleOutlineOutlinedIcon />,
-          path: "/users",
-        },
         {
           label: "Garanti Takibi",
           icon: <VerifiedOutlinedIcon />,
@@ -348,6 +342,19 @@ export default function AppLayout({ children }: AppLayoutProps) {
           anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
           transformOrigin={{ vertical: "top", horizontal: "right" }}
         >
+          {user?.is_admin && (
+            <MenuItem component={Link} to="/users" onClick={() => setUserMenuAnchor(null)}>
+              <PeopleOutlineOutlinedIcon fontSize="small" sx={{ mr: 1 }} />
+              Kullanıcı Yönetimi
+            </MenuItem>
+          )}
+          {user?.is_admin && (
+            <MenuItem component={Link} to="/cleanup" onClick={() => setUserMenuAnchor(null)}>
+              <CleaningServicesOutlinedIcon fontSize="small" sx={{ mr: 1 }} />
+              Temizleme Araçları
+            </MenuItem>
+          )}
+          {user?.is_admin && <Divider />}
           {!isViewer && (
             <MenuItem
               onClick={() => {

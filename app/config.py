@@ -23,10 +23,11 @@ class Settings(BaseSettings):
             "http://localhost:5173",
             "http://127.0.0.1:5173",
             "http://172.24.2.128:5173",
+            "http://10.10.3.4:5173",
         ],
         env=["CORS_ORIGINS", "ALLOWED_ORIGINS"],
     )
-    cors_allow_credentials: bool = Field(default=False, env="CORS_ALLOW_CREDENTIALS")
+    cors_allow_credentials: bool = Field(default=True, env="CORS_ALLOW_CREDENTIALS")
 
     DEFAULT_ADMIN_EMAIL: str = Field(default="admin@local", env="DEFAULT_ADMIN_EMAIL")
     DEFAULT_ADMIN_PASSWORD: str = Field(default="GucluBirSifre123!", env="DEFAULT_ADMIN_PASSWORD")

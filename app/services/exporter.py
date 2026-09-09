@@ -11,6 +11,7 @@ from sqlmodel import Session, select
 from app.models import BudgetItem, Expense, ExpenseStatus, PlanEntry, PurchaseFormStatusExt, Scenario
 from app.services.analytics import compute_quarterly_summary
 from app.schemas import PurchaseFormPreparedReportItem
+from app.services.unused_reason import unused_reason_label
 
 
 CURRENCY_SYMBOL = "$"
@@ -32,6 +33,8 @@ EXPORT_HEADERS = [
     "out_of_budget",
     "capex_opex",
     "asset_type",
+    "Kullanılmayacak Sebebi",
+    "Not",
 ]
 
 
@@ -93,6 +96,8 @@ def _append_plan_rows(
                 "false",
                 budget_item.map_category if budget_item and budget_item.map_category else "",
                 budget_item.map_attribute if budget_item and budget_item.map_attribute else "",
+                unused_reason_label(plan.unused_reason),
+                plan.unused_note or "",
             ]
         )
 
@@ -135,6 +140,8 @@ def _append_expense_rows(
                 "true" if expense.is_out_of_budget else "false",
                 map_category,
                 map_attribute,
+                "",
+                "",
             ]
         )
 

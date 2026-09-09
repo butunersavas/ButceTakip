@@ -6,8 +6,18 @@ from pydantic import BaseModel, Field, root_validator, validator
 from sqlmodel import SQLModel
 
 from app.models import ExpenseStatus, WarrantyItemType
+from app.services.unused_reason import UNUSED_REASON_ALIASES
 
 PLACEHOLDER_VALUES = {"-", "—"}
+def _normalize_unused_reason(value: str | None, *, required: bool = False) -> str | None:
+    normalized = _normalize_placeholder(value)
+    if normalized is None:
+        if required:
+            raise ValueError("Kullanılmayacak sebebi seçiniz.")
+        return None
+    if normalized not in UNUSED_REASON_ALIASES:
+        raise ValueError("Geçersiz kullanılmayacak sebebi.")
+    return UNUSED_REASON_ALIASES[normalized]
 
 
 def _normalize_placeholder(value: str | None) -> str | None:
@@ -361,16 +371,26 @@ class PlanEntryUpdate(BaseModel):
     scenario_id: Optional[int] = None
     budget_item_id: Optional[int] = None
     department: str | None = Field(default=None, max_length=100)
+    unused_reason: Optional[str] = None
+    unused_note: Optional[str] = Field(default=None, max_length=500)
 
     @validator("department", pre=True)
     def normalize_update_department(cls, value: str | None) -> str | None:  # noqa: D417
+        return _normalize_placeholder(value)
+
+    @validator("unused_reason", pre=True)
+    def normalize_update_unused_reason(cls, value: str | None) -> str | None:  # noqa: D417
+        return _normalize_unused_reason(value)
+
+    @validator("unused_note", pre=True)
+    def normalize_update_unused_note(cls, value: str | None) -> str | None:  # noqa: D417
         return _normalize_placeholder(value)
 
 
 class PlanUnusedUpdate(BaseModel):
     amount: float
     reason: Optional[str] = None
-    note: Optional[str] = None
+    note: Optional[str] = Field(default=None, max_length=500)
     unused_updated_at: Optional[datetime] = None
 
     @validator("amount", pre=True)
@@ -391,13 +411,50 @@ class PlanUnusedUpdate(BaseModel):
                 parsed = float(raw)
             except ValueError as exc:
                 raise ValueError("Amount must be a number") from exc
-        if parsed < 0:
-            raise ValueError("Amount must be non-negative")
+        if parsed <= 0:
+            raise ValueError("Amount must be greater than zero")
         return parsed
 
-    @validator("reason", "note", pre=True)
+    @validator("reason", pre=True)
+    def normalize_reason(cls, value: str | None) -> str:
+        return _normalize_unused_reason(value, required=True)
+
+    @validator("note", pre=True)
     def normalize_unused_text(cls, value: str | None) -> str | None:  # noqa: D417
         return _normalize_placeholder(value)
+
+
+class PlanUnusedApply(BaseModel):
+    mode: Literal["current_month", "all_remaining", "custom", "reason_only"]
+    amount: Optional[float] = None
+    reason: Optional[str] = None
+    note: Optional[str] = Field(default=None, max_length=500)
+
+    @validator("reason", pre=True, always=True)
+    def normalize_required_reason(cls, value: str | None) -> str:
+        return _normalize_unused_reason(value, required=True)
+
+    @validator("amount", pre=True)
+    def normalize_optional_amount(cls, value: float | str | None) -> float | None:
+        if value is None or value == "":
+            return None
+        try:
+            parsed = float(str(value).replace(",", "."))
+        except ValueError as exc:
+            raise ValueError("Amount must be a number") from exc
+        return parsed
+
+
+class PlanUnusedOptionsRead(BaseModel):
+    plan_id: int
+    budget_name: Optional[str] = None
+    total_budget: float
+    spent_amount: float
+    unused_amount: float
+    current_month_available: float
+    total_remaining_available: float
+    unused_reason: Optional[str] = None
+    unused_note: Optional[str] = None
 
 
 class PlanEntryRead(SQLModel, table=False):
@@ -436,6 +493,7 @@ class PlanEntryRead(SQLModel, table=False):
     is_form_prepared: bool = False
     purchase_requested: bool = False
     purchase_requested_at: datetime | None = None
+    purchase_requested_by: str | None = None
 
     class Config:
         orm_mode = True
@@ -571,6 +629,27 @@ class DashboardPurchaseAlertResponse(BaseModel):
     items: list[DashboardPurchaseAlertItem]
 
 
+class PurchasePendingItem(BaseModel):
+    id: int
+    budget_item_id: int
+    scenario_id: int
+    year: int
+    month: int
+    department: str | None = None
+    budget_code: str | None = None
+    budget_name: str | None = None
+    title: str
+    capex_opex: str | None = None
+    nitelik: str | None = None
+    planned_amount: float
+    actual_amount: float = 0
+    remaining_amount: float = 0
+    requested: bool = False
+    status: str
+    requested_at: datetime | None = None
+    requested_by: str | None = None
+
+
 class PurchaseAlertSetRequest(BaseModel):
     requested: bool
 
@@ -680,7 +759,7 @@ class ExpenseUnusedBudgetCreate(BaseModel):
     expense_date: date = Field(alias="date")
     amount: float
     reason: Optional[str] = None
-    note: Optional[str] = None
+    note: Optional[str] = Field(default=None, max_length=500)
 
     @validator("expense_date", pre=True)
     def parse_unused_expense_date(cls, value: date | str) -> date:  # noqa: D417
@@ -716,12 +795,61 @@ class ExpenseUnusedBudgetCreate(BaseModel):
             raise ValueError("Amount must be greater than zero")
         return value
 
-    @validator("reason", "note", pre=True)
+    @validator("reason", pre=True, always=True)
+    def normalize_unused_reason(cls, value: str | None) -> str:
+        return _normalize_unused_reason(value, required=True)
+
+    @validator("note", pre=True)
     def normalize_unused_text(cls, value: str | None) -> str | None:  # noqa: D417
         return _normalize_placeholder(value)
 
     class Config:
         allow_population_by_field_name = True
+
+
+class PendingExpenseItem(BaseModel):
+    plan_id: int
+    budget_item_id: int
+    scenario_id: int
+    year: int
+    month: int
+    department: Optional[str] = None
+    budget_code: Optional[str] = None
+    budget_item: str
+    capex_opex: Optional[str] = None
+    nitelik: Optional[str] = None
+    planned_amount: float
+    expense_total: float
+    remaining_amount: float
+    unused_amount: float = 0
+    pending_step: str
+    pending_step_label: str
+    pending_reason: str
+    pending_reason_label: str
+    pending_actions: list[str] = Field(default_factory=list)
+    pending_action_labels: list[str] = Field(default_factory=list)
+    purchase_request_pending: bool = False
+    purchase_request_created: bool = False
+    expense_missing: bool = False
+    invoice_missing: bool
+    missing_invoice_expense_id: Optional[int] = None
+    description: Optional[str] = None
+
+
+class PendingExpenseResponse(BaseModel):
+    items: list[PendingExpenseItem]
+    total: int
+
+
+class PendingBudgetActionCounts(BaseModel):
+    all: int = 0
+    request_pending: int = 0
+    expense_pending: int = 0
+    invoice_pending: int = 0
+
+
+class PendingBudgetActionResponse(PendingExpenseResponse):
+    counts: PendingBudgetActionCounts
 
 
 class ExpenseUpdate(BaseModel):

@@ -6,7 +6,7 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import Response
-from sqlalchemy import and_, func, or_
+from sqlalchemy import and_, exists, func, or_
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import aliased
 from sqlmodel import Session, select
@@ -32,6 +32,10 @@ from app.schemas import (
     ExpenseRead,
     ExpenseUnusedBudgetCreate,
     ExpenseUpdate,
+    PendingExpenseItem,
+    PendingExpenseResponse,
+    PendingBudgetActionCounts,
+    PendingBudgetActionResponse,
     PlanEntryRead,
 )
 from app.routers.plans import _fetch_plan_read
@@ -41,6 +45,7 @@ from app.services.analytics import (
     compute_budget_scope_statuses,
 )
 from app.services.related_records import count_related_file_records, delete_related_file_records
+from app.services.budget_availability import calculate_budget_availability
 
 router = APIRouter(prefix="/expenses", tags=["Expenses"])
 logger = logging.getLogger(__name__)
@@ -993,6 +998,331 @@ def list_expenses(
     return _build_expense_reads(session, rows, year, scenario_id)
 
 
+def _pending_expense_reason(
+    valid_expenses: list[tuple[int, float, int]],
+) -> tuple[str, str, tuple[int, float, int] | None]:
+    """Classify one plan scope using valid expenses and their invoice attachment counts."""
+
+    if not valid_expenses:
+        return "expense_missing", "Harcama Girilmedi", None
+    missing_invoice = next((expense for expense in valid_expenses if expense[2] <= 0), None)
+    if missing_invoice:
+        return "invoice_missing", "Fatura Eksik", missing_invoice
+    return "", "", None
+
+
+def _pending_step_for(
+    reason: str,
+    *,
+    requested: bool,
+) -> tuple[str, str]:
+    """Return exactly one next step using request -> expense -> invoice priority."""
+
+    if not requested:
+        return "request_pending", "Talep Bekliyor"
+    if reason == "expense_missing":
+        return "expense_pending", "Harcama Bekliyor"
+    if reason == "invoice_missing":
+        return "invoice_pending", "Fatura Bekliyor"
+    return "", ""
+
+
+def _pending_budget_action_counts(items: list[PendingExpenseItem]) -> PendingBudgetActionCounts:
+    pending_items = [item for item in items if _is_pending_budget_action(item)]
+    return PendingBudgetActionCounts(
+        all=len(pending_items),
+        request_pending=sum(item.pending_step == "request_pending" for item in pending_items),
+        expense_pending=sum(item.pending_step == "expense_pending" for item in pending_items),
+        invoice_pending=sum(item.pending_step == "invoice_pending" for item in pending_items),
+    )
+
+
+def _is_pending_budget_action(item: PendingExpenseItem) -> bool:
+    """A row is pending only while it has one recognized next step."""
+
+    return item.pending_step in {"request_pending", "expense_pending", "invoice_pending"}
+
+
+def _filter_pending_budget_actions(
+    items: list[PendingExpenseItem],
+    pending_type: str,
+) -> list[PendingExpenseItem]:
+    if pending_type == "request":
+        return [item for item in items if item.pending_step == "request_pending"]
+    if pending_type == "expense":
+        return [item for item in items if item.pending_step == "expense_pending"]
+    if pending_type == "invoice":
+        return [item for item in items if item.pending_step == "invoice_pending"]
+    return items
+
+
+def _include_pending_expense(
+    reason: str,
+    available_amount: float,
+    *,
+    requested: bool = True,
+) -> bool:
+    if not reason:
+        return not requested
+    return reason == "invoice_missing" or available_amount > 0.005
+
+
+@router.get("/pending", response_model=PendingExpenseResponse)
+@router.get("/pending/", response_model=PendingExpenseResponse, include_in_schema=False)
+def list_pending_expenses(
+    year: int | None = Query(default=None),
+    month: int | None = Query(default=None, ge=1, le=12),
+    department_id: str | None = Query(default=None),
+    pending_reason: str | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    page_size: int | None = Query(default=50, ge=1, le=2000),
+    session: Session = Depends(get_db_session),
+    _: User = Depends(get_current_user),
+) -> PendingExpenseResponse:
+    """Return past/current plan rows with no expense or at least one missing invoice."""
+    today = date.today()
+    normalized_reason = (pending_reason or "").strip().lower()
+    if normalized_reason not in {"", "all", "expense_missing", "invoice_missing"}:
+        raise HTTPException(status_code=400, detail="Geçersiz bekleme nedeni filtresi.")
+
+    prepared_status_exists = exists().where(
+        PurchaseFormStatusExt.budget_code
+        == func.coalesce(func.nullif(PlanEntry.budget_code, ""), BudgetItem.code)
+    ).where(PurchaseFormStatusExt.year == PlanEntry.year).where(
+        PurchaseFormStatusExt.month == PlanEntry.month
+    ).where(PurchaseFormStatusExt.scenario_id == PlanEntry.scenario_id).where(
+        PurchaseFormStatusExt.department == func.coalesce(PlanEntry.department, "")
+    ).where(PurchaseFormStatusExt.is_form_prepared.is_(True))
+
+    plan_query = (
+        select(PlanEntry, BudgetItem, prepared_status_exists.label("purchase_form_prepared"))
+        .join(BudgetItem, BudgetItem.id == PlanEntry.budget_item_id)
+        .where(PlanEntry.amount > 0)
+        .where(
+            or_(
+                PlanEntry.year < today.year,
+                and_(PlanEntry.year == today.year, PlanEntry.month <= today.month),
+            )
+        )
+    )
+    if year is not None:
+        plan_query = plan_query.where(PlanEntry.year == year)
+    if month is not None:
+        plan_query = plan_query.where(PlanEntry.month == month)
+    if department_id:
+        plan_query = plan_query.where(PlanEntry.department == department_id)
+
+    plan_rows = session.exec(plan_query.order_by(PlanEntry.year.desc(), PlanEntry.month.desc())).all()
+    if not plan_rows:
+        return PendingExpenseResponse(items=[], total=0)
+
+    plan_keys = {
+        (plan.budget_item_id, plan.year, plan.month, plan.scenario_id)
+        for plan, _budget_item, _purchase_form_prepared in plan_rows
+    }
+    budget_item_ids = {key[0] for key in plan_keys}
+    scenario_ids = {key[3] for key in plan_keys}
+    years = {key[1] for key in plan_keys}
+    months = {key[2] for key in plan_keys}
+    scope_statuses: dict[BudgetScopeKey, BudgetScopeAggregate] = {}
+    for scope_year in years:
+        scope_statuses.update(
+            compute_budget_scope_statuses(
+                session,
+                year=scope_year,
+                month_range=sorted({key[2] for key in plan_keys if key[1] == scope_year}),
+            )
+        )
+
+    attachment_counts = (
+        select(ExpenseAttachment.expense_id, func.count(ExpenseAttachment.id).label("attachment_count"))
+        .group_by(ExpenseAttachment.expense_id)
+        .subquery()
+    )
+    allocation_rows = session.exec(
+        select(
+            ExpenseAllocation.budget_item_id,
+            ExpenseAllocation.year,
+            ExpenseAllocation.month,
+            ExpenseAllocation.scenario_id,
+            Expense.id,
+            ExpenseAllocation.allocated_amount,
+            func.coalesce(attachment_counts.c.attachment_count, 0),
+        )
+        .join(Expense, Expense.id == ExpenseAllocation.expense_id)
+        .join(attachment_counts, attachment_counts.c.expense_id == Expense.id, isouter=True)
+        .where(Expense.status == ExpenseStatus.RECORDED)
+        .where(Expense.is_out_of_budget.is_(False))
+        .where(ExpenseAllocation.budget_item_id.in_(budget_item_ids))
+        .where(ExpenseAllocation.scenario_id.in_(scenario_ids))
+        .where(ExpenseAllocation.year.in_(years))
+        .where(ExpenseAllocation.month.in_(months))
+    ).all()
+    allocated_expense_ids = {row[4] for row in allocation_rows}
+    expense_year = func.extract("year", Expense.expense_date)
+    expense_month = func.extract("month", Expense.expense_date)
+    fallback_rows = session.exec(
+        select(
+            Expense.budget_item_id,
+            expense_year,
+            expense_month,
+            Expense.scenario_id,
+            Expense.id,
+            Expense.amount,
+            func.coalesce(attachment_counts.c.attachment_count, 0),
+        )
+        .join(attachment_counts, attachment_counts.c.expense_id == Expense.id, isouter=True)
+        .where(Expense.status == ExpenseStatus.RECORDED)
+        .where(Expense.is_out_of_budget.is_(False))
+        .where(Expense.budget_item_id.in_(budget_item_ids))
+        .where(Expense.scenario_id.in_(scenario_ids))
+        .where(expense_year.in_(years))
+        .where(expense_month.in_(months))
+    ).all()
+
+    expenses_by_scope: dict[tuple[int, int, int, int], list[tuple[int, float, int]]] = {}
+    for budget_item_id, row_year, row_month, scenario_id, expense_id, amount, attachment_count in [
+        *allocation_rows,
+        *(row for row in fallback_rows if row[4] not in allocated_expense_ids),
+    ]:
+        key = (int(budget_item_id), int(row_year), int(row_month), int(scenario_id))
+        if key in plan_keys:
+            expenses_by_scope.setdefault(key, []).append(
+                (int(expense_id), float(amount or 0), int(attachment_count or 0))
+            )
+
+    items: list[PendingExpenseItem] = []
+    for plan, budget_item, purchase_form_prepared in plan_rows:
+        key = (plan.budget_item_id, plan.year, plan.month, plan.scenario_id)
+        scope = scope_statuses.get(key)
+        availability = calculate_budget_availability(
+            scope.revised_plan if scope else plan.amount,
+            scope.actual if scope else 0,
+            scope.unused_amount if scope else plan.unused_amount,
+        )
+        valid_expenses = expenses_by_scope.get(key, [])
+        reason, label, missing_invoice = _pending_expense_reason(valid_expenses)
+        requested = bool(plan.purchase_requested or purchase_form_prepared)
+        if not _include_pending_expense(
+            reason,
+            availability.available_amount,
+            requested=requested,
+        ):
+            continue
+        pending_step, pending_step_label = _pending_step_for(reason, requested=requested)
+        expense_missing = reason == "expense_missing"
+        invoice_missing = reason in {"expense_missing", "invoice_missing"}
+        if normalized_reason == "expense_missing" and not expense_missing:
+            continue
+        if normalized_reason == "invoice_missing" and not invoice_missing:
+            continue
+        expense_total = availability.valid_expense_total
+        planned_amount = availability.planned_amount
+        items.append(PendingExpenseItem(
+            plan_id=int(plan.id),
+            budget_item_id=plan.budget_item_id,
+            scenario_id=plan.scenario_id,
+            year=plan.year,
+            month=plan.month,
+            department=plan.department,
+            budget_code=plan.budget_code or budget_item.code,
+            budget_item=budget_item.name,
+            capex_opex=budget_item.map_category,
+            nitelik=budget_item.map_attribute,
+            planned_amount=planned_amount,
+            expense_total=expense_total,
+            remaining_amount=availability.available_amount,
+            unused_amount=availability.unused_amount,
+            pending_step=pending_step,
+            pending_step_label=pending_step_label,
+            pending_reason=reason,
+            pending_reason_label=label,
+            pending_actions=[pending_step],
+            pending_action_labels=[pending_step_label],
+            purchase_request_pending=not requested,
+            purchase_request_created=requested,
+            expense_missing=expense_missing,
+            invoice_missing=invoice_missing,
+            missing_invoice_expense_id=missing_invoice[0] if missing_invoice else None,
+            description=budget_item.description,
+        ))
+
+    total = len(items)
+    if page_size is None:
+        return PendingExpenseResponse(items=items, total=total)
+    start = (page - 1) * page_size
+    return PendingExpenseResponse(items=items[start:start + page_size], total=total)
+
+
+@router.get("/pending-budget-actions", response_model=PendingBudgetActionResponse)
+@router.get(
+    "/pending-budget-actions/",
+    response_model=PendingBudgetActionResponse,
+    include_in_schema=False,
+)
+def list_pending_budget_actions(
+    year: int | None = Query(default=None),
+    month: int | None = Query(default=None, ge=1, le=12),
+    department_id: str | None = Query(default=None),
+    pending_type: str | None = Query(default=None),
+    pending_reason: str | None = Query(default=None),
+    search: str | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=200),
+    session: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+) -> PendingBudgetActionResponse:
+    normalized_type = (pending_type or "all").strip().lower()
+    type_aliases = {
+        "": "all", "all": "all", "request": "request", "request_pending": "request",
+        "request-pending": "request", "purchase": "request", "purchase_pending": "request",
+        "purchase-pending": "request",
+        "created": "all", "purchase_created": "all", "purchase-created": "all",
+        "expense": "expense", "expense_pending": "expense", "invoice": "invoice",
+        "invoice_pending": "invoice", "invoice_missing": "invoice",
+    }
+    if normalized_type not in type_aliases:
+        raise HTTPException(status_code=400, detail="Geçersiz bekleyen işlem filtresi.")
+    normalized_type = type_aliases[normalized_type]
+
+    expense_response = list_pending_expenses(
+        year=year,
+        month=month,
+        department_id=department_id,
+        pending_reason=pending_reason,
+        page=1,
+        page_size=None,
+        session=session,
+        _=current_user,
+    )
+    merged: dict[int, PendingExpenseItem] = {item.plan_id: item.copy(deep=True) for item in expense_response.items}
+
+    all_items = list(merged.values())
+    needle = (search or "").strip().casefold()
+    if needle:
+        all_items = [
+            item for item in all_items
+            if needle in " ".join(
+                filter(None, [item.budget_code, item.budget_item, item.department, item.description])
+            ).casefold()
+        ]
+    normalized_reason = (pending_reason or "").strip().lower()
+    if normalized_reason == "expense_missing":
+        all_items = [item for item in all_items if item.expense_missing]
+    elif normalized_reason == "invoice_missing":
+        all_items = [item for item in all_items if item.invoice_missing]
+    all_items.sort(key=lambda item: (-item.year, -item.month, item.department or "", item.budget_item))
+    pending_items = [item for item in all_items if _is_pending_budget_action(item)]
+    counts = _pending_budget_action_counts(all_items)
+    filtered = _filter_pending_budget_actions(pending_items, normalized_type)
+    start = (page - 1) * page_size
+    return PendingBudgetActionResponse(
+        items=filtered[start:start + page_size],
+        total=len(filtered),
+        counts=counts,
+    )
+
+
 @router.post("/unused-budget", response_model=PlanEntryRead, status_code=201)
 @router.post("/unused-budget/", response_model=PlanEntryRead, status_code=201, include_in_schema=False)
 def create_unused_budget_entry(
@@ -1040,13 +1370,25 @@ def create_unused_budget_entry(
     revised_plan = float(scope.revised_plan if scope else plan.amount or 0)
     actual_amount = float(scope.actual if scope else 0)
     current_unused = float(scope.unused_amount if scope else plan.unused_amount or 0)
-    available_amount = max(revised_plan - actual_amount - current_unused, 0.0)
+    availability = calculate_budget_availability(revised_plan, actual_amount, current_unused)
+    available_amount = availability.available_amount
     if amount > available_amount + 0.005:
+        logger.warning(
+            "Kullanılmayacak tutar validasyonu başarısız",
+            extra={
+                "plan_id": plan.id,
+                "planned_amount": availability.planned_amount,
+                "valid_expense_total": availability.valid_expense_total,
+                "existing_unused_amount": availability.unused_amount,
+                "calculated_available_amount": available_amount,
+                "requested_unused_amount": amount,
+            },
+        )
         raise HTTPException(
             status_code=400,
             detail=(
                 "Kullanılmayacak tutar kalan kullanılabilir bütçeden fazla olamaz. "
-                f"Maksimum tutar: {available_amount:.2f}"
+                f"Maksimum tutar: ${available_amount:,.2f}"
             ),
         )
 

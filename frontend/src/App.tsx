@@ -10,6 +10,7 @@ import CleanupView from "./components/Cleanup/CleanupView";
 import UsersView from "./components/Users/UsersView";
 import DailyExportView from "./components/DailyExport/DailyExportView";
 import WarrantyTrackingView from "./components/WarrantyTracking/WarrantyTrackingView";
+import PendingExpensesView from "./components/Expenses/PendingExpensesView";
 import AppLayout from "./components/layout/AppLayout";
 import { useAuth } from "./context/AuthContext";
 import LoginPage from "./pages/LoginPage";
@@ -69,6 +70,9 @@ export default function App() {
       />
       <Route path="/plans" element={<LayoutRoute><PlansView /></LayoutRoute>} />
       <Route path="/expenses" element={<LayoutRoute><ExpensesView /></LayoutRoute>} />
+      <Route path="/pending-budget-actions" element={<LayoutRoute><PendingExpensesView /></LayoutRoute>} />
+      <Route path="/expenses/pending" element={<Navigate to="/pending-budget-actions?filter=expense" replace />} />
+      <Route path="/purchase-pending" element={<Navigate to="/pending-budget-actions?filter=purchase-pending" replace />} />
       <Route path="/reports" element={<LayoutRoute><ImportExportView /></LayoutRoute>} />
       <Route path="/import-export" element={<Navigate to="/reports" replace />} />
       <Route path="/daily-export" element={<LayoutRoute><DailyExportView /></LayoutRoute>} />

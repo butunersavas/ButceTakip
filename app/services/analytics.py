@@ -166,6 +166,18 @@ class BudgetReconciliationGroup:
     overrun_amount: float
 
 
+def calculate_scoped_overrun(
+    monthly_totals: list[tuple[float, float]], *, monthly_scope: bool
+) -> float:
+    """Apply total-item or positive-month overrun semantics without cross-item offsets."""
+
+    if monthly_scope:
+        return round(sum(max(actual - plan, 0.0) for plan, actual in monthly_totals), 2)
+    total_plan = sum(plan for plan, _ in monthly_totals)
+    total_actual = sum(actual for _, actual in monthly_totals)
+    return round(max(total_actual - total_plan, 0.0), 2)
+
+
 def compute_budget_scope_statuses(
     session: Session,
     *,
@@ -699,6 +711,7 @@ def compute_budget_item_overrun_statuses(
     budget_item_id: int | None = None,
     department: str | None = None,
     capex_opex: str | None = None,
+    monthly_scope: bool = False,
 ) -> list[BudgetItemStatus]:
     """Return overrun rows from the selected scope total, not month-by-month positives."""
     scope_map = compute_budget_scope_statuses(
@@ -726,7 +739,12 @@ def compute_budget_item_overrun_statuses(
     }
 
     statuses: list[BudgetItemStatus] = []
-    for (item_id, item_scenario_id), item_scopes in grouped_scopes.items():
+    status_groups = (
+        [((item_id, scenario_id), [(month, scope)]) for (item_id, _year, month, scenario_id), scope in scope_map.items()]
+        if monthly_scope
+        else list(grouped_scopes.items())
+    )
+    for (item_id, item_scenario_id), item_scopes in status_groups:
         revised_plan = round(
             sum(float(scope.revised_plan or 0) for _, scope in item_scopes), 2
         )
@@ -870,6 +888,7 @@ def _compute_budget_reconciliation_groups(
     budget_item_id: int | None = None,
     department: str | None = None,
     capex_opex: str | None = None,
+    monthly_overrun: bool = False,
 ) -> list[BudgetReconciliationGroup]:
     scope_map = compute_budget_scope_statuses(
         session,
@@ -929,7 +948,13 @@ def _compute_budget_reconciliation_groups(
             0.0,
         )
         realized_amount = min(actual_amount, plan_amount)
-        overrun_amount = max(actual_amount - plan_amount, 0.0)
+        overrun_amount = calculate_scoped_overrun(
+            [
+                (float(scope.revised_plan or 0.0), float(scope.actual or 0.0))
+                for _, scope in scopes
+            ],
+            monthly_scope=monthly_overrun,
+        )
         available_capacity = max(plan_amount - realized_amount, 0.0)
 
         negotiated_amount = min(
@@ -1074,6 +1099,7 @@ def compute_budget_reconciliation_summary(
     budget_item_id: int | None = None,
     department: str | None = None,
     capex_opex: str | None = None,
+    monthly_overrun: bool = False,
 ) -> BudgetReconciliationSummary:
     """Build the dashboard reconciliation from selected-scope totals.
 
@@ -1089,6 +1115,7 @@ def compute_budget_reconciliation_summary(
         budget_item_id=budget_item_id,
         department=department,
         capex_opex=capex_opex,
+        monthly_overrun=monthly_overrun,
     )
     total_plan = sum(group.total_plan_amount for group in groups)
     realized_plan_inside = sum(group.realized_plan_inside_amount for group in groups)

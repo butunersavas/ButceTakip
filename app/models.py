@@ -21,6 +21,7 @@ class WarrantyItemType(str, enum.Enum):
     DEVICE = "DEVICE"
     SERVICE = "SERVICE"
     DOMAIN_SSL = "DOMAIN_SSL"
+    SSL = "SSL"
 
 
 class User(TimestampMixin, SQLModel, table=True):

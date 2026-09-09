@@ -16,7 +16,7 @@ import { useAuth } from "../context/AuthContext";
 
 export default function LoginPage() {
   const { login, loading, error } = useAuth();
-  const [username, setUsername] = useState("admin");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -38,12 +38,14 @@ export default function LoginPage() {
               </Typography>
             </Box>
             {error && <Alert severity="error">{error}</Alert>}
-            <form onSubmit={handleSubmit}>
+            <form onSubmit={handleSubmit} autoComplete="off">
               <Stack spacing={2.5}>
                 <TextField
                   label="Kullanıcı adı"
-                  placeholder="admin"
+                  placeholder="Kullanıcı adınız"
                   type="text"
+                  name="bt-login-username"
+                  autoComplete="off"
                   value={username}
                   required
                   onChange={(event) => setUsername(event.target.value)}
@@ -57,6 +59,8 @@ export default function LoginPage() {
                 <TextField
                   label="Şifre"
                   type="password"
+                  name="bt-login-password"
+                  autoComplete="new-password"
                   value={password}
                   required
                   onChange={(event) => setPassword(event.target.value)}

@@ -53,11 +53,13 @@ import axios from "axios";
 import dayjs from "dayjs";
 import { useLocation } from "react-router-dom";
 import * as XLSX from "xlsx";
+import { formatUnusedReason, UNUSED_REASON_OPTIONS } from "../../utils/unusedReason";
 
 import { API_BASE, authHeaders } from "../../api/client";
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import usePersistentState from "../../hooks/usePersistentState";
 import { useAuth } from "../../context/AuthContext";
+import UnusedBudgetDialog from "../common/UnusedBudgetDialog";
 import { formatBudgetItemLabel, stripBudgetCode } from "../../utils/budgetLabel";
 import OverBudgetDialog, {
   type BudgetStatusCategory,
@@ -158,6 +160,13 @@ interface PlanAggregate {
   month: number;
   total_amount: number;
   scenario_id?: number | null;
+}
+
+interface ExpensePlanOption {
+  id: number;
+  month: number;
+  budget_item_id: number;
+  scenario_id: number;
 }
 
 interface ExpenseAttachment {
@@ -320,6 +329,7 @@ type UnusedBudgetResponse = OverBudgetResponse & {
 };
 
 type ExpensesRouteState = {
+  openCreate?: boolean;
   filter?: string;
   statusFilter?: ExpenseStatusFilter;
   selectedExpenseFilter?: ExpenseSummaryFilter;
@@ -567,13 +577,7 @@ const monthOptions = [
 
 const expensesMonthListboxId = "expenses-month-filter-listbox";
 
-const unusedBudgetReasonOptions = [
-  "Alımdan vazgeçildi",
-  "İhtiyaç kalmadı",
-  "Proje iptal/ertelendi",
-  "Başka bütçeden karşılandı",
-  "Diğer"
-];
+const unusedBudgetReasonOptions = UNUSED_REASON_OPTIONS;
 
 function formatBudgetPeriod(item: { months?: number[]; month?: number | null }) {
   const sourceMonths = item.months?.length ? item.months : item.month ? [item.month] : [];
@@ -662,6 +666,7 @@ export default function ExpensesView() {
   const [formQuantity, setFormQuantity] = useState<string>("1");
   const [formUnitPrice, setFormUnitPrice] = useState<string>("0");
   const [formBudgetItemId, setFormBudgetItemId] = useState<number | null>(null);
+  const [unusedDialogPlanId, setUnusedDialogPlanId] = useState<number | null>(null);
   const [formIsOutOfBudget, setFormIsOutOfBudget] = useState(false);
   const [formBudgetOutsideTitle, setFormBudgetOutsideTitle] = useState("");
   const [formBudgetOutsideDepartment, setFormBudgetOutsideDepartment] = useState("");
@@ -675,7 +680,7 @@ export default function ExpensesView() {
   const [allocationMethod, setAllocationMethod] = useState<"equal" | "plan_amount">("equal");
   const [formMarkPlanPurchased, setFormMarkPlanPurchased] = useState(true);
   const [isUnusedBudgetMode, setIsUnusedBudgetMode] = useState(false);
-  const [unusedBudgetReason, setUnusedBudgetReason] = useState(unusedBudgetReasonOptions[0]);
+  const [unusedBudgetReason, setUnusedBudgetReason] = useState(unusedBudgetReasonOptions[0].value);
   const [selectedAttachmentFiles, setSelectedAttachmentFiles] = useState<File[]>([]);
   const [attachmentPicker, setAttachmentPicker] = useState<{
     expenseId: number;
@@ -1186,7 +1191,7 @@ export default function ExpensesView() {
       setDialogOpen(false);
       setSelectedAttachmentFiles([]);
       setIsUnusedBudgetMode(false);
-      setUnusedBudgetReason(unusedBudgetReasonOptions[0]);
+      setUnusedBudgetReason(unusedBudgetReasonOptions[0].value);
       setErrorMessage(null);
       setSuccessMessage("Kullanılmayacak bütçe kaydedildi.");
     },
@@ -1228,24 +1233,41 @@ export default function ExpensesView() {
     setEditingExpense(null);
     setFormQuantity("1");
     setFormUnitPrice("0");
-    setFormBudgetItemId(budgetItemId ?? null);
+    const routeState = (location.state ?? null) as ExpensesRouteState | null;
+    const routeBudgetItemId = Number(routeState?.budgetItemId ?? routeState?.budget_item_id);
+    const routeScenarioId = Number(routeState?.scenarioId ?? routeState?.scenario_id);
+    const routeYear = Number(routeState?.year);
+    const routeMonth = Number(routeState?.month);
+    setFormBudgetItemId(Number.isFinite(routeBudgetItemId) && routeBudgetItemId > 0 ? routeBudgetItemId : budgetItemId ?? null);
     setFormIsOutOfBudget(false);
     setFormBudgetOutsideTitle("");
     setFormBudgetOutsideDepartment("");
     setFormBudgetOutsideCapexOpex("");
     setFormBudgetOutsideAssetType("");
-    setFormScenarioId(scenarioId ?? "");
-    setFormExpenseDate(dayjs().format("YYYY-MM-DD"));
+    setFormScenarioId(Number.isFinite(routeScenarioId) && routeScenarioId > 0 ? routeScenarioId : scenarioId ?? "");
+    setFormExpenseDate(
+      Number.isFinite(routeYear) && Number.isInteger(routeMonth) && routeMonth >= 1 && routeMonth <= 12
+        ? `${routeYear}-${String(routeMonth).padStart(2, "0")}-01`
+        : dayjs().format("YYYY-MM-DD")
+    );
     setAllocationMode("single");
     setAllocationStartMonth(new Date().getMonth() + 1);
     setAllocationMonthCount("1");
     setAllocationMethod("equal");
     setFormMarkPlanPurchased(true);
     setIsUnusedBudgetMode(false);
-    setUnusedBudgetReason(unusedBudgetReasonOptions[0]);
+    setUnusedBudgetReason(unusedBudgetReasonOptions[0].value);
     setSelectedAttachmentFiles([]);
     setDialogOpen(true);
-  }, [budgetItemId, isViewer, scenarioId, setDialogOpen, setEditingExpense, setFormQuantity, setFormUnitPrice]);
+  }, [budgetItemId, isViewer, location.state, scenarioId, setDialogOpen, setEditingExpense, setFormQuantity, setFormUnitPrice]);
+
+  const handledOpenCreateRef = useRef<unknown>(null);
+  useEffect(() => {
+    const routeState = (location.state ?? null) as ExpensesRouteState | null;
+    if (!routeState?.openCreate || handledOpenCreateRef.current === location.state) return;
+    handledOpenCreateRef.current = location.state;
+    handleCreate();
+  }, [handleCreate, location.state]);
 
   const handleEdit = useCallback(
     (expense: Expense) => {
@@ -1294,7 +1316,7 @@ export default function ExpensesView() {
       setAllocationMethod("equal");
       setFormMarkPlanPurchased(!isOutOfBudget);
       setIsUnusedBudgetMode(false);
-      setUnusedBudgetReason(unusedBudgetReasonOptions[0]);
+      setUnusedBudgetReason(unusedBudgetReasonOptions[0].value);
       setSelectedAttachmentFiles([]);
       setDialogOpen(true);
     },
@@ -1748,6 +1770,21 @@ export default function ExpensesView() {
       Boolean(formScenarioId),
     queryFn: async () => {
       const { data } = await client.get<PlanAggregate[]>("/plans/aggregate", {
+        params: {
+          year: formPlanYear,
+          scenario_id: Number(formScenarioId),
+          budget_item_id: formBudgetItemId
+        }
+      });
+      return data;
+    }
+  });
+
+  const { data: expensePlanOptions = [] } = useQuery<ExpensePlanOption[]>({
+    queryKey: ["plans", "unused-dialog-options", formPlanYear, formScenarioId, formBudgetItemId],
+    enabled: dialogOpen && Boolean(formBudgetItemId) && Boolean(formScenarioId),
+    queryFn: async () => {
+      const { data } = await client.get<ExpensePlanOption[]>("/plans", {
         params: {
           year: formPlanYear,
           scenario_id: Number(formScenarioId),
@@ -2768,8 +2805,8 @@ export default function ExpensesView() {
       Harcama: Number(item.actual) || 0,
       Kullanılmayacak: Number(item.unused_amount ?? 0),
       "Kalan Kullanılabilir": Number(item.available_amount ?? 0),
-      Sebep: item.reason || "-",
-      Açıklama: item.note || "-",
+      Sebep: formatUnusedReason(item.reason),
+      Not: item.note || "",
       "Güncelleme Tarihi": item.unused_updated_at
         ? new Date(item.unused_updated_at).toLocaleString("tr-TR")
         : "-"
@@ -3786,13 +3823,23 @@ export default function ExpensesView() {
                         disabled={Boolean(editingExpense)}
                         onChange={(event) => {
                           const checked = event.target.checked;
-                          setIsUnusedBudgetMode(checked);
                           if (checked) {
-                            setFormIsOutOfBudget(false);
-                            setFormMarkPlanPurchased(true);
-                            setAllocationMode("single");
-                            setSelectedAttachmentFiles([]);
+                            const parsedDate = dayjs(formExpenseDate);
+                            const selectedMonth = parsedDate.isValid() ? parsedDate.month() + 1 : 0;
+                            const selectedPlan = expensePlanOptions.find(
+                              (item) =>
+                                item.month === selectedMonth &&
+                                item.budget_item_id === formBudgetItemId &&
+                                item.scenario_id === Number(formScenarioId)
+                            );
+                            if (!selectedPlan) {
+                              setErrorMessage("Seçili bütçe kalemi, ay ve senaryo için plan bulunamadı.");
+                              return;
+                            }
+                            setUnusedDialogPlanId(selectedPlan.id);
+                            return;
                           }
+                          setIsUnusedBudgetMode(checked);
                         }}
                       />
                       <Typography variant="body2">Kullanılmayacak</Typography>
@@ -4035,8 +4082,8 @@ export default function ExpensesView() {
                         required
                       >
                         {unusedBudgetReasonOptions.map((reason) => (
-                          <MenuItem key={reason} value={reason}>
-                            {reason}
+                          <MenuItem key={reason.value} value={reason.value}>
+                            {reason.label}
                           </MenuItem>
                         ))}
                       </TextField>
@@ -4045,6 +4092,10 @@ export default function ExpensesView() {
                       <TextField
                         label="Kullanılmayacak Açıklama / Not"
                         name="unused_note"
+                        multiline
+                        minRows={2}
+                        inputProps={{ maxLength: 500 }}
+                        placeholder="İsteğe bağlı açıklama ekleyebilirsiniz"
                         fullWidth
                       />
                     </Grid>
@@ -4617,7 +4668,7 @@ export default function ExpensesView() {
                         <TableCell align="right">
                           {formatCurrency(Number(item.available_amount ?? 0))}
                         </TableCell>
-                        <TableCell>{item.reason || "-"}</TableCell>
+                        <TableCell>{formatUnusedReason(item.reason)}</TableCell>
                         <TableCell>{item.note || "-"}</TableCell>
                         <TableCell>
                           {item.unused_updated_at
@@ -4755,6 +4806,11 @@ export default function ExpensesView() {
           <Button onClick={() => setDistributionDetailExpense(null)}>Kapat</Button>
         </DialogActions>
       </Dialog>
+      <UnusedBudgetDialog
+        planId={unusedDialogPlanId}
+        onClose={() => setUnusedDialogPlanId(null)}
+        onSuccess={(message) => setSuccessMessage(message)}
+      />
       </Stack>
     </ExpensesErrorBoundary>
   );

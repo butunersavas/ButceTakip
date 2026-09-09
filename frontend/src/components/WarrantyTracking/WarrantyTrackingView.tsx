@@ -23,12 +23,15 @@ import {
 } from "@mui/material";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
-import { DataGrid, type GridColDef } from "@mui/x-data-grid";
+import { DataGrid, type GridColDef, type GridPaginationModel } from "@mui/x-data-grid";
 import axios from "axios";
 
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 
-type WarrantyItemType = "DEVICE" | "SERVICE" | "DOMAIN_SSL";
+type WarrantyItemType = "DEVICE" | "DOMAIN_SSL" | "SSL" | "SERVICE";
+type SortDirection = "asc" | "desc";
+type WarrantySortState = { field: string; direction: SortDirection } | null;
+type WarrantyTypeMap<T> = Record<WarrantyItemType, T>;
 
 type WarrantyItem = {
   id: number | string;
@@ -139,9 +142,10 @@ type WarrantyImportReport = {
 };
 
 const typeOptions: Array<{ value: WarrantyItemType; label: string }> = [
-  { value: "DEVICE", label: "Cihaz" },
+  { value: "DEVICE", label: "Donanım" },
   { value: "DOMAIN_SSL", label: "Domain" },
-  { value: "SERVICE", label: "Lisans Destek" },
+  { value: "SSL", label: "SSL" },
+  { value: "SERVICE", label: "Yazılım" },
 ];
 
 const getTypeLabel = (value: WarrantyItemType | "" | null | undefined) =>
@@ -207,9 +211,10 @@ const formatDate = (value: string | null | undefined) => {
 };
 
 const formatTypeLabel = (value?: string | null) => {
-  if (value === "DEVICE") return "Cihaz";
-  if (value === "SERVICE") return "Lisans Destek";
+  if (value === "DEVICE") return "Donanım";
+  if (value === "SERVICE") return "Yazılım";
   if (value === "DOMAIN_SSL") return "Domain";
+  if (value === "SSL") return "SSL";
   return value ?? "-";
 };
 
@@ -219,7 +224,7 @@ const formatPrice = (value: string | number | null | undefined) => {
   if (!Number.isFinite(numeric)) return toDisplayText(String(value));
   return new Intl.NumberFormat("tr-TR", {
     style: "currency",
-    currency: "TRY",
+    currency: "USD",
     minimumFractionDigits: 2,
   }).format(numeric);
 };
@@ -373,6 +378,189 @@ const downloadBlob = (blob: Blob, filename: string) => {
   window.URL.revokeObjectURL(url);
 };
 
+const DEFAULT_PAGINATION_MODEL: GridPaginationModel = { page: 0, pageSize: 20 };
+
+const createWarrantyTypeMap = <T,>(factory: () => T): WarrantyTypeMap<T> => ({
+  DEVICE: factory(),
+  DOMAIN_SSL: factory(),
+  SSL: factory(),
+  SERVICE: factory(),
+});
+
+const SEARCH_FIELDS_BY_TYPE: WarrantyTypeMap<string[]> = {
+  DEVICE: [
+    "purchased_from",
+    "name",
+    "brand",
+    "model",
+    "serial_number",
+    "asset_tag",
+    "service_code",
+    "ordered_product_model",
+    "price",
+    "shipment_date",
+    "end_date",
+    "end_of_service_life",
+    "days_left",
+    "computed_status",
+    "note",
+  ],
+  DOMAIN_SSL: [
+    "domain",
+    "end_date",
+    "days_left",
+    "renewal_responsible",
+    "purchased_from",
+  ],
+  SSL: [
+    "name",
+    "certificate_issuer",
+    "end_date",
+    "days_left",
+    "purchased_from",
+    "note",
+  ],
+  SERVICE: [
+    "purchased_from",
+    "name",
+    "service_code",
+    "price",
+    "shipment_date",
+    "end_date",
+    "days_left",
+    "status",
+  ],
+};
+
+const DATE_SORT_FIELDS = new Set(["shipment_date", "end_date", "end_of_service_life"]);
+
+const normalizeSearchText = (value: unknown) =>
+  String(value ?? "")
+    .replace(/[İIı]/g, "i")
+    .replace(/[Şş]/g, "s")
+    .replace(/[Ğğ]/g, "g")
+    .replace(/[Üü]/g, "u")
+    .replace(/[Öö]/g, "o")
+    .replace(/[Çç]/g, "c")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+
+const parseSortableNumber = (value: unknown): number | null => {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  const text = String(value).trim();
+  if (!text || text === "-" || text === "—") return null;
+  let cleaned = text
+    .replace(/\s/g, "")
+    .replace(/try|tl|usd|eur|gbp/gi, "")
+    .replace(/[^0-9,.\-]/g, "");
+  if (!cleaned || cleaned === "-" || cleaned === "." || cleaned === ",") return null;
+  if (cleaned.includes(",") && cleaned.includes(".")) {
+    const decimalSeparator = cleaned.lastIndexOf(",") > cleaned.lastIndexOf(".") ? "," : ".";
+    const thousandsSeparator = decimalSeparator === "," ? "." : ",";
+    cleaned = cleaned.split(thousandsSeparator).join("").replace(decimalSeparator, ".");
+  } else if (cleaned.includes(",")) {
+    const decimals = cleaned.split(",").pop() ?? "";
+    cleaned = cleaned.replace(/\./g, "").replace(",", decimals.length <= 2 ? "." : "");
+  }
+  const numeric = Number(cleaned);
+  return Number.isFinite(numeric) ? numeric : null;
+};
+
+const parseSortableDate = (value: unknown): number | null => {
+  const normalized = normalizeDateInput(String(value ?? "")) || "";
+  if (!normalized || normalized === "-") return null;
+  const timestamp = new Date(`${normalized}T00:00:00`).getTime();
+  return Number.isFinite(timestamp) ? timestamp : null;
+};
+
+const getWarrantyFieldDisplayValue = (row: WarrantyItem, field: string): string => {
+  if (field === "domain") return toDisplayText(row.domain || row.name);
+  if (field === "certificate_issuer") return toDisplayText(row.certificate_issuer || row.issuer);
+  if (field === "renewal_responsible") {
+    return toDisplayText(row.renewal_responsible || row.renewal_owner);
+  }
+  if (field === "purchased_from" && row.type === "DOMAIN_SSL") {
+    return toDisplayText(row.purchased_from || row.issuer);
+  }
+  if (field === "price") return formatPrice(row.price);
+  if (DATE_SORT_FIELDS.has(field)) return formatDate((row as any)?.[field]);
+  if (field === "days_left") return row.days_left === null || row.days_left === undefined ? "-" : `${row.days_left} gün`;
+  if (field === "computed_status") return row.status_label ?? "Bilinmiyor";
+  return toDisplayText((row as any)?.[field]);
+};
+
+const getWarrantySearchValues = (row: WarrantyItem, type: WarrantyItemType) =>
+  SEARCH_FIELDS_BY_TYPE[type].flatMap((field) => {
+    const raw = (row as any)?.[field];
+    return [getWarrantyFieldDisplayValue(row, field), raw];
+  });
+
+const getWarrantySortValue = (row: WarrantyItem, type: WarrantyItemType, field: string) => {
+  if (field === "price" || field === "days_left" || (field === "service_code" && type === "SERVICE")) {
+    return parseSortableNumber(field === "days_left" ? row.days_left : (row as any)?.[field]);
+  }
+  if (DATE_SORT_FIELDS.has(field)) {
+    return parseSortableDate((row as any)?.[field]);
+  }
+  const text = getWarrantyFieldDisplayValue(row, field);
+  return text === "-" ? null : text;
+};
+
+const compareWarrantyRows = (
+  left: WarrantyItem,
+  right: WarrantyItem,
+  type: WarrantyItemType,
+  sortState: Exclude<WarrantySortState, null>
+) => {
+  const leftValue = getWarrantySortValue(left, type, sortState.field);
+  const rightValue = getWarrantySortValue(right, type, sortState.field);
+  const leftEmpty = leftValue === null || leftValue === undefined || leftValue === "";
+  const rightEmpty = rightValue === null || rightValue === undefined || rightValue === "";
+  if (leftEmpty && rightEmpty) return 0;
+  if (leftEmpty) return 1;
+  if (rightEmpty) return -1;
+
+  let result = 0;
+  if (typeof leftValue === "number" && typeof rightValue === "number") {
+    result = leftValue - rightValue;
+  } else {
+    result = String(leftValue).localeCompare(String(rightValue), "tr", {
+      sensitivity: "base",
+      numeric: true,
+    });
+  }
+  return sortState.direction === "asc" ? result : -result;
+};
+
+const sortWarrantyRows = (
+  rows: WarrantyItem[],
+  type: WarrantyItemType,
+  sortState: WarrantySortState
+) => {
+  if (!sortState) return rows;
+  return rows
+    .map((row, index) => ({ row, index }))
+    .sort((left, right) => {
+      const result = compareWarrantyRows(left.row, right.row, type, sortState);
+      return result === 0 ? left.index - right.index : result;
+    })
+    .map(({ row }) => row);
+};
+
+const withSortIndicator = (column: GridColDef, sortState: WarrantySortState): GridColDef => {
+  if (column.field === "actions") return column;
+  const indicator =
+    sortState?.field === column.field ? (sortState.direction === "asc" ? " ↑" : " ↓") : "";
+  return {
+    ...column,
+    headerName: `${column.headerName ?? column.field}${indicator}`,
+    sortable: false,
+  };
+};
+
 
 export default function WarrantyTrackingView() {
   const client = useAuthorizedClient();
@@ -388,6 +576,15 @@ export default function WarrantyTrackingView() {
     "NEAR" | "EXPIRED" | "UNKNOWN" | null
   >(null);
   const [activeWarrantyType, setActiveWarrantyType] = useState<WarrantyItemType>("DEVICE");
+  const [searchByType, setSearchByType] = useState<WarrantyTypeMap<string>>(() =>
+    createWarrantyTypeMap(() => "")
+  );
+  const [sortByType, setSortByType] = useState<WarrantyTypeMap<WarrantySortState>>(() =>
+    createWarrantyTypeMap(() => null)
+  );
+  const [paginationByType, setPaginationByType] = useState<WarrantyTypeMap<GridPaginationModel>>(() =>
+    createWarrantyTypeMap(() => ({ ...DEFAULT_PAGINATION_MODEL }))
+  );
   const [form, setForm] = useState<WarrantyItemForm>(() => createEmptyForm("DEVICE"));
   const [formOpen, setFormOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -397,9 +594,27 @@ export default function WarrantyTrackingView() {
   const [importCommitting, setImportCommitting] = useState(false);
   const importInputRef = useRef<HTMLInputElement | null>(null);
 
-  const nameLabel = form.type === "DOMAIN_SSL" ? "DOMAİN ADLARI" : "Ürün";
+  const nameLabel =
+    form.type === "DOMAIN_SSL"
+      ? "DOMAİN ADLARI"
+      : form.type === "SSL"
+        ? "SÖZLEŞMESİ GÜNCELLENEN SSL SERTİFİKALARI"
+        : "Ürün";
   const activeTypeLabel = getTypeLabel(activeWarrantyType);
   const formDaysLeft = useMemo(() => calcDaysLeft(normalizeDateInput(form.end_date) || null), [form.end_date]);
+  const activeSearchText = searchByType[activeWarrantyType] ?? "";
+  const activeSortState = sortByType[activeWarrantyType] ?? null;
+  const activePaginationModel = paginationByType[activeWarrantyType] ?? DEFAULT_PAGINATION_MODEL;
+
+  const resetActivePaginationPage = useCallback(() => {
+    setPaginationByType((prev) => ({
+      ...prev,
+      [activeWarrantyType]: {
+        ...(prev[activeWarrantyType] ?? DEFAULT_PAGINATION_MODEL),
+        page: 0,
+      },
+    }));
+  }, [activeWarrantyType]);
 
   const loadItems = useCallback(async () => {
     setLoading(true);
@@ -456,7 +671,7 @@ export default function WarrantyTrackingView() {
     return totals;
   }, [sectionItems]);
 
-  const filteredItems = useMemo(() => {
+  const statusFilteredItems = useMemo(() => {
     if (!selectedWarrantyFilter) return sectionItems;
     if (selectedWarrantyFilter === "NEAR") {
       return sectionItems.filter((item) => item.status_key === "approaching");
@@ -467,12 +682,71 @@ export default function WarrantyTrackingView() {
     return sectionItems.filter((item) => item.status_key === "expired");
   }, [sectionItems, selectedWarrantyFilter]);
 
+  const searchFilteredItems = useMemo(() => {
+    const search = normalizeSearchText(activeSearchText);
+    if (!search) return statusFilteredItems;
+    return statusFilteredItems.filter((item) =>
+      getWarrantySearchValues(item, activeWarrantyType).some((value) =>
+        normalizeSearchText(value).includes(search)
+      )
+    );
+  }, [activeSearchText, activeWarrantyType, statusFilteredItems]);
+
+  const visibleItems = useMemo(
+    () => sortWarrantyRows(searchFilteredItems, activeWarrantyType, activeSortState),
+    [activeSortState, activeWarrantyType, searchFilteredItems]
+  );
+
   const activeFilterLabel = useMemo(() => {
     if (!selectedWarrantyFilter) return null;
     if (selectedWarrantyFilter === "NEAR") return "Yaklaşıyor";
     if (selectedWarrantyFilter === "UNKNOWN") return "Bilinmiyor";
     return "Süresi Dolmuş";
   }, [selectedWarrantyFilter]);
+
+  const handleSearchChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      setSearchByType((prev) => ({ ...prev, [activeWarrantyType]: event.target.value }));
+      resetActivePaginationPage();
+    },
+    [activeWarrantyType, resetActivePaginationPage]
+  );
+
+  const handleClearSearch = useCallback(() => {
+    setSearchByType((prev) => ({ ...prev, [activeWarrantyType]: "" }));
+    resetActivePaginationPage();
+  }, [activeWarrantyType, resetActivePaginationPage]);
+
+  const handlePaginationModelChange = useCallback(
+    (model: GridPaginationModel) => {
+      setPaginationByType((prev) => ({ ...prev, [activeWarrantyType]: model }));
+    },
+    [activeWarrantyType]
+  );
+
+  const handleColumnHeaderDoubleClick = useCallback(
+    (params: any) => {
+      const field = String(params?.field ?? "");
+      if (!field || field === "actions") return;
+      setSortByType((prev) => {
+        const current = prev[activeWarrantyType];
+        const next =
+          current?.field !== field
+            ? { field, direction: "asc" as const }
+            : current.direction === "asc"
+              ? { field, direction: "desc" as const }
+              : null;
+        return { ...prev, [activeWarrantyType]: next };
+      });
+      resetActivePaginationPage();
+    },
+    [activeWarrantyType, resetActivePaginationPage]
+  );
+
+  const handleClearSort = useCallback(() => {
+    setSortByType((prev) => ({ ...prev, [activeWarrantyType]: null }));
+    resetActivePaginationPage();
+  }, [activeWarrantyType, resetActivePaginationPage]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -787,7 +1061,7 @@ export default function WarrantyTrackingView() {
   const actionColumn = useMemo<GridColDef>(
     () => ({
       field: "actions",
-      headerName: "İşlemler",
+      headerName: "İŞLEMLER",
       width: 150,
       minWidth: 150,
       align: "center",
@@ -823,42 +1097,54 @@ export default function WarrantyTrackingView() {
         { field: "renewal_responsible", headerName: "İLGİLİ FİRMA", flex: 1.2, minWidth: 210, valueGetter: (_value, row) => toDisplayText((row as any)?.renewal_responsible || (row as any)?.renewal_owner) },
         { field: "purchased_from", headerName: "HİZMET ALINAN HOSTİNG FİRMASI", flex: 1.6, minWidth: 300, valueGetter: (_value, row) => toDisplayText((row as any)?.purchased_from || (row as any)?.issuer) },
         actionColumn,
-      ];
+      ].map((column) => withSortIndicator(column, activeSortState));
+    }
+
+    if (activeWarrantyType === "SSL") {
+      return [
+        { field: "name", headerName: "SÖZLEŞMESİ GÜNCELLENEN SSL SERTİFİKALARI", flex: 1.7, minWidth: 340 },
+        { field: "certificate_issuer", headerName: "SERTİFİKA TÜRÜ", flex: 1, minWidth: 190, valueGetter: (_value, row) => toDisplayText((row as any)?.certificate_issuer || (row as any)?.issuer) },
+        { field: "end_date", headerName: "SÖZLEŞME BİTİŞ TARİHİ", flex: 1, minWidth: 210, valueGetter: (_value, row) => formatDate((row as any)?.end_date) },
+        { field: "days_left", headerName: "SÖZLEŞME KALAN GÜN SAYISI", flex: 1.1, minWidth: 240, sortable: false, renderCell: (params) => renderDaysChip(params) },
+        { field: "purchased_from", headerName: "FİRMA", flex: 1.1, minWidth: 200, valueGetter: (_value, row) => toDisplayText((row as any)?.purchased_from) },
+        { field: "note", headerName: "AÇIKLAMA", flex: 1.4, minWidth: 260, valueGetter: (_value, row) => toDisplayText((row as any)?.note) },
+        actionColumn,
+      ].map((column) => withSortIndicator(column, activeSortState));
     }
 
     if (activeWarrantyType === "SERVICE") {
       return [
-        { field: "purchased_from", headerName: "Alınan Kurum", flex: 1.1, minWidth: 190, valueGetter: (_value, row) => toDisplayText((row as any)?.purchased_from) },
-        { field: "name", headerName: "Ürün", flex: 1.2, minWidth: 220 },
-        { field: "service_code", headerName: "Lisans Adedi", flex: 0.9, minWidth: 150, valueGetter: (_value, row) => toDisplayText((row as any)?.service_code) },
-        { field: "price", headerName: "Fiyat", flex: 0.9, minWidth: 150, valueGetter: (_value, row) => formatPrice((row as any)?.price) },
-        { field: "shipment_date", headerName: "Alım Tarihi", flex: 0.9, minWidth: 160, valueGetter: (_value, row) => formatDate((row as any)?.shipment_date) },
-        { field: "end_date", headerName: "Bitiş Tarihi", flex: 0.9, minWidth: 160, valueGetter: (_value, row) => formatDate((row as any)?.end_date) },
-        { field: "days_left", headerName: "Destek Kalan Gün", flex: 0.9, minWidth: 170, sortable: false, renderCell: (params) => renderDaysChip(params) },
-        { field: "status", headerName: "Garanti Süresi Uzatma İşlemi Yapıldı Mı?", flex: 1.5, minWidth: 300, valueGetter: (_value, row) => toDisplayText((row as any)?.status) },
+        { field: "purchased_from", headerName: "ALINAN KURUM", flex: 1.1, minWidth: 190, valueGetter: (_value, row) => toDisplayText((row as any)?.purchased_from) },
+        { field: "name", headerName: "ÜRÜN", flex: 1.2, minWidth: 220 },
+        { field: "service_code", headerName: "LİSANS ADEDİ", flex: 0.9, minWidth: 150, valueGetter: (_value, row) => toDisplayText((row as any)?.service_code) },
+        { field: "price", headerName: "FİYAT", flex: 0.9, minWidth: 150, valueGetter: (_value, row) => formatPrice((row as any)?.price) },
+        { field: "shipment_date", headerName: "ALIM TARİHİ", flex: 0.9, minWidth: 160, valueGetter: (_value, row) => formatDate((row as any)?.shipment_date) },
+        { field: "end_date", headerName: "BİTİŞ TARİHİ", flex: 0.9, minWidth: 160, valueGetter: (_value, row) => formatDate((row as any)?.end_date) },
+        { field: "days_left", headerName: "DESTEK KALAN GÜN", flex: 0.9, minWidth: 170, sortable: false, renderCell: (params) => renderDaysChip(params) },
+        { field: "status", headerName: "GARANTİ SÜRESİ UZATMA İŞLEMİ YAPILDI MI?", flex: 1.5, minWidth: 300, valueGetter: (_value, row) => toDisplayText((row as any)?.status) },
         actionColumn,
-      ];
+      ].map((column) => withSortIndicator(column, activeSortState));
     }
 
     return [
-      { field: "purchased_from", headerName: "Alınan Kurum", flex: 1, minWidth: 170, valueGetter: (_value, row) => toDisplayText((row as any)?.purchased_from) },
-      { field: "name", headerName: "Ürün", flex: 1.2, minWidth: 190 },
-      { field: "brand", headerName: "Marka", flex: 0.8, minWidth: 130, valueGetter: (_value, row) => toDisplayText((row as any)?.brand) },
-      { field: "model", headerName: "Model", flex: 0.9, minWidth: 150, valueGetter: (_value, row) => toDisplayText((row as any)?.model) },
-      { field: "serial_number", headerName: "Seri No", flex: 1, minWidth: 160, valueGetter: (_value, row) => toDisplayText((row as any)?.serial_number) },
-      { field: "asset_tag", headerName: "Demirbaş", flex: 0.9, minWidth: 150, valueGetter: (_value, row) => toDisplayText((row as any)?.asset_tag) },
-      { field: "service_code", headerName: "Ekspres Servis Kodu", flex: 1, minWidth: 190, valueGetter: (_value, row) => toDisplayText((row as any)?.service_code) },
-      { field: "ordered_product_model", headerName: "Ordered Product Model", flex: 1, minWidth: 210, valueGetter: (_value, row) => toDisplayText((row as any)?.ordered_product_model) },
-      { field: "price", headerName: "Fiyat", flex: 0.8, minWidth: 140, valueGetter: (_value, row) => formatPrice((row as any)?.price) },
-      { field: "shipment_date", headerName: "Gönderim Tarihi", flex: 0.9, minWidth: 160, valueGetter: (_value, row) => formatDate((row as any)?.shipment_date) },
-      { field: "end_date", headerName: "Destek Sonu Tarihi", flex: 0.9, minWidth: 170, valueGetter: (_value, row) => formatDate((row as any)?.end_date) },
-      { field: "end_of_service_life", headerName: "End of Service Life", flex: 0.9, minWidth: 180, valueGetter: (_value, row) => formatDate((row as any)?.end_of_service_life) },
-      { field: "days_left", headerName: "Kalan Gün", flex: 0.8, minWidth: 130, sortable: false, renderCell: (params) => renderDaysChip(params) },
-      { field: "computed_status", headerName: "Durum", flex: 0.9, minWidth: 150, sortable: false, renderCell: (params) => (<Typography variant="body2">{params?.row?.status_label ?? "Bilinmiyor"}</Typography>) },
-      { field: "note", headerName: "Not", flex: 1.2, minWidth: 190, sortable: false, valueGetter: (_value, row) => toDisplayText((row as any)?.note) },
+      { field: "purchased_from", headerName: "ALINAN KURUM", flex: 1, minWidth: 170, valueGetter: (_value, row) => toDisplayText((row as any)?.purchased_from) },
+      { field: "name", headerName: "ÜRÜN", flex: 1.2, minWidth: 190 },
+      { field: "brand", headerName: "MARKA", flex: 0.8, minWidth: 130, valueGetter: (_value, row) => toDisplayText((row as any)?.brand) },
+      { field: "model", headerName: "MODEL", flex: 0.9, minWidth: 150, valueGetter: (_value, row) => toDisplayText((row as any)?.model) },
+      { field: "serial_number", headerName: "SERİ NO", flex: 1, minWidth: 160, valueGetter: (_value, row) => toDisplayText((row as any)?.serial_number) },
+      { field: "asset_tag", headerName: "DEMİRBAŞ", flex: 0.9, minWidth: 150, valueGetter: (_value, row) => toDisplayText((row as any)?.asset_tag) },
+      { field: "service_code", headerName: "EKSPRES SERVİS KODU", flex: 1, minWidth: 190, valueGetter: (_value, row) => toDisplayText((row as any)?.service_code) },
+      { field: "ordered_product_model", headerName: "ORDERED PRODUCT MODEL", flex: 1, minWidth: 210, valueGetter: (_value, row) => toDisplayText((row as any)?.ordered_product_model) },
+      { field: "price", headerName: "FİYAT", flex: 0.8, minWidth: 140, valueGetter: (_value, row) => formatPrice((row as any)?.price) },
+      { field: "shipment_date", headerName: "GÖNDERİM TARİHİ", flex: 0.9, minWidth: 160, valueGetter: (_value, row) => formatDate((row as any)?.shipment_date) },
+      { field: "end_date", headerName: "DESTEK SONU TARİHİ", flex: 0.9, minWidth: 170, valueGetter: (_value, row) => formatDate((row as any)?.end_date) },
+      { field: "end_of_service_life", headerName: "END OF SERVICE LIFE", flex: 0.9, minWidth: 180, valueGetter: (_value, row) => formatDate((row as any)?.end_of_service_life) },
+      { field: "days_left", headerName: "KALAN GÜN", flex: 0.8, minWidth: 130, sortable: false, renderCell: (params) => renderDaysChip(params) },
+      { field: "computed_status", headerName: "DURUM", flex: 0.9, minWidth: 150, sortable: false, renderCell: (params) => (<Typography variant="body2">{params?.row?.status_label ?? "Bilinmiyor"}</Typography>) },
+      { field: "note", headerName: "NOT", flex: 1.2, minWidth: 190, sortable: false, valueGetter: (_value, row) => toDisplayText((row as any)?.note) },
       actionColumn,
-    ];
-  }, [actionColumn, activeWarrantyType, renderDaysChip]);
+    ].map((column) => withSortIndicator(column, activeSortState));
+  }, [actionColumn, activeSortState, activeWarrantyType, renderDaysChip]);
 
   const importPreviewColumns = useMemo(() => {
     if (activeWarrantyType === "DOMAIN_SSL") {
@@ -873,36 +1159,49 @@ export default function WarrantyTrackingView() {
         { label: "HİZMET ALINAN HOSTİNG FİRMASI", render: (payload: Record<string, any>) => toDisplayText(payload.purchased_from || payload.issuer) },
       ];
     }
-    if (activeWarrantyType === "SERVICE") {
+    if (activeWarrantyType === "SSL") {
       return [
-        { label: "Alınan Kurum", render: (payload: Record<string, any>) => toDisplayText(payload.purchased_from) },
-        { label: "Ürün", render: (payload: Record<string, any>) => toDisplayText(payload.name) },
-        { label: "Lisans Adedi", render: (payload: Record<string, any>) => toDisplayText(payload.service_code) },
-        { label: "Fiyat", render: (payload: Record<string, any>) => formatPrice(payload.price) },
-        { label: "Alım Tarihi", render: (payload: Record<string, any>) => formatDate(payload.shipment_date) },
-        { label: "Bitiş Tarihi", render: (payload: Record<string, any>) => formatDate(payload.end_date) },
-        { label: "Destek Kalan Gün", render: (payload: Record<string, any>) => {
+        { label: "SÖZLEŞMESİ GÜNCELLENEN SSL SERTİFİKALARI", render: (payload: Record<string, any>) => toDisplayText(payload.name) },
+        { label: "SERTİFİKA TÜRÜ", render: (payload: Record<string, any>) => toDisplayText(payload.certificate_issuer || payload.issuer) },
+        { label: "SÖZLEŞME BİTİŞ TARİHİ", render: (payload: Record<string, any>) => formatDate(payload.end_date) },
+        { label: "SÖZLEŞME KALAN GÜN SAYISI", render: (payload: Record<string, any>) => {
           const days = calcDaysLeft(payload.end_date ?? null);
           return days === null ? "-" : `${days} gün`;
         } },
-        { label: "Garanti Süresi Uzatma İşlemi Yapıldı Mı?", render: (payload: Record<string, any>) => toDisplayText(payload.status) },
+        { label: "FİRMA", render: (payload: Record<string, any>) => toDisplayText(payload.purchased_from) },
+        { label: "AÇIKLAMA", render: (payload: Record<string, any>) => toDisplayText(payload.note) },
+      ];
+    }
+    if (activeWarrantyType === "SERVICE") {
+      return [
+        { label: "ALINAN KURUM", render: (payload: Record<string, any>) => toDisplayText(payload.purchased_from) },
+        { label: "ÜRÜN", render: (payload: Record<string, any>) => toDisplayText(payload.name) },
+        { label: "LİSANS ADEDİ", render: (payload: Record<string, any>) => toDisplayText(payload.service_code) },
+        { label: "FİYAT", render: (payload: Record<string, any>) => formatPrice(payload.price) },
+        { label: "ALIM TARİHİ", render: (payload: Record<string, any>) => formatDate(payload.shipment_date) },
+        { label: "BİTİŞ TARİHİ", render: (payload: Record<string, any>) => formatDate(payload.end_date) },
+        { label: "DESTEK KALAN GÜN", render: (payload: Record<string, any>) => {
+          const days = calcDaysLeft(payload.end_date ?? null);
+          return days === null ? "-" : `${days} gün`;
+        } },
+        { label: "GARANTİ SÜRESİ UZATMA İŞLEMİ YAPILDI MI?", render: (payload: Record<string, any>) => toDisplayText(payload.status) },
       ];
     }
     return [
-      { label: "Alınan Kurum", render: (payload: Record<string, any>) => toDisplayText(payload.purchased_from) },
-      { label: "Ürün", render: (payload: Record<string, any>) => toDisplayText(payload.name) },
-      { label: "Marka", render: (payload: Record<string, any>) => toDisplayText(payload.brand) },
-      { label: "Model", render: (payload: Record<string, any>) => toDisplayText(payload.model) },
-      { label: "Seri No", render: (payload: Record<string, any>) => toDisplayText(payload.serial_number) },
-      { label: "Demirbaş", render: (payload: Record<string, any>) => toDisplayText(payload.asset_tag) },
-      { label: "Ekspres Servis Kodu", render: (payload: Record<string, any>) => toDisplayText(payload.service_code) },
-      { label: "Ordered Product Model", render: (payload: Record<string, any>) => toDisplayText(payload.ordered_product_model) },
-      { label: "Fiyat", render: (payload: Record<string, any>) => formatPrice(payload.price) },
-      { label: "Gönderim Tarihi", render: (payload: Record<string, any>) => formatDate(payload.shipment_date) },
-      { label: "Destek Sonu Tarihi", render: (payload: Record<string, any>) => formatDate(payload.end_date) },
-      { label: "End of Service Life", render: (payload: Record<string, any>) => formatDate(payload.end_of_service_life) },
-      { label: "Durum", render: (payload: Record<string, any>) => toDisplayText(payload.status) },
-      { label: "Not", render: (payload: Record<string, any>) => toDisplayText(payload.note) },
+      { label: "ALINAN KURUM", render: (payload: Record<string, any>) => toDisplayText(payload.purchased_from) },
+      { label: "ÜRÜN", render: (payload: Record<string, any>) => toDisplayText(payload.name) },
+      { label: "MARKA", render: (payload: Record<string, any>) => toDisplayText(payload.brand) },
+      { label: "MODEL", render: (payload: Record<string, any>) => toDisplayText(payload.model) },
+      { label: "SERİ NO", render: (payload: Record<string, any>) => toDisplayText(payload.serial_number) },
+      { label: "DEMİRBAŞ", render: (payload: Record<string, any>) => toDisplayText(payload.asset_tag) },
+      { label: "EKSPRES SERVİS KODU", render: (payload: Record<string, any>) => toDisplayText(payload.service_code) },
+      { label: "ORDERED PRODUCT MODEL", render: (payload: Record<string, any>) => toDisplayText(payload.ordered_product_model) },
+      { label: "FİYAT", render: (payload: Record<string, any>) => formatPrice(payload.price) },
+      { label: "GÖNDERİM TARİHİ", render: (payload: Record<string, any>) => formatDate(payload.shipment_date) },
+      { label: "DESTEK SONU TARİHİ", render: (payload: Record<string, any>) => formatDate(payload.end_date) },
+      { label: "END OF SERVICE LIFE", render: (payload: Record<string, any>) => formatDate(payload.end_of_service_life) },
+      { label: "DURUM", render: (payload: Record<string, any>) => toDisplayText(payload.status) },
+      { label: "NOT", render: (payload: Record<string, any>) => toDisplayText(payload.note) },
     ];
   }, [activeWarrantyType]);
 
@@ -938,6 +1237,50 @@ export default function WarrantyTrackingView() {
             label="HİZMET ALINAN HOSTİNG FİRMASI"
             value={form.purchased_from}
             onChange={(event) => setForm((prev) => ({ ...prev, purchased_from: event.target.value }))}
+          />
+        </>
+      );
+    }
+
+    if (form.type === "SSL") {
+      return (
+        <>
+          <TextField
+            label="Sözleşmesi Güncellenen SSL Sertifikaları"
+            value={form.name}
+            onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
+            required
+          />
+          <TextField
+            label="Sertifika Türü"
+            value={form.issuer}
+            onChange={(event) => setForm((prev) => ({ ...prev, issuer: event.target.value }))}
+          />
+          <TextField
+            label="Sözleşme Bitiş Tarihi"
+            type="date"
+            value={form.end_date}
+            onChange={(event) => setForm((prev) => ({ ...prev, end_date: event.target.value }))}
+            InputLabelProps={{ shrink: true }}
+          />
+          <TextField
+            label="Sözleşme Kalan Gün Sayısı"
+            value={formDaysLeft === null ? "" : `${formDaysLeft} gün`}
+            InputProps={{ readOnly: true }}
+            helperText="Bitiş tarihinden otomatik hesaplanır."
+          />
+          <TextField
+            label="Firma"
+            value={form.purchased_from}
+            onChange={(event) => setForm((prev) => ({ ...prev, purchased_from: event.target.value }))}
+          />
+          <TextField
+            label="Açıklama"
+            value={form.note}
+            onChange={(event) => setForm((prev) => ({ ...prev, note: event.target.value }))}
+            multiline
+            minRows={3}
+            sx={{ gridColumn: "1 / -1" }}
           />
         </>
       );
@@ -1218,7 +1561,7 @@ export default function WarrantyTrackingView() {
               Garanti Takibi
             </Typography>
             <Typography color="text.secondary">
-              Cihaz ve bakım/hizmet garanti kayıtlarını yönetin.
+              Donanım, Domain, SSL ve Yazılım garanti/destek kayıtlarını yönetin.
             </Typography>
           </Box>
           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
@@ -1297,15 +1640,16 @@ export default function WarrantyTrackingView() {
                 }}
               >
                 <CardActionArea
-                  onClick={() =>
+                  onClick={() => {
+                    resetActivePaginationPage();
                     setSelectedWarrantyFilter((prev) => {
                       const next = prev === item.filter ? null : item.filter;
                       requestAnimationFrame(() => {
                         tableRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
                       });
                       return next;
-                    })
-                  }
+                    });
+                  }}
                   sx={{ height: "100%" }}
                 >
                   <CardContent>
@@ -1401,8 +1745,9 @@ export default function WarrantyTrackingView() {
           <Card variant="outlined">
             <CardContent
               sx={{
-                height: { xs: 700, md: "calc(100vh - 260px)" },
-                minHeight: 700,
+                height: { xs: "min(760px, calc(100vh - 180px))", md: "calc(100vh - 300px)" },
+                minHeight: { xs: 560, md: 580 },
+                maxHeight: { xs: 760, md: "calc(100vh - 220px)" },
                 p: { xs: 1.5, md: 2 },
                 display: "flex",
                 flexDirection: "column",
@@ -1419,8 +1764,35 @@ export default function WarrantyTrackingView() {
                   {activeTypeLabel} Kayıtları
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Toplam {(filteredItems ?? []).length} kayıt
+                  Toplam {sectionItems.length} kayıt / Filtrelenen {visibleItems.length} kayıt
                 </Typography>
+              </Stack>
+              <Stack
+                direction={{ xs: "column", md: "row" }}
+                spacing={1}
+                alignItems={{ xs: "stretch", md: "center" }}
+                sx={{ mb: 1.5 }}
+              >
+                <TextField
+                  size="small"
+                  label={`${activeTypeLabel} içinde ara`}
+                  value={activeSearchText}
+                  onChange={handleSearchChange}
+                  fullWidth
+                  placeholder="Görünen kolonlarda ara"
+                />
+                <Stack direction="row" spacing={1} justifyContent={{ xs: "flex-start", md: "flex-end" }}>
+                  {activeSearchText && (
+                    <Button size="small" variant="outlined" onClick={handleClearSearch}>
+                      Aramayı Temizle
+                    </Button>
+                  )}
+                  {activeSortState && (
+                    <Button size="small" variant="outlined" onClick={handleClearSort}>
+                      Sıralamayı Temizle
+                    </Button>
+                  )}
+                </Stack>
               </Stack>
               {activeFilterLabel && (
                 <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
@@ -1428,67 +1800,81 @@ export default function WarrantyTrackingView() {
                     color="primary"
                     size="small"
                     label={`Aktif filtre: ${activeFilterLabel}`}
-                    onDelete={() => setSelectedWarrantyFilter(null)}
+                    onDelete={() => {
+                      setSelectedWarrantyFilter(null);
+                      resetActivePaginationPage();
+                    }}
                   />
-                  <Button size="small" variant="text" onClick={() => setSelectedWarrantyFilter(null)}>
+                  <Button
+                    size="small"
+                    variant="text"
+                    onClick={() => {
+                      setSelectedWarrantyFilter(null);
+                      resetActivePaginationPage();
+                    }}
+                  >
                     Temizle
                   </Button>
                 </Stack>
               )}
-              {(filteredItems ?? []).length === 0 ? (
-                <Alert severity="info">Henüz garanti kaydı yok.</Alert>
-              ) : (
-                <Box sx={{ width: "100%", flex: 1, minHeight: 0 }}>
-                  <DataGrid
-                    rows={filteredItems ?? []}
-                    getRowId={(row) => row?.id}
-                    columns={columns}
-                    loading={loading}
-                    disableRowSelectionOnClick
-                    autoHeight={false}
-                    density="compact"
-                    pageSizeOptions={[12, 20, 30, 50, 100]}
-                    initialState={{ pagination: { paginationModel: { pageSize: 12, page: 0 } } }}
-                    sx={{
-                      border: "none",
-                      height: "100%",
-                      width: "100%",
-                      "& .MuiDataGrid-columnHeaders": { minHeight: 44 },
-                      "& .MuiDataGrid-cell": { whiteSpace: "nowrap" },
-                      "& .MuiDataGrid-main": { overflow: "hidden" },
-                      "& .MuiDataGrid-virtualScroller": { overflowX: "auto" },
-                      "& .MuiDataGrid-footerContainer": {
-                        minHeight: 56,
-                        borderTop: 1,
-                        borderColor: "divider",
-                        backgroundColor: "background.paper",
-                      },
-                      "& .MuiTablePagination-toolbar": {
-                        minHeight: 52,
-                        pr: 1,
-                      },
-                      "& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows": {
-                        m: 0,
-                        fontWeight: 600,
-                      },
-                      "& .MuiTablePagination-select": {
-                        py: 0.5,
-                      },
-                      "& .sticky-actions-cell, & .sticky-actions-header": {
-                        position: "sticky",
-                        right: 0,
-                        zIndex: 2,
-                        backgroundColor: "background.paper",
-                        overflow: "visible",
-                        boxShadow: "-8px 0 12px -12px rgba(15, 23, 42, 0.45)"
-                      },
-                      "& .sticky-actions-header": {
-                        zIndex: 3
-                      }
-                    }}
-                  />
-                </Box>
-              )}
+              <Box sx={{ width: "100%", flex: 1, minHeight: 0 }}>
+                <DataGrid
+                  rows={visibleItems ?? []}
+                  getRowId={(row) => row?.id}
+                  columns={columns}
+                  loading={loading}
+                  disableRowSelectionOnClick
+                  autoHeight={false}
+                  density="compact"
+                  pageSizeOptions={[12, 20, 30, 50, 100]}
+                  paginationModel={activePaginationModel}
+                  onPaginationModelChange={handlePaginationModelChange}
+                  onColumnHeaderDoubleClick={handleColumnHeaderDoubleClick}
+                  localeText={{
+                    noRowsLabel:
+                      sectionItems.length === 0
+                        ? "Henüz garanti kaydı yok."
+                        : "Arama veya filtreye uygun kayıt bulunamadı.",
+                  }}
+                  sx={{
+                    border: "none",
+                    height: "100%",
+                    width: "100%",
+                    "& .MuiDataGrid-columnHeaders": { minHeight: 44 },
+                    "& .MuiDataGrid-cell": { whiteSpace: "nowrap" },
+                    "& .MuiDataGrid-main": { overflow: "hidden" },
+                    "& .MuiDataGrid-virtualScroller": { overflowX: "auto" },
+                    "& .MuiDataGrid-footerContainer": {
+                      minHeight: 56,
+                      borderTop: 1,
+                      borderColor: "divider",
+                      backgroundColor: "background.paper",
+                    },
+                    "& .MuiTablePagination-toolbar": {
+                      minHeight: 52,
+                      pr: 1,
+                    },
+                    "& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows": {
+                      m: 0,
+                      fontWeight: 600,
+                    },
+                    "& .MuiTablePagination-select": {
+                      py: 0.5,
+                    },
+                    "& .sticky-actions-cell, & .sticky-actions-header": {
+                      position: "sticky",
+                      right: 0,
+                      zIndex: 2,
+                      backgroundColor: "background.paper",
+                      overflow: "visible",
+                      boxShadow: "-8px 0 12px -12px rgba(15, 23, 42, 0.45)"
+                    },
+                    "& .sticky-actions-header": {
+                      zIndex: 3
+                    }
+                  }}
+                />
+              </Box>
             </CardContent>
           </Card>
         </Grid>
