@@ -37,14 +37,13 @@ logger = logging.getLogger(__name__)
 app = FastAPI(redirect_slashes=False)
 API_PREFIX = "/api"
 settings = get_settings()
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origins,
-    allow_credentials=settings.cors_allow_credentials,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+default_cors_origins = {
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://172.24.2.128:5173",
+    "http://10.10.3.4:5173",
+}
+cors_origins = sorted({*settings.cors_origins, *default_cors_origins})
 
 trusted_hosts = settings.trusted_hosts
 trusted_hosts_env = os.getenv("TRUSTED_HOSTS")
@@ -82,6 +81,15 @@ async def readonly_user_guard(request: Request, call_next):
                 except Exception:
                     pass
     return await call_next(request)
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.on_event("startup")

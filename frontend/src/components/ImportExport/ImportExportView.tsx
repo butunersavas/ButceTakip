@@ -26,6 +26,7 @@ import FileDownloadOutlinedIcon from "@mui/icons-material/FileDownloadOutlined";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import * as XLSX from "xlsx";
+import { formatUnusedReason } from "../../utils/unusedReason";
 
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import usePersistentState from "../../hooks/usePersistentState";
@@ -1457,8 +1458,8 @@ export default function ImportExportView() {
       Nitelik: item.asset_type || "-",
       "Toplam Bütçe": toSafeNumber(item.plan),
       "Kullanılmayacak Tutar": toSafeNumber(item.unused_amount ?? item.over),
-      Sebep: item.reason || "-",
-      Açıklama: item.note || "-",
+      Sebep: formatUnusedReason(item.reason),
+      Not: item.note || "",
       "Güncelleme Tarihi": item.unused_updated_at
         ? new Date(item.unused_updated_at).toLocaleString("tr-TR")
         : "-"
@@ -1830,7 +1831,8 @@ export default function ImportExportView() {
     setBackupFeedback(null);
     try {
       const response = await client.get(`/backup/${type}`, {
-        responseType: "blob"
+        responseType: "blob",
+        suppressGlobalError: true
       });
       const fileName =
         type === "full"

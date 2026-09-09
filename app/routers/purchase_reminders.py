@@ -63,6 +63,7 @@ def list_purchase_reminders(
         .where(PlanEntry.year == year)
         .where(PlanEntry.month == month)
         .where(PlanEntry.amount > 0)
+        .where(PlanEntry.unused_amount <= 0)
     )
 
     if scenario_id is not None:
@@ -167,6 +168,14 @@ def mark_purchase_request_created(
     plan_entry, fallback_code = plan_row
     normalized_department = (plan_entry.department or "").strip()
     budget_code = (plan_entry.budget_code or "").strip() or fallback_code
+    now = datetime.utcnow()
+
+    if not plan_entry.purchase_requested:
+        plan_entry.purchase_requested = True
+        plan_entry.purchase_requested_at = now
+        plan_entry.purchase_requested_by = user.username
+        plan_entry.updated_at = now
+        session.add(plan_entry)
 
     status = session.exec(
         select(PurchaseFormStatusExt)
@@ -185,15 +194,15 @@ def mark_purchase_request_created(
             scenario_id=plan_entry.scenario_id,
             department=normalized_department,
             is_form_prepared=True,
-            updated_at=datetime.utcnow(),
+            updated_at=now,
             updated_by=user.id,
         )
         session.add(status)
     elif not status.is_form_prepared:
         status.is_form_prepared = True
-        status.updated_at = datetime.utcnow()
+        status.updated_at = now
         status.updated_by = user.id
 
     session.commit()
 
-    return {"detail": "Satın alma talebi işaretlendi.", "item_id": item_id}
+    return {"detail": "Satın alma takip durumu güncellendi.", "item_id": item_id}

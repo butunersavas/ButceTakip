@@ -113,6 +113,7 @@ def get_purchase_alert(
         .where(PlanEntry.year == selected_year)
         .where(PlanEntry.month == selected_month)
         .where(PlanEntry.amount > 0)
+        .where(PlanEntry.unused_amount <= 0)
         .where(PlanEntry.purchase_requested.is_(False))
         .where(~prepared_status_exists)
         .order_by(PlanEntry.department, BudgetItem.name)
@@ -685,6 +686,7 @@ def get_dashboard(
         budget_item_id=budget_item_id,
         department=department,
         capex_opex=capex_filter,
+        monthly_overrun=budget_item_id is not None or month is not None or bool(month_list),
     )
     total_plan = reconciliation.total_plan_amount
     total_actual = reconciliation.realized_plan_inside_amount
@@ -1176,6 +1178,7 @@ def get_overbudget(
         budget_item_id=budget_item_id,
         department=department,
         capex_opex=capex_filter,
+        monthly_overrun=budget_item_id is not None or month is not None or bool(month_list),
     )
     remaining_statuses = compute_remaining_budget_statuses(
         session,
@@ -1218,6 +1221,7 @@ def get_overbudget(
         budget_item_id=budget_item_id,
         department=department,
         capex_opex=capex_filter,
+        monthly_scope=budget_item_id is not None or month is not None or bool(month_list),
     )
 
     items = [serialize_status(item) for item in overrun_statuses]

@@ -65,6 +65,19 @@ TEXT_FIELDS = {
     "ordered_product_model",
     "status",
 }
+FIELD_DISPLAY_NAMES = {
+    "name": "Ürün",
+    "domain": "DOMAİN ADLARI",
+    "end_date": "Bitiş/Destek Sonu Tarihi",
+    "certificate_issuer": "SERTİFİKA TÜRÜ",
+    "purchased_from": "Firma",
+    "price": "Fiyat",
+    "shipment_date": "Alım/Gönderim Tarihi",
+    "end_of_service_life": "End of Service Life",
+    "reminder_days": "SÖZLEŞME KALAN GÜN SAYISI",
+    "remind_days": "SÖZLEŞME KALAN GÜN SAYISI",
+    "remind_days_before": "SÖZLEŞME KALAN GÜN SAYISI",
+}
 
 ALLOWED_FIELDS_BY_TYPE: dict[WarrantyItemType, set[str]] = {
     WarrantyItemType.DEVICE: {
@@ -92,6 +105,18 @@ ALLOWED_FIELDS_BY_TYPE: dict[WarrantyItemType, set[str]] = {
         "renewal_responsible",
         "renewal_owner",
         "purchased_from",
+    },
+    WarrantyItemType.SSL: {
+        "type",
+        "name",
+        "end_date",
+        "issuer",
+        "certificate_issuer",
+        "purchased_from",
+        "note",
+        "reminder_days",
+        "remind_days",
+        "remind_days_before",
     },
     WarrantyItemType.SERVICE: {
         "type",
@@ -126,6 +151,12 @@ FIELD_ALIASES: dict[str, tuple[str, ...]] = {
         "hizmet_adı",
         "garanti_adi",
         "bakim_adi",
+        "sozlesmesi_guncellenen_ssl_sertifikalari",
+        "sözleşmesi_güncellenen_ssl_sertifikaları",
+        "ssl_sertifikalari",
+        "ssl_sertifikaları",
+        "ssl_certificate",
+        "certificate_name",
     ),
     "location": ("location", "lokasyon", "konum", "yer", "departman", "bolum", "bölüm", "tesis", "adres"),
     "domain": ("domain", "domain_adi", "domain_adı", "domain_adlari", "domain_adları", "domainler", "alan_adi", "alan_adı", "fqdn", "url", "site"),
@@ -152,6 +183,9 @@ FIELD_ALIASES: dict[str, tuple[str, ...]] = {
     "certificate_issuer": (
         "certificate_issuer",
         "certificateissuer",
+        "certificate_type",
+        "sertifika_turu",
+        "sertifika_türü",
         "sertifika_saglayici",
         "ssl_saglayici",
         "sertifika_veren",
@@ -167,7 +201,16 @@ FIELD_ALIASES: dict[str, tuple[str, ...]] = {
         "ilgili_kisi",
         "ilgili_kişi",
     ),
-    "reminder_days": ("reminder_days", "hatirlatma_gun", "hatırlatma_gün", "hatirlatma", "kaç_gün_önce"),
+    "reminder_days": (
+        "reminder_days",
+        "remaining_days",
+        "sozlesme_kalan_gun_sayisi",
+        "sözleşme_kalan_gün_sayısı",
+        "hatirlatma_gun",
+        "hatırlatma_gün",
+        "hatirlatma",
+        "kaç_gün_önce",
+    ),
     "remind_days": ("remind_days", "reminddays"),
     "remind_days_before": ("remind_days_before", "reminddaysbefore", "hatirlatma_gun_once"),
     "purchased_from": (
@@ -179,6 +222,8 @@ FIELD_ALIASES: dict[str, tuple[str, ...]] = {
         "alınan_yer",
         "kurum",
         "vendor",
+        "firma",
+        "company",
         "satici",
         "satıcı",
         "tedarikci",
@@ -242,12 +287,15 @@ TYPE_ALIASES = {
     "maintenance": WarrantyItemType.SERVICE,
     "lisans": WarrantyItemType.SERVICE,
     "lisans_destek": WarrantyItemType.SERVICE,
+    "yazilim": WarrantyItemType.SERVICE,
+    "yazılım": WarrantyItemType.SERVICE,
     "yazilim_lisans_destek": WarrantyItemType.SERVICE,
     "yazılım_lisans_destek": WarrantyItemType.SERVICE,
     "domain": WarrantyItemType.DOMAIN_SSL,
     "domain_ssl": WarrantyItemType.DOMAIN_SSL,
-    "ssl": WarrantyItemType.DOMAIN_SSL,
-    "sertifika": WarrantyItemType.DOMAIN_SSL,
+    "ssl": WarrantyItemType.SSL,
+    "sertifika": WarrantyItemType.SSL,
+    "ssl_sertifika": WarrantyItemType.SSL,
 }
 
 TOTAL_MARKERS = {"toplam", "genel_toplam", "ara_toplam", "subtotal", "grand_total", "total"}
@@ -290,6 +338,14 @@ TEMPLATE_COLUMNS_BY_TYPE = {
         "SÖZLEŞME KALAN GÜN SAYISI",
         "İLGİLİ FİRMA",
         "HİZMET ALINAN HOSTİNG FİRMASI",
+    ],
+    WarrantyItemType.SSL: [
+        "SÖZLEŞMESİ GÜNCELLENEN SSL SERTİFİKALARI",
+        "SERTİFİKA TÜRÜ",
+        "SÖZLEŞME BİTİŞ TARİHİ",
+        "SÖZLEŞME KALAN GÜN SAYISI",
+        "FİRMA",
+        "AÇIKLAMA",
     ],
     WarrantyItemType.SERVICE: [
         "Alınan Kurum",
@@ -357,6 +413,20 @@ def clean_text(value: Any) -> str | None:
     if text in {"-", "--", "—"}:
         return None
     return text
+
+
+def cell_display_value(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, (date, datetime)):
+        return value.isoformat()
+    return str(value).strip()
+
+
+def field_display_name(field_name: str, header_labels: dict[str, str] | None = None) -> str:
+    if header_labels and header_labels.get(field_name):
+        return header_labels[field_name]
+    return FIELD_DISPLAY_NAMES.get(field_name, field_name)
 
 
 def build_header_lookup() -> tuple[dict[str, str], dict[str, set[str]]]:
@@ -460,6 +530,17 @@ def map_headers(headers: list[Any]) -> dict[str, Any]:
     }
 
 
+def apply_type_specific_header_mapping(mapping_info: dict[str, Any], default_type: WarrantyItemType) -> dict[str, Any]:
+    if default_type != WarrantyItemType.SSL:
+        return mapping_info
+    indexes = mapping_info["indexes"]
+    headers = mapping_info["headers"]
+    if "certificate_issuer" not in indexes and "type" in indexes:
+        indexes["certificate_issuer"] = indexes["type"]
+        headers["certificate_issuer"] = headers["type"]
+    return mapping_info
+
+
 def parse_type(value: Any, default_type: WarrantyItemType | None = WarrantyItemType.DEVICE) -> WarrantyItemType | None:
     text = clean_text(value)
     if not text:
@@ -547,9 +628,14 @@ def parse_int(value: Any) -> int | None:
         return None
     if isinstance(value, int):
         return value
+    if isinstance(value, float):
+        return int(value) if value.is_integer() else None
     text = clean_text(value)
     if not text:
         return None
+    number_match = re.search(r"-?\d+(?:[.,]\d+)?", text)
+    if number_match:
+        text = number_match.group(0)
     try:
         return int(Decimal(text.replace(",", ".")))
     except InvalidOperation:
@@ -598,6 +684,14 @@ def stringify_key_part(value: Any) -> str:
 
 def make_duplicate_key(payload: dict[str, Any]) -> tuple[str, ...]:
     item_type = payload.get("type")
+    if item_type == WarrantyItemType.SSL or item_type == WarrantyItemType.SSL.value:
+        return (
+            "ssl",
+            stringify_key_part(payload.get("name")),
+            stringify_key_part(payload.get("certificate_issuer") or payload.get("issuer")),
+            stringify_key_part(payload.get("end_date")),
+            stringify_key_part(payload.get("purchased_from")),
+        )
     if item_type == WarrantyItemType.DOMAIN_SSL or item_type == WarrantyItemType.DOMAIN_SSL.value:
         return (
             "domain",
@@ -658,7 +752,13 @@ def load_existing_duplicate_keys(session: Session) -> dict[tuple[str, ...], int 
     return {make_duplicate_key(warranty_to_payload(item)): item.id for item in items}
 
 
-def parse_row(row_number: int, row: list[Any], header_map: dict[str, int], default_type: WarrantyItemType) -> RowResult:
+def parse_row(
+    row_number: int,
+    row: list[Any],
+    header_map: dict[str, int],
+    default_type: WarrantyItemType,
+    header_labels: dict[str, str] | None = None,
+) -> RowResult:
     payload: dict[str, Any] = {}
     errors: list[str] = []
     warnings: list[str] = []
@@ -686,7 +786,11 @@ def parse_row(row_number: int, row: list[Any], header_map: dict[str, int], defau
                 elif field_name == "end_of_service_life":
                     end_of_service_life = parsed_date
             elif clean_text(cell_value) is not None:
-                errors.append(f"{field_name} tarihi okunamadı.")
+                label = field_display_name(field_name, header_labels)
+                warnings.append(
+                    f"{label} alanı okunamadı: '{cell_display_value(cell_value)}'. "
+                    "Beklenen format: 31.12.2026 veya 2026-12-31"
+                )
         elif field_name in DECIMAL_FIELDS:
             parsed_decimal = parse_decimal(cell_value)
             if parsed_decimal is not None:
@@ -694,22 +798,29 @@ def parse_row(row_number: int, row: list[Any], header_map: dict[str, int], defau
                 if field_name == "price":
                     amount = parsed_decimal
             elif clean_text(cell_value) is not None:
-                errors.append(f"{field_name} Decimal/sayı olarak okunamadı.")
+                label = field_display_name(field_name, header_labels)
+                warnings.append(
+                    f"{label} alanı okunamadı: '{cell_display_value(cell_value)}'. "
+                    "Beklenen format: 80000,00 veya ₺80.000,00"
+                )
         elif field_name in INTEGER_FIELDS:
             parsed_int = parse_int(cell_value)
             if parsed_int is not None:
                 if parsed_int < 0:
-                    errors.append(f"{field_name} negatif olamaz.")
+                    label = field_display_name(field_name, header_labels)
+                    errors.append(f"{label} negatif olamaz: '{cell_display_value(cell_value)}'.")
                 else:
                     payload[field_name] = parsed_int
+            elif clean_text(cell_value) is not None:
+                label = field_display_name(field_name, header_labels)
+                warnings.append(
+                    f"{label} alanı okunamadı: '{cell_display_value(cell_value)}'. "
+                    "Beklenen format: 376 veya 376 gün"
+                )
         elif field_name in TEXT_FIELDS:
             parsed_text = clean_text(cell_value)
             if parsed_text is not None:
                 payload[field_name] = parsed_text
-
-    missing_values = [field_name for field_name in REQUIRED_FIELDS if payload.get(field_name) in {None, ""}]
-    if missing_values:
-        errors.append("Zorunlu alan eksik: " + ", ".join(sorted(missing_values)))
 
     payload = normalize_warranty_payload(payload)
     if default_type == WarrantyItemType.DOMAIN_SSL:
@@ -725,6 +836,15 @@ def parse_row(row_number: int, row: list[Any], header_map: dict[str, int], defau
             payload["name"] = payload["domain"]
         if not payload.get("domain") and payload.get("name"):
             payload["domain"] = payload["name"]
+    missing_values = [field_name for field_name in REQUIRED_FIELDS if payload.get(field_name) in {None, ""}]
+    if missing_values:
+        if default_type == WarrantyItemType.DOMAIN_SSL and "name" in missing_values:
+            errors.append("Domain adı boş / DOMAİN ADLARI alanı zorunlu")
+        elif default_type == WarrantyItemType.SSL and "name" in missing_values:
+            errors.append("SSL sertifika adı boş / SÖZLEŞMESİ GÜNCELLENEN SSL SERTİFİKALARI alanı zorunlu")
+        else:
+            missing_labels = [field_display_name(field_name, header_labels) for field_name in sorted(missing_values)]
+            errors.append("Zorunlu alan eksik: " + ", ".join(missing_labels))
     if not errors:
         try:
             validated = WarrantyItemCreate(**payload)
@@ -749,6 +869,7 @@ def analyze_rows(
     rows: list[list[Any]],
     header_row_index: int,
     header_map: dict[str, int],
+    header_labels: dict[str, str],
     default_type: WarrantyItemType,
     existing_keys: dict[tuple[str, ...], int | None],
 ) -> tuple[list[RowResult], dict[str, int], Decimal | None, dict[str, str | None]]:
@@ -777,7 +898,7 @@ def analyze_rows(
             continue
 
         counts["data_rows_read"] += 1
-        result = parse_row(row_index, row, header_map, default_type)
+        result = parse_row(row_index, row, header_map, default_type, header_labels)
         if result.status == "importable":
             duplicate_key = make_duplicate_key(result.payload)
             result.duplicate_key = duplicate_key
@@ -884,9 +1005,10 @@ def build_report(
                 "implemented_key": [
                     "Cihaz: serial_number / asset_tag / ekspres_servis_kodu / fallback",
                     "Domain: domain + sözleşme_bitiş_tarihi + ilgili_firma + hosting_firması",
+                    "SSL: sertifika_adı + sertifika_türü + sözleşme_bitiş_tarihi + firma",
                     "Lisans Destek: ürün + alınan_kurum + alım_tarihi + bitiş_tarihi + fiyat",
                 ],
-                "note": "Seçilen sekmeye göre ayrı duplicate anahtarı kullanılır; Cihaz/Domain/Lisans Destek birbirine karışmaz.",
+                "note": "Seçilen sekmeye göre ayrı duplicate anahtarı kullanılır; Cihaz/Domain/SSL/Yazılım birbirine karışmaz.",
             },
             "summary": {
                 **counts,
@@ -913,7 +1035,7 @@ def preview_warranty_import(
 ) -> dict[str, Any]:
     sheet_name_resolved, rows = read_workbook_from_bytes(content, filename, sheet_name)
     header_row_index, headers = find_header_row(rows)
-    mapping_info = map_headers(headers)
+    mapping_info = apply_type_specific_header_mapping(map_headers(headers), default_type)
     missing_required_columns = [
         field_name for field_name in sorted(REQUIRED_FIELDS) if field_name not in mapping_info["headers"]
     ]
@@ -958,6 +1080,7 @@ def preview_warranty_import(
         rows,
         header_row_index,
         mapping_info["indexes"],
+        mapping_info["headers"],
         default_type,
         existing_keys,
     )
@@ -988,7 +1111,7 @@ def confirm_warranty_import(
 ) -> dict[str, Any]:
     sheet_name_resolved, rows = read_workbook_from_bytes(content, filename, sheet_name)
     header_row_index, headers = find_header_row(rows)
-    mapping_info = map_headers(headers)
+    mapping_info = apply_type_specific_header_mapping(map_headers(headers), default_type)
     missing_required_columns = [
         field_name for field_name in sorted(REQUIRED_FIELDS) if field_name not in mapping_info["headers"]
     ]
@@ -1004,6 +1127,7 @@ def confirm_warranty_import(
         rows,
         header_row_index,
         mapping_info["indexes"],
+        mapping_info["headers"],
         default_type,
         existing_keys,
     )
@@ -1062,6 +1186,15 @@ def build_template_workbook(template_type: WarrantyItemType = WarrantyItemType.D
             "",
             "İlgili Firma",
             "Hosting Firması",
+        ])
+    elif template_type == WarrantyItemType.SSL:
+        worksheet.append([
+            "ornekssl.example.com",
+            "OV SSL",
+            "31.12.2026",
+            "",
+            "Örnek Firma",
+            "Örnek SSL sertifika kaydıdır, import öncesi silebilirsiniz.",
         ])
     elif template_type == WarrantyItemType.SERVICE:
         worksheet.append([

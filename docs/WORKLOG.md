@@ -167,3 +167,23 @@ AGENTS ve docs içindeki TL/TRY/sembol eşleşmeleri kural açıklamaları ve ta
 - AGENTS.md değişikliği ve docs/PROJECT_CONTEXT.md, docs/BUSINESS_RULES.md, docs/WORKLOG.md henüz commit edilmemişti. Yalnız bu dört belge commit kapsamına alındı; mevcut uygulama değişiklikleri kapsam dışında korundu.
 - origin: https://github.com/SavasButuner-Surat/ButceTakip.git. Fetch denemesi Repository not found hatası verdi; erişim/adres sorunu çözülmeden uzak eşitlik doğrulanamıyor. Normal push da Repository not found hatasıyla başarısız oldu. Yerel belge commit'i oluşturuldu; GitHub'a aktarım için origin adresi veya hesap erişimi düzeltilmeli.
 - Belge değişikliği için diff whitespace kontrolü uygulanır; uygulama build/testi gerekli değildir. Canlı deploy, container veya DB işlemi yapılmadı.
+
+## 2026-09-09 — Bekleyen İşlemler tek sıradaki adım modeli
+
+### Kök neden ve düzeltme
+- Bekleyen kartları aynı satırdaki bağımsız talep, harcama ve fatura boolean'larını saydığı için bir kayıt birden fazla karta girebiliyordu; tablo da Talep Durumu ve Bekleme Sebebi kolonlarıyla aynı bilgiyi tekrarlıyordu.
+- Backend her kayıt için tek `pending_step` üretir: `request_pending` → `expense_pending` → `invoice_pending`. Talep, harcama ve fatura tamamlandığında değer boş kalır ve kayıt listeden çıkar.
+- Kart sayaçları ve kart filtreleri aynı `pending_step` alanını kullanır. Böylece üç durum sayısının toplamı `Tümü` sayısına eşittir.
+- Talep geçmişi, geri alma endpoint'i, viewer/admin kontrolleri, mevcut harcama/fatura tespiti ve `unused_amount` tabanlı Kullanılmayacak davranışı korundu.
+
+### Arayüz
+- Kartlar `Tümü`, `Talep Bekleyen`, `Harcama Bekleyen`, `Fatura Bekleyen` olarak sadeleştirildi; `Talep Oluşturulan` kaldırıldı.
+- `Talep Durumu` ve `Bekleme Sebebi` yerine tek `Bekleyen Adım` kolonu ve durum başına tek rozet gösteriliyor.
+- İşlem butonları sıradaki adıma göre gösterilir; Talebi Geri Al ve mevcut yetkilendirmeler korunur.
+
+### Test ve LOCAL doğrulama
+- Güncel API/frontend Docker imajları başarıyla build edildi; frontend Vite production build başarılı, yalnız mevcut büyük chunk uyarısı var.
+- Backend testleri: 42/42 başarılı. Öncelik, tekil sayım, sayaç/filtre uyumu, tamamlanan/tasarruflu kayıt, Kullanılmayacak ve talep geri alma regresyonları kapsandı.
+- Mevcut sağlıklı `butce_db` ve `butcetakip_git_db_data` volume'u korunarak yalnız `butce_api` ve `butce_frontend` yeni imajlarla recreate edildi.
+- Giriş yapılmış `http://localhost:5173/pending-budget-actions` ekranında kartlar ve `Bekleyen Adım` kolonu doğrulandı. Yerel veri sonucu: `378 = 373 + 4 + 1`; kart tabloları sırasıyla 373, 4 ve 1 kayıt gösterdi. `SOCRadar` aramasında `9 = 9 + 0 + 0` görüldü.
+- Canlı deploy, migration, toplu veri güncellemesi, DB/volume silme veya `docker compose down -v` yapılmadı.
