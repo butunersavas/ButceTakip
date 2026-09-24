@@ -17,6 +17,7 @@ from app.models import User
 from app.routers import (
     auth,
     backup,
+    budget_preparations,
     budget_items,
     dashboard,
     expenses,
@@ -126,6 +127,7 @@ app.include_router(auth.router, prefix=API_PREFIX)
 app.include_router(backup.router, prefix=API_PREFIX)
 app.include_router(scenarios.router, prefix=API_PREFIX)
 app.include_router(budget_items.router, prefix=API_PREFIX)
+app.include_router(budget_preparations.router, prefix=API_PREFIX)
 app.include_router(plans.router, prefix=API_PREFIX)
 app.include_router(expenses.router, prefix=API_PREFIX)
 app.include_router(dashboard.router, prefix=API_PREFIX)

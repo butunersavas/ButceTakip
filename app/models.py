@@ -103,6 +103,74 @@ class PlanEntry(TimestampMixin, SQLModel, table=True):
     budget_item: BudgetItem = Relationship(back_populates="plans")
 
 
+class BudgetPreparation(TimestampMixin, SQLModel, table=True):
+    __tablename__ = "budget_preparations"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    year: int = Field(nullable=False, index=True)
+    name: str = Field(nullable=False, index=True)
+    currency: str = Field(default="USD", nullable=False, max_length=3)
+    note: Optional[str] = Field(default=None, nullable=True)
+    status: str = Field(default="DRAFT", nullable=False, index=True)
+    created_by_id: Optional[int] = Field(default=None, foreign_key="users.id", index=True)
+    activated_scenario_id: Optional[int] = Field(
+        default=None, foreign_key="scenarios.id", nullable=True, unique=True
+    )
+    completed_at: Optional[datetime] = Field(default=None, nullable=True)
+
+
+class BudgetPreparationItem(TimestampMixin, SQLModel, table=True):
+    __tablename__ = "budget_preparation_items"
+    __table_args__ = (
+        UniqueConstraint("preparation_id", "budget_code", name="uq_preparation_budget_code"),
+    )
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    preparation_id: int = Field(
+        foreign_key="budget_preparations.id", nullable=False, index=True
+    )
+    budget_name: str = Field(nullable=False)
+    budget_code: str = Field(nullable=False, index=True)
+    total_amount: Decimal = Field(
+        default=Decimal("0.00"),
+        sa_column=Column(Numeric(16, 2), nullable=False),
+    )
+    currency: str = Field(default="USD", nullable=False, max_length=3)
+    capex_opex: Optional[str] = Field(default=None, nullable=True, index=True)
+    department: Optional[str] = Field(default=None, nullable=True, index=True, max_length=100)
+    map_attribute: Optional[str] = Field(default=None, nullable=True, index=True)
+    description: Optional[str] = Field(default=None, nullable=True)
+    distribution_method: str = Field(default="CUSTOM", nullable=False)
+    single_month: Optional[int] = Field(default=None, nullable=True)
+    start_month: Optional[int] = Field(default=None, nullable=True)
+    month_count: Optional[int] = Field(default=None, nullable=True)
+    source_year: Optional[int] = Field(default=None, nullable=True)
+    source_plan_id: Optional[int] = Field(
+        default=None, foreign_key="plan_entries.id", nullable=True
+    )
+    source_budget_item_id: Optional[int] = Field(
+        default=None, foreign_key="budget_items.id", nullable=True
+    )
+    is_carryover: bool = Field(default=False, nullable=False)
+
+
+class BudgetPreparationAllocation(TimestampMixin, SQLModel, table=True):
+    __tablename__ = "budget_preparation_allocations"
+    __table_args__ = (
+        UniqueConstraint("item_id", "month", name="uq_preparation_item_month"),
+    )
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    item_id: int = Field(
+        foreign_key="budget_preparation_items.id", nullable=False, index=True
+    )
+    month: int = Field(nullable=False, ge=1, le=12)
+    amount: Decimal = Field(
+        default=Decimal("0.00"),
+        sa_column=Column(Numeric(16, 2), nullable=False),
+    )
+
+
 class BudgetTransfer(TimestampMixin, SQLModel, table=True):
     __tablename__ = "budget_transfers"
 

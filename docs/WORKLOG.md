@@ -187,3 +187,29 @@ AGENTS ve docs içindeki TL/TRY/sembol eşleşmeleri kural açıklamaları ve ta
 - Mevcut sağlıklı `butce_db` ve `butcetakip_git_db_data` volume'u korunarak yalnız `butce_api` ve `butce_frontend` yeni imajlarla recreate edildi.
 - Giriş yapılmış `http://localhost:5173/pending-budget-actions` ekranında kartlar ve `Bekleyen Adım` kolonu doğrulandı. Yerel veri sonucu: `378 = 373 + 4 + 1`; kart tabloları sırasıyla 373, 4 ve 1 kayıt gösterdi. `SOCRadar` aramasında `9 = 9 + 0 + 0` görüldü.
 - Canlı deploy, migration, toplu veri güncellemesi, DB/volume silme veya `docker compose down -v` yapılmadı.
+
+## 2026-09-24 — Bütçe Hazırlama modülü
+
+### Kapsam ve veri modeli
+- Çalışma alanı `C:\ButceTakip_Codex`, branch `feature/budget-preparation-2027` olarak doğrulandı. Main branch'e geçilmedi.
+- Taslakların mevcut Dashboard, Plan ve Harcama sorgularına sızmaması için `budget_preparations`, `budget_preparation_items` ve `budget_preparation_allocations` tabloları eklendi.
+- Başlıkta yıl, ad, USD, not, DRAFT/ACTIVE durumu, oluşturan, zaman damgaları ve aktive edilen Scenario bağlantısı tutulur.
+- Kalemde bütçe adı/kodu, Decimal toplam, USD, CAPEX/OPEX, departman, `map_attribute` tabanlı Nitelik, not ve dağıtım yöntemi tutulur. Gelecekteki tahakkuk geliştirmesi için nullable `source_year`, `source_plan_id`, `source_budget_item_id` ve `is_carryover` alanları hazırlandı.
+- Tek Ay, Eşit ve Özel dağıtım backend'de hesaplanır. Eşit dağıtım kuruş farkını son aya ekler; özel dağıtım taslakta eksik kalabilir.
+
+### Aktivasyon ve yetki
+- Final validasyonu ad/yıl/kalem, pozitif toplam, CAPEX/OPEX, departman, Nitelik, aylık toplam ve bütçe kodu çakışmasını kontrol eder; hatalar kalem kimliğiyle UI'ya döner.
+- Başarılı finalizasyon tek transaction içinde Scenario, uyumlu BudgetItem ve yalnız pozitif aylar için PlanEntry oluşturur. Taslak ACTIVE olur ve kilitlenir; tekrar finalizasyon duplicate üretmez.
+- Mevcut `map_category`, `map_attribute` ve `PlanEntry.department` sözleşmeleri korundu. Viewer/readonly kullanıcılar GET ile görüntüler, bütün mutasyonlarda backend 403 alır.
+
+### API ve arayüz
+- `/api/budget-preparations` altında liste/oluşturma, detay/güncelleme/silme, kalem CRUD, metadata ve `/{id}/complete` endpointleri eklendi.
+- Sol menü ve `/budget-preparation` route'u eklendi. Liste ekranında ad/kod araması, yıl/durum filtreleri ve taslak özetleri; detay ekranında üst kartlar, başlık otomatik kaydı, kalem filtreleri, 12 aylık özel dağıtım, canlı toplam/kalan ve final hata yönlendirmesi bulunur.
+- Departman ve Nitelik mevcut verilerden önerilir; serbest girişle ileride eklenecek değerler desteklenir. ACTIVE bütçede düzenleme ve silme kontrolleri kaldırılır, alanlar kilitlenir.
+
+### Test ve LOCAL doğrulama
+- İzole SQLite backend testleri: 57/57 başarılı; bunun 15'i yeni Bütçe Hazırlama regresyonudur.
+- Frontend production build başarılı: 12.905 modül. Mevcut yaklaşık 2 MB ana chunk uyarısı devam eder.
+- Geçici SQLite DB ve 5174/8002 portlarıyla gerçek tarayıcı doğrulaması yapıldı: taslak oluşturma, özel dağıtım `$50.000 + $70.000 = $120.000`, ACTIVE kilidi ve Plan Yönetimi'nde 2027 Scenario altında Ocak/Şubat PlanEntry satırları doğrulandı. Son temiz tarayıcı konsolunda hata yoktu.
+- Geçici test süreçleri, SQLite DB, loglar, Python bağımlılıkları ve build çıktısı kaldırıldı. Docker Desktop çalışmadığı için proje container'ları build/recreate edilmedi; mevcut local DB/container/volume değişmedi.
+- Production sunucuya/DB'ye/container'lara erişilmedi, production deploy ve main merge yapılmadı.

@@ -299,6 +299,223 @@ class PlanEntryCreate(PlanEntryBase):
     pass
 
 
+class BudgetPreparationBase(BaseModel):
+    year: int
+    name: str
+    currency: str = "USD"
+    note: str | None = None
+
+    @validator("year")
+    def validate_preparation_year(cls, value: int) -> int:
+        if value < 2000 or value > 2200:
+            raise ValueError("Bütçe yılı 2000 ile 2200 arasında olmalıdır.")
+        return value
+
+    @validator("name")
+    def validate_preparation_name(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Bütçe adı zorunludur.")
+        return normalized
+
+    @validator("currency")
+    def validate_preparation_currency(cls, value: str) -> str:
+        normalized = value.strip().upper()
+        if normalized != "USD":
+            raise ValueError("Bütçe para birimi USD olmalıdır.")
+        return normalized
+
+    @validator("note", pre=True)
+    def normalize_preparation_note(cls, value: str | None) -> str | None:
+        return _normalize_placeholder(value)
+
+
+class BudgetPreparationCreate(BudgetPreparationBase):
+    pass
+
+
+class BudgetPreparationUpdate(BaseModel):
+    year: int | None = None
+    name: str | None = None
+    currency: str | None = None
+    note: str | None = None
+
+    @validator("year")
+    def validate_update_year(cls, value: int | None) -> int | None:
+        if value is not None and not 2000 <= value <= 2200:
+            raise ValueError("Bütçe yılı 2000 ile 2200 arasında olmalıdır.")
+        return value
+
+    @validator("name")
+    def validate_update_name(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Bütçe adı zorunludur.")
+        return normalized
+
+    @validator("currency")
+    def validate_update_currency(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip().upper()
+        if normalized != "USD":
+            raise ValueError("Bütçe para birimi USD olmalıdır.")
+        return normalized
+
+    @validator("note", pre=True)
+    def normalize_update_note(cls, value: str | None) -> str | None:
+        return _normalize_placeholder(value)
+
+
+class BudgetPreparationAllocationInput(BaseModel):
+    month: int
+    amount: Decimal = Decimal("0.00")
+
+    @validator("month")
+    def validate_allocation_month(cls, value: int) -> int:
+        if not 1 <= value <= 12:
+            raise ValueError("Ay 1 ile 12 arasında olmalıdır.")
+        return value
+
+    @validator("amount")
+    def validate_allocation_amount(cls, value: Decimal) -> Decimal:
+        if value < 0:
+            raise ValueError("Aylık dağılım negatif olamaz.")
+        return value.quantize(Decimal("0.01"))
+
+
+class BudgetPreparationItemInput(BaseModel):
+    budget_name: str
+    budget_code: str
+    total_amount: Decimal = Decimal("0.00")
+    currency: str = "USD"
+    capex_opex: Literal["CAPEX", "OPEX"] | None = None
+    department: str | None = None
+    map_attribute: str | None = None
+    description: str | None = None
+    distribution_method: Literal["SINGLE_MONTH", "EQUAL", "CUSTOM"] = "CUSTOM"
+    single_month: int | None = None
+    start_month: int | None = None
+    month_count: int | None = None
+    allocations: list[BudgetPreparationAllocationInput] = Field(default_factory=list)
+    source_year: int | None = None
+    source_plan_id: int | None = None
+    source_budget_item_id: int | None = None
+    is_carryover: bool = False
+
+    @validator("budget_name", "budget_code")
+    def validate_item_required_text(cls, value: str, field) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError(f"{field.name} zorunludur.")
+        return normalized
+
+    @validator("total_amount")
+    def validate_item_total(cls, value: Decimal) -> Decimal:
+        if value < 0:
+            raise ValueError("Toplam tutar negatif olamaz.")
+        return value.quantize(Decimal("0.01"))
+
+    @validator("currency")
+    def validate_item_currency(cls, value: str) -> str:
+        normalized = value.strip().upper()
+        if normalized != "USD":
+            raise ValueError("Bütçe para birimi USD olmalıdır.")
+        return normalized
+
+    @validator("department", "map_attribute", "description", pre=True)
+    def normalize_item_optional_text(cls, value: str | None) -> str | None:
+        return _normalize_placeholder(value)
+
+    @validator("single_month", "start_month")
+    def validate_optional_month(cls, value: int | None) -> int | None:
+        if value is not None and not 1 <= value <= 12:
+            raise ValueError("Ay 1 ile 12 arasında olmalıdır.")
+        return value
+
+    @validator("month_count")
+    def validate_month_count(cls, value: int | None) -> int | None:
+        if value is not None and not 1 <= value <= 12:
+            raise ValueError("Ay sayısı 1 ile 12 arasında olmalıdır.")
+        return value
+
+
+class BudgetPreparationAllocationRead(BudgetPreparationAllocationInput):
+    id: int
+
+    class Config:
+        orm_mode = True
+
+
+class BudgetPreparationItemRead(BaseModel):
+    id: int
+    preparation_id: int
+    budget_name: str
+    budget_code: str
+    total_amount: Decimal
+    currency: str
+    capex_opex: str | None = None
+    department: str | None = None
+    map_attribute: str | None = None
+    description: str | None = None
+    distribution_method: str
+    single_month: int | None = None
+    start_month: int | None = None
+    month_count: int | None = None
+    source_year: int | None = None
+    source_plan_id: int | None = None
+    source_budget_item_id: int | None = None
+    is_carryover: bool
+    allocations: list[BudgetPreparationAllocationRead] = Field(default_factory=list)
+    allocated_amount: Decimal = Decimal("0.00")
+    remaining_amount: Decimal = Decimal("0.00")
+    is_complete: bool = False
+    validation_errors: list[str] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
+
+
+class BudgetPreparationRead(BaseModel):
+    id: int
+    year: int
+    name: str
+    currency: str
+    note: str | None = None
+    status: str
+    created_by_id: int | None = None
+    created_by_name: str | None = None
+    activated_scenario_id: int | None = None
+    completed_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+    item_count: int = 0
+    total_budget: Decimal = Decimal("0.00")
+    incomplete_item_count: int = 0
+    capex_total: Decimal = Decimal("0.00")
+    opex_total: Decimal = Decimal("0.00")
+    items: list[BudgetPreparationItemRead] = Field(default_factory=list)
+
+
+class BudgetPreparationValidationError(BaseModel):
+    item_id: int | None = None
+    budget_code: str | None = None
+    field: str
+    message: str
+
+
+class BudgetPreparationCompleteRead(BaseModel):
+    preparation: BudgetPreparationRead
+    scenario_id: int
+    created_plan_entries: int
+
+
+class BudgetPreparationMetadataRead(BaseModel):
+    departments: list[str] = Field(default_factory=list)
+    attributes: list[str] = Field(default_factory=list)
+
+
 class PlanManualCreate(BaseModel):
     year: int
     month: int

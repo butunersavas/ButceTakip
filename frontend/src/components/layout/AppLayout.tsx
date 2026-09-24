@@ -32,6 +32,7 @@ import CloudOutlinedIcon from "@mui/icons-material/CloudOutlined";
 import CleaningServicesOutlinedIcon from "@mui/icons-material/CleaningServicesOutlined";
 import PeopleOutlineOutlinedIcon from "@mui/icons-material/PeopleOutlineOutlined";
 import VerifiedOutlinedIcon from "@mui/icons-material/VerifiedOutlined";
+import AccountBalanceWalletOutlinedIcon from "@mui/icons-material/AccountBalanceWalletOutlined";
 import MenuIcon from "@mui/icons-material/Menu";
 import DarkModeIcon from "@mui/icons-material/DarkModeOutlined";
 import LightModeIcon from "@mui/icons-material/LightModeOutlined";
@@ -87,6 +88,12 @@ export default function AppLayout({ children }: AppLayoutProps) {
         label: "Plan Yönetimi",
         icon: <TableChartOutlinedIcon />,
         path: "/plans",
+      },
+      {
+        label: "Bütçe Hazırlama",
+        icon: <AccountBalanceWalletOutlinedIcon />,
+        path: "/budget-preparation",
+        isSelected: (currentLocation) => currentLocation.pathname.startsWith("/budget-preparation"),
       },
       {
         label: "Harcama Yönetimi",
