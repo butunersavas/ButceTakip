@@ -1149,9 +1149,13 @@ export default function DashboardView() {
 
   useEffect(() => {
     if (!scenarios?.length) return;
+    const selectedScenario = scenarios.find(
+      (scenario) => scenario.id === scenarioId && scenario.year === year
+    );
+    if (selectedScenario) return;
     const matchingScenario = scenarios.find((scenario) => scenario.year === year);
     setScenarioId(matchingScenario?.id ?? null);
-  }, [scenarios, year]);
+  }, [scenarios, scenarioId, setScenarioId, year]);
 
   const { data: dashboard, isLoading } = useQuery<DashboardResponse>({
     queryKey: [
@@ -2804,6 +2808,26 @@ export default function DashboardView() {
               }}
               sx={{ minWidth: 160, "& .MuiInputBase-root": { height: 40 } }}
             />
+            <TextField
+              select
+              size="small"
+              label="Scenario"
+              value={scenarioId ?? ""}
+              onChange={(event) => {
+                const value = event.target.value;
+                setScenarioId(value === "" ? null : Number(value));
+              }}
+              sx={{ minWidth: 240, "& .MuiInputBase-root": { height: 40 } }}
+            >
+              <MenuItem value="">Tüm Scenario'lar</MenuItem>
+              {(scenarios ?? [])
+                .filter((scenario) => scenario.year === year)
+                .map((scenario) => (
+                  <MenuItem key={scenario.id} value={scenario.id}>
+                    {scenario.name} ({scenario.year})
+                  </MenuItem>
+                ))}
+            </TextField>
             <Autocomplete
               ref={periodFilterRef}
               multiple

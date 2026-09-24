@@ -25,6 +25,7 @@ import {
   MenuItem,
   Paper,
   Select,
+  Snackbar,
   Stack,
   Table,
   TableBody,
@@ -106,6 +107,15 @@ interface Metadata {
   attributes: string[];
 }
 
+interface CompletionIssue {
+  item_id?: number;
+  budget_code?: string;
+  message: string;
+}
+
+type SaveSource = "auto" | "manual";
+type Feedback = { severity: "success" | "error"; message: string };
+
 interface ItemFormState {
   id?: number;
   budget_name: string;
@@ -162,6 +172,89 @@ function formatDate(value: string | null) {
   return value ? new Intl.DateTimeFormat("tr-TR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)) : "—";
 }
 
+const validationFieldLabels: Record<string, string> = {
+  allocations: "Aylık dağıtım",
+  budget_code: "Bütçe kodu",
+  budget_name: "Bütçe kalemi",
+  capex_opex: "CAPEX / OPEX",
+  department: "Departman",
+  map_attribute: "Nitelik",
+  name: "Bütçe adı",
+  note: "Açıklama / Not",
+  total_amount: "Toplam tutar",
+  year: "Bütçe yılı",
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function validationLocation(value: unknown): string {
+  if (!Array.isArray(value)) return "";
+  return value
+    .filter((part) => !["body", "query", "path"].includes(String(part)))
+    .map((part) => validationFieldLabels[String(part)] ?? String(part))
+    .join(" / ");
+}
+
+function turkishValidationMessage(message: string): string {
+  const normalized = message.trim().toLocaleLowerCase("en-US");
+  if (normalized === "field required") return "Bu alan zorunludur.";
+  if (normalized.includes("valid integer")) return "Geçerli bir tam sayı girin.";
+  if (normalized.includes("valid number") || normalized.includes("valid float")) return "Geçerli bir sayı girin.";
+  if (normalized.includes("not an allowed value")) return "İzin verilen değerlerden birini seçin.";
+  if (normalized.includes("valid list")) return "Geçerli bir liste girin.";
+  if (normalized.includes("greater than")) return "Sıfırdan büyük bir değer girin.";
+  if (normalized.includes("string should have at least") || normalized.includes("too short")) return "Girilen metin çok kısa.";
+  return message;
+}
+
+function readableDetail(value: unknown): string | null {
+  if (typeof value === "string") return value.trim() || null;
+  if (Array.isArray(value)) {
+    const messages = value.map(readableDetail).filter((message): message is string => Boolean(message));
+    return messages.length ? messages.join(" • ") : null;
+  }
+  if (!isRecord(value)) return null;
+
+  const directMessage = readableDetail(value.message) ?? readableDetail(value.msg);
+  const location = validationLocation(value.loc);
+  if (directMessage) {
+    const localizedMessage = value.loc ? turkishValidationMessage(directMessage) : directMessage;
+    return location ? `${location}: ${localizedMessage}` : localizedMessage;
+  }
+
+  return readableDetail(value.errors) ?? readableDetail(value.detail);
+}
+
+function apiErrorMessage(error: unknown, fallback: string): string {
+  const responseData = isRecord(error) && isRecord(error.response) ? error.response.data : undefined;
+  if (!isRecord(responseData)) return fallback;
+  return readableDetail(responseData.detail) ?? readableDetail(responseData.message) ?? fallback;
+}
+
+function completionIssues(error: unknown): CompletionIssue[] {
+  const responseData = isRecord(error) && isRecord(error.response) ? error.response.data : undefined;
+  const detail = isRecord(responseData) ? responseData.detail : undefined;
+  const candidates = isRecord(detail) && Array.isArray(detail.errors)
+    ? detail.errors
+    : Array.isArray(detail) ? detail : [detail];
+  const issues = candidates.flatMap((candidate): CompletionIssue[] => {
+    if (!isRecord(candidate)) {
+      const message = readableDetail(candidate);
+      return message ? [{ message }] : [];
+    }
+    const message = readableDetail(candidate);
+    if (!message) return [];
+    return [{
+      item_id: typeof candidate.item_id === "number" ? candidate.item_id : undefined,
+      budget_code: typeof candidate.budget_code === "string" ? candidate.budget_code : undefined,
+      message,
+    }];
+  });
+  return issues.length ? issues : [{ message: apiErrorMessage(error, "Bütçe tamamlanamadı.") }];
+}
+
 export default function BudgetPreparationView() {
   const { preparationId } = useParams();
   const id = preparationId ? Number(preparationId) : null;
@@ -195,6 +288,16 @@ function PreparationList() {
       return data;
     },
   });
+
+  const sameYearPreparationsQuery = useQuery<Preparation[]>({
+    queryKey: ["budget-preparations", "same-year-warning", newYear],
+    queryFn: async () => (await client.get<Preparation[]>("/budget-preparations", { params: { year: newYear } })).data,
+    enabled: createOpen && Number.isInteger(newYear),
+  });
+
+  const sameYearPreparations = sameYearPreparationsQuery.data ?? [];
+  const sameYearDraftCount = sameYearPreparations.filter((preparation) => preparation.status === "DRAFT").length;
+  const sameYearActiveCount = sameYearPreparations.filter((preparation) => preparation.status === "ACTIVE").length;
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -272,7 +375,10 @@ function PreparationList() {
             <TextField required label="Bütçe Adı" value={newName} onChange={(event) => setNewName(event.target.value)} />
             <TextField label="Para Birimi" value="USD" disabled />
             <TextField label="Açıklama / Not" multiline minRows={3} value={newNote} onChange={(event) => setNewNote(event.target.value)} />
-            {createMutation.isError && <Alert severity="error">Bütçe taslağı oluşturulamadı.</Alert>}
+            {sameYearPreparations.length > 0 && <Alert severity="warning">
+              {newYear} yılı için {sameYearDraftCount ? `${sameYearDraftCount} taslak` : ""}{sameYearDraftCount && sameYearActiveCount ? " ve " : ""}{sameYearActiveCount ? `${sameYearActiveCount} aktif` : ""} bütçe zaten mevcut. Scenario yapısı nedeniyle yeni bütçe oluşturabilirsiniz; doğru bütçeyle çalıştığınızdan emin olun.
+            </Alert>}
+            {createMutation.isError && <Alert severity="error">{apiErrorMessage(createMutation.error, "Bütçe taslağı oluşturulamadı.")}</Alert>}
           </Stack>
         </DialogContent>
         <DialogActions>
@@ -294,7 +400,9 @@ function PreparationDetail({ preparationId }: { preparationId: number }) {
   const [itemOpen, setItemOpen] = useState(false);
   const [itemForm, setItemForm] = useState<ItemFormState>(emptyItemForm());
   const [formError, setFormError] = useState<string | null>(null);
-  const [completionErrors, setCompletionErrors] = useState<Array<{ item_id?: number; budget_code?: string; message: string }>>([]);
+  const [completionErrors, setCompletionErrors] = useState<CompletionIssue[]>([]);
+  const [feedback, setFeedback] = useState<Feedback | null>(null);
+  const [isSavingItem, setIsSavingItem] = useState(false);
   const [search, setSearch] = useState("");
   const [department, setDepartment] = useState("");
   const [capexOpex, setCapexOpex] = useState("");
@@ -318,29 +426,49 @@ function PreparationDetail({ preparationId }: { preparationId: number }) {
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["budget-preparation", preparationId] });
   const updateHeaderMutation = useMutation({
-    mutationFn: async () => client.put(`/budget-preparations/${preparationId}`, { ...header, currency: "USD" }),
-    onSuccess: refresh,
+    mutationFn: async (_source: SaveSource) => client.put(`/budget-preparations/${preparationId}`, { ...header, currency: "USD" }),
+    onSuccess: async (_data, source) => {
+      await refresh();
+      setFeedback({ severity: "success", message: source === "auto" ? "Değişiklikler otomatik kaydedildi." : "Taslak başarıyla kaydedildi." });
+    },
+    onError: (error, source) => setFeedback({
+      severity: "error",
+      message: apiErrorMessage(error, source === "auto" ? "Otomatik kayıt başarısız oldu." : "Taslak kaydedilemedi."),
+    }),
   });
   const deleteDraftMutation = useMutation({
     mutationFn: async () => client.delete(`/budget-preparations/${preparationId}`),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["budget-preparations"] }); navigate("/budget-preparation"); },
+    onError: (error) => setFeedback({ severity: "error", message: apiErrorMessage(error, "Bütçe taslağı silinemedi.") }),
   });
   const deleteItemMutation = useMutation({
     mutationFn: async (itemId: number) => client.delete(`/budget-preparations/${preparationId}/items/${itemId}`),
-    onSuccess: refresh,
+    onSuccess: async () => { await refresh(); setFeedback({ severity: "success", message: "Bütçe kalemi silindi." }); },
+    onError: (error) => setFeedback({ severity: "error", message: apiErrorMessage(error, "Bütçe kalemi silinemedi.") }),
   });
   const completeMutation = useMutation({
     mutationFn: async () => client.post(`/budget-preparations/${preparationId}/complete`),
-    onSuccess: () => { setCompletionErrors([]); refresh(); queryClient.invalidateQueries({ queryKey: ["scenarios"] }); },
-    onError: (error: any) => {
-      const detail = error?.response?.data?.detail;
-      setCompletionErrors(Array.isArray(detail?.errors) ? detail.errors : [{ message: detail?.message ?? "Bütçe tamamlanamadı." }]);
+    onSuccess: async () => {
+      setCompletionErrors([]);
+      await refresh();
+      queryClient.invalidateQueries({ queryKey: ["scenarios"] });
+      setFeedback({ severity: "success", message: "Bütçe tamamlandı ve aktif Scenario oluşturuldu." });
+    },
+    onError: (error) => {
+      const issues = completionIssues(error);
+      setCompletionErrors(issues);
+      setFeedback({ severity: "error", message: issues.map((issue) => issue.message).join(" • ") });
     },
   });
 
   const preparation = detailQuery.data;
   const isLocked = preparation?.status === "ACTIVE";
   const canEdit = !isViewer && !isLocked;
+  const saveHeader = (source: SaveSource) => {
+    if (!canEdit || updateHeaderMutation.isPending) return;
+    setFeedback(null);
+    updateHeaderMutation.mutate(source);
+  };
   const departmentOptions = useMemo(() => Array.from(new Set([...(metadataQuery.data?.departments ?? []), ...(preparation?.items ?? []).map((item) => item.department).filter(Boolean) as string[]])).sort(), [metadataQuery.data, preparation]);
   const attributeOptions = useMemo(() => Array.from(new Set([...(metadataQuery.data?.attributes ?? []), ...(preparation?.items ?? []).map((item) => item.map_attribute).filter(Boolean) as string[]])).sort(), [metadataQuery.data, preparation]);
   const filteredItems = useMemo(() => (preparation?.items ?? []).filter((item) => {
@@ -390,6 +518,7 @@ function PreparationDetail({ preparationId }: { preparationId: number }) {
   }, [itemForm]);
 
   const saveItem = async () => {
+    if (isSavingItem) return;
     const totalAmount = parseAmount(itemForm.total_amount);
     if (!itemForm.budget_name.trim() || !itemForm.budget_code.trim()) {
       setFormError("Bütçe adı ve bütçe kodu zorunludur.");
@@ -415,13 +544,18 @@ function PreparationDetail({ preparationId }: { preparationId: number }) {
       allocations: itemForm.allocations.map((amount, index) => ({ month: index + 1, amount: parseAmount(amount) })),
       is_carryover: false,
     };
+    setIsSavingItem(true);
+    setFormError(null);
     try {
       if (itemForm.id) await client.put(`/budget-preparations/${preparationId}/items/${itemForm.id}`, payload);
       else await client.post(`/budget-preparations/${preparationId}/items`, payload);
       setItemOpen(false);
       await refresh();
-    } catch (error: any) {
-      setFormError(error?.response?.data?.detail ?? "Bütçe kalemi kaydedilemedi.");
+      setFeedback({ severity: "success", message: "Bütçe kalemi taslağa kaydedildi." });
+    } catch (error: unknown) {
+      setFormError(apiErrorMessage(error, "Bütçe kalemi kaydedilemedi."));
+    } finally {
+      setIsSavingItem(false);
     }
   };
 
@@ -445,8 +579,8 @@ function PreparationDetail({ preparationId }: { preparationId: number }) {
           <Chip label={statusLabel(preparation.status)} color={isLocked ? "success" : "warning"} />
         </Stack>
         {canEdit && <Stack direction="row" spacing={1}>
-          <Button startIcon={<SaveIcon />} variant="outlined" onClick={() => updateHeaderMutation.mutate()}>Taslağı Kaydet</Button>
-          <Button startIcon={<CompleteIcon />} variant="contained" color="success" onClick={() => completeMutation.mutate()}>Bütçeyi Tamamla</Button>
+          <Button startIcon={<SaveIcon />} variant="outlined" disabled={updateHeaderMutation.isPending || completeMutation.isPending} onClick={() => saveHeader("manual")}>{updateHeaderMutation.isPending ? "Kaydediliyor…" : "Taslağı Kaydet"}</Button>
+          <Button startIcon={<CompleteIcon />} variant="contained" color="success" disabled={completeMutation.isPending || updateHeaderMutation.isPending} onClick={() => completeMutation.mutate()}>{completeMutation.isPending ? "Tamamlanıyor…" : "Bütçeyi Tamamla"}</Button>
         </Stack>}
       </Stack>
 
@@ -459,11 +593,11 @@ function PreparationDetail({ preparationId }: { preparationId: number }) {
       <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3 }}>
         <Typography variant="h6" fontWeight={750} gutterBottom>Bütçe Başlığı</Typography>
         <Grid container spacing={2}>
-          <Grid item xs={12} md={2}><TextField fullWidth label="Bütçe Yılı" type="number" disabled={!canEdit} value={header.year} onChange={(event) => setHeader((current) => ({ ...current, year: Number(event.target.value) }))} onBlur={() => canEdit && updateHeaderMutation.mutate()} /></Grid>
-          <Grid item xs={12} md={5}><TextField fullWidth label="Bütçe Adı" disabled={!canEdit} value={header.name} onChange={(event) => setHeader((current) => ({ ...current, name: event.target.value }))} onBlur={() => canEdit && updateHeaderMutation.mutate()} /></Grid>
+          <Grid item xs={12} md={2}><TextField fullWidth label="Bütçe Yılı" type="number" disabled={!canEdit || updateHeaderMutation.isPending} value={header.year} onChange={(event) => setHeader((current) => ({ ...current, year: Number(event.target.value) }))} onBlur={() => saveHeader("auto")} /></Grid>
+          <Grid item xs={12} md={5}><TextField fullWidth label="Bütçe Adı" disabled={!canEdit || updateHeaderMutation.isPending} value={header.name} onChange={(event) => setHeader((current) => ({ ...current, name: event.target.value }))} onBlur={() => saveHeader("auto")} /></Grid>
           <Grid item xs={12} md={2}><TextField fullWidth label="Para Birimi" value="USD" disabled /></Grid>
           <Grid item xs={12} md={3}><TextField fullWidth label="Oluşturan" value={preparation.created_by_name ?? "—"} disabled /></Grid>
-          <Grid item xs={12}><TextField fullWidth label="Açıklama / Not" multiline minRows={2} disabled={!canEdit} value={header.note} onChange={(event) => setHeader((current) => ({ ...current, note: event.target.value }))} onBlur={() => canEdit && updateHeaderMutation.mutate()} /></Grid>
+          <Grid item xs={12}><TextField fullWidth label="Açıklama / Not" multiline minRows={2} disabled={!canEdit || updateHeaderMutation.isPending} value={header.note} onChange={(event) => setHeader((current) => ({ ...current, note: event.target.value }))} onBlur={() => saveHeader("auto")} /></Grid>
         </Grid>
       </Paper>
 
@@ -487,16 +621,16 @@ function PreparationDetail({ preparationId }: { preparationId: number }) {
               <TableCell><Tooltip title={item.validation_errors.join(" ")}><Chip size="small" label={item.is_complete ? "Tamam" : "Eksik"} color={item.is_complete ? "success" : "error"} /></Tooltip></TableCell>
               <TableCell>{item.budget_code}</TableCell><TableCell>{item.budget_name}</TableCell><TableCell>{item.department || "—"}</TableCell><TableCell>{item.map_attribute || "—"}</TableCell><TableCell>{item.capex_opex || "—"}</TableCell>
               <TableCell align="right">{formatCurrency(item.total_amount)}</TableCell><TableCell align="right">{formatCurrency(item.allocated_amount)}</TableCell><TableCell align="right">{formatCurrency(item.remaining_amount)}</TableCell>
-              <TableCell align="right">{canEdit && <><IconButton aria-label="Düzenle" onClick={() => openItem(item)}><EditIcon /></IconButton><IconButton aria-label="Sil" color="error" onClick={() => window.confirm("Bütçe kalemi silinsin mi?") && deleteItemMutation.mutate(item.id)}><DeleteIcon /></IconButton></>}</TableCell>
+              <TableCell align="right">{canEdit && <><IconButton aria-label="Düzenle" disabled={deleteItemMutation.isPending} onClick={() => openItem(item)}><EditIcon /></IconButton><IconButton aria-label="Sil" color="error" disabled={deleteItemMutation.isPending} onClick={() => window.confirm("Bütçe kalemi silinsin mi?") && deleteItemMutation.mutate(item.id)}><DeleteIcon /></IconButton></>}</TableCell>
             </TableRow>)}
             {!filteredItems.length && <TableRow><TableCell colSpan={10} align="center">Filtrelere uygun bütçe kalemi bulunamadı.</TableCell></TableRow>}
           </TableBody>
         </Table>
       </TableContainer>
 
-      {canEdit && <Button color="error" variant="text" startIcon={<DeleteIcon />} sx={{ alignSelf: "flex-start" }} onClick={() => window.confirm("Bu bütçe taslağı ve tüm kalemleri silinecek. Devam edilsin mi?") && deleteDraftMutation.mutate()}>Taslağı Sil</Button>}
+      {canEdit && <Button color="error" variant="text" startIcon={<DeleteIcon />} sx={{ alignSelf: "flex-start" }} disabled={deleteDraftMutation.isPending} onClick={() => window.confirm("Bu bütçe taslağı ve tüm kalemleri silinecek. Devam edilsin mi?") && deleteDraftMutation.mutate()}>{deleteDraftMutation.isPending ? "Siliniyor…" : "Taslağı Sil"}</Button>}
 
-      <Dialog open={itemOpen} onClose={() => setItemOpen(false)} fullWidth maxWidth="lg">
+      <Dialog open={itemOpen} onClose={() => !isSavingItem && setItemOpen(false)} fullWidth maxWidth="lg">
         <DialogTitle>{itemForm.id ? "Bütçe Kalemini Düzenle" : "Bütçe Kalemi Ekle"}</DialogTitle>
         <DialogContent dividers>
           <Grid container spacing={2} sx={{ pt: 0.5 }}>
@@ -517,8 +651,11 @@ function PreparationDetail({ preparationId }: { preparationId: number }) {
             {formError && <Grid item xs={12}><Alert severity="error">{formError}</Alert></Grid>}
           </Grid>
         </DialogContent>
-        <DialogActions><Button onClick={() => setItemOpen(false)}>İptal</Button><Button variant="contained" onClick={saveItem}>Taslağa Kaydet</Button></DialogActions>
+        <DialogActions><Button disabled={isSavingItem} onClick={() => setItemOpen(false)}>İptal</Button><Button variant="contained" disabled={isSavingItem} onClick={saveItem}>{isSavingItem ? "Kaydediliyor…" : "Taslağa Kaydet"}</Button></DialogActions>
       </Dialog>
+      <Snackbar open={Boolean(feedback)} autoHideDuration={5000} onClose={() => setFeedback(null)} anchorOrigin={{ vertical: "bottom", horizontal: "center" }}>
+        <Alert severity={feedback?.severity ?? "success"} variant="filled" onClose={() => setFeedback(null)}>{feedback?.message ?? ""}</Alert>
+      </Snackbar>
     </Stack>
   );
 }

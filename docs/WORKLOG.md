@@ -213,3 +213,13 @@ AGENTS ve docs içindeki TL/TRY/sembol eşleşmeleri kural açıklamaları ve ta
 - Geçici SQLite DB ve 5174/8002 portlarıyla gerçek tarayıcı doğrulaması yapıldı: taslak oluşturma, özel dağıtım `$50.000 + $70.000 = $120.000`, ACTIVE kilidi ve Plan Yönetimi'nde 2027 Scenario altında Ocak/Şubat PlanEntry satırları doğrulandı. Son temiz tarayıcı konsolunda hata yoktu.
 - Geçici test süreçleri, SQLite DB, loglar, Python bağımlılıkları ve build çıktısı kaldırıldı. Docker Desktop çalışmadığı için proje container'ları build/recreate edilmedi; mevcut local DB/container/volume değişmedi.
 - Production sunucuya/DB'ye/container'lara erişilmedi, production deploy ve main merge yapılmadı.
+
+### 2026-09-24 — Pre-merge güvenlik ve geri bildirim iyileştirmeleri
+- FastAPI `detail` değerleri string, nesne veya validation error dizisi olduğunda güvenli düz metne dönüştürülür; React'e nesne/dizi verilmez. Validation alan yolları kullanıcıya okunabilir etiketlerle gösterilir.
+- Başlık otomatik kaydı ve `Taslağı Kaydet` için görünür başarı/hata bildirimi eklendi. Taslak tamamlama, kalem kaydetme/silme ve taslak silme sonuçları da kullanıcıya bildirilir.
+- Taslak kaydetme/tamamlama ile kalem kaydetme/silme mutation'ları sürerken ilgili butonlar devre dışı bırakılır; tekrarlı UI istekleri engellenir.
+- Yeni bütçe formu aynı yıl için DRAFT veya ACTIVE bütçe varsa bilgi uyarısı gösterir; mevcut Scenario davranışı korunur ve oluşturma engellenmez.
+- Dashboard'un mevcut `scenarioId` sorgu akışına görünür Scenario seçimi bağlandı. Yıl değişince uygun Scenario seçilir; aynı yıldaki kullanıcı seçimi sorgu yenilenmelerinde korunur.
+- Backend regresyon testleri 57/57 başarılıdır. Frontend production build 12.905 modülle başarılıdır; mevcut büyük ana chunk uyarısı devam eder.
+- İzole local tarayıcı testinde 2027 bütçesi ACTIVE yapıldı. Plan Yönetimi'ndeki Ocak `$50.000` ve Şubat `$70.000` PlanEntry toplamı `$120.000`; Dashboard'da 2027 ve `Codex 2027 Browser Test (2027)` Scenario seçiliyken `Toplam Plan` `$120.000,00` olarak doğrulandı. Aynı yıl ACTIVE bütçe uyarısı ve taslak/kalem kayıt başarı bildirimleri de görüldü.
+- Geçici local API/frontend süreçleri, SQLite DB, loglar, bağımlılıklar ve build çıktısı temizlendi. Production deploy, production DB/container değişikliği ve main merge yapılmadı.
