@@ -943,6 +943,7 @@ def _budget_item_aggregates(
 @router.get("/risky-items", response_model=list[RiskyItem])
 def get_risky_budget_items(
     year: int,
+    scenario_id: int | None = Query(default=None),
     month: int | None = None,
     month_list: str | None = Query(default=None),
     department: str | None = Query(default=None),
@@ -955,6 +956,7 @@ def get_risky_budget_items(
         session,
         year=year,
         month_range=month_range,
+        scenario_id=scenario_id,
         department=department,
         capex_opex=_normalize_capex_opex(capex_opex),
     )
@@ -962,6 +964,7 @@ def get_risky_budget_items(
         session,
         year=year,
         month_range=month_range,
+        scenario_id=scenario_id,
         department=department,
         capex_opex=_normalize_capex_opex(capex_opex),
     )
@@ -978,8 +981,8 @@ def get_risky_budget_items(
             items.append(
                 RiskyItem(
                     budget_item_id=row.budget_item_id,
-                    budget_code=row.code,
-                    budget_name=row.name,
+                    budget_code=row.budget_code,
+                    budget_name=row.budget_name,
                     plan=plan,
                     actual=actual,
                     ratio=ratio,

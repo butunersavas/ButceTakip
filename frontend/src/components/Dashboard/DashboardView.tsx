@@ -765,6 +765,10 @@ export default function DashboardView() {
   const currentYear = new Date().getFullYear();
   const [year, setYear] = usePersistentState<number>("dashboard:year", currentYear);
   const [scenarioId, setScenarioId] = usePersistentState<number | null>("dashboard:scenarioId", null);
+  const [allScenariosSelected, setAllScenariosSelected] = usePersistentState<boolean>(
+    "dashboard:allScenariosSelected",
+    false
+  );
   const [selectedPeriods, setSelectedPeriods] = usePersistentState<DashboardQuarter[]>(
     "dashboard:periods",
     []
@@ -1119,12 +1123,17 @@ export default function DashboardView() {
       "dashboard",
       "risky-items",
       debouncedFilters.year,
+      debouncedFilters.scenarioId,
       debouncedFilters.selectedMonthKey,
       debouncedFilters.department,
       debouncedFilters.capexOpex
     ],
     queryFn: async () => {
       const params: Record<string, number | string> = { year: debouncedFilters.year };
+
+      if (debouncedFilters.scenarioId) {
+        params.scenario_id = debouncedFilters.scenarioId;
+      }
 
       if (debouncedFilters.selectedMonthKey) {
         params.month_list = debouncedFilters.selectedMonthKey;
@@ -1149,13 +1158,17 @@ export default function DashboardView() {
 
   useEffect(() => {
     if (!scenarios?.length) return;
+    if (allScenariosSelected) {
+      if (scenarioId !== null) setScenarioId(null);
+      return;
+    }
     const selectedScenario = scenarios.find(
       (scenario) => scenario.id === scenarioId && scenario.year === year
     );
     if (selectedScenario) return;
     const matchingScenario = scenarios.find((scenario) => scenario.year === year);
     setScenarioId(matchingScenario?.id ?? null);
-  }, [scenarios, scenarioId, setScenarioId, year]);
+  }, [allScenariosSelected, scenarios, scenarioId, setScenarioId, year]);
 
   const { data: dashboard, isLoading } = useQuery<DashboardResponse>({
     queryKey: [
@@ -1379,6 +1392,7 @@ export default function DashboardView() {
   const handleResetFilters = () => {
     setYear(currentYear);
     setScenarioId(null);
+    setAllScenariosSelected(true);
     setSelectedPeriods([]);
     setSelectedMonths([]);
     setBudgetItemId(null);
@@ -2812,10 +2826,13 @@ export default function DashboardView() {
               select
               size="small"
               label="Scenario"
-              value={scenarioId ?? ""}
+              value={allScenariosSelected ? "" : scenarioId ?? ""}
+              SelectProps={{ displayEmpty: true }}
               onChange={(event) => {
                 const value = event.target.value;
-                setScenarioId(value === "" ? null : Number(value));
+                const isAllScenarios = value === "";
+                setAllScenariosSelected(isAllScenarios);
+                setScenarioId(isAllScenarios ? null : Number(value));
               }}
               sx={{ minWidth: 240, "& .MuiInputBase-root": { height: 40 } }}
             >

@@ -247,6 +247,12 @@ export default function PlansView() {
   const currentYear = new Date().getFullYear();
   const [year, setYear] = usePersistentState<number>("plans:year", currentYear);
   const [scenarioId, setScenarioId] = usePersistentState<number | null>("plans:scenarioId", null);
+  useEffect(() => {
+    const requestedYear = Number(searchParams.get("year"));
+    const requestedScenario = Number(searchParams.get("scenario_id"));
+    if (Number.isInteger(requestedYear) && requestedYear > 0) setYear(requestedYear);
+    if (Number.isInteger(requestedScenario) && requestedScenario > 0) setScenarioId(requestedScenario);
+  }, [searchParams, setScenarioId, setYear]);
   const [monthFilter, setMonthFilter] = useState<number | "">("");
   const [departmentFilter, setDepartmentFilter] = useState<string>("");
   const [budgetItemId, setBudgetItemId] = usePersistentState<number | null>("plans:budgetItemId", null);
@@ -333,7 +339,9 @@ export default function PlansView() {
     if (!scenarios?.length) return;
     setScenarioId((previous) => {
       const previousScenario = previous ? scenarioById.get(previous) : null;
-      if (previousScenario?.year === year) {
+      // A preparation scenario can legitimately own carry-over PlanEntry rows in
+      // later years, so its definition year must not clear an explicit selection.
+      if (previousScenario) {
         return previous;
       }
 

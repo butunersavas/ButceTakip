@@ -370,6 +370,7 @@ class BudgetPreparationUpdate(BaseModel):
 
 
 class BudgetPreparationAllocationInput(BaseModel):
+    year: int | None = None
     month: int
     amount: Decimal = Decimal("0.00")
 
@@ -388,7 +389,7 @@ class BudgetPreparationAllocationInput(BaseModel):
 
 class BudgetPreparationItemInput(BaseModel):
     budget_name: str
-    budget_code: str
+    budget_code: str | None = None
     total_amount: Decimal = Decimal("0.00")
     currency: str = "USD"
     capex_opex: Literal["CAPEX", "OPEX"] | None = None
@@ -397,6 +398,7 @@ class BudgetPreparationItemInput(BaseModel):
     description: str | None = None
     distribution_method: Literal["SINGLE_MONTH", "EQUAL", "CUSTOM"] = "CUSTOM"
     single_month: int | None = None
+    start_year: int | None = None
     start_month: int | None = None
     month_count: int | None = None
     allocations: list[BudgetPreparationAllocationInput] = Field(default_factory=list)
@@ -405,12 +407,16 @@ class BudgetPreparationItemInput(BaseModel):
     source_budget_item_id: int | None = None
     is_carryover: bool = False
 
-    @validator("budget_name", "budget_code")
+    @validator("budget_name")
     def validate_item_required_text(cls, value: str, field) -> str:
         normalized = value.strip()
         if not normalized:
             raise ValueError(f"{field.name} zorunludur.")
         return normalized
+
+    @validator("budget_code", pre=True)
+    def normalize_optional_budget_code(cls, value: str | None) -> str | None:
+        return _normalize_placeholder(value)
 
     @validator("total_amount")
     def validate_item_total(cls, value: Decimal) -> Decimal:
@@ -437,13 +443,14 @@ class BudgetPreparationItemInput(BaseModel):
 
     @validator("month_count")
     def validate_month_count(cls, value: int | None) -> int | None:
-        if value is not None and not 1 <= value <= 12:
-            raise ValueError("Ay sayısı 1 ile 12 arasında olmalıdır.")
+        if value is not None and not 1 <= value <= 36:
+            raise ValueError("Ay sayısı 1 ile 36 arasında olmalıdır.")
         return value
 
 
 class BudgetPreparationAllocationRead(BudgetPreparationAllocationInput):
     id: int
+    year: int
 
     class Config:
         orm_mode = True
@@ -462,6 +469,7 @@ class BudgetPreparationItemRead(BaseModel):
     description: str | None = None
     distribution_method: str
     single_month: int | None = None
+    start_year: int | None = None
     start_month: int | None = None
     month_count: int | None = None
     source_year: int | None = None

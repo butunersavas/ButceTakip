@@ -30,32 +30,36 @@ def money(value: Decimal | float | int | None) -> Decimal:
     return Decimal(str(value or 0)).quantize(MONEY_STEP)
 
 
-def build_allocation_amounts(payload: BudgetPreparationItemInput) -> dict[int, Decimal]:
+def build_allocation_amounts(
+    payload: BudgetPreparationItemInput,
+    preparation_year: int = 2027,
+) -> dict[tuple[int, int], Decimal]:
     total = money(payload.total_amount)
+    start_year = payload.start_year or preparation_year
     if payload.distribution_method == "SINGLE_MONTH":
         if payload.single_month is None:
             return {}
-        return {payload.single_month: total}
+        return {(start_year, payload.single_month): total}
 
     if payload.distribution_method == "EQUAL":
         if payload.start_month is None or payload.month_count is None:
             return {}
-        last_month = payload.start_month + payload.month_count - 1
-        if last_month > 12:
-            raise ValueError("Eşit dağıtım Aralık ayını aşamaz.")
         base = (total / payload.month_count).quantize(MONEY_STEP, rounding=ROUND_DOWN)
-        amounts = {
-            month: base
-            for month in range(payload.start_month, last_month + 1)
-        }
-        amounts[last_month] = money(total - base * (payload.month_count - 1))
+        amounts: dict[tuple[int, int], Decimal] = {}
+        for offset in range(payload.month_count):
+            zero_based_month = payload.start_month - 1 + offset
+            key = (start_year + zero_based_month // 12, zero_based_month % 12 + 1)
+            amounts[key] = base
+        last_key = next(reversed(amounts))
+        amounts[last_key] = money(total - base * (payload.month_count - 1))
         return amounts
 
-    amounts: dict[int, Decimal] = {}
+    amounts: dict[tuple[int, int], Decimal] = {}
     for allocation in payload.allocations:
-        if allocation.month in amounts:
-            raise ValueError(f"{allocation.month}. ay birden fazla kez gönderilemez.")
-        amounts[allocation.month] = money(allocation.amount)
+        key = (allocation.year or preparation_year, allocation.month)
+        if key in amounts:
+            raise ValueError(f"{key[0]} / {key[1]}. ay birden fazla kez gönderilemez.")
+        amounts[key] = money(allocation.amount)
     return amounts
 
 
@@ -64,6 +68,9 @@ def replace_allocations(
     item: BudgetPreparationItem,
     payload: BudgetPreparationItemInput,
 ) -> None:
+    preparation = session.get(BudgetPreparation, item.preparation_id)
+    if not preparation:
+        raise LookupError("Bütçe taslağı bulunamadı.")
     existing = session.exec(
         select(BudgetPreparationAllocation).where(
             BudgetPreparationAllocation.item_id == item.id
@@ -73,9 +80,9 @@ def replace_allocations(
         session.delete(allocation)
     session.flush()
 
-    for month, amount in build_allocation_amounts(payload).items():
+    for (year, month), amount in build_allocation_amounts(payload, preparation.year).items():
         session.add(
-            BudgetPreparationAllocation(item_id=item.id, month=month, amount=amount)
+            BudgetPreparationAllocation(item_id=item.id, year=year, month=month, amount=amount)
         )
 
 
@@ -103,7 +110,7 @@ def build_item_read(session: Session, item: BudgetPreparationItem) -> BudgetPrep
     allocations = session.exec(
         select(BudgetPreparationAllocation)
         .where(BudgetPreparationAllocation.item_id == item.id)
-        .order_by(BudgetPreparationAllocation.month)
+        .order_by(BudgetPreparationAllocation.year, BudgetPreparationAllocation.month)
     ).all()
     allocated = sum((money(row.amount) for row in allocations), Decimal("0.00"))
     total = money(item.total_amount)
@@ -121,6 +128,7 @@ def build_item_read(session: Session, item: BudgetPreparationItem) -> BudgetPrep
         description=item.description,
         distribution_method=item.distribution_method,
         single_month=item.single_month,
+        start_year=item.start_year,
         start_month=item.start_month,
         month_count=item.month_count,
         source_year=item.source_year,
@@ -129,7 +137,7 @@ def build_item_read(session: Session, item: BudgetPreparationItem) -> BudgetPrep
         is_carryover=item.is_carryover,
         allocations=[
             BudgetPreparationAllocationRead(
-                id=row.id, month=row.month, amount=money(row.amount)
+                id=row.id, year=row.year, month=row.month, amount=money(row.amount)
             )
             for row in allocations
         ],
@@ -334,14 +342,14 @@ def activate_preparation(
         allocations = session.exec(
             select(BudgetPreparationAllocation)
             .where(BudgetPreparationAllocation.item_id == item.id)
-            .order_by(BudgetPreparationAllocation.month)
+            .order_by(BudgetPreparationAllocation.year, BudgetPreparationAllocation.month)
         ).all()
         for allocation in allocations:
             if money(allocation.amount) <= 0:
                 continue
             session.add(
                 PlanEntry(
-                    year=preparation.year,
+                    year=allocation.year,
                     month=allocation.month,
                     amount=float(money(allocation.amount)),
                     scenario_id=scenario.id,

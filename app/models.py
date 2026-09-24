@@ -142,6 +142,7 @@ class BudgetPreparationItem(TimestampMixin, SQLModel, table=True):
     description: Optional[str] = Field(default=None, nullable=True)
     distribution_method: str = Field(default="CUSTOM", nullable=False)
     single_month: Optional[int] = Field(default=None, nullable=True)
+    start_year: Optional[int] = Field(default=None, nullable=True)
     start_month: Optional[int] = Field(default=None, nullable=True)
     month_count: Optional[int] = Field(default=None, nullable=True)
     source_year: Optional[int] = Field(default=None, nullable=True)
@@ -157,13 +158,14 @@ class BudgetPreparationItem(TimestampMixin, SQLModel, table=True):
 class BudgetPreparationAllocation(TimestampMixin, SQLModel, table=True):
     __tablename__ = "budget_preparation_allocations"
     __table_args__ = (
-        UniqueConstraint("item_id", "month", name="uq_preparation_item_month"),
+        UniqueConstraint("item_id", "year", "month", name="uq_preparation_item_year_month"),
     )
 
     id: Optional[int] = Field(default=None, primary_key=True)
     item_id: int = Field(
         foreign_key="budget_preparation_items.id", nullable=False, index=True
     )
+    year: int = Field(nullable=False, index=True)
     month: int = Field(nullable=False, ge=1, le=12)
     amount: Decimal = Field(
         default=Decimal("0.00"),

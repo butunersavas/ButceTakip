@@ -233,6 +233,78 @@ def _apply_schema_upgrades() -> None:
     for table in ("users", "scenarios", "budget_items", "plan_entries", "expenses", "warranty_items"):
         ensure_timestamp_columns(table)
 
+    if inspector.has_table("budget_preparation_items"):
+        item_columns = {column["name"] for column in inspector.get_columns("budget_preparation_items")}
+        if "start_year" not in item_columns:
+            with engine.begin() as connection:
+                connection.execute(text("ALTER TABLE budget_preparation_items ADD COLUMN start_year INTEGER"))
+                connection.execute(text(
+                    "UPDATE budget_preparation_items SET start_year = ("
+                    "SELECT year FROM budget_preparations "
+                    "WHERE budget_preparations.id = budget_preparation_items.preparation_id"
+                    ") WHERE start_year IS NULL"
+                ))
+
+    if inspector.has_table("budget_preparation_allocations"):
+        allocation_columns = {
+            column["name"] for column in inspector.get_columns("budget_preparation_allocations")
+        }
+        unique_names = {
+            constraint.get("name")
+            for constraint in inspector.get_unique_constraints("budget_preparation_allocations")
+        }
+        if is_sqlite and ("year" not in allocation_columns or "uq_preparation_item_month" in unique_names):
+            year_expression = "COALESCE(old.year, preparation.year)" if "year" in allocation_columns else "preparation.year"
+            with engine.begin() as connection:
+                connection.execute(text("PRAGMA foreign_keys=OFF"))
+                connection.execute(text("ALTER TABLE budget_preparation_allocations RENAME TO budget_preparation_allocations_legacy"))
+                connection.execute(text(
+                    "CREATE TABLE budget_preparation_allocations ("
+                    "id INTEGER NOT NULL PRIMARY KEY, item_id INTEGER NOT NULL, year INTEGER NOT NULL, "
+                    "month INTEGER NOT NULL, amount NUMERIC(16, 2) NOT NULL, "
+                    "created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, "
+                    "updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, "
+                    "CONSTRAINT uq_preparation_item_year_month UNIQUE (item_id, year, month), "
+                    "FOREIGN KEY(item_id) REFERENCES budget_preparation_items (id))"
+                ))
+                connection.execute(text(
+                    "INSERT INTO budget_preparation_allocations "
+                    "(id, item_id, year, month, amount, created_at, updated_at) "
+                    f"SELECT old.id, old.item_id, {year_expression}, old.month, old.amount, "
+                    "old.created_at, old.updated_at "
+                    "FROM budget_preparation_allocations_legacy old "
+                    "JOIN budget_preparation_items item ON item.id = old.item_id "
+                    "JOIN budget_preparations preparation ON preparation.id = item.preparation_id"
+                ))
+                connection.execute(text("DROP TABLE budget_preparation_allocations_legacy"))
+                connection.execute(text(
+                    "CREATE INDEX ix_budget_preparation_allocations_item_id "
+                    "ON budget_preparation_allocations (item_id)"
+                ))
+                connection.execute(text(
+                    "CREATE INDEX ix_budget_preparation_allocations_year "
+                    "ON budget_preparation_allocations (year)"
+                ))
+                connection.execute(text("PRAGMA foreign_keys=ON"))
+        elif is_postgres:
+            with engine.begin() as connection:
+                if "year" not in allocation_columns:
+                    connection.execute(text("ALTER TABLE budget_preparation_allocations ADD COLUMN year INTEGER"))
+                    connection.execute(text(
+                        "UPDATE budget_preparation_allocations allocation SET year = preparation.year "
+                        "FROM budget_preparation_items item, budget_preparations preparation "
+                        "WHERE allocation.item_id = item.id AND item.preparation_id = preparation.id"
+                    ))
+                    connection.execute(text("ALTER TABLE budget_preparation_allocations ALTER COLUMN year SET NOT NULL"))
+                connection.execute(text(
+                    "ALTER TABLE budget_preparation_allocations "
+                    "DROP CONSTRAINT IF EXISTS uq_preparation_item_month"
+                ))
+                connection.execute(text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS uq_preparation_item_year_month "
+                    "ON budget_preparation_allocations (item_id, year, month)"
+                ))
+
     if inspector.has_table("budget_items"):
         existing_columns = {column["name"] for column in inspector.get_columns("budget_items")}
         if "map_attribute" not in existing_columns:

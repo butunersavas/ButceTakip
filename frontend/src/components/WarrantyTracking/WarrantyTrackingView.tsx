@@ -576,9 +576,7 @@ export default function WarrantyTrackingView() {
     "NEAR" | "EXPIRED" | "UNKNOWN" | null
   >(null);
   const [activeWarrantyType, setActiveWarrantyType] = useState<WarrantyItemType>("DEVICE");
-  const [searchByType, setSearchByType] = useState<WarrantyTypeMap<string>>(() =>
-    createWarrantyTypeMap(() => "")
-  );
+  const [globalSearch, setGlobalSearch] = useState("");
   const [sortByType, setSortByType] = useState<WarrantyTypeMap<WarrantySortState>>(() =>
     createWarrantyTypeMap(() => null)
   );
@@ -602,7 +600,7 @@ export default function WarrantyTrackingView() {
         : "Ürün";
   const activeTypeLabel = getTypeLabel(activeWarrantyType);
   const formDaysLeft = useMemo(() => calcDaysLeft(normalizeDateInput(form.end_date) || null), [form.end_date]);
-  const activeSearchText = searchByType[activeWarrantyType] ?? "";
+  const activeSearchText = globalSearch;
   const activeSortState = sortByType[activeWarrantyType] ?? null;
   const activePaginationModel = paginationByType[activeWarrantyType] ?? DEFAULT_PAGINATION_MODEL;
 
@@ -646,8 +644,8 @@ export default function WarrantyTrackingView() {
   }, [loadItems]);
 
   const sectionItems = useMemo(() => {
-    return items.filter((item) => item.type === activeWarrantyType);
-  }, [items, activeWarrantyType]);
+    return globalSearch.trim() ? items : items.filter((item) => item.type === activeWarrantyType);
+  }, [items, activeWarrantyType, globalSearch]);
 
   const summary = useMemo(() => {
     const totals = {
@@ -686,11 +684,11 @@ export default function WarrantyTrackingView() {
     const search = normalizeSearchText(activeSearchText);
     if (!search) return statusFilteredItems;
     return statusFilteredItems.filter((item) =>
-      getWarrantySearchValues(item, activeWarrantyType).some((value) =>
+      getWarrantySearchValues(item, item.type).some((value) =>
         normalizeSearchText(value).includes(search)
       )
     );
-  }, [activeSearchText, activeWarrantyType, statusFilteredItems]);
+  }, [activeSearchText, statusFilteredItems]);
 
   const visibleItems = useMemo(
     () => sortWarrantyRows(searchFilteredItems, activeWarrantyType, activeSortState),
@@ -706,16 +704,16 @@ export default function WarrantyTrackingView() {
 
   const handleSearchChange = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
-      setSearchByType((prev) => ({ ...prev, [activeWarrantyType]: event.target.value }));
+      setGlobalSearch(event.target.value);
       resetActivePaginationPage();
     },
-    [activeWarrantyType, resetActivePaginationPage]
+    [resetActivePaginationPage]
   );
 
   const handleClearSearch = useCallback(() => {
-    setSearchByType((prev) => ({ ...prev, [activeWarrantyType]: "" }));
+    setGlobalSearch("");
     resetActivePaginationPage();
-  }, [activeWarrantyType, resetActivePaginationPage]);
+  }, [resetActivePaginationPage]);
 
   const handlePaginationModelChange = useCallback(
     (model: GridPaginationModel) => {
@@ -1775,11 +1773,11 @@ export default function WarrantyTrackingView() {
               >
                 <TextField
                   size="small"
-                  label={`${activeTypeLabel} içinde ara`}
+                  label="Tüm garanti türlerinde ara"
                   value={activeSearchText}
                   onChange={handleSearchChange}
                   fullWidth
-                  placeholder="Görünen kolonlarda ara"
+                  placeholder="Cihaz, domain, SSL ve servis kayıtlarında ara"
                 />
                 <Stack direction="row" spacing={1} justifyContent={{ xs: "flex-start", md: "flex-end" }}>
                   {activeSearchText && (
@@ -1821,7 +1819,7 @@ export default function WarrantyTrackingView() {
                 <DataGrid
                   rows={visibleItems ?? []}
                   getRowId={(row) => row?.id}
-                  columns={columns}
+                  columns={globalSearch ? [{ field: "type", headerName: "Tür", minWidth: 140, renderCell: (params: any) => getTypeLabel(params.row.type) }, ...columns] : columns}
                   loading={loading}
                   disableRowSelectionOnClick
                   autoHeight={false}

@@ -18,6 +18,7 @@ from app.routers.budget_preparations import (
     create_preparation,
     get_preparation,
 )
+from app.routers.dashboard import get_dashboard
 from app.schemas import (
     BudgetPreparationAllocationInput,
     BudgetPreparationCreate,
@@ -126,7 +127,7 @@ class BudgetPreparationTests(unittest.TestCase):
             single_month=3,
             allocations=[],
         )
-        self.assertEqual({3: Decimal("1200000.00")}, build_allocation_amounts(payload))
+        self.assertEqual({(2027, 3): Decimal("1200000.00")}, build_allocation_amounts(payload))
 
     def test_05_equal_distribution_preserves_total_and_rounding(self) -> None:
         payload = self.valid_item_payload(
@@ -138,12 +139,27 @@ class BudgetPreparationTests(unittest.TestCase):
         )
         amounts = build_allocation_amounts(payload)
         self.assertEqual(Decimal("100.00"), sum(amounts.values()))
-        self.assertEqual(Decimal("33.34"), amounts[7])
+        self.assertEqual(Decimal("33.34"), amounts[(2027, 7)])
 
     def test_06_custom_distribution(self) -> None:
         amounts = build_allocation_amounts(self.valid_item_payload())
-        self.assertEqual(Decimal("50000.00"), amounts[1])
-        self.assertEqual(Decimal("70000.00"), amounts[2])
+        self.assertEqual(Decimal("50000.00"), amounts[(2027, 1)])
+        self.assertEqual(Decimal("70000.00"), amounts[(2027, 2)])
+
+    def test_equal_distribution_can_cross_year_and_preserves_cents(self) -> None:
+        payload = self.valid_item_payload(
+            budget_code=None,
+            total_amount=Decimal("50000.00"),
+            distribution_method="EQUAL",
+            start_month=7,
+            month_count=12,
+            allocations=[],
+        )
+        amounts = build_allocation_amounts(payload, 2027)
+        self.assertEqual(12, len(amounts))
+        self.assertEqual(Decimal("50000.00"), sum(amounts.values()))
+        self.assertEqual({2027, 2028}, {year for year, _ in amounts})
+        self.assertIn((2028, 6), amounts)
 
     def test_07_completion_rejects_distribution_mismatch(self) -> None:
         draft = self.create_draft()
@@ -220,6 +236,41 @@ class BudgetPreparationTests(unittest.TestCase):
             )
         ).all()
         self.assertEqual(Decimal("120000.00"), sum(row.amount for row in rows))
+
+    def test_cross_year_activation_creates_plan_entries_in_each_year(self) -> None:
+        draft = self.create_draft()
+        result = self.add_valid_item(
+            draft,
+            budget_code=None,
+            total_amount=Decimal("50000.00"),
+            distribution_method="EQUAL",
+            start_month=7,
+            month_count=12,
+            allocations=[],
+        )
+        self.assertTrue(result.budget_code.startswith("PREP-2027-"))
+        preparation, scenario_id, created_count = activate_preparation(self.session, draft.id)
+        plans = self.session.exec(
+            select(PlanEntry).where(PlanEntry.scenario_id == scenario_id)
+        ).all()
+        self.assertEqual("ACTIVE", preparation.status)
+        self.assertEqual(12, created_count)
+        self.assertEqual(Decimal("50000.00"), sum(Decimal(str(plan.amount)) for plan in plans))
+        self.assertEqual(6, sum(plan.year == 2027 for plan in plans))
+        self.assertEqual(6, sum(plan.year == 2028 for plan in plans))
+        dashboard = get_dashboard(
+            year=2027,
+            scenario_id=scenario_id,
+            month=None,
+            month_list=None,
+            budget_item_id=None,
+            department=None,
+            capex_opex=None,
+            session=self.session,
+            _=self.user,
+        )
+        expected_2027 = sum(plan.amount for plan in plans if plan.year == 2027)
+        self.assertAlmostEqual(expected_2027, dashboard.kpi.total_plan, places=2)
 
 
 if __name__ == "__main__":

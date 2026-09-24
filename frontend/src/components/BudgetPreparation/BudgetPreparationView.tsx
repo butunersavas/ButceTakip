@@ -33,6 +33,7 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  TableSortLabel,
   TextField,
   Tooltip,
   Typography,
@@ -44,6 +45,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import { formatCurrency } from "../../utils/currency";
+import useSortableRows from "../../hooks/useSortableRows";
 
 const months = [
   "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
@@ -55,6 +57,7 @@ type DistributionMethod = "SINGLE_MONTH" | "EQUAL" | "CUSTOM";
 
 interface Allocation {
   id?: number;
+  year: number;
   month: number;
   amount: number;
 }
@@ -72,6 +75,7 @@ interface PreparationItem {
   description: string | null;
   distribution_method: DistributionMethod;
   single_month: number | null;
+  start_year: number | null;
   start_month: number | null;
   month_count: number | null;
   is_carryover: boolean;
@@ -113,13 +117,17 @@ interface CompletionIssue {
   message: string;
 }
 
+interface CompletionResponse {
+  scenario_id: number;
+  created_plan_entries: number;
+}
+
 type SaveSource = "auto" | "manual";
 type Feedback = { severity: "success" | "error"; message: string };
 
 interface ItemFormState {
   id?: number;
   budget_name: string;
-  budget_code: string;
   total_amount: string;
   capex_opex: "" | "CAPEX" | "OPEX";
   department: string;
@@ -134,7 +142,6 @@ interface ItemFormState {
 
 const emptyItemForm = (): ItemFormState => ({
   budget_name: "",
-  budget_code: "",
   total_amount: "",
   capex_opex: "",
   department: "",
@@ -174,7 +181,7 @@ function formatDate(value: string | null) {
 
 const validationFieldLabels: Record<string, string> = {
   allocations: "Aylık dağıtım",
-  budget_code: "Bütçe kodu",
+  budget_code: "Bütçe kalemi",
   budget_name: "Bütçe kalemi",
   capex_opex: "CAPEX / OPEX",
   department: "Departman",
@@ -328,7 +335,7 @@ function PreparationList() {
 
       <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
         <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
-          <TextField fullWidth label="Bütçe adı veya kodu ara" value={search} onChange={(event) => setSearch(event.target.value)} />
+          <TextField fullWidth label="Bütçe adı ara" value={search} onChange={(event) => setSearch(event.target.value)} />
           <TextField label="Yıl" type="number" value={yearFilter} onChange={(event) => setYearFilter(event.target.value)} sx={{ minWidth: 140 }} />
           <FormControl sx={{ minWidth: 160 }}>
             <InputLabel>Durum</InputLabel>
@@ -402,6 +409,7 @@ function PreparationDetail({ preparationId }: { preparationId: number }) {
   const [formError, setFormError] = useState<string | null>(null);
   const [completionErrors, setCompletionErrors] = useState<CompletionIssue[]>([]);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
+  const [completedScenarioId, setCompletedScenarioId] = useState<number | null>(null);
   const [isSavingItem, setIsSavingItem] = useState(false);
   const [search, setSearch] = useState("");
   const [department, setDepartment] = useState("");
@@ -447,11 +455,14 @@ function PreparationDetail({ preparationId }: { preparationId: number }) {
     onError: (error) => setFeedback({ severity: "error", message: apiErrorMessage(error, "Bütçe kalemi silinemedi.") }),
   });
   const completeMutation = useMutation({
-    mutationFn: async () => client.post(`/budget-preparations/${preparationId}/complete`),
-    onSuccess: async () => {
+    mutationFn: async () => (await client.post<CompletionResponse>(`/budget-preparations/${preparationId}/complete`)).data,
+    onSuccess: async (result) => {
       setCompletionErrors([]);
+      setCompletedScenarioId(result.scenario_id);
       await refresh();
       queryClient.invalidateQueries({ queryKey: ["scenarios"] });
+      queryClient.invalidateQueries({ queryKey: ["plans"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       setFeedback({ severity: "success", message: "Bütçe tamamlandı ve aktif Scenario oluşturuldu." });
     },
     onError: (error) => {
@@ -469,16 +480,18 @@ function PreparationDetail({ preparationId }: { preparationId: number }) {
     setFeedback(null);
     updateHeaderMutation.mutate(source);
   };
-  const departmentOptions = useMemo(() => Array.from(new Set([...(metadataQuery.data?.departments ?? []), ...(preparation?.items ?? []).map((item) => item.department).filter(Boolean) as string[]])).sort(), [metadataQuery.data, preparation]);
-  const attributeOptions = useMemo(() => Array.from(new Set([...(metadataQuery.data?.attributes ?? []), ...(preparation?.items ?? []).map((item) => item.map_attribute).filter(Boolean) as string[]])).sort(), [metadataQuery.data, preparation]);
+  const canonicalOptions = (values: string[]) => Array.from(new Map(values.filter(Boolean).map((value) => [value.trim().toLocaleLowerCase("tr-TR"), value.trim()])).values()).sort((a, b) => a.localeCompare(b, "tr-TR"));
+  const departmentOptions = useMemo(() => canonicalOptions([...(metadataQuery.data?.departments ?? []), ...(preparation?.items ?? []).map((item) => item.department).filter(Boolean) as string[]]), [metadataQuery.data, preparation]);
+  const attributeOptions = useMemo(() => canonicalOptions([...(metadataQuery.data?.attributes ?? []), ...(preparation?.items ?? []).map((item) => item.map_attribute).filter(Boolean) as string[]]), [metadataQuery.data, preparation]);
   const filteredItems = useMemo(() => (preparation?.items ?? []).filter((item) => {
     const term = search.trim().toLocaleLowerCase("tr-TR");
-    return (!term || item.budget_name.toLocaleLowerCase("tr-TR").includes(term) || item.budget_code.toLocaleLowerCase("tr-TR").includes(term))
+    return (!term || item.budget_name.toLocaleLowerCase("tr-TR").includes(term))
       && (!department || item.department === department)
       && (!capexOpex || item.capex_opex === capexOpex)
       && (!attribute || item.map_attribute === attribute)
       && (!itemStatus || (itemStatus === "COMPLETE" ? item.is_complete : !item.is_complete));
   }), [preparation, search, department, capexOpex, attribute, itemStatus]);
+  const { sortedRows: sortedItems, sort: itemSort, toggleSort: toggleItemSort } = useSortableRows(filteredItems);
 
   const openItem = (item?: PreparationItem) => {
     setFormError(null);
@@ -490,7 +503,6 @@ function PreparationDetail({ preparationId }: { preparationId: number }) {
       setItemForm({
         id: item.id,
         budget_name: item.budget_name,
-        budget_code: item.budget_code,
         total_amount: String(item.total_amount),
         capex_opex: item.capex_opex ?? "",
         department: item.department ?? "",
@@ -512,25 +524,44 @@ function PreparationDetail({ preparationId }: { preparationId: number }) {
     if (itemForm.distribution_method === "EQUAL") {
       const start = Number(itemForm.start_month || 0);
       const count = Number(itemForm.month_count || 0);
-      return start && count && start + count - 1 <= 12 ? total : 0;
+      return start && count ? total : 0;
     }
     return itemForm.allocations.reduce((sum, value) => sum + parseAmount(value), 0);
   }, [itemForm]);
+  const distributionPreview = useMemo(() => {
+    const rows: Array<{ year: number; month: number; amount: number }> = [];
+    const totalCents = Math.round(parseAmount(itemForm.total_amount) * 100);
+    if (itemForm.distribution_method === "SINGLE_MONTH" && itemForm.single_month) {
+      rows.push({ year: preparation?.year ?? header.year, month: Number(itemForm.single_month), amount: totalCents / 100 });
+    } else if (itemForm.distribution_method === "EQUAL" && itemForm.start_month && itemForm.month_count) {
+      const count = Number(itemForm.month_count);
+      const baseCents = Math.floor(totalCents / count);
+      Array.from({ length: count }).forEach((_, offset) => {
+        const zeroBased = Number(itemForm.start_month) - 1 + offset;
+        rows.push({
+          year: (preparation?.year ?? header.year) + Math.floor(zeroBased / 12),
+          month: zeroBased % 12 + 1,
+          amount: (offset === count - 1 ? totalCents - baseCents * (count - 1) : baseCents) / 100,
+        });
+      });
+    } else if (itemForm.distribution_method === "CUSTOM") {
+      itemForm.allocations.forEach((amount, index) => {
+        if (parseAmount(amount)) rows.push({ year: preparation?.year ?? header.year, month: index + 1, amount: parseAmount(amount) });
+      });
+    }
+    return rows;
+  }, [header.year, itemForm, preparation?.year]);
+  const distributionYears = useMemo(() => Array.from(new Set(distributionPreview.map((row) => row.year))), [distributionPreview]);
 
   const saveItem = async () => {
     if (isSavingItem) return;
     const totalAmount = parseAmount(itemForm.total_amount);
-    if (!itemForm.budget_name.trim() || !itemForm.budget_code.trim()) {
-      setFormError("Bütçe adı ve bütçe kodu zorunludur.");
-      return;
-    }
-    if (itemForm.distribution_method === "EQUAL" && Number(itemForm.start_month) + Number(itemForm.month_count) - 1 > 12) {
-      setFormError("Eşit dağıtım Aralık ayını aşamaz.");
+    if (!itemForm.budget_name.trim() || !itemForm.department || !itemForm.map_attribute || !itemForm.capex_opex) {
+      setFormError("Bütçe adı, departman, nitelik ve CAPEX/OPEX zorunludur.");
       return;
     }
     const payload = {
       budget_name: itemForm.budget_name,
-      budget_code: itemForm.budget_code,
       total_amount: totalAmount,
       currency: "USD",
       capex_opex: itemForm.capex_opex || null,
@@ -539,9 +570,10 @@ function PreparationDetail({ preparationId }: { preparationId: number }) {
       description: itemForm.description || null,
       distribution_method: itemForm.distribution_method,
       single_month: itemForm.single_month || null,
+      start_year: preparation.year,
       start_month: itemForm.start_month || null,
       month_count: itemForm.month_count || null,
-      allocations: itemForm.allocations.map((amount, index) => ({ month: index + 1, amount: parseAmount(amount) })),
+      allocations: itemForm.allocations.map((amount, index) => ({ year: preparation.year, month: index + 1, amount: parseAmount(amount) })),
       is_carryover: false,
     };
     setIsSavingItem(true);
@@ -584,9 +616,9 @@ function PreparationDetail({ preparationId }: { preparationId: number }) {
         </Stack>}
       </Stack>
 
-      {isLocked && <Alert severity="info">Bu bütçe aktiftir. Hazırlama ekranından düzenlenemez. Plan Yönetimi ve Dashboard akışlarında kullanılabilir.</Alert>}
+      {isLocked && <Alert severity="info" action={completedScenarioId || preparation.activated_scenario_id ? <Button color="inherit" size="small" onClick={() => navigate(`/plans?year=${preparation.year}&scenario_id=${completedScenarioId ?? preparation.activated_scenario_id}`)}>Plan Yönetiminde Gör</Button> : undefined}>Bu bütçe aktiftir. Hazırlama ekranından düzenlenemez. Plan Yönetimi ve Dashboard akışlarında kullanılabilir.</Alert>}
       {isViewer && !isLocked && <Alert severity="info">Sadece görüntüleme yetkiniz var. Taslak üzerinde değişiklik yapamazsınız.</Alert>}
-      {completionErrors.length > 0 && <Alert severity="error"><Typography fontWeight={700}>Bütçe tamamlanamadı</Typography>{completionErrors.map((error, index) => <Button key={index} size="small" color="inherit" sx={{ display: "block", textAlign: "left" }} onClick={() => error.item_id && document.getElementById(`budget-item-${error.item_id}`)?.scrollIntoView({ behavior: "smooth" })}>{error.budget_code ? `${error.budget_code}: ` : ""}{error.message}</Button>)}</Alert>}
+      {completionErrors.length > 0 && <Alert severity="error"><Typography fontWeight={700}>Bütçe tamamlanamadı</Typography>{completionErrors.map((error, index) => <Button key={index} size="small" color="inherit" sx={{ display: "block", textAlign: "left" }} onClick={() => error.item_id && document.getElementById(`budget-item-${error.item_id}`)?.scrollIntoView({ behavior: "smooth" })}>{error.message}</Button>)}</Alert>}
 
       <Grid container spacing={2}>{cards.map(([label, value], index) => <Grid item xs={12} sm={6} lg key={label}><Card variant="outlined" elevation={0} sx={{ borderRadius: 3 }}><CardContent><Typography color="text.secondary" variant="body2">{label}</Typography><Typography variant="h5" fontWeight={800}>{index < 3 ? formatCurrency(Number(value)) : value}</Typography></CardContent></Card></Grid>)}</Grid>
 
@@ -603,7 +635,7 @@ function PreparationDetail({ preparationId }: { preparationId: number }) {
 
       <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
         <Stack direction={{ xs: "column", lg: "row" }} spacing={1.5} alignItems={{ lg: "center" }}>
-          <TextField size="small" label="Bütçe adı veya kodu" value={search} onChange={(event) => setSearch(event.target.value)} sx={{ minWidth: 240 }} />
+          <TextField size="small" label="Bütçe adı" value={search} onChange={(event) => setSearch(event.target.value)} sx={{ minWidth: 240 }} />
           <FilterSelect label="Departman" value={department} values={departmentOptions} onChange={setDepartment} />
           <FilterSelect label="CAPEX/OPEX" value={capexOpex} values={["CAPEX", "OPEX"]} onChange={setCapexOpex} />
           <FilterSelect label="Nitelik" value={attribute} values={attributeOptions} onChange={setAttribute} />
@@ -615,15 +647,15 @@ function PreparationDetail({ preparationId }: { preparationId: number }) {
 
       <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 3 }}>
         <Table sx={{ minWidth: 1050 }}>
-          <TableHead><TableRow><TableCell>Durum</TableCell><TableCell>Bütçe Kodu</TableCell><TableCell>Bütçe Kalemi</TableCell><TableCell>Departman</TableCell><TableCell>Nitelik</TableCell><TableCell>CAPEX/OPEX</TableCell><TableCell align="right">Toplam</TableCell><TableCell align="right">Dağıtılan</TableCell><TableCell align="right">Kalan</TableCell><TableCell align="right">İşlem</TableCell></TableRow></TableHead>
+          <TableHead><TableRow><SortableHeader label="Durum" field="is_complete" sort={itemSort} onSort={toggleItemSort} /><SortableHeader label="Bütçe Kalemi" field="budget_name" sort={itemSort} onSort={toggleItemSort} /><SortableHeader label="Departman" field="department" sort={itemSort} onSort={toggleItemSort} /><SortableHeader label="Nitelik" field="map_attribute" sort={itemSort} onSort={toggleItemSort} /><SortableHeader label="CAPEX/OPEX" field="capex_opex" sort={itemSort} onSort={toggleItemSort} /><SortableHeader label="Toplam" field="total_amount" align="right" sort={itemSort} onSort={toggleItemSort} /><SortableHeader label="Dağıtılan" field="allocated_amount" align="right" sort={itemSort} onSort={toggleItemSort} /><SortableHeader label="Kalan" field="remaining_amount" align="right" sort={itemSort} onSort={toggleItemSort} /><TableCell align="right">İşlem</TableCell></TableRow></TableHead>
           <TableBody>
-            {filteredItems.map((item) => <TableRow id={`budget-item-${item.id}`} key={item.id} hover sx={{ bgcolor: item.is_complete ? undefined : "error.50" }}>
+            {sortedItems.map((item) => <TableRow id={`budget-item-${item.id}`} key={item.id} hover sx={{ bgcolor: item.is_complete ? undefined : "error.50" }}>
               <TableCell><Tooltip title={item.validation_errors.join(" ")}><Chip size="small" label={item.is_complete ? "Tamam" : "Eksik"} color={item.is_complete ? "success" : "error"} /></Tooltip></TableCell>
-              <TableCell>{item.budget_code}</TableCell><TableCell>{item.budget_name}</TableCell><TableCell>{item.department || "—"}</TableCell><TableCell>{item.map_attribute || "—"}</TableCell><TableCell>{item.capex_opex || "—"}</TableCell>
+              <TableCell>{item.budget_name}</TableCell><TableCell>{item.department || "—"}</TableCell><TableCell>{item.map_attribute || "—"}</TableCell><TableCell>{item.capex_opex || "—"}</TableCell>
               <TableCell align="right">{formatCurrency(item.total_amount)}</TableCell><TableCell align="right">{formatCurrency(item.allocated_amount)}</TableCell><TableCell align="right">{formatCurrency(item.remaining_amount)}</TableCell>
               <TableCell align="right">{canEdit && <><IconButton aria-label="Düzenle" disabled={deleteItemMutation.isPending} onClick={() => openItem(item)}><EditIcon /></IconButton><IconButton aria-label="Sil" color="error" disabled={deleteItemMutation.isPending} onClick={() => window.confirm("Bütçe kalemi silinsin mi?") && deleteItemMutation.mutate(item.id)}><DeleteIcon /></IconButton></>}</TableCell>
             </TableRow>)}
-            {!filteredItems.length && <TableRow><TableCell colSpan={10} align="center">Filtrelere uygun bütçe kalemi bulunamadı.</TableCell></TableRow>}
+            {!filteredItems.length && <TableRow><TableCell colSpan={9} align="center">Filtrelere uygun bütçe kalemi bulunamadı.</TableCell></TableRow>}
           </TableBody>
         </Table>
       </TableContainer>
@@ -634,19 +666,23 @@ function PreparationDetail({ preparationId }: { preparationId: number }) {
         <DialogTitle>{itemForm.id ? "Bütçe Kalemini Düzenle" : "Bütçe Kalemi Ekle"}</DialogTitle>
         <DialogContent dividers>
           <Grid container spacing={2} sx={{ pt: 0.5 }}>
-            <Grid item xs={12} md={6}><TextField required fullWidth label="Bütçe Kalemi / Bütçe Adı" value={itemForm.budget_name} onChange={(event) => setItemForm((current) => ({ ...current, budget_name: event.target.value }))} /></Grid>
-            <Grid item xs={12} md={3}><TextField required fullWidth label="Bütçe Kodu" value={itemForm.budget_code} onChange={(event) => setItemForm((current) => ({ ...current, budget_code: event.target.value }))} /></Grid>
-            <Grid item xs={12} md={3}><TextField required fullWidth label="Toplam Tutar (USD)" value={itemForm.total_amount} onChange={(event) => setItemForm((current) => ({ ...current, total_amount: event.target.value }))} /></Grid>
+            <Grid item xs={12} md={8}><TextField required fullWidth label="Bütçe Kalemi / Bütçe Adı" value={itemForm.budget_name} onChange={(event) => setItemForm((current) => ({ ...current, budget_name: event.target.value }))} /></Grid>
+            <Grid item xs={12} md={4}><TextField required fullWidth label="Toplam Tutar (USD)" value={itemForm.total_amount} onChange={(event) => setItemForm((current) => ({ ...current, total_amount: event.target.value }))} /></Grid>
             <Grid item xs={12} md={4}><EditableSelect label="CAPEX / OPEX" value={itemForm.capex_opex} values={["CAPEX", "OPEX"]} onChange={(value) => setItemForm((current) => ({ ...current, capex_opex: value as ItemFormState["capex_opex"] }))} /></Grid>
-            <Grid item xs={12} md={4}><Autocomplete freeSolo options={departmentOptions} value={itemForm.department} onInputChange={(_, value) => setItemForm((current) => ({ ...current, department: value }))} renderInput={(params) => <TextField {...params} label="Departman" helperText="Mevcut değeri seçebilir veya yeni bir departman yazabilirsiniz." />} /></Grid>
-            <Grid item xs={12} md={4}><Autocomplete freeSolo options={attributeOptions} value={itemForm.map_attribute} onInputChange={(_, value) => setItemForm((current) => ({ ...current, map_attribute: value }))} renderInput={(params) => <TextField {...params} label="Nitelik" helperText="Mevcut değeri seçebilir veya yeni bir nitelik yazabilirsiniz." />} /></Grid>
+            <Grid item xs={12} md={4}><Autocomplete options={departmentOptions} value={itemForm.department || null} onChange={(_, value) => setItemForm((current) => ({ ...current, department: value ?? "" }))} renderInput={(params) => <TextField {...params} required label="Departman" />} /></Grid>
+            <Grid item xs={12} md={4}><Autocomplete options={attributeOptions} value={itemForm.map_attribute || null} onChange={(_, value) => setItemForm((current) => ({ ...current, map_attribute: value ?? "" }))} renderInput={(params) => <TextField {...params} required label="Nitelik" />} /></Grid>
             <Grid item xs={12}><TextField fullWidth label="Açıklama / Not" multiline minRows={2} value={itemForm.description} onChange={(event) => setItemForm((current) => ({ ...current, description: event.target.value }))} /></Grid>
-            <Grid item xs={12}><Typography variant="h6" fontWeight={750}>Aylık Bütçe Dağıtımı</Typography></Grid>
-            <Grid item xs={12} md={4}><EditableSelect label="Dağıtım Yöntemi" value={itemForm.distribution_method} values={["SINGLE_MONTH", "EQUAL", "CUSTOM"]} labels={{ SINGLE_MONTH: "Tek Ay", EQUAL: "Eşit Dağıtım", CUSTOM: "Özel Dağıtım" }} onChange={(value) => setItemForm((current) => ({ ...current, distribution_method: value as DistributionMethod }))} /></Grid>
-            {itemForm.distribution_method === "SINGLE_MONTH" && <Grid item xs={12} md={4}><EditableSelect label="Ay" value={String(itemForm.single_month)} values={months.map((_, index) => String(index + 1))} labels={Object.fromEntries(months.map((month, index) => [String(index + 1), month]))} onChange={(value) => setItemForm((current) => ({ ...current, single_month: Number(value) }))} /></Grid>}
-            {itemForm.distribution_method === "EQUAL" && <><Grid item xs={12} md={4}><EditableSelect label="Başlangıç Ayı" value={String(itemForm.start_month)} values={months.map((_, index) => String(index + 1))} labels={Object.fromEntries(months.map((month, index) => [String(index + 1), month]))} onChange={(value) => setItemForm((current) => ({ ...current, start_month: Number(value) }))} /></Grid><Grid item xs={12} md={4}><TextField fullWidth label="Ay Sayısı" type="number" inputProps={{ min: 1, max: 12 }} value={itemForm.month_count} onChange={(event) => setItemForm((current) => ({ ...current, month_count: Number(event.target.value) }))} /></Grid></>}
-            {itemForm.distribution_method === "CUSTOM" && months.map((month, index) => <Grid item xs={12} sm={6} md={3} key={month}><TextField fullWidth label={`${month} (USD)`} value={itemForm.allocations[index]} onChange={(event) => setItemForm((current) => ({ ...current, allocations: current.allocations.map((value, itemIndex) => itemIndex === index ? event.target.value : value) }))} /></Grid>)}
-            <Grid item xs={12}><Paper variant="outlined" sx={{ p: 2 }}><Stack direction={{ xs: "column", sm: "row" }} spacing={4}><Box><Typography variant="caption">Toplam Bütçe</Typography><Typography fontWeight={800}>{formatCurrency(parseAmount(itemForm.total_amount))}</Typography></Box><Box><Typography variant="caption">Aylara Dağıtılan</Typography><Typography fontWeight={800}>{formatCurrency(allocatedPreview)}</Typography></Box><Box><Typography variant="caption">Kalan</Typography><Typography fontWeight={800} color={Math.abs(parseAmount(itemForm.total_amount) - allocatedPreview) > 0.009 ? "warning.main" : "success.main"}>{formatCurrency(parseAmount(itemForm.total_amount) - allocatedPreview)}</Typography></Box></Stack></Paper></Grid>
+            <Grid item xs={12}><Card variant="outlined" sx={{ borderRadius: 3, bgcolor: "background.default" }}><CardContent><Stack spacing={2.5}>
+              <Box><Typography variant="h6" fontWeight={800}>Aylık Bütçe Dağıtımı</Typography><Typography variant="body2" color="text.secondary">Dağıtım yöntemi, başlangıç dönemi ve süreyi belirleyin. Yıl aşan tutarlar ilgili yıl altında gösterilir.</Typography></Box>
+              <Grid container spacing={2}>
+                <Grid item xs={12} md={4}><EditableSelect label="Dağıtım Yöntemi" value={itemForm.distribution_method} values={["SINGLE_MONTH", "EQUAL", "CUSTOM"]} labels={{ SINGLE_MONTH: "Tek Ay", EQUAL: "Eşit Dağıtım", CUSTOM: "Özel Dağıtım" }} onChange={(value) => setItemForm((current) => ({ ...current, distribution_method: value as DistributionMethod }))} /></Grid>
+                {itemForm.distribution_method === "SINGLE_MONTH" && <Grid item xs={12} md={4}><EditableSelect label="Ay" value={String(itemForm.single_month)} values={months.map((_, index) => String(index + 1))} labels={Object.fromEntries(months.map((month, index) => [String(index + 1), month]))} onChange={(value) => setItemForm((current) => ({ ...current, single_month: Number(value) }))} /></Grid>}
+                {itemForm.distribution_method === "EQUAL" && <><Grid item xs={12} md={4}><EditableSelect label="Başlangıç Ayı" value={String(itemForm.start_month)} values={months.map((_, index) => String(index + 1))} labels={Object.fromEntries(months.map((month, index) => [String(index + 1), month]))} onChange={(value) => setItemForm((current) => ({ ...current, start_month: Number(value) }))} /></Grid><Grid item xs={12} md={4}><TextField fullWidth label="Ay Sayısı" type="number" inputProps={{ min: 1, max: 36 }} value={itemForm.month_count} onChange={(event) => setItemForm((current) => ({ ...current, month_count: Number(event.target.value) }))} helperText="1–36 ay" /></Grid></>}
+              </Grid>
+              {itemForm.distribution_method === "CUSTOM" && <Grid container spacing={1.5}>{months.map((month, index) => <Grid item xs={12} sm={6} md={3} key={month}><TextField fullWidth size="small" label={`${month} ${preparation.year} (USD)`} value={itemForm.allocations[index]} onChange={(event) => setItemForm((current) => ({ ...current, allocations: current.allocations.map((value, itemIndex) => itemIndex === index ? event.target.value : value) }))} /></Grid>)}</Grid>}
+              {distributionYears.map((year) => <Box key={year}><Typography variant="subtitle2" fontWeight={800} sx={{ mb: 1 }}>{year}</Typography><Grid container spacing={1}>{distributionPreview.filter((row) => row.year === year).map((row) => <Grid item xs={6} sm={4} md={2} key={`${row.year}-${row.month}`}><Paper variant="outlined" sx={{ p: 1.25, borderRadius: 2 }}><Typography variant="caption" color="text.secondary">{months[row.month - 1]}</Typography><Typography fontWeight={750}>{formatCurrency(row.amount)}</Typography></Paper></Grid>)}</Grid></Box>)}
+              <Paper variant="outlined" sx={{ p: 2, borderColor: Math.abs(parseAmount(itemForm.total_amount) - allocatedPreview) > 0.009 ? "warning.main" : "success.main", bgcolor: Math.abs(parseAmount(itemForm.total_amount) - allocatedPreview) > 0.009 ? "warning.50" : "success.50" }}><Stack direction={{ xs: "column", sm: "row" }} spacing={4}><Box><Typography variant="caption">Toplam Bütçe</Typography><Typography fontWeight={800}>{formatCurrency(parseAmount(itemForm.total_amount))}</Typography></Box><Box><Typography variant="caption">Aylara Dağıtılan</Typography><Typography fontWeight={800}>{formatCurrency(allocatedPreview)}</Typography></Box><Box><Typography variant="caption">Kalan</Typography><Typography fontWeight={800} color={Math.abs(parseAmount(itemForm.total_amount) - allocatedPreview) > 0.009 ? "warning.main" : "success.main"}>{formatCurrency(parseAmount(itemForm.total_amount) - allocatedPreview)}</Typography></Box></Stack></Paper>
+            </Stack></CardContent></Card></Grid>
             {Math.abs(parseAmount(itemForm.total_amount) - allocatedPreview) > 0.009 && <Grid item xs={12}><Alert severity="warning">{formatCurrency(parseAmount(itemForm.total_amount) - allocatedPreview)} henüz aylara dağıtılmadı. Taslak kaydedilebilir; bütçe tamamlanamaz.</Alert></Grid>}
             {formError && <Grid item xs={12}><Alert severity="error">{formError}</Alert></Grid>}
           </Grid>
@@ -666,4 +702,8 @@ function FilterSelect({ label, value, values, labels = {}, onChange }: { label: 
 
 function EditableSelect({ label, value, values, labels = {}, onChange }: { label: string; value: string; values: string[]; labels?: Record<string, string>; onChange: (value: string) => void }) {
   return <FormControl fullWidth><InputLabel>{label}</InputLabel><Select label={label} value={value} onChange={(event) => onChange(event.target.value)}><MenuItem value=""><em>Seçiniz</em></MenuItem>{values.map((option) => <MenuItem key={option} value={option}>{labels[option] ?? option}</MenuItem>)}</Select></FormControl>;
+}
+
+function SortableHeader({ label, field, sort, onSort, align = "left" }: { label: string; field: keyof PreparationItem; sort: { key: keyof PreparationItem; direction: "asc" | "desc" } | null; onSort: (field: keyof PreparationItem) => void; align?: "left" | "right" }) {
+  return <TableCell align={align} sortDirection={sort?.key === field ? sort.direction : false}><TableSortLabel active={sort?.key === field} direction={sort?.key === field ? sort.direction : "asc"} onClick={() => onSort(field)}>{label}</TableSortLabel></TableCell>;
 }

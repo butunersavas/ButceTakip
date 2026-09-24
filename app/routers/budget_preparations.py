@@ -32,6 +32,35 @@ from app.services.budget_preparation import (
 
 router = APIRouter(prefix="/budget-preparations", tags=["Budget Preparations"])
 
+DEFAULT_DEPARTMENTS = ("Sistem", "Teknik")
+DEFAULT_ATTRIBUTES = ("Bakım", "Danışmanlık", "Donanım", "Hizmet", "Yazılım")
+
+
+def _canonical_values(defaults: tuple[str, ...], values: list[str | None]) -> list[str]:
+    canonical: dict[str, str] = {value.casefold(): value for value in defaults}
+    for raw in values:
+        value = (raw or "").strip()
+        if value:
+            canonical.setdefault(value.casefold(), value)
+    return sorted(canonical.values(), key=lambda value: value.casefold())
+
+
+def _canonicalize_choice(value: str | None, choices: list[str]) -> str | None:
+    if value is None:
+        return None
+    normalized = value.strip()
+    return next((choice for choice in choices if choice.casefold() == normalized.casefold()), normalized)
+
+
+def _canonicalize_item_metadata(
+    session: Session, payload: BudgetPreparationItemInput
+) -> BudgetPreparationItemInput:
+    metadata = get_metadata(session, None)  # type: ignore[arg-type]
+    return payload.copy(update={
+        "department": _canonicalize_choice(payload.department, metadata.departments),
+        "map_attribute": _canonicalize_choice(payload.map_attribute, metadata.attributes),
+    })
+
 
 def _get_preparation(session: Session, preparation_id: int) -> BudgetPreparation:
     preparation = session.get(BudgetPreparation, preparation_id)
@@ -72,9 +101,19 @@ def get_metadata(
         .where(BudgetItem.map_attribute.is_not(None))
         .distinct()
     ).all()
+    preparation_departments = session.exec(
+        select(BudgetPreparationItem.department)
+        .where(BudgetPreparationItem.department.is_not(None))
+        .distinct()
+    ).all()
+    preparation_attributes = session.exec(
+        select(BudgetPreparationItem.map_attribute)
+        .where(BudgetPreparationItem.map_attribute.is_not(None))
+        .distinct()
+    ).all()
     return BudgetPreparationMetadataRead(
-        departments=sorted({value.strip() for value in departments if value and value.strip()}),
-        attributes=sorted({value.strip() for value in attributes if value and value.strip()}),
+        departments=_canonical_values(DEFAULT_DEPARTMENTS, [*departments, *preparation_departments]),
+        attributes=_canonical_values(DEFAULT_ATTRIBUTES, [*attributes, *preparation_attributes]),
     )
 
 
@@ -180,7 +219,8 @@ def _apply_item_payload(
     item: BudgetPreparationItem, payload: BudgetPreparationItemInput
 ) -> None:
     item.budget_name = payload.budget_name
-    item.budget_code = payload.budget_code
+    if payload.budget_code:
+        item.budget_code = payload.budget_code
     item.total_amount = payload.total_amount
     item.currency = payload.currency
     item.capex_opex = payload.capex_opex
@@ -189,6 +229,7 @@ def _apply_item_payload(
     item.description = payload.description
     item.distribution_method = payload.distribution_method
     item.single_month = payload.single_month
+    item.start_year = payload.start_year
     item.start_month = payload.start_month
     item.month_count = payload.month_count
     item.source_year = payload.source_year
@@ -211,7 +252,21 @@ def create_item(
 ) -> BudgetPreparationItemRead:
     preparation = _get_preparation(session, preparation_id)
     _ensure_draft(preparation)
-    item = BudgetPreparationItem(preparation_id=preparation_id)
+    payload = _canonicalize_item_metadata(session, payload)
+    existing_codes = set(session.exec(
+        select(BudgetPreparationItem.budget_code).where(
+            BudgetPreparationItem.preparation_id == preparation_id
+        )
+    ).all())
+    sequence = len(existing_codes) + 1
+    generated_code = f"PREP-{preparation.year}-{preparation_id:04d}-{sequence:04d}"
+    while generated_code in existing_codes:
+        sequence += 1
+        generated_code = f"PREP-{preparation.year}-{preparation_id:04d}-{sequence:04d}"
+    item = BudgetPreparationItem(
+        preparation_id=preparation_id,
+        budget_code=payload.budget_code or generated_code,
+    )
     _apply_item_payload(item, payload)
     session.add(item)
     try:
@@ -243,6 +298,7 @@ def update_item(
 ) -> BudgetPreparationItemRead:
     preparation = _get_preparation(session, preparation_id)
     _ensure_draft(preparation)
+    payload = _canonicalize_item_metadata(session, payload)
     item = _get_item(session, preparation_id, item_id)
     _apply_item_payload(item, payload)
     session.add(item)
