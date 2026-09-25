@@ -196,23 +196,31 @@ def delete_preparation(
     _: User = Depends(get_write_user),
 ) -> None:
     preparation = _get_preparation(session, preparation_id)
-    _ensure_draft(preparation)
-    items = session.exec(
-        select(BudgetPreparationItem).where(
-            BudgetPreparationItem.preparation_id == preparation_id
+    if preparation.status != "DRAFT":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Aktifleştirilmiş bütçe çalışması silinemez.",
         )
-    ).all()
-    for item in items:
-        allocations = session.exec(
-            select(BudgetPreparationAllocation).where(
-                BudgetPreparationAllocation.item_id == item.id
+    try:
+        items = session.exec(
+            select(BudgetPreparationItem).where(
+                BudgetPreparationItem.preparation_id == preparation_id
             )
         ).all()
-        for allocation in allocations:
-            session.delete(allocation)
-        session.delete(item)
-    session.delete(preparation)
-    session.commit()
+        for item in items:
+            allocations = session.exec(
+                select(BudgetPreparationAllocation).where(
+                    BudgetPreparationAllocation.item_id == item.id
+                )
+            ).all()
+            for allocation in allocations:
+                session.delete(allocation)
+            session.delete(item)
+        session.delete(preparation)
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
 
 
 def _apply_item_payload(

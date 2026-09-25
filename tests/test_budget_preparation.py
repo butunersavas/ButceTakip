@@ -11,11 +11,13 @@ from app.models import (
     BudgetPreparationAllocation,
     BudgetPreparationItem,
     PlanEntry,
+    Scenario,
     User,
 )
 from app.routers.budget_preparations import (
     create_item,
     create_preparation,
+    delete_preparation,
     get_preparation,
 )
 from app.routers.dashboard import get_dashboard
@@ -271,6 +273,57 @@ class BudgetPreparationTests(unittest.TestCase):
         )
         expected_2027 = sum(plan.amount for plan in plans if plan.year == 2027)
         self.assertAlmostEqual(expected_2027, dashboard.kpi.total_plan, places=2)
+
+    def test_delete_draft_removes_items_and_allocations(self) -> None:
+        draft = self.create_draft()
+        item = self.add_valid_item(draft)
+        allocation_ids = [row.id for row in self.session.exec(
+            select(BudgetPreparationAllocation).where(
+                BudgetPreparationAllocation.item_id == item.id
+            )
+        ).all()]
+
+        delete_preparation(draft.id, self.session, self.user)
+
+        self.assertIsNone(self.session.get(BudgetPreparation, draft.id))
+        self.assertIsNone(self.session.get(BudgetPreparationItem, item.id))
+        self.assertTrue(all(
+            self.session.get(BudgetPreparationAllocation, allocation_id) is None
+            for allocation_id in allocation_ids
+        ))
+
+    def test_delete_active_is_rejected_without_touching_plan_data(self) -> None:
+        draft = self.create_draft()
+        self.add_valid_item(draft)
+        preparation, scenario_id, _ = activate_preparation(self.session, draft.id)
+        plan_ids = [row.id for row in self.session.exec(
+            select(PlanEntry).where(PlanEntry.scenario_id == scenario_id)
+        ).all()]
+
+        with self.assertRaises(HTTPException) as caught:
+            delete_preparation(preparation.id, self.session, self.user)
+
+        self.assertEqual(409, caught.exception.status_code)
+        self.assertEqual(
+            "Aktifleştirilmiş bütçe çalışması silinemez.",
+            caught.exception.detail,
+        )
+        self.assertIsNotNone(self.session.get(BudgetPreparation, preparation.id))
+        self.assertIsNotNone(self.session.get(Scenario, scenario_id))
+        self.assertTrue(all(self.session.get(PlanEntry, plan_id) is not None for plan_id in plan_ids))
+
+    def test_viewer_cannot_delete_preparation(self) -> None:
+        draft = self.create_draft()
+        with self.assertRaises(HTTPException) as caught:
+            authorized_user = get_write_user(self.viewer)
+            delete_preparation(draft.id, self.session, authorized_user)
+        self.assertEqual(403, caught.exception.status_code)
+        self.assertIsNotNone(self.session.get(BudgetPreparation, draft.id))
+
+    def test_delete_missing_preparation_returns_404(self) -> None:
+        with self.assertRaises(HTTPException) as caught:
+            delete_preparation(999999, self.session, self.user)
+        self.assertEqual(404, caught.exception.status_code)
 
 
 if __name__ == "__main__":

@@ -247,16 +247,29 @@ export default function PlansView() {
   const currentYear = new Date().getFullYear();
   const [year, setYear] = usePersistentState<number>("plans:year", currentYear);
   const [scenarioId, setScenarioId] = usePersistentState<number | null>("plans:scenarioId", null);
+  const [monthFilter, setMonthFilter] = useState<number | "">("");
+  const [departmentFilter, setDepartmentFilter] = useState<string>("");
+  const [budgetItemId, setBudgetItemId] = usePersistentState<number | null>("plans:budgetItemId", null);
+  const [capexOpex, setCapexOpex] = usePersistentState<"" | "capex" | "opex">("plans:capexOpex", "");
   useEffect(() => {
     const requestedYear = Number(searchParams.get("year"));
     const requestedScenario = Number(searchParams.get("scenario_id"));
     if (Number.isInteger(requestedYear) && requestedYear > 0) setYear(requestedYear);
     if (Number.isInteger(requestedScenario) && requestedScenario > 0) setScenarioId(requestedScenario);
-  }, [searchParams, setScenarioId, setYear]);
-  const [monthFilter, setMonthFilter] = useState<number | "">("");
-  const [departmentFilter, setDepartmentFilter] = useState<string>("");
-  const [budgetItemId, setBudgetItemId] = usePersistentState<number | null>("plans:budgetItemId", null);
-  const [capexOpex, setCapexOpex] = usePersistentState<"" | "capex" | "opex">("plans:capexOpex", "");
+
+    if (searchParams.get("source") === "budget-preparation") {
+      setBudgetItemId(null);
+      setCapexOpex("");
+      setMonthFilter("");
+      setDepartmentFilter("");
+      setActiveCard("");
+      setPaginationModel((current) => ({ ...current, page: 0 }));
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete("source");
+      nextParams.delete("card");
+      setSearchParams(nextParams, { replace: true });
+    }
+  }, [searchParams, setBudgetItemId, setCapexOpex, setScenarioId, setSearchParams, setYear]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState<PlanEntry | null>(null);
   const [formError, setFormError] = useState<string | null>(null);

@@ -281,6 +281,8 @@ function PreparationList() {
   const [newYear, setNewYear] = useState(new Date().getFullYear() + 1);
   const [newName, setNewName] = useState("");
   const [newNote, setNewNote] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<Preparation | null>(null);
+  const [deleteFeedback, setDeleteFeedback] = useState<Feedback | null>(null);
 
   const preparationsQuery = useQuery<Preparation[]>({
     queryKey: ["budget-preparations", search, statusFilter, yearFilter],
@@ -322,6 +324,18 @@ function PreparationList() {
       navigate(`/budget-preparation/${data.id}`);
     },
   });
+  const deleteMutation = useMutation({
+    mutationFn: async (preparationId: number) => client.delete(`/budget-preparations/${preparationId}`),
+    onSuccess: async () => {
+      setDeleteTarget(null);
+      await queryClient.invalidateQueries({ queryKey: ["budget-preparations"] });
+      setDeleteFeedback({ severity: "success", message: "Bütçe çalışması silindi." });
+    },
+    onError: (error) => setDeleteFeedback({
+      severity: "error",
+      message: apiErrorMessage(error, "Bütçe çalışması silinemedi."),
+    }),
+  });
 
   return (
     <Stack spacing={3}>
@@ -359,7 +373,21 @@ function PreparationList() {
                     <Typography variant="h6" fontWeight={750}>{preparation.name}</Typography>
                     <Typography color="text.secondary">{preparation.year} · {preparation.currency}</Typography>
                   </Box>
-                  <Chip label={statusLabel(preparation.status)} color={preparation.status === "ACTIVE" ? "success" : "warning"} />
+                  <Stack direction="row" spacing={0.5} alignItems="flex-start">
+                    <Chip label={statusLabel(preparation.status)} color={preparation.status === "ACTIVE" ? "success" : "warning"} />
+                    {!isViewer && preparation.status === "DRAFT" && <Tooltip title="Bütçe çalışmasını sil">
+                      <IconButton
+                        aria-label={`${preparation.name} bütçe çalışmasını sil`}
+                        color="error"
+                        disabled={deleteMutation.isPending}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setDeleteFeedback(null);
+                          setDeleteTarget(preparation);
+                        }}
+                      ><DeleteIcon /></IconButton>
+                    </Tooltip>}
+                  </Stack>
                 </Stack>
                 <Grid container spacing={2} sx={{ mt: 1 }}>
                   <Grid item xs={6}><Typography variant="caption" color="text.secondary">Kalem</Typography><Typography fontWeight={700}>{preparation.item_count}</Typography></Grid>
@@ -393,6 +421,36 @@ function PreparationList() {
           <Button variant="contained" disabled={!newName.trim() || createMutation.isPending} onClick={() => createMutation.mutate()}>Oluştur</Button>
         </DialogActions>
       </Dialog>
+      <Dialog open={Boolean(deleteTarget)} onClose={() => !deleteMutation.isPending && setDeleteTarget(null)} fullWidth maxWidth="sm">
+        <DialogTitle>Bütçe Çalışmasını Sil</DialogTitle>
+        <DialogContent dividers>
+          <Typography>
+            “{deleteTarget?.name}” adlı taslak bütçe çalışması ve içindeki bütçe kalemleri kalıcı olarak silinecek.
+          </Typography>
+          <Typography sx={{ mt: 2 }} fontWeight={700}>Bu işlem geri alınamaz.</Typography>
+          <Typography sx={{ mt: 2 }}>Devam etmek istiyor musunuz?</Typography>
+          {deleteMutation.isError && deleteFeedback?.severity === "error" && <Alert severity="error" sx={{ mt: 2 }}>{deleteFeedback.message}</Alert>}
+        </DialogContent>
+        <DialogActions>
+          <Button disabled={deleteMutation.isPending} onClick={() => setDeleteTarget(null)}>İptal</Button>
+          <Button
+            variant="contained"
+            color="error"
+            disabled={!deleteTarget || deleteMutation.isPending}
+            onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+          >{deleteMutation.isPending ? "Siliniyor…" : "Bütçe Çalışmasını Sil"}</Button>
+        </DialogActions>
+      </Dialog>
+      <Snackbar
+        open={Boolean(deleteFeedback) && deleteFeedback.severity === "success"}
+        autoHideDuration={5000}
+        onClose={(_event, reason) => {
+          if (reason !== "clickaway") setDeleteFeedback(null);
+        }}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert severity="success" variant="filled" onClose={() => setDeleteFeedback(null)}>{deleteFeedback?.message ?? ""}</Alert>
+      </Snackbar>
     </Stack>
   );
 }
@@ -616,7 +674,7 @@ function PreparationDetail({ preparationId }: { preparationId: number }) {
         </Stack>}
       </Stack>
 
-      {isLocked && <Alert severity="info" action={completedScenarioId || preparation.activated_scenario_id ? <Button color="inherit" size="small" onClick={() => navigate(`/plans?year=${preparation.year}&scenario_id=${completedScenarioId ?? preparation.activated_scenario_id}`)}>Plan Yönetiminde Gör</Button> : undefined}>Bu bütçe aktiftir. Hazırlama ekranından düzenlenemez. Plan Yönetimi ve Dashboard akışlarında kullanılabilir.</Alert>}
+      {isLocked && <Alert severity="info" action={completedScenarioId || preparation.activated_scenario_id ? <Button color="inherit" size="small" onClick={() => navigate(`/plans?year=${preparation.year}&scenario_id=${completedScenarioId ?? preparation.activated_scenario_id}&source=budget-preparation`)}>Plan Yönetiminde Gör</Button> : undefined}>Bu bütçe aktiftir. Hazırlama ekranından düzenlenemez. Plan Yönetimi ve Dashboard akışlarında kullanılabilir.</Alert>}
       {isViewer && !isLocked && <Alert severity="info">Sadece görüntüleme yetkiniz var. Taslak üzerinde değişiklik yapamazsınız.</Alert>}
       {completionErrors.length > 0 && <Alert severity="error"><Typography fontWeight={700}>Bütçe tamamlanamadı</Typography>{completionErrors.map((error, index) => <Button key={index} size="small" color="inherit" sx={{ display: "block", textAlign: "left" }} onClick={() => error.item_id && document.getElementById(`budget-item-${error.item_id}`)?.scrollIntoView({ behavior: "smooth" })}>{error.message}</Button>)}</Alert>}
 
