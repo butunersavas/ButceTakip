@@ -172,6 +172,7 @@ class ScenarioBase(BaseModel):
     name: str
     year: int
     description: Optional[str] = None
+    is_primary: bool = False
 
 
 class ScenarioCreate(ScenarioBase):
@@ -182,6 +183,7 @@ class ScenarioUpdate(BaseModel):
     name: Optional[str] = None
     year: Optional[int] = None
     description: Optional[str] = None
+    is_primary: Optional[bool] = None
 
 
 class ScenarioRead(ScenarioBase):
@@ -495,6 +497,7 @@ class BudgetPreparationRead(BaseModel):
     created_by_id: int | None = None
     created_by_name: str | None = None
     activated_scenario_id: int | None = None
+    is_primary: bool = False
     completed_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
@@ -517,6 +520,26 @@ class BudgetPreparationCompleteRead(BaseModel):
     preparation: BudgetPreparationRead
     scenario_id: int
     created_plan_entries: int
+
+
+class CarryoverMonthRead(BaseModel):
+    month: int
+    amount: Decimal
+
+
+class BudgetPreparationCarryoverRead(BaseModel):
+    source_year: int
+    source_scenario_id: int
+    source_scenario_name: str
+    source_preparation_name: str | None = None
+    budget_item_id: int
+    budget_code: str
+    budget_name: str
+    department: str | None = None
+    capex_opex: str | None = None
+    map_attribute: str | None = None
+    months: list[CarryoverMonthRead] = Field(default_factory=list)
+    total_amount: Decimal = Decimal("0.00")
 
 
 class BudgetPreparationMetadataRead(BaseModel):
@@ -692,6 +715,9 @@ class PlanEntryRead(SQLModel, table=False):
     department: Optional[str] = None
     department_name: Optional[str] = None
     scenario_name: Optional[str] = None
+    scenario_year: Optional[int] = None
+    is_carryover: bool = False
+    source_year: Optional[int] = None
     budget_code: Optional[str] = None
     budget_name: Optional[str] = None
     capex_opex: Optional[str] = None
@@ -1570,6 +1596,9 @@ class DashboardKPI(BaseModel):
     capex_total_plan_amount: float = 0
     opex_total_plan_amount: float = 0
     unclassified_total_plan_amount: float = 0
+    new_budget_plan_amount: float = 0
+    carryover_plan_amount: float = 0
+    effective_plan_amount: float = 0
 
 
 class BudgetReconciliationRead(BaseModel):

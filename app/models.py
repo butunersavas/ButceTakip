@@ -3,7 +3,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy import Column, LargeBinary, Numeric, UniqueConstraint
+from sqlalchemy import Column, Index, LargeBinary, Numeric, UniqueConstraint, text
 from sqlmodel import Field, Relationship, SQLModel
 
 
@@ -56,11 +56,21 @@ class User(TimestampMixin, SQLModel, table=True):
 
 class Scenario(TimestampMixin, SQLModel, table=True):
     __tablename__ = "scenarios"
+    __table_args__ = (
+        Index(
+            "uq_scenarios_primary_year",
+            "year",
+            unique=True,
+            sqlite_where=text("is_primary = 1"),
+            postgresql_where=text("is_primary IS TRUE"),
+        ),
+    )
 
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(nullable=False)
     year: int = Field(nullable=False, index=True)
     description: Optional[str] = Field(default=None)
+    is_primary: bool = Field(default=False, nullable=False, index=True)
 
     plans: list["PlanEntry"] = Relationship(back_populates="scenario")
     expenses: list["Expense"] = Relationship(back_populates="scenario")

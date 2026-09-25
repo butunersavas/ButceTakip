@@ -45,7 +45,7 @@ import {
   YAxis,
   Tooltip as RechartsTooltip
 } from "recharts";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import * as XLSX from "xlsx";
 import { formatUnusedReason } from "../../utils/unusedReason";
 
@@ -137,6 +137,9 @@ interface DashboardKPI {
   capex_reconciliation_difference?: number;
   opex_reconciliation_difference?: number;
   unclassified_reconciliation_difference?: number;
+  new_budget_plan_amount?: number;
+  carryover_plan_amount?: number;
+  effective_plan_amount?: number;
 }
 
 interface DashboardReconciliation {
@@ -260,6 +263,7 @@ interface Scenario {
   id: number;
   name: string;
   year: number;
+  is_primary: boolean;
 }
 
 interface BudgetItem {
@@ -761,6 +765,7 @@ export default function DashboardView() {
     String(user?.role ?? "").toLowerCase()
   );
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const currentYear = new Date().getFullYear();
   const [year, setYear] = usePersistentState<number>("dashboard:year", currentYear);
@@ -834,6 +839,25 @@ export default function DashboardView() {
   const monthFilterRef = useRef<HTMLDivElement | null>(null);
   const highlightTimeoutRef = useRef<number | null>(null);
   const hasLoggedTrendResponse = useRef(false);
+
+  useEffect(() => {
+    if (searchParams.get("source") !== "budget-preparation") return;
+    const requestedYear = Number(searchParams.get("year"));
+    const requestedScenario = Number(searchParams.get("scenario_id"));
+    if (Number.isInteger(requestedYear) && requestedYear > 0) setYear(requestedYear);
+    if (Number.isInteger(requestedScenario) && requestedScenario > 0) {
+      setAllScenariosSelected(false);
+      setScenarioId(requestedScenario);
+    }
+    setSelectedPeriods([]);
+    setSelectedMonths([]);
+    setDepartment("");
+    setBudgetItemId(null);
+    setCapexOpex("");
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("source");
+    setSearchParams(nextParams, { replace: true });
+  }, [searchParams, setAllScenariosSelected, setBudgetItemId, setCapexOpex, setScenarioId, setSearchParams, setSelectedMonths, setSelectedPeriods, setYear]);
 
   const monthOptions = [
     { value: 1, label: "Ocak" },
@@ -1126,7 +1150,8 @@ export default function DashboardView() {
       debouncedFilters.scenarioId,
       debouncedFilters.selectedMonthKey,
       debouncedFilters.department,
-      debouncedFilters.capexOpex
+      debouncedFilters.capexOpex,
+      Boolean(scenarios?.find((scenario) => scenario.id === debouncedFilters.scenarioId)?.is_primary)
     ],
     queryFn: async () => {
       const params: Record<string, number | string> = { year: debouncedFilters.year };
@@ -1134,6 +1159,8 @@ export default function DashboardView() {
       if (debouncedFilters.scenarioId) {
         params.scenario_id = debouncedFilters.scenarioId;
       }
+      const selectedScenario = scenarios?.find((scenario) => scenario.id === debouncedFilters.scenarioId);
+      if (selectedScenario?.is_primary) params.effective_primary = "true";
 
       if (debouncedFilters.selectedMonthKey) {
         params.month_list = debouncedFilters.selectedMonthKey;
@@ -1166,9 +1193,14 @@ export default function DashboardView() {
       (scenario) => scenario.id === scenarioId && scenario.year === year
     );
     if (selectedScenario) return;
-    const matchingScenario = scenarios.find((scenario) => scenario.year === year);
+    const matchingScenario = scenarios.find((scenario) => scenario.year === year && scenario.is_primary)
+      ?? scenarios.find((scenario) => scenario.year === year);
     setScenarioId(matchingScenario?.id ?? null);
   }, [allScenariosSelected, scenarios, scenarioId, setScenarioId, year]);
+
+  const selectedScenarioIsPrimary = Boolean(
+    scenarios?.find((scenario) => scenario.id === debouncedFilters.scenarioId)?.is_primary
+  );
 
   const { data: dashboard, isLoading } = useQuery<DashboardResponse>({
     queryKey: [
@@ -1178,11 +1210,13 @@ export default function DashboardView() {
       debouncedFilters.selectedMonthKey,
       debouncedFilters.budgetItemId,
       debouncedFilters.department,
-      debouncedFilters.capexOpex
+      debouncedFilters.capexOpex,
+      selectedScenarioIsPrimary
     ],
     queryFn: async () => {
       const params: Record<string, number | string> = { year: debouncedFilters.year };
       if (debouncedFilters.scenarioId) params.scenario_id = debouncedFilters.scenarioId;
+      if (selectedScenarioIsPrimary) params.effective_primary = "true";
       if (debouncedFilters.selectedMonthKey) params.month_list = debouncedFilters.selectedMonthKey;
       if (debouncedFilters.budgetItemId) params.budget_item_id = debouncedFilters.budgetItemId;
       if (debouncedFilters.department) params.department = debouncedFilters.department;
@@ -2836,12 +2870,12 @@ export default function DashboardView() {
               }}
               sx={{ minWidth: 240, "& .MuiInputBase-root": { height: 40 } }}
             >
-              <MenuItem value="">Tüm Scenario'lar</MenuItem>
+              <MenuItem value="">Scenario Karşılaştırması (Tümü)</MenuItem>
               {(scenarios ?? [])
                 .filter((scenario) => scenario.year === year)
                 .map((scenario) => (
                   <MenuItem key={scenario.id} value={scenario.id}>
-                    {scenario.name} ({scenario.year})
+                    {scenario.name} ({scenario.year}){scenario.is_primary ? " · ANA BÜTÇE" : ""}
                   </MenuItem>
                 ))}
             </TextField>
@@ -3005,6 +3039,9 @@ export default function DashboardView() {
               <MenuItem value="opex">Opex</MenuItem>
             </TextField>
           </FiltersBar>
+          {allScenariosSelected && <Alert severity="info">
+            Scenario Karşılaştırması görünümündesiniz. Alternatif ve revizyon Scenario tutarları birlikte gösterilir; bu değer normal operasyonel Ana Bütçe toplamı değildir.
+          </Alert>}
           <Stack direction="row" justifyContent="flex-end">
             <Button
               variant="contained"
@@ -3023,7 +3060,9 @@ export default function DashboardView() {
                 {
                   title: "Toplam Plan",
                   value: formattedTotalPlan,
-                  subtitle: "Planlanan bütçe",
+                  subtitle: (dashboard?.kpi.carryover_plan_amount ?? 0) > 0
+                    ? `Yeni ${formatCurrency(dashboard?.kpi.new_budget_plan_amount ?? 0)} + Devreden ${formatCurrency(dashboard?.kpi.carryover_plan_amount ?? 0)}`
+                    : "Planlanan bütçe",
                   icon: (
                     <AccountBalanceWalletOutlinedIcon
                       sx={{ fontSize: 18, color: "common.white" }}

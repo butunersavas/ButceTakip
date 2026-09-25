@@ -500,6 +500,7 @@ def _plan_read_query(capex_filter: str | None):
             PlanEntry.department.label("department_name"),
             func.nullif(func.trim(PlanEntry.budget_code), "").label("plan_budget_code"),
             Scenario.name.label("scenario_name"),
+            Scenario.year.label("scenario_year"),
             func.coalesce(func.nullif(func.trim(PlanEntry.budget_code), ""), BudgetItem.code).label(
                 "budget_code"
             ),
@@ -610,6 +611,19 @@ def _build_plan_read(
         department=row.get("department"),
         department_name=row.get("department_name"),
         scenario_name=row.get("scenario_name"),
+        scenario_year=row.get("scenario_year"),
+        is_carryover=bool(
+            row.get("scenario_year") is not None
+            and row.get("year") is not None
+            and row.get("scenario_year") < row.get("year")
+        ),
+        source_year=(
+            row.get("scenario_year")
+            if row.get("scenario_year") is not None
+            and row.get("year") is not None
+            and row.get("scenario_year") < row.get("year")
+            else None
+        ),
         budget_code=budget_code,
         budget_name=budget_name,
         capex_opex=capex_value.title() if capex_value else None,
@@ -656,6 +670,7 @@ def list_plans(
     month: int | None = Query(default=None),
     department: str | None = Query(default=None),
     capex_opex: str | None = Query(default=None),
+    effective_primary: bool = False,
     session: Session = Depends(get_db_session),
     _: User = Depends(get_current_user),
 ) -> list[PlanEntryRead]:
@@ -664,7 +679,24 @@ def list_plans(
     if year is not None:
         query = query.where(PlanEntry.year == year)
     if scenario_id is not None:
-        query = query.where(PlanEntry.scenario_id == scenario_id)
+        effective_ids = [scenario_id]
+        selected_scenario = session.get(Scenario, scenario_id)
+        if (
+            effective_primary
+            and selected_scenario
+            and selected_scenario.year == year
+            and selected_scenario.is_primary
+        ):
+            carryover_ids = session.exec(
+                select(Scenario.id)
+                .join(PlanEntry, PlanEntry.scenario_id == Scenario.id)
+                .where(Scenario.is_primary.is_(True))
+                .where(Scenario.year < year)
+                .where(PlanEntry.year == year)
+                .distinct()
+            ).all()
+            effective_ids.extend(value for value in carryover_ids if value != scenario_id)
+        query = query.where(PlanEntry.scenario_id.in_(effective_ids))
     if budget_item_id is not None:
         query = query.where(PlanEntry.budget_item_id == budget_item_id)
     if month is not None:

@@ -45,6 +45,7 @@ interface Scenario {
   id: number;
   name: string;
   year: number;
+  is_primary: boolean;
 }
 
 interface BudgetItem {
@@ -71,6 +72,9 @@ interface PlanEntry {
   departmentName?: string | null;
   scenario?: string | null;
   scenario_name?: string | null;
+  scenario_year?: number | null;
+  is_carryover?: boolean;
+  source_year?: number | null;
   scenarioName?: string | null;
   budget_code?: string | null;
   budget_name?: string | null;
@@ -340,6 +344,7 @@ export default function PlansView() {
     (targetYear: number) => {
       const yearScenarios = (scenarios ?? []).filter((scenario) => scenario.year === targetYear);
       return (
+        yearScenarios.find((scenario) => scenario.is_primary) ??
         yearScenarios.find((scenario) => scenario.name?.trim().toLowerCase() === "temel") ??
         yearScenarios[0] ??
         null
@@ -354,7 +359,7 @@ export default function PlansView() {
       const previousScenario = previous ? scenarioById.get(previous) : null;
       // A preparation scenario can legitimately own carry-over PlanEntry rows in
       // later years, so its definition year must not clear an explicit selection.
-      if (previousScenario) {
+      if (previousScenario?.year === year) {
         return previous;
       }
 
@@ -401,6 +406,7 @@ export default function PlansView() {
       const { data: latestScenarios } = await client.get<Scenario[]>("/scenarios");
       const latestYearScenarios = latestScenarios.filter((scenario) => scenario.year === targetYear);
       const latestExisting =
+        latestYearScenarios.find((scenario) => scenario.is_primary) ??
         latestYearScenarios.find((scenario) => scenario.name?.trim().toLowerCase() === "temel") ??
         latestYearScenarios[0] ??
         null;
@@ -468,11 +474,13 @@ export default function PlansView() {
       budgetItemId,
       monthFilter || "",
       departmentFilter || "",
-      capexOpex
+      capexOpex,
+      Boolean(scenarioId && scenarioById.get(scenarioId)?.is_primary)
     ],
     queryFn: async () => {
       const params: Record<string, number | string> = { year };
       if (scenarioId) params.scenario_id = scenarioId;
+      if (scenarioId && scenarioById.get(scenarioId)?.is_primary) params.effective_primary = "true";
       if (budgetItemId) params.budget_item_id = budgetItemId;
       if (monthFilter !== "") params.month = Number(monthFilter);
       if (departmentFilter) params.department = departmentFilter;
@@ -1160,7 +1168,8 @@ export default function PlansView() {
         minWidth: 160,
         valueGetter: (_value, row) => {
           const r = row as any;
-          return getPlanDisplayValues(r).scenario;
+          const scenario = getPlanDisplayValues(r).scenario;
+          return r.is_carryover ? `${scenario} · DEVREDEN ${r.source_year ?? ""}` : scenario;
         }
       },
       {
@@ -1559,9 +1568,9 @@ export default function PlansView() {
           sx={{ minWidth: { xs: "100%", sm: 240 }, flex: "1 1 240px", "& .MuiInputBase-root": { height: 40 } }}
         >
           <MenuItem value="">Tümü</MenuItem>
-          {scenarios?.map((scenario) => (
+          {scenarios?.filter((scenario) => scenario.year === year).map((scenario) => (
             <MenuItem key={scenario.id} value={scenario.id}>
-              {scenario.name} ({scenario.year})
+              {scenario.name} ({scenario.year}){scenario.is_primary ? " · ANA BÜTÇE" : ""}
             </MenuItem>
           ))}
         </TextField>

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import defaultdict
 from datetime import datetime
 from decimal import Decimal, ROUND_DOWN
 
@@ -17,10 +18,12 @@ from app.models import (
 )
 from app.schemas import (
     BudgetPreparationAllocationRead,
+    BudgetPreparationCarryoverRead,
     BudgetPreparationItemInput,
     BudgetPreparationItemRead,
     BudgetPreparationRead,
     BudgetPreparationValidationError,
+    CarryoverMonthRead,
 )
 
 MONEY_STEP = Decimal("0.01")
@@ -172,6 +175,11 @@ def build_preparation_read(
         (item.total_amount for item in item_reads if item.capex_opex == "OPEX"),
         Decimal("0.00"),
     )
+    scenario = (
+        session.get(Scenario, preparation.activated_scenario_id)
+        if preparation.activated_scenario_id
+        else None
+    )
     return BudgetPreparationRead(
         id=preparation.id,
         year=preparation.year,
@@ -182,6 +190,7 @@ def build_preparation_read(
         created_by_id=preparation.created_by_id,
         created_by_name=(creator.full_name or creator.username) if creator else None,
         activated_scenario_id=preparation.activated_scenario_id,
+        is_primary=bool(scenario and scenario.is_primary),
         completed_at=preparation.completed_at,
         created_at=preparation.created_at,
         updated_at=preparation.updated_at,
@@ -192,6 +201,91 @@ def build_preparation_read(
         opex_total=money(opex_total),
         items=item_reads if include_items else [],
     )
+
+
+def discover_carryovers(
+    session: Session,
+    target_year: int,
+) -> list[BudgetPreparationCarryoverRead]:
+    rows = session.exec(
+        select(
+            PlanEntry,
+            Scenario,
+            BudgetItem,
+            BudgetPreparation.name.label("preparation_name"),
+        )
+        .join(Scenario, Scenario.id == PlanEntry.scenario_id)
+        .join(BudgetItem, BudgetItem.id == PlanEntry.budget_item_id)
+        .outerjoin(
+            BudgetPreparation,
+            BudgetPreparation.activated_scenario_id == Scenario.id,
+        )
+        .where(PlanEntry.year == target_year)
+        .where(Scenario.year < target_year)
+        .where(Scenario.is_primary.is_(True))
+        .order_by(Scenario.year, Scenario.id, BudgetItem.id, PlanEntry.month)
+    ).all()
+    grouped: dict[tuple[int, int, int, str], dict] = {}
+    for plan, scenario, budget_item, preparation_name in rows:
+        department = (plan.department or "").strip()
+        key = (scenario.id, budget_item.id, target_year, department)
+        entry = grouped.setdefault(
+            key,
+            {
+                "source_year": scenario.year,
+                "source_scenario_id": scenario.id,
+                "source_scenario_name": scenario.name,
+                "source_preparation_name": preparation_name,
+                "budget_item_id": budget_item.id,
+                "budget_code": budget_item.code,
+                "budget_name": budget_item.name,
+                "department": plan.department,
+                "capex_opex": (budget_item.map_category or "").upper() or None,
+                "map_attribute": budget_item.map_attribute,
+                "months": defaultdict(lambda: Decimal("0.00")),
+            },
+        )
+        entry["months"][plan.month] += money(plan.amount)
+
+    results: list[BudgetPreparationCarryoverRead] = []
+    for entry in grouped.values():
+        month_rows = [
+            CarryoverMonthRead(month=month, amount=money(amount))
+            for month, amount in sorted(entry.pop("months").items())
+        ]
+        results.append(
+            BudgetPreparationCarryoverRead(
+                **entry,
+                months=month_rows,
+                total_amount=money(sum((row.amount for row in month_rows), Decimal("0.00"))),
+            )
+        )
+    return results
+
+
+def matching_carryovers(
+    item: BudgetPreparationItem,
+    carryovers: list[BudgetPreparationCarryoverRead],
+) -> list[BudgetPreparationCarryoverRead]:
+    normalized_name = item.budget_name.strip().casefold()
+    normalized_department = (item.department or "").strip().casefold()
+    normalized_category = (item.capex_opex or "").strip().casefold()
+    normalized_attribute = (item.map_attribute or "").strip().casefold()
+    matches: list[BudgetPreparationCarryoverRead] = []
+    for carryover in carryovers:
+        identity_match = bool(
+            item.source_budget_item_id
+            and item.source_budget_item_id == carryover.budget_item_id
+        )
+        metadata_match = (
+            normalized_name == carryover.budget_name.strip().casefold()
+            and normalized_department == (carryover.department or "").strip().casefold()
+            and normalized_category == (carryover.capex_opex or "").strip().casefold()
+            and normalized_attribute == (carryover.map_attribute or "").strip().casefold()
+        )
+        if identity_match or metadata_match:
+            matches.append(carryover)
+    return matches
 
 
 def validate_preparation_for_completion(
@@ -307,10 +401,17 @@ def activate_preparation(
         error.validation_errors = validation_errors  # type: ignore[attr-defined]
         raise error
 
+    existing_primary = session.exec(
+        select(Scenario)
+        .where(Scenario.year == preparation.year)
+        .where(Scenario.is_primary.is_(True))
+        .with_for_update()
+    ).first()
     scenario = Scenario(
         name=preparation.name,
         year=preparation.year,
         description=preparation.note,
+        is_primary=existing_primary is None,
     )
     session.add(scenario)
     session.flush()
@@ -338,6 +439,10 @@ def activate_preparation(
             )
             session.add(budget_item)
             session.flush()
+
+        item.source_year = preparation.year
+        item.source_budget_item_id = budget_item.id
+        session.add(item)
 
         allocations = session.exec(
             select(BudgetPreparationAllocation)

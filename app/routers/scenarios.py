@@ -43,9 +43,24 @@ def create_scenario(
     current_user: User = Depends(get_current_user),
 ) -> Scenario:
     """Yeni senaryo oluştur (herhangi bir oturum açmış kullanıcı)."""
-    scenario = Scenario(**scenario_in.dict())
+    requested = scenario_in.dict()
+    year_scenarios = session.exec(
+        select(Scenario).where(Scenario.year == scenario_in.year).with_for_update()
+    ).all()
+    make_primary = bool(requested.pop("is_primary", False)) or not any(
+        scenario.is_primary for scenario in year_scenarios
+    )
+    if make_primary:
+        for existing in year_scenarios:
+            existing.is_primary = False
+            session.add(existing)
+    scenario = Scenario(**requested, is_primary=make_primary)
     session.add(scenario)
-    session.commit()
+    try:
+        session.commit()
+    except IntegrityError as exc:
+        session.rollback()
+        raise HTTPException(status_code=409, detail="Bu yıl için yalnız bir Ana Bütçe olabilir.") from exc
     session.refresh(scenario)
     return scenario
 
@@ -63,11 +78,25 @@ def update_scenario(
     if not scenario:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
 
-    for field, value in scenario_in.dict(exclude_unset=True).items():
+    changes = scenario_in.dict(exclude_unset=True)
+    target_year = changes.get("year", scenario.year)
+    if changes.get("is_primary") is True:
+        year_scenarios = session.exec(
+            select(Scenario).where(Scenario.year == target_year).with_for_update()
+        ).all()
+        for existing in year_scenarios:
+            if existing.id != scenario.id:
+                existing.is_primary = False
+                session.add(existing)
+    for field, value in changes.items():
         setattr(scenario, field, value)
     scenario.updated_at = datetime.utcnow()
     session.add(scenario)
-    session.commit()
+    try:
+        session.commit()
+    except IntegrityError as exc:
+        session.rollback()
+        raise HTTPException(status_code=409, detail="Bu yıl için yalnız bir Ana Bütçe olabilir.") from exc
     session.refresh(scenario)
     return scenario
 

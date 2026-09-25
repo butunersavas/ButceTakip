@@ -1,4 +1,5 @@
 from datetime import date
+from dataclasses import fields
 from types import SimpleNamespace
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -34,6 +35,8 @@ from app.schemas import (
     SpendTrendResponse,
 )
 from app.services.analytics import (
+    BudgetReconciliationSummary,
+    MonthlyAggregate,
     compute_budget_reconciliation_summary,
     compute_budget_item_overrun_statuses,
     compute_budget_item_statuses,
@@ -44,6 +47,52 @@ from app.services.analytics import (
 )
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
+
+
+def _effective_primary_scenario_ids(
+    session: Session,
+    *,
+    year: int,
+    scenario_id: int | None,
+    effective_primary: bool,
+) -> list[int | None]:
+    if not effective_primary or scenario_id is None:
+        return [scenario_id]
+    selected = session.get(Scenario, scenario_id)
+    if not selected or selected.year != year or not selected.is_primary:
+        return [scenario_id]
+    carryover_ids = session.exec(
+        select(Scenario.id)
+        .join(PlanEntry, PlanEntry.scenario_id == Scenario.id)
+        .where(Scenario.is_primary.is_(True))
+        .where(Scenario.year < year)
+        .where(PlanEntry.year == year)
+        .distinct()
+    ).all()
+    return [scenario_id, *[value for value in carryover_ids if value != scenario_id]]
+
+
+def _sum_reconciliations(
+    values: list[BudgetReconciliationSummary],
+) -> BudgetReconciliationSummary:
+    return BudgetReconciliationSummary(**{
+        field.name: round(sum(float(getattr(value, field.name) or 0) for value in values), 2)
+        for field in fields(BudgetReconciliationSummary)
+    })
+
+
+def _sum_monthly(values: list[list[MonthlyAggregate]]) -> list[MonthlyAggregate]:
+    grouped: dict[int, MonthlyAggregate] = {}
+    for rows in values:
+        for row in rows:
+            current = grouped.setdefault(row.month, MonthlyAggregate(row.month, 0, 0))
+            current.planned += row.planned
+            current.actual += row.actual
+            current.unused += row.unused
+            current.negotiated_saving += row.negotiated_saving
+            current.cancelled += row.cancelled
+            current.cancelled_budget += row.cancelled_budget
+    return [grouped[month] for month in sorted(grouped)]
 
 
 def _parse_month_list(value: str | None) -> list[int] | None:
@@ -661,6 +710,7 @@ def get_dashboard(
     budget_item_id: int | None = Query(default=None),
     department: str | None = Query(default=None),
     capex_opex: str | None = Query(default=None),
+    effective_primary: bool = False,
     session: Session = Depends(get_db_session),
     _ = Depends(get_current_user),
 ) -> DashboardResponse:
@@ -668,25 +718,42 @@ def get_dashboard(
         raise HTTPException(status_code=400, detail="Year is required")
     capex_filter = _normalize_capex_opex(capex_opex)
     month_range = _dashboard_month_range(month=month, month_list=month_list)
-    monthly = compute_monthly_summary(
-        session,
-        year,
-        scenario_id,
-        budget_item_id,
-        month_range[0] if len(month_range) == 1 else None,
-        department,
-        capex_filter,
-    )
-    monthly = [item for item in monthly if item.month in month_range]
-    reconciliation = compute_budget_reconciliation_summary(
+    effective_scenario_ids = _effective_primary_scenario_ids(
         session,
         year=year,
-        month_range=month_range,
         scenario_id=scenario_id,
-        budget_item_id=budget_item_id,
-        department=department,
-        capex_opex=capex_filter,
-        monthly_overrun=budget_item_id is not None or month is not None or bool(month_list),
+        effective_primary=effective_primary,
+    )
+    monthly = _sum_monthly([
+        compute_monthly_summary(
+            session,
+            year,
+            effective_scenario_id,
+            budget_item_id,
+            month_range[0] if len(month_range) == 1 else None,
+            department,
+            capex_filter,
+        )
+        for effective_scenario_id in effective_scenario_ids
+    ])
+    monthly = [item for item in monthly if item.month in month_range]
+    reconciliations = [
+        compute_budget_reconciliation_summary(
+            session,
+            year=year,
+            month_range=month_range,
+            scenario_id=effective_scenario_id,
+            budget_item_id=budget_item_id,
+            department=department,
+            capex_opex=capex_filter,
+            monthly_overrun=budget_item_id is not None or month is not None or bool(month_list),
+        )
+        for effective_scenario_id in effective_scenario_ids
+    ]
+    reconciliation = _sum_reconciliations(reconciliations)
+    new_budget_plan_amount = reconciliations[0].total_plan_amount
+    carryover_plan_amount = round(
+        sum(value.total_plan_amount for value in reconciliations[1:]), 2
     )
     total_plan = reconciliation.total_plan_amount
     total_actual = reconciliation.realized_plan_inside_amount
@@ -762,6 +829,9 @@ def get_dashboard(
             unclassified_reconciliation_difference=(
                 reconciliation.unclassified_reconciliation_difference
             ),
+            new_budget_plan_amount=new_budget_plan_amount,
+            carryover_plan_amount=carryover_plan_amount,
+            effective_plan_amount=reconciliation.total_plan_amount,
         ),
         monthly=[
             DashboardSummary(
@@ -948,26 +1018,41 @@ def get_risky_budget_items(
     month_list: str | None = Query(default=None),
     department: str | None = Query(default=None),
     capex_opex: str | None = Query(default=None),
+    effective_primary: bool = False,
     session: Session = Depends(get_db_session),
     _ = Depends(get_current_user),
 ) -> list[RiskyItem]:
     month_range = _parse_month_list(month_list) or list(range(1, (month or 12) + 1))
-    remaining_statuses = compute_remaining_budget_statuses(
+    effective_ids = _effective_primary_scenario_ids(
         session,
         year=year,
-        month_range=month_range,
         scenario_id=scenario_id,
-        department=department,
-        capex_opex=_normalize_capex_opex(capex_opex),
+        effective_primary=effective_primary,
     )
-    overrun_statuses = compute_budget_item_overrun_statuses(
-        session,
-        year=year,
-        month_range=month_range,
-        scenario_id=scenario_id,
-        department=department,
-        capex_opex=_normalize_capex_opex(capex_opex),
-    )
+    remaining_statuses = [
+        row
+        for effective_id in effective_ids
+        for row in compute_remaining_budget_statuses(
+            session,
+            year=year,
+            month_range=month_range,
+            scenario_id=effective_id,
+            department=department,
+            capex_opex=_normalize_capex_opex(capex_opex),
+        )
+    ]
+    overrun_statuses = [
+        row
+        for effective_id in effective_ids
+        for row in compute_budget_item_overrun_statuses(
+            session,
+            year=year,
+            month_range=month_range,
+            scenario_id=effective_id,
+            department=department,
+            capex_opex=_normalize_capex_opex(capex_opex),
+        )
+    ]
     items: list[RiskyItem] = []
 
     for row in [*remaining_statuses, *overrun_statuses]:

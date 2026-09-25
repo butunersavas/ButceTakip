@@ -5,6 +5,9 @@ import {
   DeleteOutline as DeleteIcon,
   EditOutlined as EditIcon,
   SaveOutlined as SaveIcon,
+  ContentCopyOutlined as RevisionIcon,
+  StarOutline as PrimaryIcon,
+  DashboardOutlined as DashboardIcon,
 } from "@mui/icons-material";
 import {
   Alert,
@@ -98,12 +101,42 @@ interface Preparation {
   updated_at: string;
   completed_at: string | null;
   activated_scenario_id: number | null;
+  is_primary: boolean;
   item_count: number;
   total_budget: number;
   incomplete_item_count: number;
   capex_total: number;
   opex_total: number;
   items: PreparationItem[];
+}
+
+interface CarryoverMonth {
+  month: number;
+  amount: number;
+}
+
+interface Carryover {
+  source_year: number;
+  source_scenario_id: number;
+  source_scenario_name: string;
+  source_preparation_name: string | null;
+  budget_item_id: number;
+  budget_code: string;
+  budget_name: string;
+  department: string | null;
+  capex_opex: string | null;
+  map_attribute: string | null;
+  months: CarryoverMonth[];
+  total_amount: number;
+}
+
+interface CarryoverWarning {
+  item_id: number;
+  budget_name: string;
+  source_year: number;
+  carryover_amount: number;
+  new_amount: number;
+  total_effect: number;
 }
 
 interface Metadata {
@@ -172,7 +205,7 @@ function parseAmount(value: string): number {
 }
 
 function statusLabel(status: PreparationStatus) {
-  return status === "ACTIVE" ? "AKTİF" : "TASLAK";
+  return status === "ACTIVE" ? "PLANLANDI" : "TASLAK";
 }
 
 function formatDate(value: string | null) {
@@ -282,6 +315,7 @@ function PreparationList() {
   const [newName, setNewName] = useState("");
   const [newNote, setNewNote] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<Preparation | null>(null);
+  const [primaryTarget, setPrimaryTarget] = useState<Preparation | null>(null);
   const [deleteFeedback, setDeleteFeedback] = useState<Feedback | null>(null);
 
   const preparationsQuery = useQuery<Preparation[]>({
@@ -293,6 +327,7 @@ function PreparationList() {
           status: statusFilter || undefined,
           year: yearFilter || undefined,
         },
+        suppressGlobalError: true,
       });
       return data;
     },
@@ -300,7 +335,10 @@ function PreparationList() {
 
   const sameYearPreparationsQuery = useQuery<Preparation[]>({
     queryKey: ["budget-preparations", "same-year-warning", newYear],
-    queryFn: async () => (await client.get<Preparation[]>("/budget-preparations", { params: { year: newYear } })).data,
+    queryFn: async () => (await client.get<Preparation[]>("/budget-preparations", {
+      params: { year: newYear },
+      suppressGlobalError: true,
+    })).data,
     enabled: createOpen && Number.isInteger(newYear),
   });
 
@@ -315,7 +353,7 @@ function PreparationList() {
         name: newName,
         currency: "USD",
         note: newNote || null,
-      });
+      }, { suppressGlobalError: true });
       return data;
     },
     onSuccess: (data) => {
@@ -325,7 +363,7 @@ function PreparationList() {
     },
   });
   const deleteMutation = useMutation({
-    mutationFn: async (preparationId: number) => client.delete(`/budget-preparations/${preparationId}`),
+    mutationFn: async (preparationId: number) => client.delete(`/budget-preparations/${preparationId}`, { suppressGlobalError: true }),
     onSuccess: async () => {
       setDeleteTarget(null);
       await queryClient.invalidateQueries({ queryKey: ["budget-preparations"] });
@@ -336,13 +374,28 @@ function PreparationList() {
       message: apiErrorMessage(error, "Bütçe çalışması silinemedi."),
     }),
   });
+  const primaryMutation = useMutation({
+    mutationFn: async (preparation: Preparation) => (
+      await client.post<Preparation>(`/budget-preparations/${preparation.id}/primary`, undefined, { suppressGlobalError: true })
+    ).data,
+    onSuccess: async (preparation) => {
+      setPrimaryTarget(null);
+      await queryClient.invalidateQueries({ queryKey: ["budget-preparations"] });
+      await queryClient.invalidateQueries({ queryKey: ["scenarios"] });
+      setDeleteFeedback({ severity: "success", message: `${preparation.year} Ana Bütçesi güncellendi.` });
+    },
+    onError: (error) => setDeleteFeedback({
+      severity: "error",
+      message: apiErrorMessage(error, "Ana Bütçe güncellenemedi."),
+    }),
+  });
 
   return (
     <Stack spacing={3}>
       <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" gap={2}>
         <Box>
           <Typography variant="h4" fontWeight={800}>Bütçe Hazırlama</Typography>
-          <Typography color="text.secondary">Yeni bütçe yıllarını taslak olarak hazırlayın ve kontrollerden sonra aktifleştirin.</Typography>
+          <Typography color="text.secondary">Yeni bütçe yıllarını taslak olarak hazırlayın ve kontrollerden sonra planlayın.</Typography>
         </Box>
         {!isViewer && <Button variant="contained" startIcon={<AddIcon />} onClick={() => setCreateOpen(true)}>Yeni Bütçe</Button>}
       </Stack>
@@ -356,7 +409,7 @@ function PreparationList() {
             <Select label="Durum" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
               <MenuItem value="">Tümü</MenuItem>
               <MenuItem value="DRAFT">TASLAK</MenuItem>
-              <MenuItem value="ACTIVE">AKTİF</MenuItem>
+              <MenuItem value="ACTIVE">PLANLANDI</MenuItem>
             </Select>
           </FormControl>
         </Stack>
@@ -375,6 +428,7 @@ function PreparationList() {
                   </Box>
                   <Stack direction="row" spacing={0.5} alignItems="flex-start">
                     <Chip label={statusLabel(preparation.status)} color={preparation.status === "ACTIVE" ? "success" : "warning"} />
+                    {preparation.is_primary && <Chip size="small" color="primary" label="ANA BÜTÇE" />}
                     {!isViewer && preparation.status === "DRAFT" && <Tooltip title="Bütçe çalışmasını sil">
                       <IconButton
                         aria-label={`${preparation.name} bütçe çalışmasını sil`}
@@ -395,6 +449,19 @@ function PreparationList() {
                   <Grid item xs={6}><Typography variant="caption" color="text.secondary">Eksik Kalem</Typography><Typography fontWeight={700} color={preparation.incomplete_item_count ? "error.main" : "success.main"}>{preparation.incomplete_item_count}</Typography></Grid>
                   <Grid item xs={6}><Typography variant="caption" color="text.secondary">Son Güncelleme</Typography><Typography variant="body2">{formatDate(preparation.updated_at)}</Typography></Grid>
                 </Grid>
+                {!isViewer && preparation.status === "ACTIVE" && !preparation.is_primary && (
+                  <Button
+                    size="small"
+                    startIcon={<PrimaryIcon />}
+                    disabled={primaryMutation.isPending}
+                    sx={{ mt: 1.5 }}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setDeleteFeedback(null);
+                      setPrimaryTarget(preparation);
+                    }}
+                  >Ana Bütçe Yap</Button>
+                )}
               </CardContent>
             </Card>
           </Grid>
@@ -411,7 +478,7 @@ function PreparationList() {
             <TextField label="Para Birimi" value="USD" disabled />
             <TextField label="Açıklama / Not" multiline minRows={3} value={newNote} onChange={(event) => setNewNote(event.target.value)} />
             {sameYearPreparations.length > 0 && <Alert severity="warning">
-              {newYear} yılı için {sameYearDraftCount ? `${sameYearDraftCount} taslak` : ""}{sameYearDraftCount && sameYearActiveCount ? " ve " : ""}{sameYearActiveCount ? `${sameYearActiveCount} aktif` : ""} bütçe zaten mevcut. Scenario yapısı nedeniyle yeni bütçe oluşturabilirsiniz; doğru bütçeyle çalıştığınızdan emin olun.
+              {newYear} yılı için {sameYearDraftCount ? `${sameYearDraftCount} taslak` : ""}{sameYearDraftCount && sameYearActiveCount ? " ve " : ""}{sameYearActiveCount ? `${sameYearActiveCount} planlanmış` : ""} bütçe zaten mevcut. Scenario yapısı nedeniyle yeni bütçe oluşturabilirsiniz; doğru bütçeyle çalıştığınızdan emin olun.
             </Alert>}
             {createMutation.isError && <Alert severity="error">{apiErrorMessage(createMutation.error, "Bütçe taslağı oluşturulamadı.")}</Alert>}
           </Stack>
@@ -419,6 +486,20 @@ function PreparationList() {
         <DialogActions>
           <Button onClick={() => setCreateOpen(false)}>İptal</Button>
           <Button variant="contained" disabled={!newName.trim() || createMutation.isPending} onClick={() => createMutation.mutate()}>Oluştur</Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog open={Boolean(primaryTarget)} onClose={() => !primaryMutation.isPending && setPrimaryTarget(null)} fullWidth maxWidth="sm">
+        <DialogTitle>Ana Bütçeyi Değiştir</DialogTitle>
+        <DialogContent dividers>
+          <Typography>
+            {primaryTarget?.year} yılı için Ana Bütçe “{primaryTarget?.name}” olarak değiştirilecek. Devam etmek istiyor musunuz?
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button disabled={primaryMutation.isPending} onClick={() => setPrimaryTarget(null)}>İptal</Button>
+          <Button variant="contained" disabled={!primaryTarget || primaryMutation.isPending} onClick={() => primaryTarget && primaryMutation.mutate(primaryTarget)}>
+            {primaryMutation.isPending ? "Güncelleniyor…" : "Ana Bütçe Yap"}
+          </Button>
         </DialogActions>
       </Dialog>
       <Dialog open={Boolean(deleteTarget)} onClose={() => !deleteMutation.isPending && setDeleteTarget(null)} fullWidth maxWidth="sm">
@@ -474,14 +555,25 @@ function PreparationDetail({ preparationId }: { preparationId: number }) {
   const [capexOpex, setCapexOpex] = useState("");
   const [attribute, setAttribute] = useState("");
   const [itemStatus, setItemStatus] = useState("");
+  const [carryoverConfirmation, setCarryoverConfirmation] = useState<CarryoverWarning[]>([]);
 
   const detailQuery = useQuery<Preparation>({
     queryKey: ["budget-preparation", preparationId],
-    queryFn: async () => (await client.get<Preparation>(`/budget-preparations/${preparationId}`)).data,
+    queryFn: async () => (await client.get<Preparation>(`/budget-preparations/${preparationId}`, { suppressGlobalError: true })).data,
   });
   const metadataQuery = useQuery<Metadata>({
     queryKey: ["budget-preparation-metadata"],
-    queryFn: async () => (await client.get<Metadata>("/budget-preparations/metadata")).data,
+    queryFn: async () => (await client.get<Metadata>("/budget-preparations/metadata", { suppressGlobalError: true })).data,
+  });
+  const carryoversQuery = useQuery<Carryover[]>({
+    queryKey: ["budget-preparation-carryovers", detailQuery.data?.year],
+    queryFn: async () => (
+      await client.get<Carryover[]>("/budget-preparations/carryovers", {
+        params: { year: detailQuery.data?.year },
+        suppressGlobalError: true,
+      })
+    ).data,
+    enabled: Boolean(detailQuery.data?.year),
   });
 
   useEffect(() => {
@@ -492,7 +584,7 @@ function PreparationDetail({ preparationId }: { preparationId: number }) {
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["budget-preparation", preparationId] });
   const updateHeaderMutation = useMutation({
-    mutationFn: async (_source: SaveSource) => client.put(`/budget-preparations/${preparationId}`, { ...header, currency: "USD" }),
+    mutationFn: async (_source: SaveSource) => client.put(`/budget-preparations/${preparationId}`, { ...header, currency: "USD" }, { suppressGlobalError: true }),
     onSuccess: async (_data, source) => {
       await refresh();
       setFeedback({ severity: "success", message: source === "auto" ? "Değişiklikler otomatik kaydedildi." : "Taslak başarıyla kaydedildi." });
@@ -503,17 +595,21 @@ function PreparationDetail({ preparationId }: { preparationId: number }) {
     }),
   });
   const deleteDraftMutation = useMutation({
-    mutationFn: async () => client.delete(`/budget-preparations/${preparationId}`),
+    mutationFn: async () => client.delete(`/budget-preparations/${preparationId}`, { suppressGlobalError: true }),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["budget-preparations"] }); navigate("/budget-preparation"); },
     onError: (error) => setFeedback({ severity: "error", message: apiErrorMessage(error, "Bütçe taslağı silinemedi.") }),
   });
   const deleteItemMutation = useMutation({
-    mutationFn: async (itemId: number) => client.delete(`/budget-preparations/${preparationId}/items/${itemId}`),
+    mutationFn: async (itemId: number) => client.delete(`/budget-preparations/${preparationId}/items/${itemId}`, { suppressGlobalError: true }),
     onSuccess: async () => { await refresh(); setFeedback({ severity: "success", message: "Bütçe kalemi silindi." }); },
     onError: (error) => setFeedback({ severity: "error", message: apiErrorMessage(error, "Bütçe kalemi silinemedi.") }),
   });
   const completeMutation = useMutation({
-    mutationFn: async () => (await client.post<CompletionResponse>(`/budget-preparations/${preparationId}/complete`)).data,
+    mutationFn: async (confirmed = false) => (await client.post<CompletionResponse>(
+      `/budget-preparations/${preparationId}/complete`,
+      undefined,
+      { params: { confirm_carryover_overlap: confirmed || undefined }, suppressGlobalError: true },
+    )).data,
     onSuccess: async (result) => {
       setCompletionErrors([]);
       setCompletedScenarioId(result.scenario_id);
@@ -521,13 +617,33 @@ function PreparationDetail({ preparationId }: { preparationId: number }) {
       queryClient.invalidateQueries({ queryKey: ["scenarios"] });
       queryClient.invalidateQueries({ queryKey: ["plans"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-      setFeedback({ severity: "success", message: "Bütçe tamamlandı ve aktif Scenario oluşturuldu." });
+      setCarryoverConfirmation([]);
+      setFeedback({ severity: "success", message: "Bütçe planlandı ve Scenario kayıtları oluşturuldu." });
     },
     onError: (error) => {
+      const responseData = isRecord(error) && isRecord(error.response) ? error.response.data : undefined;
+      const detail = isRecord(responseData) && isRecord(responseData.detail) ? responseData.detail : undefined;
+      if (detail?.requires_confirmation === true && Array.isArray(detail.warnings)) {
+        setCarryoverConfirmation(detail.warnings as unknown as CarryoverWarning[]);
+        return;
+      }
       const issues = completionIssues(error);
       setCompletionErrors(issues);
       setFeedback({ severity: "error", message: issues.map((issue) => issue.message).join(" • ") });
     },
+  });
+  const revisionMutation = useMutation({
+    mutationFn: async () => (
+      await client.post<Preparation>(`/budget-preparations/${preparationId}/revision`, undefined, { suppressGlobalError: true })
+    ).data,
+    onSuccess: async (revision) => {
+      await queryClient.invalidateQueries({ queryKey: ["budget-preparations"] });
+      navigate(`/budget-preparation/${revision.id}`);
+    },
+    onError: (error) => setFeedback({
+      severity: "error",
+      message: apiErrorMessage(error, "Revizyon oluşturulamadı."),
+    }),
   });
 
   const preparation = detailQuery.data;
@@ -610,6 +726,16 @@ function PreparationDetail({ preparationId }: { preparationId: number }) {
     return rows;
   }, [header.year, itemForm, preparation?.year]);
   const distributionYears = useMemo(() => Array.from(new Set(distributionPreview.map((row) => row.year))), [distributionPreview]);
+  const matchingFormCarryovers = useMemo(() => {
+    const normalize = (value: string | null | undefined) => (value ?? "").trim().toLocaleLowerCase("tr-TR");
+    return (carryoversQuery.data ?? []).filter((carryover) =>
+      normalize(carryover.budget_name) === normalize(itemForm.budget_name)
+      && normalize(carryover.department) === normalize(itemForm.department)
+      && normalize(carryover.capex_opex) === normalize(itemForm.capex_opex)
+      && normalize(carryover.map_attribute) === normalize(itemForm.map_attribute)
+    );
+  }, [carryoversQuery.data, itemForm.budget_name, itemForm.capex_opex, itemForm.department, itemForm.map_attribute]);
+  const matchingCarryoverTotal = matchingFormCarryovers.reduce((sum, item) => sum + Number(item.total_amount), 0);
 
   const saveItem = async () => {
     if (isSavingItem) return;
@@ -637,8 +763,8 @@ function PreparationDetail({ preparationId }: { preparationId: number }) {
     setIsSavingItem(true);
     setFormError(null);
     try {
-      if (itemForm.id) await client.put(`/budget-preparations/${preparationId}/items/${itemForm.id}`, payload);
-      else await client.post(`/budget-preparations/${preparationId}/items`, payload);
+      if (itemForm.id) await client.put(`/budget-preparations/${preparationId}/items/${itemForm.id}`, payload, { suppressGlobalError: true });
+      else await client.post(`/budget-preparations/${preparationId}/items`, payload, { suppressGlobalError: true });
       setItemOpen(false);
       await refresh();
       setFeedback({ severity: "success", message: "Bütçe kalemi taslağa kaydedildi." });
@@ -670,15 +796,28 @@ function PreparationDetail({ preparationId }: { preparationId: number }) {
         </Stack>
         {canEdit && <Stack direction="row" spacing={1}>
           <Button startIcon={<SaveIcon />} variant="outlined" disabled={updateHeaderMutation.isPending || completeMutation.isPending} onClick={() => saveHeader("manual")}>{updateHeaderMutation.isPending ? "Kaydediliyor…" : "Taslağı Kaydet"}</Button>
-          <Button startIcon={<CompleteIcon />} variant="contained" color="success" disabled={completeMutation.isPending || updateHeaderMutation.isPending} onClick={() => completeMutation.mutate()}>{completeMutation.isPending ? "Tamamlanıyor…" : "Bütçeyi Tamamla"}</Button>
+          <Button startIcon={<CompleteIcon />} variant="contained" color="success" disabled={completeMutation.isPending || updateHeaderMutation.isPending} onClick={() => completeMutation.mutate(false)}>{completeMutation.isPending ? "Tamamlanıyor…" : "Bütçeyi Tamamla"}</Button>
         </Stack>}
+        {!isViewer && isLocked && <Button startIcon={<RevisionIcon />} variant="outlined" disabled={revisionMutation.isPending} onClick={() => revisionMutation.mutate()}>{revisionMutation.isPending ? "Oluşturuluyor…" : "Revizyon Oluştur"}</Button>}
       </Stack>
 
-      {isLocked && <Alert severity="info" action={completedScenarioId || preparation.activated_scenario_id ? <Button color="inherit" size="small" onClick={() => navigate(`/plans?year=${preparation.year}&scenario_id=${completedScenarioId ?? preparation.activated_scenario_id}&source=budget-preparation`)}>Plan Yönetiminde Gör</Button> : undefined}>Bu bütçe aktiftir. Hazırlama ekranından düzenlenemez. Plan Yönetimi ve Dashboard akışlarında kullanılabilir.</Alert>}
+      {isLocked && <Alert severity="info" action={completedScenarioId || preparation.activated_scenario_id ? <Stack direction="row"><Button color="inherit" size="small" onClick={() => navigate(`/plans?year=${preparation.year}&scenario_id=${completedScenarioId ?? preparation.activated_scenario_id}&source=budget-preparation`)}>Plan Yönetiminde Gör</Button><Button color="inherit" size="small" startIcon={<DashboardIcon />} onClick={() => navigate(`/dashboard?year=${preparation.year}&scenario_id=${completedScenarioId ?? preparation.activated_scenario_id}&source=budget-preparation`)}>Dashboard'da Gör</Button></Stack> : undefined}>Bu bütçe planlanmıştır. Hazırlama ekranından düzenlenemez; Scenario bazlı tarihçe olarak korunur.</Alert>}
       {isViewer && !isLocked && <Alert severity="info">Sadece görüntüleme yetkiniz var. Taslak üzerinde değişiklik yapamazsınız.</Alert>}
       {completionErrors.length > 0 && <Alert severity="error"><Typography fontWeight={700}>Bütçe tamamlanamadı</Typography>{completionErrors.map((error, index) => <Button key={index} size="small" color="inherit" sx={{ display: "block", textAlign: "left" }} onClick={() => error.item_id && document.getElementById(`budget-item-${error.item_id}`)?.scrollIntoView({ behavior: "smooth" })}>{error.message}</Button>)}</Alert>}
 
       <Grid container spacing={2}>{cards.map(([label, value], index) => <Grid item xs={12} sm={6} lg key={label}><Card variant="outlined" elevation={0} sx={{ borderRadius: 3 }}><CardContent><Typography color="text.secondary" variant="body2">{label}</Typography><Typography variant="h5" fontWeight={800}>{index < 3 ? formatCurrency(Number(value)) : value}</Typography></CardContent></Card></Grid>)}</Grid>
+
+      {(carryoversQuery.data?.length ?? 0) > 0 && <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3 }}>
+        <Typography variant="h6" fontWeight={800}>{preparation.year - 1}'DEN DEVREDEN TAAHHÜTLER</Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>Yalnız önceki yılların Ana Bütçe Scenario'larından bu yıla taşan plan kayıtlarıdır; yeni bütçeye otomatik kopyalanmaz.</Typography>
+        <Stack spacing={1.5}>{carryoversQuery.data?.map((carryover) => <Card variant="outlined" key={`${carryover.source_scenario_id}-${carryover.budget_item_id}-${carryover.department ?? ""}`}><CardContent>
+          <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" gap={1}>
+            <Box><Typography fontWeight={750}>{carryover.budget_name}</Typography><Typography variant="body2" color="text.secondary">Kaynak Bütçe: {carryover.source_preparation_name ?? carryover.source_scenario_name}</Typography></Box>
+            <Chip label={`DEVREDEN ${formatCurrency(carryover.total_amount)}`} color="info" />
+          </Stack>
+          <Stack direction="row" spacing={2} sx={{ mt: 1, flexWrap: "wrap" }}>{carryover.months.map((month) => <Typography key={month.month} variant="body2"><strong>{months[month.month - 1]}:</strong> {formatCurrency(month.amount)}</Typography>)}</Stack>
+        </CardContent></Card>)}</Stack>
+      </Paper>}
 
       <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3 }}>
         <Typography variant="h6" fontWeight={750} gutterBottom>Bütçe Başlığı</Typography>
@@ -737,15 +876,40 @@ function PreparationDetail({ preparationId }: { preparationId: number }) {
                 {itemForm.distribution_method === "SINGLE_MONTH" && <Grid item xs={12} md={4}><EditableSelect label="Ay" value={String(itemForm.single_month)} values={months.map((_, index) => String(index + 1))} labels={Object.fromEntries(months.map((month, index) => [String(index + 1), month]))} onChange={(value) => setItemForm((current) => ({ ...current, single_month: Number(value) }))} /></Grid>}
                 {itemForm.distribution_method === "EQUAL" && <><Grid item xs={12} md={4}><EditableSelect label="Başlangıç Ayı" value={String(itemForm.start_month)} values={months.map((_, index) => String(index + 1))} labels={Object.fromEntries(months.map((month, index) => [String(index + 1), month]))} onChange={(value) => setItemForm((current) => ({ ...current, start_month: Number(value) }))} /></Grid><Grid item xs={12} md={4}><TextField fullWidth label="Ay Sayısı" type="number" inputProps={{ min: 1, max: 36 }} value={itemForm.month_count} onChange={(event) => setItemForm((current) => ({ ...current, month_count: Number(event.target.value) }))} helperText="1–36 ay" /></Grid></>}
               </Grid>
-              {itemForm.distribution_method === "CUSTOM" && <Grid container spacing={1.5}>{months.map((month, index) => <Grid item xs={12} sm={6} md={3} key={month}><TextField fullWidth size="small" label={`${month} ${preparation.year} (USD)`} value={itemForm.allocations[index]} onChange={(event) => setItemForm((current) => ({ ...current, allocations: current.allocations.map((value, itemIndex) => itemIndex === index ? event.target.value : value) }))} /></Grid>)}</Grid>}
-              {distributionYears.map((year) => <Box key={year}><Typography variant="subtitle2" fontWeight={800} sx={{ mb: 1 }}>{year}</Typography><Grid container spacing={1}>{distributionPreview.filter((row) => row.year === year).map((row) => <Grid item xs={6} sm={4} md={2} key={`${row.year}-${row.month}`}><Paper variant="outlined" sx={{ p: 1.25, borderRadius: 2 }}><Typography variant="caption" color="text.secondary">{months[row.month - 1]}</Typography><Typography fontWeight={750}>{formatCurrency(row.amount)}</Typography></Paper></Grid>)}</Grid></Box>)}
+              {itemForm.distribution_method === "CUSTOM" && <Grid container spacing={1.5}>{months.map((month, index) => <Grid item xs={6} sm={4} md={3} key={month}><Paper variant="outlined" sx={{ p: 1.25, borderRadius: 2, height: "100%", textAlign: "center" }}><Typography color="primary.main" fontWeight={600} sx={{ mb: 1 }}>{month}</Typography><TextField fullWidth size="small" placeholder="0,00" value={itemForm.allocations[index]} inputProps={{ style: { textAlign: "center", fontWeight: 700 } }} onChange={(event) => setItemForm((current) => ({ ...current, allocations: current.allocations.map((value, itemIndex) => itemIndex === index ? event.target.value : value) }))} /><Typography variant="caption" color="text.secondary">{preparation.year} · USD</Typography></Paper></Grid>)}</Grid>}
+              {distributionYears.map((year) => <Box key={year}><Typography variant="subtitle2" fontWeight={800} sx={{ mb: 1 }}>{year}</Typography><Grid container spacing={1}>{distributionPreview.filter((row) => row.year === year).map((row) => <Grid item xs={6} sm={4} md={2} key={`${row.year}-${row.month}`}><Paper variant="outlined" sx={{ p: 1.25, borderRadius: 2, minHeight: 78, height: "100%", display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", textAlign: "center" }}><Typography color="primary.main" fontWeight={600}>{months[row.month - 1]}</Typography><Typography fontWeight={750}>{formatCurrency(row.amount)}</Typography></Paper></Grid>)}</Grid></Box>)}
               <Paper variant="outlined" sx={{ p: 2, borderColor: Math.abs(parseAmount(itemForm.total_amount) - allocatedPreview) > 0.009 ? "warning.main" : "success.main", bgcolor: Math.abs(parseAmount(itemForm.total_amount) - allocatedPreview) > 0.009 ? "warning.50" : "success.50" }}><Stack direction={{ xs: "column", sm: "row" }} spacing={4}><Box><Typography variant="caption">Toplam Bütçe</Typography><Typography fontWeight={800}>{formatCurrency(parseAmount(itemForm.total_amount))}</Typography></Box><Box><Typography variant="caption">Aylara Dağıtılan</Typography><Typography fontWeight={800}>{formatCurrency(allocatedPreview)}</Typography></Box><Box><Typography variant="caption">Kalan</Typography><Typography fontWeight={800} color={Math.abs(parseAmount(itemForm.total_amount) - allocatedPreview) > 0.009 ? "warning.main" : "success.main"}>{formatCurrency(parseAmount(itemForm.total_amount) - allocatedPreview)}</Typography></Box></Stack></Paper>
             </Stack></CardContent></Card></Grid>
             {Math.abs(parseAmount(itemForm.total_amount) - allocatedPreview) > 0.009 && <Grid item xs={12}><Alert severity="warning">{formatCurrency(parseAmount(itemForm.total_amount) - allocatedPreview)} henüz aylara dağıtılmadı. Taslak kaydedilebilir; bütçe tamamlanamaz.</Alert></Grid>}
+            {matchingFormCarryovers.length > 0 && <Grid item xs={12}><Alert severity="warning">
+              <Typography fontWeight={750}>Bu bütçe kaleminin önceki yıldan {preparation.year}'e devreden bütçesi bulunmaktadır.</Typography>
+              {matchingFormCarryovers.map((carryover) => <Box key={`${carryover.source_scenario_id}-${carryover.budget_item_id}`} sx={{ mt: 1 }}>
+                <Typography variant="body2"><strong>{carryover.source_year}'den Devreden:</strong> {carryover.months.map((row) => `${months[row.month - 1]} ${formatCurrency(row.amount)}`).join(" · ")}</Typography>
+              </Box>)}
+              <Typography variant="body2" sx={{ mt: 1 }}><strong>Devreden:</strong> {formatCurrency(matchingCarryoverTotal)}</Typography>
+              <Typography variant="body2"><strong>{preparation.year} Yeni Bütçesi:</strong> {formatCurrency(parseAmount(itemForm.total_amount))}</Typography>
+              <Typography variant="body2"><strong>{preparation.year} Toplam Etki:</strong> {formatCurrency(matchingCarryoverTotal + parseAmount(itemForm.total_amount))}</Typography>
+            </Alert></Grid>}
             {formError && <Grid item xs={12}><Alert severity="error">{formError}</Alert></Grid>}
           </Grid>
         </DialogContent>
         <DialogActions><Button disabled={isSavingItem} onClick={() => setItemOpen(false)}>İptal</Button><Button variant="contained" disabled={isSavingItem} onClick={saveItem}>{isSavingItem ? "Kaydediliyor…" : "Taslağa Kaydet"}</Button></DialogActions>
+      </Dialog>
+      <Dialog open={carryoverConfirmation.length > 0} onClose={() => !completeMutation.isPending && setCarryoverConfirmation([])} fullWidth maxWidth="sm">
+        <DialogTitle>Devreden Bütçe Onayı</DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={2}>{carryoverConfirmation.map((warning) => <Alert severity="warning" key={warning.item_id}>
+            <Typography fontWeight={750}>{warning.budget_name}</Typography>
+            <Typography variant="body2">{warning.source_year} bütçesinden {formatCurrency(warning.carryover_amount)} devreden tutar vardır.</Typography>
+            <Typography variant="body2">{preparation.year} için ayrıca {formatCurrency(warning.new_amount)} yeni bütçe tanımladınız.</Typography>
+            <Typography variant="body2" fontWeight={750}>{preparation.year} toplam etkisi {formatCurrency(warning.total_effect)} olacaktır.</Typography>
+          </Alert>)}</Stack>
+          <Typography sx={{ mt: 2 }}>Devam etmek istiyor musunuz?</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button disabled={completeMutation.isPending} onClick={() => setCarryoverConfirmation([])}>İptal</Button>
+          <Button variant="contained" color="warning" disabled={completeMutation.isPending} onClick={() => completeMutation.mutate(true)}>{completeMutation.isPending ? "Tamamlanıyor…" : "Onayla ve Planla"}</Button>
+        </DialogActions>
       </Dialog>
       <Snackbar open={Boolean(feedback)} autoHideDuration={5000} onClose={() => setFeedback(null)} anchorOrigin={{ vertical: "bottom", horizontal: "center" }}>
         <Alert severity={feedback?.severity ?? "success"} variant="filled" onClose={() => setFeedback(null)}>{feedback?.message ?? ""}</Alert>

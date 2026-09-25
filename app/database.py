@@ -233,6 +233,38 @@ def _apply_schema_upgrades() -> None:
     for table in ("users", "scenarios", "budget_items", "plan_entries", "expenses", "warranty_items"):
         ensure_timestamp_columns(table)
 
+    if inspector.has_table("scenarios"):
+        scenario_columns = {column["name"] for column in inspector.get_columns("scenarios")}
+        with engine.begin() as connection:
+            if "is_primary" not in scenario_columns:
+                connection.execute(
+                    text(
+                        "ALTER TABLE scenarios ADD COLUMN is_primary BOOLEAN NOT NULL DEFAULT FALSE"
+                        if is_postgres
+                        else "ALTER TABLE scenarios ADD COLUMN is_primary BOOLEAN NOT NULL DEFAULT 0"
+                    )
+                )
+            connection.execute(
+                text(
+                    "UPDATE scenarios SET is_primary = "
+                    + ("TRUE" if is_postgres else "1")
+                    + " WHERE year IN ("
+                    "SELECT year FROM scenarios GROUP BY year HAVING COUNT(*) = 1"
+                    ") AND (is_primary IS NULL OR is_primary = "
+                    + ("FALSE" if is_postgres else "0")
+                    + ")"
+                )
+            )
+            connection.execute(
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS uq_scenarios_primary_year "
+                    "ON scenarios (year) WHERE is_primary IS TRUE"
+                    if is_postgres
+                    else "CREATE UNIQUE INDEX IF NOT EXISTS uq_scenarios_primary_year "
+                    "ON scenarios (year) WHERE is_primary = 1"
+                )
+            )
+
     if inspector.has_table("budget_preparation_items"):
         item_columns = {column["name"] for column in inspector.get_columns("budget_preparation_items")}
         if "start_year" not in item_columns:
