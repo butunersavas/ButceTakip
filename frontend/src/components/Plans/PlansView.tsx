@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Button,
@@ -40,6 +40,7 @@ import FiltersBar from "../Filters/FiltersBar";
 import { formatCurrency } from "../../utils/currency";
 import { formatUnusedReason, normalizeUnusedReason, UNUSED_REASON_OPTIONS } from "../../utils/unusedReason";
 import UnusedBudgetDialog from "../common/UnusedBudgetDialog";
+import { useConfirmDialog } from "../../context/ConfirmDialogContext";
 
 interface Scenario {
   id: number;
@@ -229,6 +230,7 @@ function parseLocaleNumber(value: FormDataEntryValue | string | null) {
 export default function PlansView() {
   const client = useAuthorizedClient();
   const queryClient = useQueryClient();
+  const requestConfirmation = useConfirmDialog();
   const { user } = useAuth();
   const isViewer = ["viewer", "readonly", "read_only"].includes(
     String(user?.role ?? "").toLowerCase()
@@ -255,11 +257,15 @@ export default function PlansView() {
   const [departmentFilter, setDepartmentFilter] = useState<string>("");
   const [budgetItemId, setBudgetItemId] = usePersistentState<number | null>("plans:budgetItemId", null);
   const [capexOpex, setCapexOpex] = usePersistentState<"" | "capex" | "opex">("plans:capexOpex", "");
+  const explicitScenarioSelectionRef = useRef(false);
   useEffect(() => {
     const requestedYear = Number(searchParams.get("year"));
     const requestedScenario = Number(searchParams.get("scenario_id"));
     if (Number.isInteger(requestedYear) && requestedYear > 0) setYear(requestedYear);
-    if (Number.isInteger(requestedScenario) && requestedScenario > 0) setScenarioId(requestedScenario);
+    if (Number.isInteger(requestedScenario) && requestedScenario > 0) {
+      explicitScenarioSelectionRef.current = true;
+      setScenarioId(requestedScenario);
+    }
 
     if (searchParams.get("source") === "budget-preparation") {
       setBudgetItemId(null);
@@ -359,10 +365,14 @@ export default function PlansView() {
       const previousScenario = previous ? scenarioById.get(previous) : null;
       // A preparation scenario can legitimately own carry-over PlanEntry rows in
       // later years, so its definition year must not clear an explicit selection.
-      if (previousScenario?.year === year) {
+      if (
+        previousScenario?.year === year
+        && (previousScenario.is_primary || explicitScenarioSelectionRef.current)
+      ) {
         return previous;
       }
 
+      explicitScenarioSelectionRef.current = false;
       return findDefaultScenarioForYear(year)?.id ?? null;
     });
   }, [findDefaultScenarioForYear, scenarioById, scenarios, setScenarioId, year]);
@@ -837,14 +847,20 @@ export default function PlansView() {
         : relatedFileCount > 0
           ? `Bu kayda bağlı ${relatedFileCount} ek/dosya var. Silerseniz ekler de silinecek. Devam etmek istiyor musunuz?`
           : "Plan kaydını silmek istediğinize emin misiniz? Bu işlem geri alınamaz.";
-    const confirmed = window.confirm(confirmMessage);
+    const confirmed = await requestConfirmation({
+      title: "Plan Kaydını Sil",
+      message: confirmMessage,
+      confirmLabel: "Plan Kaydını Sil",
+      severity: "error",
+      irreversible: true,
+    });
     if (confirmed) {
       deleteMutation.mutate({
         planId,
         deleteRelated: relatedFileCount === null || relatedFileCount > 0
       });
     }
-  }, [client, deleteMutation, user?.is_admin]);
+  }, [client, deleteMutation, requestConfirmation, user?.is_admin]);
 
   const handleOpenUnusedDialog = useCallback((plan: PlanEntry) => {
     setUnusedDialogPlan(plan);
@@ -879,13 +895,18 @@ export default function PlansView() {
     });
   }, [unusedAmount, unusedDialogPlan, unusedMutation, unusedNote, unusedReason]);
 
-  const handleClearUnused = useCallback((plan: PlanEntry) => {
+  const handleClearUnused = useCallback(async (plan: PlanEntry) => {
     if (!user?.is_admin) return;
-    const confirmed = window.confirm("Kullanılmayacak bütçe bilgisi kaldırılacak. Devam etmek istiyor musunuz?");
+    const confirmed = await requestConfirmation({
+      title: "Kullanılmayacak Bilgisini Kaldır",
+      message: "Kullanılmayacak bütçe bilgisi kaldırılacak.",
+      confirmLabel: "Bilgiyi Kaldır",
+      severity: "warning",
+    });
     if (confirmed) {
       clearUnusedMutation.mutate(plan.id);
     }
-  }, [clearUnusedMutation, user?.is_admin]);
+  }, [clearUnusedMutation, requestConfirmation, user?.is_admin]);
 
   const handleOpenTransferDialog = useCallback(() => {
     const defaultScenarioId =
@@ -912,7 +933,7 @@ export default function PlansView() {
     setTransferDialogOpen(true);
   }, [budgetItemId, monthFilter, scenarioId, scenarios, year]);
 
-  const handleTransferSubmit = useCallback((event: React.FormEvent<HTMLFormElement>) => {
+  const handleTransferSubmit = useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const amount = parseLocaleNumber(transferAmount);
     if (!transferSourceBudgetItemId) {
@@ -952,9 +973,12 @@ export default function PlansView() {
 
     const sourceMonthLabel = monthOptions[transferSourceMonth - 1] ?? transferSourceMonth;
     const targetMonthLabel = monthOptions[transferTargetMonth - 1] ?? transferTargetMonth;
-    const confirmed = window.confirm(
-      `${formatCurrency(amount)} tutarı ${transferSourceYear} ${sourceMonthLabel} kaynağından ${transferTargetYear} ${targetMonthLabel} hedefine aktarılacak. Devam etmek istiyor musunuz?`
-    );
+    const confirmed = await requestConfirmation({
+      title: "Bütçe Aktarımını Onayla",
+      message: `${formatCurrency(amount)} tutarı ${transferSourceYear} ${sourceMonthLabel} kaynağından ${transferTargetYear} ${targetMonthLabel} hedefine aktarılacak.`,
+      confirmLabel: "Aktarımı Onayla",
+      severity: "warning",
+    });
     if (!confirmed) return;
 
     transferMutation.mutate({
@@ -972,6 +996,7 @@ export default function PlansView() {
   }, [
     transferAmount,
     transferAvailableQuery.data?.available_amount,
+    requestConfirmation,
     transferMutation,
     transferReason,
     transferSourceBudgetItemId,
@@ -984,13 +1009,18 @@ export default function PlansView() {
     transferTargetYear
   ]);
 
-  const handleCancelTransfer = useCallback((transfer: BudgetTransfer) => {
+  const handleCancelTransfer = useCallback(async (transfer: BudgetTransfer) => {
     if (!user?.is_admin) return;
-    const confirmed = window.confirm("Bu bütçe aktarımı iptal edilecek. Devam etmek istiyor musunuz?");
+    const confirmed = await requestConfirmation({
+      title: "Bütçe Aktarımını İptal Et",
+      message: "Bu bütçe aktarımı iptal edilecek.",
+      confirmLabel: "Aktarımı İptal Et",
+      severity: "error",
+    });
     if (confirmed) {
       cancelTransferMutation.mutate(transfer.id);
     }
-  }, [cancelTransferMutation, user?.is_admin]);
+  }, [cancelTransferMutation, requestConfirmation, user?.is_admin]);
 
   const baseRows = useMemo(() => {
     const mapped =
@@ -1553,6 +1583,7 @@ export default function PlansView() {
           value={year}
           onChange={(event) => {
             const value = event.target.value;
+            explicitScenarioSelectionRef.current = false;
             setYear(value ? Number(value) : currentYear);
           }}
           sx={{ minWidth: { xs: "100%", sm: 110 }, flex: "0 1 120px", "& .MuiInputBase-root": { height: 40 } }}
@@ -1562,9 +1593,10 @@ export default function PlansView() {
           label="Senaryo"
           size="small"
           value={scenarioId ?? ""}
-          onChange={(event) =>
-            setScenarioId(event.target.value ? Number(event.target.value) : null)
-          }
+          onChange={(event) => {
+            explicitScenarioSelectionRef.current = true;
+            setScenarioId(event.target.value ? Number(event.target.value) : null);
+          }}
           sx={{ minWidth: { xs: "100%", sm: 240 }, flex: "1 1 240px", "& .MuiInputBase-root": { height: 40 } }}
         >
           <MenuItem value="">Tümü</MenuItem>

@@ -26,6 +26,7 @@ import axios from "axios";
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import { useAuth } from "../../context/AuthContext";
 import { formatBudgetItemLabel, stripBudgetCode } from "../../utils/budgetLabel";
+import { useConfirmDialog } from "../../context/ConfirmDialogContext";
 
 interface Scenario {
   id: number;
@@ -58,6 +59,7 @@ export default function CleanupView() {
 function CleaningToolsSection() {
   const client = useAuthorizedClient();
   const queryClient = useQueryClient();
+  const requestConfirmation = useConfirmDialog();
   const { user } = useAuth();
 
   const isAdmin = !!user?.is_admin;
@@ -256,7 +258,7 @@ function CleaningToolsSection() {
 
   const isDeletingScenario = deleteScenarioMutation.isPending && actionType === "delete-scenario";
 
-  const handleCleanup = (event: FormEvent<HTMLFormElement>) => {
+  const handleCleanup = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     if (!isAdmin) {
@@ -274,9 +276,13 @@ function CleaningToolsSection() {
         return;
       }
 
-      const confirmed = window.confirm(
-        `${selectedScenarioName} senaryosunu ve ilgili kayıtları kalıcı olarak silmek istediğinize emin misiniz?`
-      );
+      const confirmed = await requestConfirmation({
+        title: "Scenario ve İlgili Kayıtları Sil",
+        message: `${selectedScenarioName} senaryosu ve ilgili kayıtlar kalıcı olarak silinecek.`,
+        confirmLabel: "Scenario'yu Sil",
+        severity: "error",
+        irreversible: true,
+      });
 
       if (!confirmed) return;
 
@@ -284,9 +290,13 @@ function CleaningToolsSection() {
       return;
     }
 
-    const confirmed = window.confirm(
-      `"${selectedScenarioName || "Tüm senaryolar"}" için tüm harcama kayıtlarını silmek istediğinize emin misiniz?`
-    );
+    const confirmed = await requestConfirmation({
+      title: "Harcama Kayıtlarını Temizle",
+      message: `“${selectedScenarioName || "Tüm senaryolar"}” için tüm harcama kayıtları silinecek.`,
+      confirmLabel: "Kayıtları Sil",
+      severity: "error",
+      irreversible: true,
+    });
 
     if (!confirmed) return;
 

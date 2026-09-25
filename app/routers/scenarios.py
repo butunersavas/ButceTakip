@@ -54,6 +54,7 @@ def create_scenario(
         for existing in year_scenarios:
             existing.is_primary = False
             session.add(existing)
+        session.flush()
     scenario = Scenario(**requested, is_primary=make_primary)
     session.add(scenario)
     try:
@@ -88,6 +89,7 @@ def update_scenario(
             if existing.id != scenario.id:
                 existing.is_primary = False
                 session.add(existing)
+        session.flush()
     for field, value in changes.items():
         setattr(scenario, field, value)
     scenario.updated_at = datetime.utcnow()

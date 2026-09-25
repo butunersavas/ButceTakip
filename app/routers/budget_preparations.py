@@ -277,9 +277,16 @@ def make_primary(
     ).all()
     try:
         for scenario in year_scenarios:
-            scenario.is_primary = scenario.id == selected.id
-            scenario.updated_at = datetime.utcnow()
-            session.add(scenario)
+            if scenario.is_primary:
+                scenario.is_primary = False
+                scenario.updated_at = datetime.utcnow()
+                session.add(scenario)
+        session.flush()
+
+        selected.is_primary = True
+        selected.updated_at = datetime.utcnow()
+        session.add(selected)
+        session.flush()
         session.commit()
     except IntegrityError as exc:
         session.rollback()
@@ -331,8 +338,12 @@ def delete_preparation(
             ).all()
             for allocation in allocations:
                 session.delete(allocation)
+        session.flush()
+        for item in items:
             session.delete(item)
+        session.flush()
         session.delete(preparation)
+        session.flush()
         session.commit()
     except Exception:
         session.rollback()

@@ -10,6 +10,7 @@ import "dayjs/locale/tr";
 import App from "./App";
 import { AuthProvider } from "./context/AuthContext";
 import { ThemeModeProvider } from "./context/ThemeModeContext";
+import { ConfirmDialogProvider } from "./context/ConfirmDialogContext";
 
 dayjs.locale("tr");
 
@@ -77,9 +78,11 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
           }}
         />
         <BrowserRouter>
-          <AuthProvider>
-            <App />
-          </AuthProvider>
+          <ConfirmDialogProvider>
+            <AuthProvider>
+              <App />
+            </AuthProvider>
+          </ConfirmDialogProvider>
         </BrowserRouter>
       </ThemeModeProvider>
     </QueryClientProvider>

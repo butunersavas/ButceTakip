@@ -1,4 +1,4 @@
-import { Component, useEffect, useMemo, useRef, useState } from "react";
+import { Component, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
   Alert,
@@ -839,25 +839,65 @@ export default function DashboardView() {
   const monthFilterRef = useRef<HTMLDivElement | null>(null);
   const highlightTimeoutRef = useRef<number | null>(null);
   const hasLoggedTrendResponse = useRef(false);
+  const explicitScopeSelectionRef = useRef(false);
 
-  useEffect(() => {
-    if (searchParams.get("source") !== "budget-preparation") return;
-    const requestedYear = Number(searchParams.get("year"));
-    const requestedScenario = Number(searchParams.get("scenario_id"));
-    if (Number.isInteger(requestedYear) && requestedYear > 0) setYear(requestedYear);
-    if (Number.isInteger(requestedScenario) && requestedScenario > 0) {
-      setAllScenariosSelected(false);
-      setScenarioId(requestedScenario);
-    }
+  const resetDashboardNarrowingFilters = useCallback(() => {
     setSelectedPeriods([]);
     setSelectedMonths([]);
     setDepartment("");
     setBudgetItemId(null);
     setCapexOpex("");
+    setSelectedKpiFilter(null);
+    setPurchaseDepartmentFilter("");
+    setIsAlertsDialogOpen(false);
+    setIsPlanDetailDialogOpen(false);
+    setIsRealizedDialogOpen(false);
+    setIsOutOfBudgetDialogOpen(false);
+    setIsUnusedBudgetDialogOpen(false);
+    setSavingDetailDialog(null);
+    setSelectedOverrunItem(null);
+    setIsCancelledDialogOpen(false);
+    setBudgetStatusDialogCategory(null);
+    setDashboardReadonlyDetail(null);
+    setForceShowOverBudget(false);
+    setHighlightOverBudget(false);
+  }, [setBudgetItemId, setCapexOpex, setSelectedMonths, setSelectedPeriods]);
+
+  const applyDashboardScope = useCallback((nextScope: {
+    year: number;
+    scenarioId: number | null;
+    allScenariosSelected?: boolean;
+    resetNarrowingFilters?: boolean;
+    explicitSelection?: boolean;
+  }) => {
+    if (nextScope.explicitSelection !== undefined) {
+      explicitScopeSelectionRef.current = nextScope.explicitSelection;
+    }
+    setYear(nextScope.year);
+    setAllScenariosSelected(Boolean(nextScope.allScenariosSelected));
+    setScenarioId(nextScope.scenarioId);
+    if (nextScope.resetNarrowingFilters) resetDashboardNarrowingFilters();
+  }, [resetDashboardNarrowingFilters, setAllScenariosSelected, setScenarioId, setYear]);
+
+  useEffect(() => {
+    if (searchParams.get("source") !== "budget-preparation") return;
+    const requestedYear = Number(searchParams.get("year"));
+    const requestedScenario = Number(searchParams.get("scenario_id"));
+    const targetYear = Number.isInteger(requestedYear) && requestedYear > 0 ? requestedYear : year;
+    const targetScenario = Number.isInteger(requestedScenario) && requestedScenario > 0
+      ? requestedScenario
+      : null;
+    applyDashboardScope({
+      year: targetYear,
+      scenarioId: targetScenario,
+      allScenariosSelected: targetScenario === null,
+      resetNarrowingFilters: true,
+      explicitSelection: true,
+    });
     const nextParams = new URLSearchParams(searchParams);
     nextParams.delete("source");
     setSearchParams(nextParams, { replace: true });
-  }, [searchParams, setAllScenariosSelected, setBudgetItemId, setCapexOpex, setScenarioId, setSearchParams, setSelectedMonths, setSelectedPeriods, setYear]);
+  }, [applyDashboardScope, searchParams, setSearchParams, year]);
 
   const monthOptions = [
     { value: 1, label: "Ocak" },
@@ -1192,11 +1232,17 @@ export default function DashboardView() {
     const selectedScenario = scenarios.find(
       (scenario) => scenario.id === scenarioId && scenario.year === year
     );
-    if (selectedScenario) return;
+    if (selectedScenario && (selectedScenario.is_primary || explicitScopeSelectionRef.current)) return;
     const matchingScenario = scenarios.find((scenario) => scenario.year === year && scenario.is_primary)
       ?? scenarios.find((scenario) => scenario.year === year);
-    setScenarioId(matchingScenario?.id ?? null);
-  }, [allScenariosSelected, scenarios, scenarioId, setScenarioId, year]);
+    applyDashboardScope({
+      year,
+      scenarioId: matchingScenario?.id ?? null,
+      allScenariosSelected: false,
+      resetNarrowingFilters: true,
+      explicitSelection: false,
+    });
+  }, [allScenariosSelected, applyDashboardScope, scenarios, scenarioId, year]);
 
   const selectedScenarioIsPrimary = Boolean(
     scenarios?.find((scenario) => scenario.id === debouncedFilters.scenarioId)?.is_primary
@@ -1424,21 +1470,12 @@ export default function DashboardView() {
   );
 
   const handleResetFilters = () => {
-    setYear(currentYear);
-    setScenarioId(null);
-    setAllScenariosSelected(true);
-    setSelectedPeriods([]);
-    setSelectedMonths([]);
-    setBudgetItemId(null);
-    setCapexOpex("");
-    setDepartment("");
-    setSelectedKpiFilter(null);
-    setIsPlanDetailDialogOpen(false);
-    setForceShowOverBudget(false);
-    setHighlightOverBudget(false);
-    setSelectedOverrunItem(null);
-    setBudgetStatusDialogCategory(null);
-    setIsCancelledDialogOpen(false);
+    applyDashboardScope({
+      year: currentYear,
+      scenarioId: null,
+      allScenariosSelected: true,
+      resetNarrowingFilters: true,
+    });
   };
 
   const trendMonths = Array.isArray(trendData.months) ? trendData.months : [];
@@ -2852,7 +2889,17 @@ export default function DashboardView() {
               value={year}
               onChange={(event) => {
                 const value = event.target.value;
-                setYear(value ? Number(value) : currentYear);
+                const nextYear = value ? Number(value) : currentYear;
+                const nextScenario = scenarios?.find(
+                  (scenario) => scenario.year === nextYear && scenario.is_primary
+                ) ?? scenarios?.find((scenario) => scenario.year === nextYear);
+                applyDashboardScope({
+                  year: nextYear,
+                  scenarioId: nextScenario?.id ?? null,
+                  allScenariosSelected: false,
+                  resetNarrowingFilters: true,
+                  explicitSelection: true,
+                });
               }}
               sx={{ minWidth: 160, "& .MuiInputBase-root": { height: 40 } }}
             />
@@ -2865,8 +2912,13 @@ export default function DashboardView() {
               onChange={(event) => {
                 const value = event.target.value;
                 const isAllScenarios = value === "";
-                setAllScenariosSelected(isAllScenarios);
-                setScenarioId(isAllScenarios ? null : Number(value));
+                applyDashboardScope({
+                  year,
+                  scenarioId: isAllScenarios ? null : Number(value),
+                  allScenariosSelected: isAllScenarios,
+                  resetNarrowingFilters: true,
+                  explicitSelection: true,
+                });
               }}
               sx={{ minWidth: 240, "& .MuiInputBase-root": { height: 40 } }}
             >

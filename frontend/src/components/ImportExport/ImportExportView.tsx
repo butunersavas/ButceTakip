@@ -32,6 +32,7 @@ import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import usePersistentState from "../../hooks/usePersistentState";
 import { useAuth } from "../../context/AuthContext";
 import { formatBudgetItemLabel, stripBudgetCode } from "../../utils/budgetLabel";
+import { useConfirmDialog } from "../../context/ConfirmDialogContext";
 
 interface Scenario {
   id: number;
@@ -721,6 +722,7 @@ function withReportTotalRow(rows: ReportRow[]): ReportRow[] {
 export default function ImportExportView() {
   const client = useAuthorizedClient();
   const queryClient = useQueryClient();
+  const requestConfirmation = useConfirmDialog();
   const { user } = useAuth();
   const isAdmin = !!user?.is_admin;
   const isViewer = ["viewer", "readonly", "read_only"].includes(
@@ -1853,7 +1855,13 @@ export default function ImportExportView() {
   };
 
   const handleRestoreBackup = async (file: File) => {
-    const confirmed = window.confirm("Mevcut tüm veri silinip yüklenecek, emin misiniz?");
+    const confirmed = await requestConfirmation({
+      title: "Tam Yedeği Geri Yükle",
+      message: "Mevcut veriler silinerek seçilen yedek dosyasındaki veriler yüklenecek.",
+      confirmLabel: "Yedeği Geri Yükle",
+      severity: "error",
+      irreversible: true,
+    });
     if (!confirmed) return;
     setExporting(true);
     setBackupFeedback(null);

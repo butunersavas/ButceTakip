@@ -27,6 +27,7 @@ import { DataGrid, type GridColDef, type GridPaginationModel } from "@mui/x-data
 import axios from "axios";
 
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
+import { useConfirmDialog } from "../../context/ConfirmDialogContext";
 
 type WarrantyItemType = "DEVICE" | "DOMAIN_SSL" | "SSL" | "SERVICE";
 type SortDirection = "asc" | "desc";
@@ -564,6 +565,7 @@ const withSortIndicator = (column: GridColDef, sortState: WarrantySortState): Gr
 
 export default function WarrantyTrackingView() {
   const client = useAuthorizedClient();
+  const requestConfirmation = useConfirmDialog();
   const [items, setItems] = useState<WarrantyItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -863,7 +865,14 @@ export default function WarrantyTrackingView() {
         : relatedFileCount > 0
           ? `Bu kayda bağlı ${relatedFileCount} ek/dosya var. Silerseniz ekler de silinecek. Devam etmek istiyor musunuz?`
           : "Garanti kaydını silmek istediğinize emin misiniz?";
-    if (!window.confirm(confirmMessage)) {
+    const confirmed = await requestConfirmation({
+      title: "Garanti Kaydını Sil",
+      message: confirmMessage,
+      confirmLabel: "Garanti Kaydını Sil",
+      severity: "error",
+      irreversible: true,
+    });
+    if (!confirmed) {
       return;
     }
 
@@ -892,7 +901,7 @@ export default function WarrantyTrackingView() {
     } finally {
       setSubmitting(false);
     }
-  }, [activeWarrantyType, client, editingItem?.id, loadItems]);
+  }, [activeWarrantyType, client, editingItem?.id, loadItems, requestConfirmation]);
 
   const handleDownloadTemplate = useCallback(async () => {
     setError(null);
@@ -960,9 +969,12 @@ export default function WarrantyTrackingView() {
       setError("Import edilebilir geçerli satır bulunamadı.");
       return;
     }
-    const confirmed = window.confirm(
-      `${importableRows} geçerli Garanti/Bakım kaydı DB'ye aktarılacak. Devam etmek istiyor musunuz?`
-    );
+    const confirmed = await requestConfirmation({
+      title: "Garanti/Bakım Importunu Onayla",
+      message: `${importableRows} geçerli Garanti/Bakım kaydı veritabanına aktarılacak.`,
+      confirmLabel: "Importu Başlat",
+      severity: "warning",
+    });
     if (!confirmed) return;
 
     setImportCommitting(true);
@@ -988,7 +1000,7 @@ export default function WarrantyTrackingView() {
     } finally {
       setImportCommitting(false);
     }
-  }, [activeWarrantyType, client, importFile, importReport?.summary?.importable_rows, loadItems]);
+  }, [activeWarrantyType, client, importFile, importReport?.summary?.importable_rows, loadItems, requestConfirmation]);
 
   const renderImportRows = (title: string, rows: WarrantyImportPreviewRow[] | undefined, severity: "error" | "warning" | "info") => {
     if (!rows || rows.length === 0) return null;

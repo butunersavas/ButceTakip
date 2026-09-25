@@ -66,6 +66,7 @@ import OverBudgetDialog, {
   type OverBudgetItem,
   type OverBudgetResponse
 } from "../common/OverBudgetDialog";
+import { useConfirmDialog } from "../../context/ConfirmDialogContext";
 
 interface Scenario {
   id: number;
@@ -630,6 +631,7 @@ function isExpenseExcludedFromBudgetSavings(expense?: Expense | null) {
 export default function ExpensesView() {
   const client = useAuthorizedClient();
   const queryClient = useQueryClient();
+  const requestConfirmation = useConfirmDialog();
   const location = useLocation();
   const { user } = useAuth();
   const isViewer = ["viewer", "readonly", "read_only"].includes(
@@ -1345,7 +1347,13 @@ export default function ExpensesView() {
           : relatedFileCount > 0
             ? `Bu kayda bağlı ${relatedFileCount} ek/dosya var. Silerseniz ekler de silinecek. Devam etmek istiyor musunuz?`
             : "Harcama kaydını silmek istediğinize emin misiniz?";
-      const confirmed = window.confirm(confirmMessage);
+      const confirmed = await requestConfirmation({
+        title: "Harcama Kaydını Sil",
+        message: confirmMessage,
+        confirmLabel: "Harcama Kaydını Sil",
+        severity: "error",
+        irreversible: true,
+      });
       if (confirmed) {
         deleteMutation.mutate({
           expenseId,
@@ -1353,7 +1361,7 @@ export default function ExpensesView() {
         });
       }
     },
-    [client, deleteMutation, isViewer]
+    [client, deleteMutation, isViewer, requestConfirmation]
   );
 
   const buildAllocationSummary = useCallback(
@@ -1552,9 +1560,12 @@ export default function ExpensesView() {
           payload.budget_item_id
         );
         if (summary) {
-          const confirmed = window.confirm(
-            `Bu harcama şu aylara dağıtılacak:\n${summary}\nDevam etmek istiyor musunuz?`
-          );
+          const confirmed = await requestConfirmation({
+            title: "Harcama Dağılımını Onayla",
+            message: `Bu harcama şu aylara dağıtılacak: ${summary}`,
+            confirmLabel: "Dağılımı Onayla",
+            severity: "warning",
+          });
           if (!confirmed) return;
         }
       } catch (error) {
@@ -2128,7 +2139,13 @@ export default function ExpensesView() {
         setErrorMessage("Bu kullanıcı yalnızca görüntüleme yetkisine sahiptir.");
         return;
       }
-      const confirmed = window.confirm("Bu eki silmek istediğinize emin misiniz?");
+      const confirmed = await requestConfirmation({
+        title: "Eki Sil",
+        message: `“${attachment.file_name || "Ek dosya"}” kalıcı olarak silinecek.`,
+        confirmLabel: "Eki Sil",
+        severity: "error",
+        irreversible: true,
+      });
       if (!confirmed) {
         return;
       }
@@ -2178,7 +2195,7 @@ export default function ExpensesView() {
         setDeletingAttachmentId(null);
       }
     },
-    [attachmentPicker, client, isViewer, queryClient, refetchExpenses, resolveApiErrorMessage]
+    [attachmentPicker, client, isViewer, queryClient, refetchExpenses, requestConfirmation, resolveApiErrorMessage]
   );
 
   const budgetFilterOptions = useMemo(

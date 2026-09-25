@@ -49,6 +49,7 @@ import { useAuth } from "../../context/AuthContext";
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
 import { formatCurrency } from "../../utils/currency";
 import useSortableRows from "../../hooks/useSortableRows";
+import ConfirmDialog from "../common/ConfirmDialog";
 
 const months = [
   "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
@@ -379,10 +380,24 @@ function PreparationList() {
       await client.post<Preparation>(`/budget-preparations/${preparation.id}/primary`, undefined, { suppressGlobalError: true })
     ).data,
     onSuccess: async (preparation) => {
+      queryClient.setQueriesData<Preparation[]>({ queryKey: ["budget-preparations"] }, (current) => (
+        Array.isArray(current)
+          ? current.map((item) => item.year === preparation.year
+            ? { ...item, is_primary: item.id === preparation.id }
+            : item)
+          : current
+      ));
       setPrimaryTarget(null);
-      await queryClient.invalidateQueries({ queryKey: ["budget-preparations"] });
-      await queryClient.invalidateQueries({ queryKey: ["scenarios"] });
-      setDeleteFeedback({ severity: "success", message: `${preparation.year} Ana Bütçesi güncellendi.` });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["budget-preparations"] }),
+        queryClient.invalidateQueries({ queryKey: ["scenarios"] }),
+        queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
+        queryClient.invalidateQueries({ queryKey: ["plans"] }),
+      ]);
+      setDeleteFeedback({
+        severity: "success",
+        message: `${preparation.year} Ana Bütçesi '${preparation.name}' olarak güncellendi.`,
+      });
     },
     onError: (error) => setDeleteFeedback({
       severity: "error",
@@ -494,6 +509,9 @@ function PreparationList() {
           <Typography>
             {primaryTarget?.year} yılı için Ana Bütçe “{primaryTarget?.name}” olarak değiştirilecek. Devam etmek istiyor musunuz?
           </Typography>
+          {primaryMutation.isError && deleteFeedback?.severity === "error" && (
+            <Alert severity="error" sx={{ mt: 2 }}>{deleteFeedback.message}</Alert>
+          )}
         </DialogContent>
         <DialogActions>
           <Button disabled={primaryMutation.isPending} onClick={() => setPrimaryTarget(null)}>İptal</Button>
@@ -502,35 +520,29 @@ function PreparationList() {
           </Button>
         </DialogActions>
       </Dialog>
-      <Dialog open={Boolean(deleteTarget)} onClose={() => !deleteMutation.isPending && setDeleteTarget(null)} fullWidth maxWidth="sm">
-        <DialogTitle>Bütçe Çalışmasını Sil</DialogTitle>
-        <DialogContent dividers>
-          <Typography>
-            “{deleteTarget?.name}” adlı taslak bütçe çalışması ve içindeki bütçe kalemleri kalıcı olarak silinecek.
-          </Typography>
-          <Typography sx={{ mt: 2 }} fontWeight={700}>Bu işlem geri alınamaz.</Typography>
-          <Typography sx={{ mt: 2 }}>Devam etmek istiyor musunuz?</Typography>
-          {deleteMutation.isError && deleteFeedback?.severity === "error" && <Alert severity="error" sx={{ mt: 2 }}>{deleteFeedback.message}</Alert>}
-        </DialogContent>
-        <DialogActions>
-          <Button disabled={deleteMutation.isPending} onClick={() => setDeleteTarget(null)}>İptal</Button>
-          <Button
-            variant="contained"
-            color="error"
-            disabled={!deleteTarget || deleteMutation.isPending}
-            onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
-          >{deleteMutation.isPending ? "Siliniyor…" : "Bütçe Çalışmasını Sil"}</Button>
-        </DialogActions>
-      </Dialog>
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        title="Bütçe Çalışmasını Sil"
+        message={`“${deleteTarget?.name ?? ""}” adlı taslak bütçe çalışması ve içindeki bütçe kalemleri kalıcı olarak silinecek.`}
+        content={deleteMutation.isError && deleteFeedback?.severity === "error"
+          ? <Alert severity="error">{deleteFeedback.message}</Alert>
+          : undefined}
+        confirmLabel="Bütçe Çalışmasını Sil"
+        severity="error"
+        irreversible
+        loading={deleteMutation.isPending}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+      />
       <Snackbar
-        open={Boolean(deleteFeedback) && deleteFeedback.severity === "success"}
+        open={Boolean(deleteFeedback)}
         autoHideDuration={5000}
         onClose={(_event, reason) => {
           if (reason !== "clickaway") setDeleteFeedback(null);
         }}
         anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
       >
-        <Alert severity="success" variant="filled" onClose={() => setDeleteFeedback(null)}>{deleteFeedback?.message ?? ""}</Alert>
+        <Alert severity={deleteFeedback?.severity ?? "success"} variant="filled" onClose={() => setDeleteFeedback(null)}>{deleteFeedback?.message ?? ""}</Alert>
       </Snackbar>
     </Stack>
   );
@@ -556,6 +568,8 @@ function PreparationDetail({ preparationId }: { preparationId: number }) {
   const [attribute, setAttribute] = useState("");
   const [itemStatus, setItemStatus] = useState("");
   const [carryoverConfirmation, setCarryoverConfirmation] = useState<CarryoverWarning[]>([]);
+  const [deleteItemTarget, setDeleteItemTarget] = useState<PreparationItem | null>(null);
+  const [deleteDraftOpen, setDeleteDraftOpen] = useState(false);
 
   const detailQuery = useQuery<Preparation>({
     queryKey: ["budget-preparation", preparationId],
@@ -601,7 +615,7 @@ function PreparationDetail({ preparationId }: { preparationId: number }) {
   });
   const deleteItemMutation = useMutation({
     mutationFn: async (itemId: number) => client.delete(`/budget-preparations/${preparationId}/items/${itemId}`, { suppressGlobalError: true }),
-    onSuccess: async () => { await refresh(); setFeedback({ severity: "success", message: "Bütçe kalemi silindi." }); },
+    onSuccess: async () => { setDeleteItemTarget(null); await refresh(); setFeedback({ severity: "success", message: "Bütçe kalemi silindi." }); },
     onError: (error) => setFeedback({ severity: "error", message: apiErrorMessage(error, "Bütçe kalemi silinemedi.") }),
   });
   const completeMutation = useMutation({
@@ -850,14 +864,37 @@ function PreparationDetail({ preparationId }: { preparationId: number }) {
               <TableCell><Tooltip title={item.validation_errors.join(" ")}><Chip size="small" label={item.is_complete ? "Tamam" : "Eksik"} color={item.is_complete ? "success" : "error"} /></Tooltip></TableCell>
               <TableCell>{item.budget_name}</TableCell><TableCell>{item.department || "—"}</TableCell><TableCell>{item.map_attribute || "—"}</TableCell><TableCell>{item.capex_opex || "—"}</TableCell>
               <TableCell align="right">{formatCurrency(item.total_amount)}</TableCell><TableCell align="right">{formatCurrency(item.allocated_amount)}</TableCell><TableCell align="right">{formatCurrency(item.remaining_amount)}</TableCell>
-              <TableCell align="right">{canEdit && <><IconButton aria-label="Düzenle" disabled={deleteItemMutation.isPending} onClick={() => openItem(item)}><EditIcon /></IconButton><IconButton aria-label="Sil" color="error" disabled={deleteItemMutation.isPending} onClick={() => window.confirm("Bütçe kalemi silinsin mi?") && deleteItemMutation.mutate(item.id)}><DeleteIcon /></IconButton></>}</TableCell>
+              <TableCell align="right">{canEdit && <><IconButton aria-label="Düzenle" disabled={deleteItemMutation.isPending} onClick={() => openItem(item)}><EditIcon /></IconButton><IconButton aria-label="Sil" color="error" disabled={deleteItemMutation.isPending} onClick={() => { setFeedback(null); setDeleteItemTarget(item); }}><DeleteIcon /></IconButton></>}</TableCell>
             </TableRow>)}
             {!filteredItems.length && <TableRow><TableCell colSpan={9} align="center">Filtrelere uygun bütçe kalemi bulunamadı.</TableCell></TableRow>}
           </TableBody>
         </Table>
       </TableContainer>
 
-      {canEdit && <Button color="error" variant="text" startIcon={<DeleteIcon />} sx={{ alignSelf: "flex-start" }} disabled={deleteDraftMutation.isPending} onClick={() => window.confirm("Bu bütçe taslağı ve tüm kalemleri silinecek. Devam edilsin mi?") && deleteDraftMutation.mutate()}>{deleteDraftMutation.isPending ? "Siliniyor…" : "Taslağı Sil"}</Button>}
+      {canEdit && <Button color="error" variant="text" startIcon={<DeleteIcon />} sx={{ alignSelf: "flex-start" }} disabled={deleteDraftMutation.isPending} onClick={() => { setFeedback(null); setDeleteDraftOpen(true); }}>{deleteDraftMutation.isPending ? "Siliniyor…" : "Taslağı Sil"}</Button>}
+
+      <ConfirmDialog
+        open={Boolean(deleteItemTarget)}
+        title="Bütçe Kalemini Sil"
+        message={`“${deleteItemTarget?.budget_name ?? ""}” adlı bütçe kalemi ve ilgili taslak dağılımları silinecek.`}
+        confirmLabel="Bütçe Kalemini Sil"
+        severity="error"
+        irreversible
+        loading={deleteItemMutation.isPending}
+        onCancel={() => setDeleteItemTarget(null)}
+        onConfirm={() => deleteItemTarget && deleteItemMutation.mutate(deleteItemTarget.id)}
+      />
+      <ConfirmDialog
+        open={deleteDraftOpen}
+        title="Bütçe Çalışmasını Sil"
+        message={`“${preparation.name}” adlı taslak bütçe çalışması ve içindeki bütçe kalemleri kalıcı olarak silinecek.`}
+        confirmLabel="Bütçe Çalışmasını Sil"
+        severity="error"
+        irreversible
+        loading={deleteDraftMutation.isPending}
+        onCancel={() => setDeleteDraftOpen(false)}
+        onConfirm={() => deleteDraftMutation.mutate()}
+      />
 
       <Dialog open={itemOpen} onClose={() => !isSavingItem && setItemOpen(false)} fullWidth maxWidth="lg">
         <DialogTitle>{itemForm.id ? "Bütçe Kalemini Düzenle" : "Bütçe Kalemi Ekle"}</DialogTitle>
