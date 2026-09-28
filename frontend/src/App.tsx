@@ -11,7 +11,6 @@ import UsersView from "./components/Users/UsersView";
 import DailyExportView from "./components/DailyExport/DailyExportView";
 import WarrantyTrackingView from "./components/WarrantyTracking/WarrantyTrackingView";
 import PendingExpensesView from "./components/Expenses/PendingExpensesView";
-import BudgetPreparationView from "./components/BudgetPreparation/BudgetPreparationView";
 import AppLayout from "./components/layout/AppLayout";
 import { useAuth } from "./context/AuthContext";
 import LoginPage from "./pages/LoginPage";
@@ -70,8 +69,6 @@ export default function App() {
         }
       />
       <Route path="/plans" element={<LayoutRoute><PlansView /></LayoutRoute>} />
-      <Route path="/budget-preparation" element={<LayoutRoute><BudgetPreparationView /></LayoutRoute>} />
-      <Route path="/budget-preparation/:preparationId" element={<LayoutRoute><BudgetPreparationView /></LayoutRoute>} />
       <Route path="/expenses" element={<LayoutRoute><ExpensesView /></LayoutRoute>} />
       <Route path="/pending-budget-actions" element={<LayoutRoute><PendingExpensesView /></LayoutRoute>} />
       <Route path="/expenses/pending" element={<Navigate to="/pending-budget-actions?filter=expense" replace />} />

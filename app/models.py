@@ -108,6 +108,14 @@ class PlanEntry(TimestampMixin, SQLModel, table=True):
     unused_reason: Optional[str] = Field(default=None, nullable=True)
     unused_note: Optional[str] = Field(default=None, nullable=True)
     unused_updated_at: Optional[datetime] = Field(default=None, nullable=True)
+    accrual_group_id: Optional[str] = Field(default=None, nullable=True, index=True, max_length=36)
+    accrual_amount: Optional[Decimal] = Field(
+        default=None,
+        sa_column=Column(Numeric(16, 2), nullable=True),
+    )
+    accrual_source_year: Optional[int] = Field(default=None, nullable=True, index=True)
+    accrual_source_month: Optional[int] = Field(default=None, nullable=True)
+    is_accrual: bool = Field(default=False, nullable=False, index=True)
 
     scenario: Scenario = Relationship(back_populates="plans")
     budget_item: BudgetItem = Relationship(back_populates="plans")

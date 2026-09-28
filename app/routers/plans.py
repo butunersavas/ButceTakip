@@ -1,10 +1,12 @@
 from datetime import datetime
+from decimal import Decimal
 import logging
 import re
 import unicodedata
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import and_, exists, func, or_
+from sqlalchemy import and_, exists, func, or_, text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlmodel import Session, select
 
@@ -21,6 +23,8 @@ from app.models import (
     User,
 )
 from app.schemas import (
+    AccrualPlanInput,
+    AccrualPlanRead,
     BudgetAvailableRead,
     BudgetTransferCreate,
     BudgetTransferRead,
@@ -517,6 +521,11 @@ def _plan_read_query(capex_filter: str | None):
             PlanEntry.unused_reason,
             PlanEntry.unused_note,
             PlanEntry.unused_updated_at,
+            PlanEntry.accrual_group_id,
+            PlanEntry.accrual_amount,
+            PlanEntry.accrual_source_year,
+            PlanEntry.accrual_source_month,
+            PlanEntry.is_accrual,
         )
         .select_from(PlanEntry)
         .join(Scenario, Scenario.id == PlanEntry.scenario_id)
@@ -613,16 +622,29 @@ def _build_plan_read(
         scenario_name=row.get("scenario_name"),
         scenario_year=row.get("scenario_year"),
         is_carryover=bool(
-            row.get("scenario_year") is not None
-            and row.get("year") is not None
-            and row.get("scenario_year") < row.get("year")
+            (
+                row.get("accrual_source_year") is not None
+                and row.get("year") is not None
+                and row.get("accrual_source_year") < row.get("year")
+            )
+            or (
+                row.get("scenario_year") is not None
+                and row.get("year") is not None
+                and row.get("scenario_year") < row.get("year")
+            )
         ),
         source_year=(
-            row.get("scenario_year")
-            if row.get("scenario_year") is not None
+            row.get("accrual_source_year")
+            if row.get("accrual_source_year") is not None
             and row.get("year") is not None
-            and row.get("scenario_year") < row.get("year")
-            else None
+            and row.get("accrual_source_year") < row.get("year")
+            else (
+                row.get("scenario_year")
+                if row.get("scenario_year") is not None
+                and row.get("year") is not None
+                and row.get("scenario_year") < row.get("year")
+                else None
+            )
         ),
         budget_code=budget_code,
         budget_name=budget_name,
@@ -651,6 +673,11 @@ def _build_plan_read(
         purchase_requested=row.get("purchase_requested") or False,
         purchase_requested_at=row.get("purchase_requested_at"),
         purchase_requested_by=row.get("purchase_requested_by"),
+        accrual_group_id=row.get("accrual_group_id"),
+        accrual_amount=row.get("accrual_amount"),
+        accrual_source_year=row.get("accrual_source_year"),
+        accrual_source_month=row.get("accrual_source_month"),
+        is_accrual=bool(row.get("is_accrual")),
     )
 
 
@@ -1169,6 +1196,289 @@ def create_manual_plan_entry(
     return _fetch_plan_read(session, plan.id)
 
 
+def _accrual_amounts(total_amount: Decimal, month_count: int) -> list[Decimal]:
+    total_cents = int((total_amount.quantize(Decimal("0.01")) * 100).to_integral_exact())
+    base_cents, remainder = divmod(total_cents, month_count)
+    amounts = [Decimal(base_cents) / Decimal(100) for _ in range(month_count)]
+    amounts[-1] += Decimal(remainder) / Decimal(100)
+    return amounts
+
+
+def _accrual_periods(start_year: int, start_month: int, month_count: int):
+    for offset in range(month_count):
+        absolute_month = start_month - 1 + offset
+        yield start_year + absolute_month // 12, absolute_month % 12 + 1
+
+
+def _resolve_accrual_budget_item(session: Session, payload: AccrualPlanInput) -> BudgetItem:
+    item = session.get(BudgetItem, payload.budget_item_id) if payload.budget_item_id else None
+    budget_name = _clean_text(payload.budget_name)
+    budget_code = _clean_text(payload.budget_code)
+    if payload.budget_item_id and item is None:
+        raise HTTPException(status_code=400, detail="Bütçe kalemi bulunamadı.")
+    if item is None and budget_code:
+        item = session.exec(
+            select(BudgetItem).where(func.upper(func.trim(BudgetItem.code)) == budget_code.upper())
+        ).first()
+    if item is None and budget_name:
+        item = session.exec(
+            select(BudgetItem).where(func.lower(func.trim(BudgetItem.name)) == budget_name.lower())
+        ).first()
+    if item is None:
+        if not budget_name:
+            raise HTTPException(status_code=400, detail="Bütçe kalemi zorunludur.")
+        item = BudgetItem(
+            code=budget_code or _generate_manual_code(session),
+            name=budget_name,
+            description=_clean_text(payload.description),
+            map_category=_normalize_capex_opex(payload.map_category),
+            map_attribute=_clean_text(payload.map_attribute),
+        )
+        session.add(item)
+        session.flush()
+    return item
+
+
+def _resolve_accrual_scenarios(
+    session: Session, source: Scenario, years: set[int]
+) -> dict[int, Scenario]:
+    result: dict[int, Scenario] = {source.year: source}
+    for target_year in sorted(years):
+        if target_year == source.year:
+            continue
+        if session.get_bind().dialect.name == "postgresql":
+            session.execute(
+                text("SELECT pg_advisory_xact_lock(hashtext(:scenario_key))"),
+                {"scenario_key": f"accrual-scenario:{target_year}:{source.name.strip().lower()}"},
+            )
+        scenario = session.exec(
+            select(Scenario)
+            .where(Scenario.year == target_year)
+            .where(func.lower(func.trim(Scenario.name)) == source.name.strip().lower())
+            .with_for_update()
+        ).first()
+        if scenario is None:
+            has_primary = session.exec(
+                select(Scenario.id).where(
+                    Scenario.year == target_year, Scenario.is_primary.is_(True)
+                )
+            ).first()
+            scenario = Scenario(
+                name=source.name.strip(),
+                year=target_year,
+                description=source.description,
+                is_primary=bool(source.is_primary and not has_primary),
+            )
+            session.add(scenario)
+            session.flush()
+        result[target_year] = scenario
+    return result
+
+
+def _scope_has_expense(session: Session, plan: PlanEntry) -> bool:
+    allocated = session.exec(
+        select(ExpenseAllocation.id)
+        .where(ExpenseAllocation.budget_item_id == plan.budget_item_id)
+        .where(ExpenseAllocation.year == plan.year)
+        .where(ExpenseAllocation.month == plan.month)
+        .where(ExpenseAllocation.scenario_id == plan.scenario_id)
+    ).first()
+    if allocated:
+        return True
+    return session.exec(
+        select(Expense.id)
+        .where(Expense.budget_item_id == plan.budget_item_id)
+        .where(Expense.scenario_id == plan.scenario_id)
+        .where(func.extract("year", Expense.expense_date) == plan.year)
+        .where(func.extract("month", Expense.expense_date) == plan.month)
+        .where(~exists().where(ExpenseAllocation.expense_id == Expense.id))
+    ).first() is not None
+
+
+def _get_accrual_rows(session: Session, group_id: str, *, lock: bool = False) -> list[PlanEntry]:
+    statement = (
+        select(PlanEntry)
+        .where(PlanEntry.accrual_group_id == group_id)
+        .where(PlanEntry.is_accrual.is_(True))
+        .order_by(PlanEntry.year, PlanEntry.month, PlanEntry.id)
+    )
+    if lock:
+        statement = statement.with_for_update()
+    rows = list(session.exec(statement).all())
+    if not rows:
+        raise HTTPException(status_code=404, detail="Tahakkuk planı bulunamadı.")
+    return rows
+
+
+def _build_accrual_read(session: Session, group_id: str) -> AccrualPlanRead:
+    rows = _get_accrual_rows(session, group_id)
+    source = next(
+        (row for row in rows if row.year == row.accrual_source_year and row.month == row.accrual_source_month),
+        rows[0],
+    )
+    entries = [_fetch_plan_read(session, row.id) for row in rows]
+    return AccrualPlanRead(
+        accrual_group_id=group_id,
+        total_amount=sum((Decimal(str(row.accrual_amount or 0)) for row in rows), Decimal("0.00")),
+        start_year=source.accrual_source_year or source.year,
+        start_month=source.accrual_source_month or source.month,
+        month_count=len(rows),
+        scenario_id=source.scenario_id,
+        budget_item_id=source.budget_item_id,
+        department=source.department,
+        entries=entries,
+    )
+
+
+def _remove_accrual_contributions(session: Session, rows: list[PlanEntry]) -> None:
+    if any(_scope_has_expense(session, row) for row in rows):
+        raise HTTPException(
+            status_code=409,
+            detail="Bu tahakkuka bağlı harcama bulunduğu için işlem yapılamaz.",
+        )
+    for row in rows:
+        contribution = Decimal(str(row.accrual_amount or row.amount or 0))
+        remaining = Decimal(str(row.amount or 0)) - contribution
+        if remaining > Decimal("0.005"):
+            row.amount = float(remaining.quantize(Decimal("0.01")))
+            row.accrual_group_id = None
+            row.accrual_amount = None
+            row.accrual_source_year = None
+            row.accrual_source_month = None
+            row.is_accrual = False
+            row.updated_at = datetime.utcnow()
+            session.add(row)
+        else:
+            session.delete(row)
+    session.flush()
+
+
+def _create_accrual_rows(
+    session: Session, payload: AccrualPlanInput, group_id: str
+) -> None:
+    source_scenario = session.get(Scenario, payload.scenario_id)
+    if source_scenario is None:
+        raise HTTPException(status_code=400, detail="Scenario bulunamadı.")
+    if source_scenario.year != payload.start_year:
+        raise HTTPException(
+            status_code=400,
+            detail="Başlangıç yılı ile kaynak Scenario yılı aynı olmalıdır.",
+        )
+    item = _resolve_accrual_budget_item(session, payload)
+    periods = list(_accrual_periods(payload.start_year, payload.start_month, payload.month_count))
+    scenarios = _resolve_accrual_scenarios(session, source_scenario, {year for year, _ in periods})
+    amounts = _accrual_amounts(payload.total_amount, payload.month_count)
+    department = _clean_text(payload.department)
+    for (target_year, target_month), amount in zip(periods, amounts):
+        scenario = scenarios[target_year]
+        existing = session.exec(
+            select(PlanEntry)
+            .where(PlanEntry.year == target_year)
+            .where(PlanEntry.month == target_month)
+            .where(PlanEntry.scenario_id == scenario.id)
+            .where(PlanEntry.budget_item_id == item.id)
+            .where(func.coalesce(PlanEntry.department, "") == (department or ""))
+            .order_by(PlanEntry.id)
+            .with_for_update()
+        ).first()
+        if existing and payload.merge_mode == "merge":
+            if existing.is_accrual:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Bu dönemde aynı bütçe kalemi için başka bir tahakkuk planı bulunmaktadır. Ayrı kayıt oluşturmayı seçin.",
+                )
+            existing.amount = float((Decimal(str(existing.amount or 0)) + amount).quantize(Decimal("0.01")))
+            existing.accrual_group_id = group_id
+            existing.accrual_amount = amount
+            existing.accrual_source_year = payload.start_year
+            existing.accrual_source_month = payload.start_month
+            existing.is_accrual = True
+            existing.updated_at = datetime.utcnow()
+            session.add(existing)
+        else:
+            session.add(PlanEntry(
+                year=target_year,
+                month=target_month,
+                amount=float(amount),
+                scenario_id=scenario.id,
+                budget_item_id=item.id,
+                budget_code=item.code,
+                department=department,
+                accrual_group_id=group_id,
+                accrual_amount=amount,
+                accrual_source_year=payload.start_year,
+                accrual_source_month=payload.start_month,
+                is_accrual=True,
+            ))
+    session.flush()
+
+
+@router.post("/accruals", response_model=AccrualPlanRead, status_code=status.HTTP_201_CREATED)
+def create_accrual_plan(
+    payload: AccrualPlanInput,
+    session: Session = Depends(get_db_session),
+    _: User = Depends(get_admin_user),
+) -> AccrualPlanRead:
+    group_id = str(uuid4())
+    try:
+        _create_accrual_rows(session, payload, group_id)
+        session.commit()
+        return _build_accrual_read(session, group_id)
+    except HTTPException:
+        session.rollback()
+        raise
+    except (IntegrityError, SQLAlchemyError) as exc:
+        session.rollback()
+        logger.exception("Tahakkuk planı oluşturulamadı")
+        raise HTTPException(status_code=409, detail="Tahakkuk planı kaydedilemedi.") from exc
+
+
+@router.get("/accruals/{group_id}", response_model=AccrualPlanRead)
+def get_accrual_plan(
+    group_id: str,
+    session: Session = Depends(get_db_session),
+    _: User = Depends(get_current_user),
+) -> AccrualPlanRead:
+    return _build_accrual_read(session, group_id)
+
+
+@router.put("/accruals/{group_id}", response_model=AccrualPlanRead)
+def update_accrual_plan(
+    group_id: str,
+    payload: AccrualPlanInput,
+    session: Session = Depends(get_db_session),
+    _: User = Depends(get_admin_user),
+) -> AccrualPlanRead:
+    try:
+        rows = _get_accrual_rows(session, group_id, lock=True)
+        _remove_accrual_contributions(session, rows)
+        _create_accrual_rows(session, payload, group_id)
+        session.commit()
+        return _build_accrual_read(session, group_id)
+    except HTTPException:
+        session.rollback()
+        raise
+    except (IntegrityError, SQLAlchemyError) as exc:
+        session.rollback()
+        logger.exception("Tahakkuk planı güncellenemedi")
+        raise HTTPException(status_code=409, detail="Tahakkuk planı güncellenemedi.") from exc
+
+
+@router.delete("/accruals/{group_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_accrual_plan(
+    group_id: str,
+    session: Session = Depends(get_db_session),
+    _: User = Depends(get_admin_user),
+) -> None:
+    try:
+        rows = _get_accrual_rows(session, group_id, lock=True)
+        _remove_accrual_contributions(session, rows)
+        session.commit()
+    except HTTPException:
+        session.rollback()
+        raise
+
+
 def _remaining_plan_scopes(session: Session, plan: PlanEntry) -> list[tuple[PlanEntry, BudgetAvailableRead]]:
     rows = session.exec(
         select(PlanEntry)
@@ -1394,6 +1704,11 @@ def update_plan_entry(
     plan = session.get(PlanEntry, plan_id)
     if not plan:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan not found")
+    if getattr(plan, "is_accrual", False):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Tahakkuk satırı tek başına güncellenemez. Tahakkuk Planını Düzenle akışını kullanın.",
+        )
     update_data = plan_in.dict(exclude_unset=True)
     if (
         any(update_data.get(field) is not None for field in ("unused_reason", "unused_note"))
@@ -1446,6 +1761,11 @@ def delete_plan_entry(
     plan = session.get(PlanEntry, plan_id)
     if not plan:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan not found")
+    if getattr(plan, "is_accrual", False):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Tahakkuk satırı tek başına silinemez. Tahakkuk Planını Sil akışını kullanın.",
+        )
     related_file_count = count_related_file_records(session, "plan_entries", plan_id)
     if related_file_count and not delete_related:
         raise HTTPException(

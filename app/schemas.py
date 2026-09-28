@@ -613,6 +613,48 @@ class PlanManualCreate(BaseModel):
         return raw if raw in {"merge", "separate"} else "merge"
 
 
+class AccrualPlanInput(BaseModel):
+    total_amount: Decimal
+    start_year: int
+    start_month: int
+    month_count: int = Field(ge=1, le=36)
+    scenario_id: int
+    budget_item_id: Optional[int] = None
+    budget_code: Optional[str] = None
+    budget_name: Optional[str] = None
+    department: str | None = Field(default=None, max_length=100)
+    map_category: Optional[str] = None
+    map_attribute: Optional[str] = None
+    description: Optional[str] = None
+    merge_mode: Literal["merge", "separate"] = "merge"
+
+    @validator("total_amount", pre=True)
+    def validate_total_amount(cls, value) -> Decimal:  # noqa: D417
+        parsed = _parse_decimal_value(value)
+        if parsed is None or parsed <= 0:
+            raise ValueError("Toplam tutar 0'dan büyük olmalıdır.")
+        return parsed.quantize(Decimal("0.01"))
+
+    @validator("start_year")
+    def validate_start_year(cls, value: int) -> int:  # noqa: D417
+        if value < 2000 or value > 2200:
+            raise ValueError("Başlangıç yılı 2000 ile 2200 arasında olmalıdır.")
+        return value
+
+    @validator("start_month")
+    def validate_start_month(cls, value: int) -> int:  # noqa: D417
+        if not 1 <= value <= 12:
+            raise ValueError("Başlangıç ayı 1 ile 12 arasında olmalıdır.")
+        return value
+
+    @validator(
+        "budget_code", "budget_name", "department", "map_category",
+        "map_attribute", "description", pre=True,
+    )
+    def normalize_accrual_text(cls, value: str | None) -> str | None:  # noqa: D417
+        return _normalize_placeholder(value)
+
+
 class PlanEntryUpdate(BaseModel):
     year: Optional[int] = None
     month: Optional[int] = None
@@ -746,9 +788,26 @@ class PlanEntryRead(SQLModel, table=False):
     purchase_requested: bool = False
     purchase_requested_at: datetime | None = None
     purchase_requested_by: str | None = None
+    accrual_group_id: Optional[str] = None
+    accrual_amount: Optional[Decimal] = None
+    accrual_source_year: Optional[int] = None
+    accrual_source_month: Optional[int] = None
+    is_accrual: bool = False
 
     class Config:
         orm_mode = True
+
+
+class AccrualPlanRead(BaseModel):
+    accrual_group_id: str
+    total_amount: Decimal
+    start_year: int
+    start_month: int
+    month_count: int
+    scenario_id: int
+    budget_item_id: int
+    department: Optional[str] = None
+    entries: list[PlanEntryRead] = Field(default_factory=list)
 
 
 class PlanAggregateRead(BaseModel):

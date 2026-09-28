@@ -445,6 +445,30 @@ def _apply_schema_upgrades() -> None:
         if "unused_updated_at" not in plan_columns:
             with engine.begin() as connection:
                 connection.execute(text("ALTER TABLE plan_entries ADD COLUMN unused_updated_at TIMESTAMP"))
+        accrual_columns = {
+            "accrual_group_id": "VARCHAR(36)",
+            "accrual_amount": "NUMERIC(16, 2)",
+            "accrual_source_year": "INTEGER",
+            "accrual_source_month": "INTEGER",
+        }
+        for column_name, column_type in accrual_columns.items():
+            if column_name not in plan_columns:
+                with engine.begin() as connection:
+                    connection.execute(text(
+                        f"ALTER TABLE plan_entries ADD COLUMN {column_name} {column_type}"
+                    ))
+        if "is_accrual" not in plan_columns:
+            with engine.begin() as connection:
+                connection.execute(text(
+                    "ALTER TABLE plan_entries ADD COLUMN is_accrual BOOLEAN NOT NULL DEFAULT FALSE"
+                    if is_postgres
+                    else "ALTER TABLE plan_entries ADD COLUMN is_accrual BOOLEAN NOT NULL DEFAULT 0"
+                ))
+        with engine.begin() as connection:
+            connection.execute(text(
+                "CREATE INDEX IF NOT EXISTS ix_plan_entries_accrual_group_id "
+                "ON plan_entries (accrual_group_id)"
+            ))
 
     ensure_warranty_schema(inspector)
 

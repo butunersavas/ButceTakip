@@ -879,26 +879,6 @@ export default function DashboardView() {
     if (nextScope.resetNarrowingFilters) resetDashboardNarrowingFilters();
   }, [resetDashboardNarrowingFilters, setAllScenariosSelected, setScenarioId, setYear]);
 
-  useEffect(() => {
-    if (searchParams.get("source") !== "budget-preparation") return;
-    const requestedYear = Number(searchParams.get("year"));
-    const requestedScenario = Number(searchParams.get("scenario_id"));
-    const targetYear = Number.isInteger(requestedYear) && requestedYear > 0 ? requestedYear : year;
-    const targetScenario = Number.isInteger(requestedScenario) && requestedScenario > 0
-      ? requestedScenario
-      : null;
-    applyDashboardScope({
-      year: targetYear,
-      scenarioId: targetScenario,
-      allScenariosSelected: targetScenario === null,
-      resetNarrowingFilters: true,
-      explicitSelection: true,
-    });
-    const nextParams = new URLSearchParams(searchParams);
-    nextParams.delete("source");
-    setSearchParams(nextParams, { replace: true });
-  }, [applyDashboardScope, searchParams, setSearchParams, year]);
-
   const monthOptions = [
     { value: 1, label: "Ocak" },
     { value: 2, label: "Şubat" },
