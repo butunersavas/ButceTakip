@@ -3,11 +3,10 @@ import {
   ArrowBack as ArrowBackIcon,
   CheckCircleOutline as CompleteIcon,
   DeleteOutline as DeleteIcon,
+  FileDownloadOutlined as DownloadIcon,
   EditOutlined as EditIcon,
+  LockOpenOutlined as ReopenIcon,
   SaveOutlined as SaveIcon,
-  ContentCopyOutlined as RevisionIcon,
-  StarOutline as PrimaryIcon,
-  DashboardOutlined as DashboardIcon,
 } from "@mui/icons-material";
 import {
   Alert,
@@ -56,7 +55,7 @@ const months = [
   "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık",
 ];
 
-type PreparationStatus = "DRAFT" | "ACTIVE";
+type PreparationStatus = "DRAFT" | "READY" | "ACTIVE";
 type DistributionMethod = "SINGLE_MONTH" | "EQUAL" | "CUSTOM";
 
 interface Allocation {
@@ -118,10 +117,11 @@ interface CarryoverMonth {
 
 interface Carryover {
   source_year: number;
-  source_scenario_id: number;
-  source_scenario_name: string;
+  source_preparation_id: number | null;
+  source_scenario_id: number | null;
+  source_scenario_name: string | null;
   source_preparation_name: string | null;
-  budget_item_id: number;
+  budget_item_id: number | null;
   budget_code: string;
   budget_name: string;
   department: string | null;
@@ -129,15 +129,6 @@ interface Carryover {
   map_attribute: string | null;
   months: CarryoverMonth[];
   total_amount: number;
-}
-
-interface CarryoverWarning {
-  item_id: number;
-  budget_name: string;
-  source_year: number;
-  carryover_amount: number;
-  new_amount: number;
-  total_effect: number;
 }
 
 interface Metadata {
@@ -149,11 +140,6 @@ interface CompletionIssue {
   item_id?: number;
   budget_code?: string;
   message: string;
-}
-
-interface CompletionResponse {
-  scenario_id: number;
-  created_plan_entries: number;
 }
 
 type SaveSource = "auto" | "manual";
@@ -206,7 +192,23 @@ function parseAmount(value: string): number {
 }
 
 function statusLabel(status: PreparationStatus) {
-  return status === "ACTIVE" ? "PLANLANDI" : "TASLAK";
+  return status === "DRAFT" ? "TASLAK" : "HAZIR";
+}
+
+function downloadBlob(data: Blob, filename: string) {
+  const url = URL.createObjectURL(data);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function exportFilename(preparation: Preparation) {
+  const safeName = preparation.name.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "Butce";
+  return `Butce_Hazirlama_${preparation.year}_${safeName}.xlsx`;
 }
 
 function formatDate(value: string | null) {
@@ -316,7 +318,6 @@ function PreparationList() {
   const [newName, setNewName] = useState("");
   const [newNote, setNewNote] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<Preparation | null>(null);
-  const [primaryTarget, setPrimaryTarget] = useState<Preparation | null>(null);
   const [deleteFeedback, setDeleteFeedback] = useState<Feedback | null>(null);
 
   const preparationsQuery = useQuery<Preparation[]>({
@@ -345,7 +346,7 @@ function PreparationList() {
 
   const sameYearPreparations = sameYearPreparationsQuery.data ?? [];
   const sameYearDraftCount = sameYearPreparations.filter((preparation) => preparation.status === "DRAFT").length;
-  const sameYearActiveCount = sameYearPreparations.filter((preparation) => preparation.status === "ACTIVE").length;
+  const sameYearReadyCount = sameYearPreparations.filter((preparation) => preparation.status !== "DRAFT").length;
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -375,34 +376,26 @@ function PreparationList() {
       message: apiErrorMessage(error, "Bütçe çalışması silinemedi."),
     }),
   });
-  const primaryMutation = useMutation({
+  const exportMutation = useMutation({
+    mutationFn: async (preparation: Preparation) => {
+      const { data } = await client.get<Blob>(`/budget-preparations/${preparation.id}/export/xlsx`, {
+        responseType: "blob",
+        suppressGlobalError: true,
+      });
+      downloadBlob(data, exportFilename(preparation));
+    },
+    onError: (error) => setDeleteFeedback({ severity: "error", message: apiErrorMessage(error, "Excel dosyası oluşturulamadı.") }),
+  });
+  const reopenMutation = useMutation({
     mutationFn: async (preparation: Preparation) => (
-      await client.post<Preparation>(`/budget-preparations/${preparation.id}/primary`, undefined, { suppressGlobalError: true })
+      await client.post<Preparation>(`/budget-preparations/${preparation.id}/reopen`, undefined, { suppressGlobalError: true })
     ).data,
     onSuccess: async (preparation) => {
-      queryClient.setQueriesData<Preparation[]>({ queryKey: ["budget-preparations"] }, (current) => (
-        Array.isArray(current)
-          ? current.map((item) => item.year === preparation.year
-            ? { ...item, is_primary: item.id === preparation.id }
-            : item)
-          : current
-      ));
-      setPrimaryTarget(null);
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["budget-preparations"] }),
-        queryClient.invalidateQueries({ queryKey: ["scenarios"] }),
-        queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
-        queryClient.invalidateQueries({ queryKey: ["plans"] }),
-      ]);
-      setDeleteFeedback({
-        severity: "success",
-        message: `${preparation.year} Ana Bütçesi '${preparation.name}' olarak güncellendi.`,
-      });
+      await queryClient.invalidateQueries({ queryKey: ["budget-preparations"] });
+      setDeleteFeedback({ severity: "success", message: "Bütçe çalışması düzenlemeye açıldı." });
+      navigate(`/budget-preparation/${preparation.id}`);
     },
-    onError: (error) => setDeleteFeedback({
-      severity: "error",
-      message: apiErrorMessage(error, "Ana Bütçe güncellenemedi."),
-    }),
+    onError: (error) => setDeleteFeedback({ severity: "error", message: apiErrorMessage(error, "Bütçe çalışması düzenlemeye açılamadı.") }),
   });
 
   return (
@@ -410,7 +403,7 @@ function PreparationList() {
       <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" gap={2}>
         <Box>
           <Typography variant="h4" fontWeight={800}>Bütçe Hazırlama</Typography>
-          <Typography color="text.secondary">Yeni bütçe yıllarını taslak olarak hazırlayın ve kontrollerden sonra planlayın.</Typography>
+          <Typography color="text.secondary">Bütçe çalışmalarını operasyonel planlardan bağımsız hazırlayın, kontrol edin ve Excel'e aktarın.</Typography>
         </Box>
         {!isViewer && <Button variant="contained" startIcon={<AddIcon />} onClick={() => setCreateOpen(true)}>Yeni Bütçe</Button>}
       </Stack>
@@ -424,7 +417,7 @@ function PreparationList() {
             <Select label="Durum" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
               <MenuItem value="">Tümü</MenuItem>
               <MenuItem value="DRAFT">TASLAK</MenuItem>
-              <MenuItem value="ACTIVE">PLANLANDI</MenuItem>
+              <MenuItem value="READY">HAZIR</MenuItem>
             </Select>
           </FormControl>
         </Stack>
@@ -442,8 +435,7 @@ function PreparationList() {
                     <Typography color="text.secondary">{preparation.year} · {preparation.currency}</Typography>
                   </Box>
                   <Stack direction="row" spacing={0.5} alignItems="flex-start">
-                    <Chip label={statusLabel(preparation.status)} color={preparation.status === "ACTIVE" ? "success" : "warning"} />
-                    {preparation.is_primary && <Chip size="small" color="primary" label="ANA BÜTÇE" />}
+                    <Chip label={statusLabel(preparation.status)} color={preparation.status === "DRAFT" ? "warning" : "success"} />
                     {!isViewer && preparation.status === "DRAFT" && <Tooltip title="Bütçe çalışmasını sil">
                       <IconButton
                         aria-label={`${preparation.name} bütçe çalışmasını sil`}
@@ -464,19 +456,10 @@ function PreparationList() {
                   <Grid item xs={6}><Typography variant="caption" color="text.secondary">Eksik Kalem</Typography><Typography fontWeight={700} color={preparation.incomplete_item_count ? "error.main" : "success.main"}>{preparation.incomplete_item_count}</Typography></Grid>
                   <Grid item xs={6}><Typography variant="caption" color="text.secondary">Son Güncelleme</Typography><Typography variant="body2">{formatDate(preparation.updated_at)}</Typography></Grid>
                 </Grid>
-                {!isViewer && preparation.status === "ACTIVE" && !preparation.is_primary && (
-                  <Button
-                    size="small"
-                    startIcon={<PrimaryIcon />}
-                    disabled={primaryMutation.isPending}
-                    sx={{ mt: 1.5 }}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      setDeleteFeedback(null);
-                      setPrimaryTarget(preparation);
-                    }}
-                  >Ana Bütçe Yap</Button>
-                )}
+                <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
+                  <Button size="small" startIcon={<DownloadIcon />} disabled={exportMutation.isPending} onClick={(event) => { event.stopPropagation(); exportMutation.mutate(preparation); }}>Excel'e Aktar</Button>
+                  {!isViewer && preparation.status !== "DRAFT" && <Button size="small" startIcon={<ReopenIcon />} disabled={reopenMutation.isPending} onClick={(event) => { event.stopPropagation(); reopenMutation.mutate(preparation); }}>Düzenlemeye Aç</Button>}
+                </Stack>
               </CardContent>
             </Card>
           </Grid>
@@ -493,7 +476,7 @@ function PreparationList() {
             <TextField label="Para Birimi" value="USD" disabled />
             <TextField label="Açıklama / Not" multiline minRows={3} value={newNote} onChange={(event) => setNewNote(event.target.value)} />
             {sameYearPreparations.length > 0 && <Alert severity="warning">
-              {newYear} yılı için {sameYearDraftCount ? `${sameYearDraftCount} taslak` : ""}{sameYearDraftCount && sameYearActiveCount ? " ve " : ""}{sameYearActiveCount ? `${sameYearActiveCount} planlanmış` : ""} bütçe zaten mevcut. Scenario yapısı nedeniyle yeni bütçe oluşturabilirsiniz; doğru bütçeyle çalıştığınızdan emin olun.
+              {newYear} yılı için {sameYearDraftCount ? `${sameYearDraftCount} TASLAK` : ""}{sameYearDraftCount && sameYearReadyCount ? " ve " : ""}{sameYearReadyCount ? `${sameYearReadyCount} HAZIR` : ""} bütçe çalışması zaten mevcut. Yeni bir çalışma daha oluşturabilirsiniz; doğru kayıtla çalıştığınızdan emin olun.
             </Alert>}
             {createMutation.isError && <Alert severity="error">{apiErrorMessage(createMutation.error, "Bütçe taslağı oluşturulamadı.")}</Alert>}
           </Stack>
@@ -501,23 +484,6 @@ function PreparationList() {
         <DialogActions>
           <Button onClick={() => setCreateOpen(false)}>İptal</Button>
           <Button variant="contained" disabled={!newName.trim() || createMutation.isPending} onClick={() => createMutation.mutate()}>Oluştur</Button>
-        </DialogActions>
-      </Dialog>
-      <Dialog open={Boolean(primaryTarget)} onClose={() => !primaryMutation.isPending && setPrimaryTarget(null)} fullWidth maxWidth="sm">
-        <DialogTitle>Ana Bütçeyi Değiştir</DialogTitle>
-        <DialogContent dividers>
-          <Typography>
-            {primaryTarget?.year} yılı için Ana Bütçe “{primaryTarget?.name}” olarak değiştirilecek. Devam etmek istiyor musunuz?
-          </Typography>
-          {primaryMutation.isError && deleteFeedback?.severity === "error" && (
-            <Alert severity="error" sx={{ mt: 2 }}>{deleteFeedback.message}</Alert>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button disabled={primaryMutation.isPending} onClick={() => setPrimaryTarget(null)}>İptal</Button>
-          <Button variant="contained" disabled={!primaryTarget || primaryMutation.isPending} onClick={() => primaryTarget && primaryMutation.mutate(primaryTarget)}>
-            {primaryMutation.isPending ? "Güncelleniyor…" : "Ana Bütçe Yap"}
-          </Button>
         </DialogActions>
       </Dialog>
       <ConfirmDialog
@@ -560,14 +526,12 @@ function PreparationDetail({ preparationId }: { preparationId: number }) {
   const [formError, setFormError] = useState<string | null>(null);
   const [completionErrors, setCompletionErrors] = useState<CompletionIssue[]>([]);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
-  const [completedScenarioId, setCompletedScenarioId] = useState<number | null>(null);
   const [isSavingItem, setIsSavingItem] = useState(false);
   const [search, setSearch] = useState("");
   const [department, setDepartment] = useState("");
   const [capexOpex, setCapexOpex] = useState("");
   const [attribute, setAttribute] = useState("");
   const [itemStatus, setItemStatus] = useState("");
-  const [carryoverConfirmation, setCarryoverConfirmation] = useState<CarryoverWarning[]>([]);
   const [deleteItemTarget, setDeleteItemTarget] = useState<PreparationItem | null>(null);
   const [deleteDraftOpen, setDeleteDraftOpen] = useState(false);
 
@@ -618,50 +582,51 @@ function PreparationDetail({ preparationId }: { preparationId: number }) {
     onSuccess: async () => { setDeleteItemTarget(null); await refresh(); setFeedback({ severity: "success", message: "Bütçe kalemi silindi." }); },
     onError: (error) => setFeedback({ severity: "error", message: apiErrorMessage(error, "Bütçe kalemi silinemedi.") }),
   });
-  const completeMutation = useMutation({
-    mutationFn: async (confirmed = false) => (await client.post<CompletionResponse>(
-      `/budget-preparations/${preparationId}/complete`,
+  const readyMutation = useMutation({
+    mutationFn: async () => (await client.post<Preparation>(
+      `/budget-preparations/${preparationId}/ready`,
       undefined,
-      { params: { confirm_carryover_overlap: confirmed || undefined }, suppressGlobalError: true },
+      { suppressGlobalError: true },
     )).data,
-    onSuccess: async (result) => {
+    onSuccess: async () => {
       setCompletionErrors([]);
-      setCompletedScenarioId(result.scenario_id);
       await refresh();
-      queryClient.invalidateQueries({ queryKey: ["scenarios"] });
-      queryClient.invalidateQueries({ queryKey: ["plans"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-      setCarryoverConfirmation([]);
-      setFeedback({ severity: "success", message: "Bütçe planlandı ve Scenario kayıtları oluşturuldu." });
+      queryClient.invalidateQueries({ queryKey: ["budget-preparations"] });
+      setFeedback({ severity: "success", message: "Bütçe çalışması HAZIR olarak işaretlendi." });
     },
     onError: (error) => {
-      const responseData = isRecord(error) && isRecord(error.response) ? error.response.data : undefined;
-      const detail = isRecord(responseData) && isRecord(responseData.detail) ? responseData.detail : undefined;
-      if (detail?.requires_confirmation === true && Array.isArray(detail.warnings)) {
-        setCarryoverConfirmation(detail.warnings as unknown as CarryoverWarning[]);
-        return;
-      }
       const issues = completionIssues(error);
       setCompletionErrors(issues);
       setFeedback({ severity: "error", message: issues.map((issue) => issue.message).join(" • ") });
     },
   });
-  const revisionMutation = useMutation({
+  const reopenMutation = useMutation({
     mutationFn: async () => (
-      await client.post<Preparation>(`/budget-preparations/${preparationId}/revision`, undefined, { suppressGlobalError: true })
+      await client.post<Preparation>(`/budget-preparations/${preparationId}/reopen`, undefined, { suppressGlobalError: true })
     ).data,
-    onSuccess: async (revision) => {
+    onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["budget-preparations"] });
-      navigate(`/budget-preparation/${revision.id}`);
+      await refresh();
+      setFeedback({ severity: "success", message: "Bütçe çalışması düzenlemeye açıldı." });
     },
-    onError: (error) => setFeedback({
-      severity: "error",
-      message: apiErrorMessage(error, "Revizyon oluşturulamadı."),
-    }),
+    onError: (error) => setFeedback({ severity: "error", message: apiErrorMessage(error, "Bütçe çalışması düzenlemeye açılamadı.") }),
+  });
+  const exportMutation = useMutation({
+    mutationFn: async () => {
+      const currentPreparation = detailQuery.data;
+      if (!currentPreparation) throw new Error("Bütçe çalışması yüklenemedi.");
+      const { data } = await client.get<Blob>(`/budget-preparations/${preparationId}/export/xlsx`, {
+        responseType: "blob",
+        suppressGlobalError: true,
+      });
+      downloadBlob(data, exportFilename(currentPreparation));
+    },
+    onSuccess: () => setFeedback({ severity: "success", message: "Excel dosyası indirildi." }),
+    onError: (error) => setFeedback({ severity: "error", message: apiErrorMessage(error, "Excel dosyası oluşturulamadı.") }),
   });
 
   const preparation = detailQuery.data;
-  const isLocked = preparation?.status === "ACTIVE";
+  const isLocked = Boolean(preparation && preparation.status !== "DRAFT");
   const canEdit = !isViewer && !isLocked;
   const saveHeader = (source: SaveSource) => {
     if (!canEdit || updateHeaderMutation.isPending) return;
@@ -809,24 +774,25 @@ function PreparationDetail({ preparationId }: { preparationId: number }) {
           <Chip label={statusLabel(preparation.status)} color={isLocked ? "success" : "warning"} />
         </Stack>
         {canEdit && <Stack direction="row" spacing={1}>
-          <Button startIcon={<SaveIcon />} variant="outlined" disabled={updateHeaderMutation.isPending || completeMutation.isPending} onClick={() => saveHeader("manual")}>{updateHeaderMutation.isPending ? "Kaydediliyor…" : "Taslağı Kaydet"}</Button>
-          <Button startIcon={<CompleteIcon />} variant="contained" color="success" disabled={completeMutation.isPending || updateHeaderMutation.isPending} onClick={() => completeMutation.mutate(false)}>{completeMutation.isPending ? "Tamamlanıyor…" : "Bütçeyi Tamamla"}</Button>
+          <Button startIcon={<SaveIcon />} variant="outlined" disabled={updateHeaderMutation.isPending || readyMutation.isPending} onClick={() => saveHeader("manual")}>{updateHeaderMutation.isPending ? "Kaydediliyor…" : "Taslağı Kaydet"}</Button>
+          <Button startIcon={<CompleteIcon />} variant="contained" color="success" disabled={readyMutation.isPending || updateHeaderMutation.isPending} onClick={() => readyMutation.mutate()}>{readyMutation.isPending ? "İşaretleniyor…" : "Hazır Olarak İşaretle"}</Button>
+          <Button startIcon={<DownloadIcon />} variant="outlined" disabled={exportMutation.isPending} onClick={() => exportMutation.mutate()}>{exportMutation.isPending ? "Hazırlanıyor…" : "Excel'e Aktar"}</Button>
         </Stack>}
-        {!isViewer && isLocked && <Button startIcon={<RevisionIcon />} variant="outlined" disabled={revisionMutation.isPending} onClick={() => revisionMutation.mutate()}>{revisionMutation.isPending ? "Oluşturuluyor…" : "Revizyon Oluştur"}</Button>}
+        {!isViewer && isLocked && <Stack direction="row" spacing={1}><Button startIcon={<DownloadIcon />} variant="outlined" disabled={exportMutation.isPending} onClick={() => exportMutation.mutate()}>{exportMutation.isPending ? "Hazırlanıyor…" : "Excel'e Aktar"}</Button><Button startIcon={<ReopenIcon />} variant="contained" disabled={reopenMutation.isPending} onClick={() => reopenMutation.mutate()}>{reopenMutation.isPending ? "Açılıyor…" : "Düzenlemeye Aç"}</Button></Stack>}
       </Stack>
 
-      {isLocked && <Alert severity="info" action={completedScenarioId || preparation.activated_scenario_id ? <Stack direction="row"><Button color="inherit" size="small" onClick={() => navigate(`/plans?year=${preparation.year}&scenario_id=${completedScenarioId ?? preparation.activated_scenario_id}&source=budget-preparation`)}>Plan Yönetiminde Gör</Button><Button color="inherit" size="small" startIcon={<DashboardIcon />} onClick={() => navigate(`/dashboard?year=${preparation.year}&scenario_id=${completedScenarioId ?? preparation.activated_scenario_id}&source=budget-preparation`)}>Dashboard'da Gör</Button></Stack> : undefined}>Bu bütçe planlanmıştır. Hazırlama ekranından düzenlenemez; Scenario bazlı tarihçe olarak korunur.</Alert>}
+      {isLocked && <Alert severity="info">Bu bütçe çalışması HAZIR durumundadır. Değişiklik yapmak için “Düzenlemeye Aç” seçeneğini kullanabilirsiniz.</Alert>}
       {isViewer && !isLocked && <Alert severity="info">Sadece görüntüleme yetkiniz var. Taslak üzerinde değişiklik yapamazsınız.</Alert>}
-      {completionErrors.length > 0 && <Alert severity="error"><Typography fontWeight={700}>Bütçe tamamlanamadı</Typography>{completionErrors.map((error, index) => <Button key={index} size="small" color="inherit" sx={{ display: "block", textAlign: "left" }} onClick={() => error.item_id && document.getElementById(`budget-item-${error.item_id}`)?.scrollIntoView({ behavior: "smooth" })}>{error.message}</Button>)}</Alert>}
+      {completionErrors.length > 0 && <Alert severity="error"><Typography fontWeight={700}>Bütçe çalışması HAZIR olarak işaretlenemedi</Typography>{completionErrors.map((error, index) => <Button key={index} size="small" color="inherit" sx={{ display: "block", textAlign: "left" }} onClick={() => error.item_id && document.getElementById(`budget-item-${error.item_id}`)?.scrollIntoView({ behavior: "smooth" })}>{error.message}</Button>)}</Alert>}
 
       <Grid container spacing={2}>{cards.map(([label, value], index) => <Grid item xs={12} sm={6} lg key={label}><Card variant="outlined" elevation={0} sx={{ borderRadius: 3 }}><CardContent><Typography color="text.secondary" variant="body2">{label}</Typography><Typography variant="h5" fontWeight={800}>{index < 3 ? formatCurrency(Number(value)) : value}</Typography></CardContent></Card></Grid>)}</Grid>
 
       {(carryoversQuery.data?.length ?? 0) > 0 && <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3 }}>
         <Typography variant="h6" fontWeight={800}>{preparation.year - 1}'DEN DEVREDEN TAAHHÜTLER</Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>Yalnız önceki yılların Ana Bütçe Scenario'larından bu yıla taşan plan kayıtlarıdır; yeni bütçeye otomatik kopyalanmaz.</Typography>
-        <Stack spacing={1.5}>{carryoversQuery.data?.map((carryover) => <Card variant="outlined" key={`${carryover.source_scenario_id}-${carryover.budget_item_id}-${carryover.department ?? ""}`}><CardContent>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>Yalnız önceki Bütçe Hazırlama çalışmalarında bu yıla dağıtılmış tutarlardır; operasyonel planlara otomatik aktarılmaz.</Typography>
+        <Stack spacing={1.5}>{carryoversQuery.data?.map((carryover) => <Card variant="outlined" key={`${carryover.source_preparation_id}-${carryover.budget_code}-${carryover.department ?? ""}`}><CardContent>
           <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" gap={1}>
-            <Box><Typography fontWeight={750}>{carryover.budget_name}</Typography><Typography variant="body2" color="text.secondary">Kaynak Bütçe: {carryover.source_preparation_name ?? carryover.source_scenario_name}</Typography></Box>
+            <Box><Typography fontWeight={750}>{carryover.budget_name}</Typography><Typography variant="body2" color="text.secondary">Kaynak Çalışma: {carryover.source_preparation_name ?? "—"}</Typography></Box>
             <Chip label={`DEVREDEN ${formatCurrency(carryover.total_amount)}`} color="info" />
           </Stack>
           <Stack direction="row" spacing={2} sx={{ mt: 1, flexWrap: "wrap" }}>{carryover.months.map((month) => <Typography key={month.month} variant="body2"><strong>{months[month.month - 1]}:</strong> {formatCurrency(month.amount)}</Typography>)}</Stack>
@@ -919,8 +885,8 @@ function PreparationDetail({ preparationId }: { preparationId: number }) {
             </Stack></CardContent></Card></Grid>
             {Math.abs(parseAmount(itemForm.total_amount) - allocatedPreview) > 0.009 && <Grid item xs={12}><Alert severity="warning">{formatCurrency(parseAmount(itemForm.total_amount) - allocatedPreview)} henüz aylara dağıtılmadı. Taslak kaydedilebilir; bütçe tamamlanamaz.</Alert></Grid>}
             {matchingFormCarryovers.length > 0 && <Grid item xs={12}><Alert severity="warning">
-              <Typography fontWeight={750}>Bu bütçe kaleminin önceki yıldan {preparation.year}'e devreden bütçesi bulunmaktadır.</Typography>
-              {matchingFormCarryovers.map((carryover) => <Box key={`${carryover.source_scenario_id}-${carryover.budget_item_id}`} sx={{ mt: 1 }}>
+              <Typography fontWeight={750}>Bu kalemin önceki bütçe çalışmasından {preparation.year}'e taşan planlaması bulunmaktadır.</Typography>
+              {matchingFormCarryovers.map((carryover) => <Box key={`${carryover.source_preparation_id}-${carryover.budget_code}`} sx={{ mt: 1 }}>
                 <Typography variant="body2"><strong>{carryover.source_year}'den Devreden:</strong> {carryover.months.map((row) => `${months[row.month - 1]} ${formatCurrency(row.amount)}`).join(" · ")}</Typography>
               </Box>)}
               <Typography variant="body2" sx={{ mt: 1 }}><strong>Devreden:</strong> {formatCurrency(matchingCarryoverTotal)}</Typography>
@@ -931,22 +897,6 @@ function PreparationDetail({ preparationId }: { preparationId: number }) {
           </Grid>
         </DialogContent>
         <DialogActions><Button disabled={isSavingItem} onClick={() => setItemOpen(false)}>İptal</Button><Button variant="contained" disabled={isSavingItem} onClick={saveItem}>{isSavingItem ? "Kaydediliyor…" : "Taslağa Kaydet"}</Button></DialogActions>
-      </Dialog>
-      <Dialog open={carryoverConfirmation.length > 0} onClose={() => !completeMutation.isPending && setCarryoverConfirmation([])} fullWidth maxWidth="sm">
-        <DialogTitle>Devreden Bütçe Onayı</DialogTitle>
-        <DialogContent dividers>
-          <Stack spacing={2}>{carryoverConfirmation.map((warning) => <Alert severity="warning" key={warning.item_id}>
-            <Typography fontWeight={750}>{warning.budget_name}</Typography>
-            <Typography variant="body2">{warning.source_year} bütçesinden {formatCurrency(warning.carryover_amount)} devreden tutar vardır.</Typography>
-            <Typography variant="body2">{preparation.year} için ayrıca {formatCurrency(warning.new_amount)} yeni bütçe tanımladınız.</Typography>
-            <Typography variant="body2" fontWeight={750}>{preparation.year} toplam etkisi {formatCurrency(warning.total_effect)} olacaktır.</Typography>
-          </Alert>)}</Stack>
-          <Typography sx={{ mt: 2 }}>Devam etmek istiyor musunuz?</Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button disabled={completeMutation.isPending} onClick={() => setCarryoverConfirmation([])}>İptal</Button>
-          <Button variant="contained" color="warning" disabled={completeMutation.isPending} onClick={() => completeMutation.mutate(true)}>{completeMutation.isPending ? "Tamamlanıyor…" : "Onayla ve Planla"}</Button>
-        </DialogActions>
       </Dialog>
       <Snackbar open={Boolean(feedback)} autoHideDuration={5000} onClose={() => setFeedback(null)} anchorOrigin={{ vertical: "bottom", horizontal: "center" }}>
         <Alert severity={feedback?.severity ?? "success"} variant="filled" onClose={() => setFeedback(null)}>{feedback?.message ?? ""}</Alert>

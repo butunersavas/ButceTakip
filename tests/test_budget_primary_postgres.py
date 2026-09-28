@@ -4,8 +4,9 @@ from sqlalchemy import func
 from sqlmodel import Session, select
 
 from app.database import engine
-from app.models import BudgetPreparation, Scenario, User
-from app.routers.budget_preparations import make_primary
+from app.models import Scenario, User
+from app.routers.scenarios import update_scenario
+from app.schemas import ScenarioUpdate
 
 
 @unittest.skipUnless(
@@ -29,35 +30,12 @@ class BudgetPrimaryPostgresTests(unittest.TestCase):
         self.session.refresh(self.scenario_a)
         self.session.refresh(self.scenario_b)
 
-        self.preparation_a = BudgetPreparation(
-            year=self.test_year,
-            name="PG Primary Regression A",
-            status="ACTIVE",
-            activated_scenario_id=self.scenario_a.id,
-        )
-        self.preparation_b = BudgetPreparation(
-            year=self.test_year,
-            name="PG Primary Regression B",
-            status="ACTIVE",
-            activated_scenario_id=self.scenario_b.id,
-        )
-        self.session.add(self.preparation_a)
-        self.session.add(self.preparation_b)
-        self.session.commit()
-        self.session.refresh(self.preparation_a)
-        self.session.refresh(self.preparation_b)
         self.user = User(username="pg-primary-regression", hashed_password="unused", role="admin")
 
     def tearDown(self) -> None:
         if not hasattr(self, "session"):
             return
         try:
-            for preparation in (getattr(self, "preparation_a", None), getattr(self, "preparation_b", None)):
-                if preparation and preparation.id:
-                    persisted = self.session.get(BudgetPreparation, preparation.id)
-                    if persisted:
-                        self.session.delete(persisted)
-            self.session.commit()
             for scenario in (getattr(self, "scenario_a", None), getattr(self, "scenario_b", None)):
                 if scenario and scenario.id:
                     persisted = self.session.get(Scenario, scenario.id)
@@ -82,12 +60,22 @@ class BudgetPrimaryPostgresTests(unittest.TestCase):
         self.assertEqual(1, primary_count)
 
     def test_primary_switch_is_two_phase_and_reversible(self) -> None:
-        result_b = make_primary(self.preparation_b.id, self.session, self.user)
-        self.assertEqual(self.preparation_b.id, result_b.id)
+        result_b = update_scenario(
+            self.scenario_b.id,
+            ScenarioUpdate(is_primary=True),
+            self.session,
+            self.user,
+        )
+        self.assertEqual(self.scenario_b.id, result_b.id)
         self.assert_primary(self.scenario_b.id)
 
-        result_a = make_primary(self.preparation_a.id, self.session, self.user)
-        self.assertEqual(self.preparation_a.id, result_a.id)
+        result_a = update_scenario(
+            self.scenario_a.id,
+            ScenarioUpdate(is_primary=True),
+            self.session,
+            self.user,
+        )
+        self.assertEqual(self.scenario_a.id, result_a.id)
         self.assert_primary(self.scenario_a.id)
 
 

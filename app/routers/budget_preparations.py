@@ -1,19 +1,15 @@
 from datetime import datetime
-import re
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from app.dependencies import get_current_user, get_db_session, get_write_user
 from app.models import (
-    BudgetItem,
     BudgetPreparation,
     BudgetPreparationAllocation,
     BudgetPreparationItem,
-    PlanEntry,
-    Scenario,
     User,
 )
 from app.schemas import (
@@ -27,13 +23,15 @@ from app.schemas import (
     BudgetPreparationUpdate,
 )
 from app.services.budget_preparation import (
-    activate_preparation,
     build_item_read,
     build_preparation_read,
     discover_carryovers,
-    matching_carryovers,
-    money,
     replace_allocations,
+    validate_preparation_for_ready,
+)
+from app.services.budget_preparation_export import (
+    budget_preparation_export_filename,
+    build_budget_preparation_export,
 )
 
 router = APIRouter(prefix="/budget-preparations", tags=["Budget Preparations"])
@@ -79,7 +77,7 @@ def _ensure_draft(preparation: BudgetPreparation) -> None:
     if preparation.status != "DRAFT":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Bu bütçe planlanmıştır. Hazırlama ekranından düzenlenemez.",
+            detail="Bu çalışma HAZIR durumundadır. Önce Düzenlemeye Açın.",
         )
 
 
@@ -97,16 +95,6 @@ def get_metadata(
     session: Session = Depends(get_db_session),
     _: User = Depends(get_current_user),
 ) -> BudgetPreparationMetadataRead:
-    departments = session.exec(
-        select(PlanEntry.department)
-        .where(PlanEntry.department.is_not(None))
-        .distinct()
-    ).all()
-    attributes = session.exec(
-        select(BudgetItem.map_attribute)
-        .where(BudgetItem.map_attribute.is_not(None))
-        .distinct()
-    ).all()
     preparation_departments = session.exec(
         select(BudgetPreparationItem.department)
         .where(BudgetPreparationItem.department.is_not(None))
@@ -118,8 +106,8 @@ def get_metadata(
         .distinct()
     ).all()
     return BudgetPreparationMetadataRead(
-        departments=_canonical_values(DEFAULT_DEPARTMENTS, [*departments, *preparation_departments]),
-        attributes=_canonical_values(DEFAULT_ATTRIBUTES, [*attributes, *preparation_attributes]),
+        departments=_canonical_values(DEFAULT_DEPARTMENTS, preparation_departments),
+        attributes=_canonical_values(DEFAULT_ATTRIBUTES, preparation_attributes),
     )
 
 
@@ -147,7 +135,11 @@ def list_preparations(
     if year is not None:
         query = query.where(BudgetPreparation.year == year)
     if status_filter:
-        query = query.where(BudgetPreparation.status == status_filter.upper())
+        normalized_status = status_filter.upper()
+        if normalized_status == "READY":
+            query = query.where(BudgetPreparation.status.in_(("READY", "ACTIVE")))
+        else:
+            query = query.where(BudgetPreparation.status == normalized_status)
     rows = session.exec(query.order_by(BudgetPreparation.updated_at.desc())).all()
     return [build_preparation_read(session, row, include_items=False) for row in rows]
 
@@ -186,112 +178,20 @@ def get_preparation(
     return build_preparation_read(session, _get_preparation(session, preparation_id))
 
 
-@router.post("/{preparation_id}/revision", response_model=BudgetPreparationRead, status_code=201)
-def create_revision(
+@router.get("/{preparation_id}/export/xlsx")
+def export_preparation_xlsx(
     preparation_id: int,
     session: Session = Depends(get_db_session),
-    current_user: User = Depends(get_write_user),
-) -> BudgetPreparationRead:
-    source = _get_preparation(session, preparation_id)
-    if source.status != "ACTIVE":
-        raise HTTPException(status_code=409, detail="Yalnız planlanmış bütçeden revizyon oluşturulabilir.")
-    base_name = re.sub(r" - Revizyon \d+$", "", source.name).strip()
-    prefix = f"{base_name} - Revizyon "
-    existing_names = session.exec(
-        select(BudgetPreparation.name).where(BudgetPreparation.year == source.year)
-    ).all()
-    revision_number = 1
-    while f"{prefix}{revision_number}" in existing_names:
-        revision_number += 1
-    revision = BudgetPreparation(
-        year=source.year,
-        name=f"{prefix}{revision_number}",
-        currency=source.currency,
-        note=source.note,
-        status="DRAFT",
-        created_by_id=current_user.id,
-    )
-    session.add(revision)
-    session.flush()
-    source_items = session.exec(
-        select(BudgetPreparationItem).where(BudgetPreparationItem.preparation_id == source.id)
-    ).all()
-    for source_item in source_items:
-        clone = BudgetPreparationItem(
-            preparation_id=revision.id,
-            budget_name=source_item.budget_name,
-            budget_code=source_item.budget_code,
-            total_amount=source_item.total_amount,
-            currency=source_item.currency,
-            capex_opex=source_item.capex_opex,
-            department=source_item.department,
-            map_attribute=source_item.map_attribute,
-            description=source_item.description,
-            distribution_method=source_item.distribution_method,
-            single_month=source_item.single_month,
-            start_year=source_item.start_year,
-            start_month=source_item.start_month,
-            month_count=source_item.month_count,
-            source_year=source_item.source_year or source.year,
-            source_plan_id=source_item.source_plan_id,
-            source_budget_item_id=source_item.source_budget_item_id,
-            is_carryover=source_item.is_carryover,
-        )
-        session.add(clone)
-        session.flush()
-        allocations = session.exec(
-            select(BudgetPreparationAllocation).where(
-                BudgetPreparationAllocation.item_id == source_item.id
-            )
-        ).all()
-        for allocation in allocations:
-            session.add(BudgetPreparationAllocation(
-                item_id=clone.id,
-                year=allocation.year,
-                month=allocation.month,
-                amount=allocation.amount,
-            ))
-    session.commit()
-    session.refresh(revision)
-    return build_preparation_read(session, revision)
-
-
-@router.post("/{preparation_id}/primary", response_model=BudgetPreparationRead)
-def make_primary(
-    preparation_id: int,
-    session: Session = Depends(get_db_session),
-    _: User = Depends(get_write_user),
-) -> BudgetPreparationRead:
+    _: User = Depends(get_current_user),
+) -> Response:
     preparation = _get_preparation(session, preparation_id)
-    if preparation.status != "ACTIVE" or not preparation.activated_scenario_id:
-        raise HTTPException(status_code=409, detail="Yalnız planlanmış bütçe Ana Bütçe yapılabilir.")
-    selected = session.exec(
-        select(Scenario)
-        .where(Scenario.id == preparation.activated_scenario_id)
-        .with_for_update()
-    ).first()
-    if not selected:
-        raise HTTPException(status_code=404, detail="Bütçe Scenario kaydı bulunamadı.")
-    year_scenarios = session.exec(
-        select(Scenario).where(Scenario.year == selected.year).with_for_update()
-    ).all()
-    try:
-        for scenario in year_scenarios:
-            if scenario.is_primary:
-                scenario.is_primary = False
-                scenario.updated_at = datetime.utcnow()
-                session.add(scenario)
-        session.flush()
-
-        selected.is_primary = True
-        selected.updated_at = datetime.utcnow()
-        session.add(selected)
-        session.flush()
-        session.commit()
-    except IntegrityError as exc:
-        session.rollback()
-        raise HTTPException(status_code=409, detail="Bu yıl için Ana Bütçe eşzamanlı olarak güncellendi.") from exc
-    return build_preparation_read(session, preparation)
+    content = build_budget_preparation_export(session, preparation)
+    filename = budget_preparation_export_filename(preparation)
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.put("/{preparation_id}", response_model=BudgetPreparationRead)
@@ -322,7 +222,7 @@ def delete_preparation(
     if preparation.status != "DRAFT":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Planlanmış bütçe çalışması silinemez.",
+            detail="HAZIR bütçe çalışması silinemez.",
         )
     try:
         items = session.exec(
@@ -480,64 +380,74 @@ def delete_item(
     session.commit()
 
 
+def _mark_preparation_ready(
+    session: Session,
+    preparation: BudgetPreparation,
+) -> BudgetPreparation:
+    if preparation.status in {"READY", "ACTIVE"}:
+        return preparation
+    validation_errors = validate_preparation_for_ready(session, preparation)
+    if validation_errors:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": "Bütçe çalışması HAZIR olarak işaretlenemedi.",
+                "errors": [error.dict() for error in validation_errors],
+            },
+        )
+    preparation.status = "READY"
+    preparation.completed_at = datetime.utcnow()
+    preparation.updated_at = datetime.utcnow()
+    session.add(preparation)
+    session.commit()
+    session.refresh(preparation)
+    return preparation
+
+
+@router.post("/{preparation_id}/ready", response_model=BudgetPreparationRead)
+def mark_preparation_ready(
+    preparation_id: int,
+    session: Session = Depends(get_db_session),
+    _: User = Depends(get_write_user),
+) -> BudgetPreparationRead:
+    preparation = _mark_preparation_ready(
+        session,
+        _get_preparation(session, preparation_id),
+    )
+    return build_preparation_read(session, preparation)
+
+
+@router.post("/{preparation_id}/reopen", response_model=BudgetPreparationRead)
+def reopen_preparation(
+    preparation_id: int,
+    session: Session = Depends(get_db_session),
+    _: User = Depends(get_write_user),
+) -> BudgetPreparationRead:
+    preparation = _get_preparation(session, preparation_id)
+    if preparation.status not in {"READY", "ACTIVE"}:
+        raise HTTPException(status_code=409, detail="Yalnız HAZIR çalışma düzenlemeye açılabilir.")
+    preparation.status = "DRAFT"
+    preparation.completed_at = None
+    preparation.updated_at = datetime.utcnow()
+    session.add(preparation)
+    session.commit()
+    session.refresh(preparation)
+    return build_preparation_read(session, preparation)
+
+
 @router.post("/{preparation_id}/complete", response_model=BudgetPreparationCompleteRead)
 def complete_preparation(
     preparation_id: int,
-    confirm_carryover_overlap: bool = False,
     session: Session = Depends(get_db_session),
     _: User = Depends(get_write_user),
 ) -> BudgetPreparationCompleteRead:
-    preparation_model = _get_preparation(session, preparation_id)
-    if preparation_model.status == "DRAFT" and not confirm_carryover_overlap:
-        carryovers = discover_carryovers(session, preparation_model.year)
-        items = session.exec(
-            select(BudgetPreparationItem).where(
-                BudgetPreparationItem.preparation_id == preparation_id
-            )
-        ).all()
-        overlaps = [
-            (item, match)
-            for item in items
-            for match in matching_carryovers(item, carryovers)
-        ]
-        if overlaps:
-            raise HTTPException(
-                status_code=409,
-                detail={
-                    "message": "Devreden bütçeyle eşleşen yeni bütçe kalemleri var.",
-                    "requires_confirmation": True,
-                    "warnings": [
-                        {
-                            "item_id": item.id,
-                            "budget_name": item.budget_name,
-                            "source_year": match.source_year,
-                            "carryover_amount": float(match.total_amount),
-                            "new_amount": float(item.total_amount),
-                            "total_effect": float(money(match.total_amount + item.total_amount)),
-                        }
-                        for item, match in overlaps
-                    ],
-                },
-            )
-    try:
-        preparation, scenario_id, created_plan_entries = activate_preparation(
-            session, preparation_id
-        )
-    except LookupError as exc:
-        session.rollback()
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except ValueError as exc:
-        session.rollback()
-        errors = [error.dict() for error in getattr(exc, "validation_errors", [])]
-        raise HTTPException(
-            status_code=422,
-            detail={"message": "Bütçe tamamlanamadı", "errors": errors},
-        ) from exc
-    except Exception:
-        session.rollback()
-        raise
+    """Backward-compatible alias that has no operational Plan/Scenario side effect."""
+    preparation = _mark_preparation_ready(
+        session,
+        _get_preparation(session, preparation_id),
+    )
     return BudgetPreparationCompleteRead(
         preparation=build_preparation_read(session, preparation),
-        scenario_id=scenario_id,
-        created_plan_entries=created_plan_entries,
+        scenario_id=None,
+        created_plan_entries=0,
     )

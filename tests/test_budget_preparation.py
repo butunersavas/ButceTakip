@@ -7,6 +7,7 @@ from sqlmodel import Session, SQLModel, create_engine, select
 
 from app.dependencies import get_write_user
 from app.models import (
+    BudgetItem,
     BudgetPreparation,
     BudgetPreparationAllocation,
     BudgetPreparationItem,
@@ -18,11 +19,11 @@ from app.routers.budget_preparations import (
     complete_preparation,
     create_item,
     create_preparation,
-    create_revision,
     delete_preparation,
     get_preparation,
     list_carryovers,
-    make_primary,
+    mark_preparation_ready,
+    reopen_preparation,
 )
 from app.routers.dashboard import get_dashboard
 from app.routers.plans import list_plans
@@ -32,7 +33,6 @@ from app.schemas import (
     BudgetPreparationItemInput,
 )
 from app.services.budget_preparation import (
-    activate_preparation,
     build_allocation_amounts,
     validate_preparation_for_completion,
 )
@@ -197,32 +197,23 @@ class BudgetPreparationTests(unittest.TestCase):
         errors = validate_preparation_for_completion(self.session, draft)
         self.assertTrue(any(error.field == "map_attribute" for error in errors))
 
-    def test_11_successful_completion_creates_plan_entries(self) -> None:
+    def test_11_ready_does_not_create_plan_entries(self) -> None:
         draft = self.create_draft()
         self.add_valid_item(draft)
-        preparation, scenario_id, created_count = activate_preparation(
-            self.session, draft.id
-        )
-        plans = self.session.exec(
-            select(PlanEntry).where(PlanEntry.scenario_id == scenario_id)
-        ).all()
-        self.assertEqual("ACTIVE", preparation.status)
-        self.assertEqual(2, created_count)
-        self.assertEqual([1, 2], [plan.month for plan in plans])
+        preparation = mark_preparation_ready(draft.id, self.session, self.user)
+        self.assertEqual("READY", preparation.status)
+        self.assertEqual([], self.session.exec(select(Scenario)).all())
+        self.assertEqual([], self.session.exec(select(PlanEntry)).all())
 
-    def test_12_repeated_completion_is_idempotent(self) -> None:
+    def test_12_repeated_ready_is_idempotent(self) -> None:
         draft = self.create_draft()
         self.add_valid_item(draft)
-        _, scenario_id, _ = activate_preparation(self.session, draft.id)
-        _, repeated_scenario_id, repeated_count = activate_preparation(
-            self.session, draft.id
-        )
-        plans = self.session.exec(
-            select(PlanEntry).where(PlanEntry.scenario_id == scenario_id)
-        ).all()
-        self.assertEqual(scenario_id, repeated_scenario_id)
-        self.assertEqual(0, repeated_count)
-        self.assertEqual(2, len(plans))
+        first = mark_preparation_ready(draft.id, self.session, self.user)
+        repeated = mark_preparation_ready(draft.id, self.session, self.user)
+        self.assertEqual(first.id, repeated.id)
+        self.assertEqual("READY", repeated.status)
+        self.assertEqual([], self.session.exec(select(Scenario)).all())
+        self.assertEqual([], self.session.exec(select(PlanEntry)).all())
 
     def test_13_viewer_cannot_write(self) -> None:
         with self.assertRaises(HTTPException) as caught:
@@ -244,7 +235,7 @@ class BudgetPreparationTests(unittest.TestCase):
         ).all()
         self.assertEqual(Decimal("120000.00"), sum(row.amount for row in rows))
 
-    def test_cross_year_activation_creates_plan_entries_in_each_year(self) -> None:
+    def test_cross_year_ready_keeps_allocations_in_preparation_tables(self) -> None:
         draft = self.create_draft()
         result = self.add_valid_item(
             draft,
@@ -256,28 +247,19 @@ class BudgetPreparationTests(unittest.TestCase):
             allocations=[],
         )
         self.assertTrue(result.budget_code.startswith("PREP-2027-"))
-        preparation, scenario_id, created_count = activate_preparation(self.session, draft.id)
-        plans = self.session.exec(
-            select(PlanEntry).where(PlanEntry.scenario_id == scenario_id)
+        preparation = mark_preparation_ready(draft.id, self.session, self.user)
+        allocations = self.session.exec(
+            select(BudgetPreparationAllocation).where(
+                BudgetPreparationAllocation.item_id == result.id
+            )
         ).all()
-        self.assertEqual("ACTIVE", preparation.status)
-        self.assertEqual(12, created_count)
-        self.assertEqual(Decimal("50000.00"), sum(Decimal(str(plan.amount)) for plan in plans))
-        self.assertEqual(6, sum(plan.year == 2027 for plan in plans))
-        self.assertEqual(6, sum(plan.year == 2028 for plan in plans))
-        dashboard = get_dashboard(
-            year=2027,
-            scenario_id=scenario_id,
-            month=None,
-            month_list=None,
-            budget_item_id=None,
-            department=None,
-            capex_opex=None,
-            session=self.session,
-            _=self.user,
-        )
-        expected_2027 = sum(plan.amount for plan in plans if plan.year == 2027)
-        self.assertAlmostEqual(expected_2027, dashboard.kpi.total_plan, places=2)
+        self.assertEqual("READY", preparation.status)
+        self.assertEqual(12, len(allocations))
+        self.assertEqual(Decimal("50000.00"), sum(row.amount for row in allocations))
+        self.assertEqual(6, sum(row.year == 2027 for row in allocations))
+        self.assertEqual(6, sum(row.year == 2028 for row in allocations))
+        self.assertEqual([], self.session.exec(select(Scenario)).all())
+        self.assertEqual([], self.session.exec(select(PlanEntry)).all())
 
     def test_delete_draft_removes_items_and_allocations(self) -> None:
         draft = self.create_draft()
@@ -297,25 +279,22 @@ class BudgetPreparationTests(unittest.TestCase):
             for allocation_id in allocation_ids
         ))
 
-    def test_delete_active_is_rejected_without_touching_plan_data(self) -> None:
+    def test_delete_ready_is_rejected_without_touching_operational_data(self) -> None:
         draft = self.create_draft()
         self.add_valid_item(draft)
-        preparation, scenario_id, _ = activate_preparation(self.session, draft.id)
-        plan_ids = [row.id for row in self.session.exec(
-            select(PlanEntry).where(PlanEntry.scenario_id == scenario_id)
-        ).all()]
+        preparation = mark_preparation_ready(draft.id, self.session, self.user)
 
         with self.assertRaises(HTTPException) as caught:
             delete_preparation(preparation.id, self.session, self.user)
 
         self.assertEqual(409, caught.exception.status_code)
         self.assertEqual(
-            "Planlanmış bütçe çalışması silinemez.",
+            "HAZIR bütçe çalışması silinemez.",
             caught.exception.detail,
         )
         self.assertIsNotNone(self.session.get(BudgetPreparation, preparation.id))
-        self.assertIsNotNone(self.session.get(Scenario, scenario_id))
-        self.assertTrue(all(self.session.get(PlanEntry, plan_id) is not None for plan_id in plan_ids))
+        self.assertEqual([], self.session.exec(select(Scenario)).all())
+        self.assertEqual([], self.session.exec(select(PlanEntry)).all())
 
     def test_viewer_cannot_delete_preparation(self) -> None:
         draft = self.create_draft()
@@ -330,44 +309,7 @@ class BudgetPreparationTests(unittest.TestCase):
             delete_preparation(999999, self.session, self.user)
         self.assertEqual(404, caught.exception.status_code)
 
-    def test_only_one_primary_per_year_and_switch_preserves_other_year(self) -> None:
-        first = self.create_draft()
-        self.add_valid_item(first)
-        first_planned, first_scenario_id, _ = activate_preparation(self.session, first.id)
-        second = self.create_draft()
-        self.add_valid_item(second, budget_code="BT-2027-002", budget_name="İkinci Kalem")
-        second_planned, second_scenario_id, _ = activate_preparation(self.session, second.id)
-        other_year = Scenario(name="2028 Ana", year=2028, is_primary=True)
-        self.session.add(other_year)
-        self.session.commit()
-
-        self.assertTrue(self.session.get(Scenario, first_scenario_id).is_primary)
-        self.assertFalse(self.session.get(Scenario, second_scenario_id).is_primary)
-        make_primary(second_planned.id, self.session, self.user)
-
-        self.assertFalse(self.session.get(Scenario, first_scenario_id).is_primary)
-        self.assertTrue(self.session.get(Scenario, second_scenario_id).is_primary)
-        self.assertTrue(self.session.get(Scenario, other_year.id).is_primary)
-
-    def test_revision_is_draft_and_does_not_change_original_plans(self) -> None:
-        draft = self.create_draft()
-        self.add_valid_item(draft)
-        planned, scenario_id, _ = activate_preparation(self.session, draft.id)
-        original_plan_ids = list(self.session.exec(
-            select(PlanEntry.id).where(PlanEntry.scenario_id == scenario_id)
-        ).all())
-
-        revision = create_revision(planned.id, self.session, self.user)
-
-        self.assertEqual("DRAFT", revision.status)
-        self.assertEqual("2027 Bilgi Teknolojileri Bütçesi - Revizyon 1", revision.name)
-        self.assertEqual(1, revision.item_count)
-        self.assertEqual(2, len(revision.items[0].allocations))
-        self.assertEqual(original_plan_ids, list(self.session.exec(
-            select(PlanEntry.id).where(PlanEntry.scenario_id == scenario_id)
-        ).all()))
-
-    def _create_cross_year_primary(self, *, name: str = "TEST01", total: str = "12565.00"):
+    def _create_cross_year_preparation(self, *, name: str = "TEST01", total: str = "12565.00"):
         draft = self.create_draft()
         self.add_valid_item(
             draft,
@@ -379,10 +321,11 @@ class BudgetPreparationTests(unittest.TestCase):
             month_count=12,
             allocations=[],
         )
-        return activate_preparation(self.session, draft.id)
+        mark_preparation_ready(draft.id, self.session, self.user)
+        return draft
 
-    def test_carryover_discovery_and_matching_confirmation(self) -> None:
-        self._create_cross_year_primary()
+    def test_carryover_discovery_and_ready_has_no_operational_side_effect(self) -> None:
+        self._create_cross_year_preparation()
         carryovers = list_carryovers(2028, self.session, self.user)
         self.assertEqual(1, len(carryovers))
         self.assertEqual([1, 2], [row.month for row in carryovers[0].months])
@@ -403,51 +346,33 @@ class BudgetPreparationTests(unittest.TestCase):
             single_month=3,
             allocations=[],
         )
-        with self.assertRaises(HTTPException) as caught:
-            complete_preparation(draft_2028.id, False, self.session, self.user)
-        self.assertEqual(409, caught.exception.status_code)
-        self.assertTrue(caught.exception.detail["requires_confirmation"])
-        warning = caught.exception.detail["warnings"][0]
-        self.assertEqual(12094.20, warning["total_effect"])
-
-        completed = complete_preparation(draft_2028.id, True, self.session, self.user)
-        self.assertEqual("ACTIVE", completed.preparation.status)
+        scenario_count = len(self.session.exec(select(Scenario)).all())
+        plan_count = len(self.session.exec(select(PlanEntry)).all())
+        completed = complete_preparation(draft_2028.id, self.session, self.user)
+        self.assertEqual("READY", completed.preparation.status)
+        self.assertIsNone(completed.scenario_id)
+        self.assertEqual(0, completed.created_plan_entries)
+        self.assertEqual(scenario_count, len(self.session.exec(select(Scenario)).all()))
+        self.assertEqual(plan_count, len(self.session.exec(select(PlanEntry)).all()))
 
     def test_effective_dashboard_adds_only_primary_carryover_without_double_count(self) -> None:
-        _, primary_2027_id, _ = self._create_cross_year_primary()
-        alternative = self.create_draft()
-        self.add_valid_item(
-            alternative,
-            budget_name="Alternatif",
-            budget_code=None,
-            total_amount=Decimal("24000.00"),
-            distribution_method="EQUAL",
-            start_month=3,
-            month_count=12,
-            allocations=[],
-        )
-        _, alternative_id, _ = activate_preparation(self.session, alternative.id)
-        self.assertFalse(self.session.get(Scenario, alternative_id).is_primary)
-
-        result = create_preparation(
-            BudgetPreparationCreate(year=2028, name="2028 Ana", currency="USD"),
-            self.session,
-            self.user,
-        )
-        draft_2028 = self.session.get(BudgetPreparation, result.id)
-        self.add_valid_item(
-            draft_2028,
-            budget_name="2028 Yeni",
-            budget_code=None,
-            total_amount=Decimal("10000.00"),
-            distribution_method="SINGLE_MONTH",
-            single_month=3,
-            allocations=[],
-        )
-        _, primary_2028_id, _ = activate_preparation(self.session, draft_2028.id)
+        budget_item = BudgetItem(code="OPER-PRIMARY", name="Operasyonel Kalem")
+        primary_2027 = Scenario(name="2027 Ana", year=2027, is_primary=True)
+        alternative_2027 = Scenario(name="2027 Alternatif", year=2027, is_primary=False)
+        primary_2028 = Scenario(name="2028 Ana", year=2028, is_primary=True)
+        self.session.add(budget_item)
+        self.session.add(primary_2027)
+        self.session.add(alternative_2027)
+        self.session.add(primary_2028)
+        self.session.flush()
+        self.session.add(PlanEntry(year=2028, month=1, amount=1047.10, scenario_id=primary_2027.id, budget_item_id=budget_item.id))
+        self.session.add(PlanEntry(year=2028, month=2, amount=1047.10, scenario_id=primary_2027.id, budget_item_id=budget_item.id))
+        self.session.add(PlanEntry(year=2028, month=1, amount=4000.00, scenario_id=alternative_2027.id, budget_item_id=budget_item.id))
+        self.session.add(PlanEntry(year=2028, month=3, amount=10000.00, scenario_id=primary_2028.id, budget_item_id=budget_item.id))
+        self.session.commit()
         dashboard = get_dashboard(
             year=2028,
-            scenario_id=primary_2028_id,
+            scenario_id=primary_2028.id,
             month=None,
             month_list=None,
             budget_item_id=None,
@@ -460,10 +385,9 @@ class BudgetPreparationTests(unittest.TestCase):
         self.assertAlmostEqual(10000.00, dashboard.kpi.new_budget_plan_amount, places=2)
         self.assertAlmostEqual(2094.20, dashboard.kpi.carryover_plan_amount, places=2)
         self.assertAlmostEqual(12094.20, dashboard.kpi.total_plan, places=2)
-        self.assertNotEqual(primary_2027_id, alternative_id)
         effective_plans = list_plans(
             year=2028,
-            scenario_id=primary_2028_id,
+            scenario_id=primary_2028.id,
             budget_item_id=None,
             month=None,
             department=None,
@@ -474,7 +398,7 @@ class BudgetPreparationTests(unittest.TestCase):
         )
         self.assertAlmostEqual(12094.20, sum(row.amount for row in effective_plans), places=2)
         self.assertTrue(any(row.is_carryover and row.source_year == 2027 for row in effective_plans))
-        self.assertFalse(any(row.scenario_id == alternative_id for row in effective_plans))
+        self.assertFalse(any(row.scenario_id == alternative_2027.id for row in effective_plans))
 
 
 if __name__ == "__main__":

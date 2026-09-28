@@ -518,8 +518,8 @@ class BudgetPreparationValidationError(BaseModel):
 
 class BudgetPreparationCompleteRead(BaseModel):
     preparation: BudgetPreparationRead
-    scenario_id: int
-    created_plan_entries: int
+    scenario_id: int | None = None
+    created_plan_entries: int = 0
 
 
 class CarryoverMonthRead(BaseModel):
@@ -529,10 +529,11 @@ class CarryoverMonthRead(BaseModel):
 
 class BudgetPreparationCarryoverRead(BaseModel):
     source_year: int
-    source_scenario_id: int
-    source_scenario_name: str
+    source_scenario_id: int | None = None
+    source_scenario_name: str | None = None
+    source_preparation_id: int | None = None
     source_preparation_name: str | None = None
-    budget_item_id: int
+    budget_item_id: int | None = None
     budget_code: str
     budget_name: str
     department: str | None = None

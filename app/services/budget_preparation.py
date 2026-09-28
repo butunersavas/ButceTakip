@@ -1,19 +1,14 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import datetime
 from decimal import Decimal, ROUND_DOWN
 
-from sqlalchemy import func
 from sqlmodel import Session, select
 
 from app.models import (
-    BudgetItem,
     BudgetPreparation,
     BudgetPreparationAllocation,
     BudgetPreparationItem,
-    PlanEntry,
-    Scenario,
     User,
 )
 from app.schemas import (
@@ -175,11 +170,6 @@ def build_preparation_read(
         (item.total_amount for item in item_reads if item.capex_opex == "OPEX"),
         Decimal("0.00"),
     )
-    scenario = (
-        session.get(Scenario, preparation.activated_scenario_id)
-        if preparation.activated_scenario_id
-        else None
-    )
     return BudgetPreparationRead(
         id=preparation.id,
         year=preparation.year,
@@ -190,7 +180,9 @@ def build_preparation_read(
         created_by_id=preparation.created_by_id,
         created_by_name=(creator.full_name or creator.username) if creator else None,
         activated_scenario_id=preparation.activated_scenario_id,
-        is_primary=bool(scenario and scenario.is_primary),
+        # Historical records may still carry an activated_scenario_id.  The
+        # preparation workspace no longer reads operational Scenario state.
+        is_primary=False,
         completed_at=preparation.completed_at,
         created_at=preparation.created_at,
         updated_at=preparation.updated_at,
@@ -209,43 +201,53 @@ def discover_carryovers(
 ) -> list[BudgetPreparationCarryoverRead]:
     rows = session.exec(
         select(
-            PlanEntry,
-            Scenario,
-            BudgetItem,
-            BudgetPreparation.name.label("preparation_name"),
-        )
-        .join(Scenario, Scenario.id == PlanEntry.scenario_id)
-        .join(BudgetItem, BudgetItem.id == PlanEntry.budget_item_id)
-        .outerjoin(
+            BudgetPreparationAllocation,
+            BudgetPreparationItem,
             BudgetPreparation,
-            BudgetPreparation.activated_scenario_id == Scenario.id,
         )
-        .where(PlanEntry.year == target_year)
-        .where(Scenario.year < target_year)
-        .where(Scenario.is_primary.is_(True))
-        .order_by(Scenario.year, Scenario.id, BudgetItem.id, PlanEntry.month)
+        .join(
+            BudgetPreparationItem,
+            BudgetPreparationItem.id == BudgetPreparationAllocation.item_id,
+        )
+        .join(
+            BudgetPreparation,
+            BudgetPreparation.id == BudgetPreparationItem.preparation_id,
+        )
+        .where(BudgetPreparationAllocation.year == target_year)
+        .where(BudgetPreparation.year < target_year)
+        .where(BudgetPreparation.status.in_(("DRAFT", "READY", "ACTIVE")))
+        .order_by(
+            BudgetPreparation.year,
+            BudgetPreparation.id,
+            BudgetPreparationItem.id,
+            BudgetPreparationAllocation.month,
+        )
     ).all()
     grouped: dict[tuple[int, int, int, str], dict] = {}
-    for plan, scenario, budget_item, preparation_name in rows:
-        department = (plan.department or "").strip()
-        key = (scenario.id, budget_item.id, target_year, department)
+    for allocation, item, preparation in rows:
+        amount = money(allocation.amount)
+        if amount <= 0:
+            continue
+        department = (item.department or "").strip()
+        key = (preparation.id, item.id, target_year, department)
         entry = grouped.setdefault(
             key,
             {
-                "source_year": scenario.year,
-                "source_scenario_id": scenario.id,
-                "source_scenario_name": scenario.name,
-                "source_preparation_name": preparation_name,
-                "budget_item_id": budget_item.id,
-                "budget_code": budget_item.code,
-                "budget_name": budget_item.name,
-                "department": plan.department,
-                "capex_opex": (budget_item.map_category or "").upper() or None,
-                "map_attribute": budget_item.map_attribute,
+                "source_year": preparation.year,
+                "source_preparation_id": preparation.id,
+                "source_scenario_id": None,
+                "source_scenario_name": None,
+                "source_preparation_name": preparation.name,
+                "budget_item_id": item.source_budget_item_id,
+                "budget_code": item.budget_code,
+                "budget_name": item.budget_name,
+                "department": item.department,
+                "capex_opex": (item.capex_opex or "").upper() or None,
+                "map_attribute": item.map_attribute,
                 "months": defaultdict(lambda: Decimal("0.00")),
             },
         )
-        entry["months"][plan.month] += money(plan.amount)
+        entry["months"][allocation.month] += amount
 
     results: list[BudgetPreparationCarryoverRead] = []
     for entry in grouped.values():
@@ -261,31 +263,6 @@ def discover_carryovers(
             )
         )
     return results
-
-
-def matching_carryovers(
-    item: BudgetPreparationItem,
-    carryovers: list[BudgetPreparationCarryoverRead],
-) -> list[BudgetPreparationCarryoverRead]:
-    normalized_name = item.budget_name.strip().casefold()
-    normalized_department = (item.department or "").strip().casefold()
-    normalized_category = (item.capex_opex or "").strip().casefold()
-    normalized_attribute = (item.map_attribute or "").strip().casefold()
-    matches: list[BudgetPreparationCarryoverRead] = []
-    for carryover in carryovers:
-        identity_match = bool(
-            item.source_budget_item_id
-            and item.source_budget_item_id == carryover.budget_item_id
-        )
-        metadata_match = (
-            normalized_name == carryover.budget_name.strip().casefold()
-            and normalized_department == (carryover.department or "").strip().casefold()
-            and normalized_category == (carryover.capex_opex or "").strip().casefold()
-            and normalized_attribute == (carryover.map_attribute or "").strip().casefold()
-        )
-        if identity_match or metadata_match:
-            matches.append(carryover)
-    return matches
 
 
 def validate_preparation_for_completion(
@@ -355,121 +332,12 @@ def validate_preparation_for_completion(
                 )
             )
 
-        existing_item = session.exec(
-            select(BudgetItem).where(
-                func.upper(func.trim(BudgetItem.code)) == normalized_code
-            )
-        ).first()
-        if existing_item and (
-            existing_item.name.strip().casefold() != item.budget_name.strip().casefold()
-            or (existing_item.map_category or "").strip().casefold()
-            != (item.capex_opex or "").strip().casefold()
-            or (existing_item.map_attribute or "").strip().casefold()
-            != (item.map_attribute or "").strip().casefold()
-        ):
-            errors.append(
-                BudgetPreparationValidationError(
-                    item_id=item.id,
-                    budget_code=item.budget_code,
-                    field="budget_code",
-                    message=(
-                        "Bütçe kodu mevcut bir kalemle çakışıyor; ad, CAPEX/OPEX veya "
-                        "Nitelik bilgisi aynı değil."
-                    ),
-                )
-            )
     return errors
 
 
-def activate_preparation(
+def validate_preparation_for_ready(
     session: Session,
-    preparation_id: int,
-) -> tuple[BudgetPreparation, int, int]:
-    preparation = session.exec(
-        select(BudgetPreparation)
-        .where(BudgetPreparation.id == preparation_id)
-        .with_for_update()
-    ).first()
-    if not preparation:
-        raise LookupError("Bütçe taslağı bulunamadı.")
-    if preparation.status == "ACTIVE":
-        return preparation, int(preparation.activated_scenario_id or 0), 0
-
-    validation_errors = validate_preparation_for_completion(session, preparation)
-    if validation_errors:
-        error = ValueError("Bütçe tamamlanamadı")
-        error.validation_errors = validation_errors  # type: ignore[attr-defined]
-        raise error
-
-    existing_primary = session.exec(
-        select(Scenario)
-        .where(Scenario.year == preparation.year)
-        .where(Scenario.is_primary.is_(True))
-        .with_for_update()
-    ).first()
-    scenario = Scenario(
-        name=preparation.name,
-        year=preparation.year,
-        description=preparation.note,
-        is_primary=existing_primary is None,
-    )
-    session.add(scenario)
-    session.flush()
-
-    created_plan_entries = 0
-    items = session.exec(
-        select(BudgetPreparationItem).where(
-            BudgetPreparationItem.preparation_id == preparation.id
-        )
-    ).all()
-    for item in items:
-        normalized_code = item.budget_code.strip().upper()
-        budget_item = session.exec(
-            select(BudgetItem).where(
-                func.upper(func.trim(BudgetItem.code)) == normalized_code
-            )
-        ).first()
-        if budget_item is None:
-            budget_item = BudgetItem(
-                code=item.budget_code.strip(),
-                name=item.budget_name.strip(),
-                description=item.description,
-                map_attribute=item.map_attribute,
-                map_category=(item.capex_opex or "").lower(),
-            )
-            session.add(budget_item)
-            session.flush()
-
-        item.source_year = preparation.year
-        item.source_budget_item_id = budget_item.id
-        session.add(item)
-
-        allocations = session.exec(
-            select(BudgetPreparationAllocation)
-            .where(BudgetPreparationAllocation.item_id == item.id)
-            .order_by(BudgetPreparationAllocation.year, BudgetPreparationAllocation.month)
-        ).all()
-        for allocation in allocations:
-            if money(allocation.amount) <= 0:
-                continue
-            session.add(
-                PlanEntry(
-                    year=allocation.year,
-                    month=allocation.month,
-                    amount=float(money(allocation.amount)),
-                    scenario_id=scenario.id,
-                    budget_item_id=budget_item.id,
-                    budget_code=budget_item.code,
-                    department=item.department,
-                )
-            )
-            created_plan_entries += 1
-
-    preparation.status = "ACTIVE"
-    preparation.activated_scenario_id = scenario.id
-    preparation.completed_at = datetime.utcnow()
-    preparation.updated_at = datetime.utcnow()
-    session.add(preparation)
-    session.commit()
-    session.refresh(preparation)
-    return preparation, scenario.id, created_plan_entries
+    preparation: BudgetPreparation,
+) -> list[BudgetPreparationValidationError]:
+    """Validate preparation-owned data without consulting operational tables."""
+    return validate_preparation_for_completion(session, preparation)
