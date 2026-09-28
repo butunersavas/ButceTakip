@@ -54,6 +54,7 @@ import usePersistentState from "../../hooks/usePersistentState";
 import { useAuth } from "../../context/AuthContext";
 import { formatBudgetItemLabel, stripBudgetCode } from "../../utils/budgetLabel";
 import { formatBudgetItemMeta } from "../../utils/budgetItem";
+import { calculateDashboardSavings } from "../../utils/dashboardSavings";
 import AccountBalanceWalletOutlinedIcon from "@mui/icons-material/AccountBalanceWalletOutlined";
 import CheckCircleOutlineOutlinedIcon from "@mui/icons-material/CheckCircleOutlineOutlined";
 import TrendingUpOutlinedIcon from "@mui/icons-material/TrendingUpOutlined";
@@ -1707,13 +1708,6 @@ export default function DashboardView() {
   const formattedTotalPlan = formatCurrency(normalizedKpi.total_plan);
   const formattedActual = formatCurrency(normalizedKpi.total_actual);
   const formattedRemaining = formatCurrency(normalizedKpi.total_remaining);
-  const formattedNegotiatedSaving = formatCurrency(
-    normalizedKpi.total_negotiated_saving ?? 0
-  );
-  const formattedOtherSaving = formatCurrency(normalizedKpi.total_other_saving ?? 0);
-  const formattedCombinedSaving = formatCurrency(
-    normalizedKpi.total_combined_saving ?? 0
-  );
   const outOfBudgetDetailTotal = useMemo(
     () => outOfBudgetExpenses.reduce((sum, expense) => sum + toSafeNumber(expense.amount), 0),
     [outOfBudgetExpenses]
@@ -1779,12 +1773,12 @@ export default function DashboardView() {
       over_item_count: overBudget?.summary?.over_item_count ?? overBudgetItems.length
     };
   }, [overBudget?.summary?.over_item_count, overBudget?.summary?.over_total, overBudgetItems]);
-  const savingsSummary = overBudget?.summary as
-    | (NonNullable<typeof overBudget>["summary"] & {
-        negotiated_saving_item_count?: number;
-        other_saving_item_count?: number;
-      })
-    | undefined;
+  const savingsSummary = overBudget?.summary;
+  const { negotiatedSavingTotal, otherSavingTotal, combinedSavingTotal } =
+    calculateDashboardSavings(savingsSummary, normalizedKpi);
+  const formattedNegotiatedSaving = formatCurrency(negotiatedSavingTotal);
+  const formattedOtherSaving = formatCurrency(otherSavingTotal);
+  const formattedCombinedSaving = formatCurrency(combinedSavingTotal);
   const overBudgetTopItems = useMemo(() => overBudgetItems.slice(0, 10), [overBudgetItems]);
   const negotiatedSavingItems = overBudget?.saving_items ?? [];
   const unusedBudgetItems = (overBudget?.unused_items ?? []) as UnusedBudgetItem[];
@@ -1797,7 +1791,7 @@ export default function DashboardView() {
         unusedAmount: 0
       })),
       ...unusedBudgetItems.map((item) => ({
-        type: "Diğer Tasarruf",
+        type: "Optimizasyon Tasarrufu",
         item,
         amount: toSafeNumber(item.unused_amount ?? item.over),
         unusedAmount: toSafeNumber(item.unused_amount ?? item.over)
@@ -2585,18 +2579,18 @@ export default function DashboardView() {
         },
         {
           "Kart Adı": "Pazarlıklı Tasarruf",
-          Tutar: normalizedKpi.total_negotiated_saving ?? 0,
+          Tutar: negotiatedSavingTotal,
           Açıklama: "Gerçekleşen harcamanın ilgili bütçeden düşük kaldığı kayıtlar"
         },
         {
-          "Kart Adı": "Diğer Tasarruf",
-          Tutar: normalizedKpi.total_other_saving ?? 0,
+          "Kart Adı": "Optimizasyon Tasarrufu",
+          Tutar: otherSavingTotal,
           Açıklama: "Kullanılmayacak olarak işaretlenen bütçeler"
         },
         {
           "Kart Adı": "Toplam Tasarruf",
-          Tutar: normalizedKpi.total_combined_saving ?? 0,
-          Açıklama: "Pazarlıklı Tasarruf + Diğer Tasarruf"
+          Tutar: combinedSavingTotal,
+          Açıklama: "Pazarlıklı + Optimizasyon Tasarrufu"
         },
         {
           "Kart Adı": "Aşım",
@@ -2621,7 +2615,7 @@ export default function DashboardView() {
           "Gerçekleşen Plan İçi": normalizedKpi.realized_plan_inside_amount ?? 0,
           "Kalan Bütçe / Kalan Kullanılabilir": normalizedKpi.remaining_available_amount ?? 0,
           "Pazarlıklı Tasarruf": normalizedKpi.negotiated_saving_amount ?? 0,
-          "Diğer Tasarruf": normalizedKpi.other_saving_amount ?? 0,
+          "Optimizasyon Tasarrufu": otherSavingTotal,
           "İptal Edilen Bütçe": normalizedKpi.canceled_budget_amount ?? 0,
           "Mutabakat Toplamı": normalizedKpi.reconciliation_total ?? 0,
           "Mutabakat Farkı": normalizedKpi.reconciliation_difference ?? 0,
@@ -2676,7 +2670,7 @@ export default function DashboardView() {
         "Gerçekleşen Plan İçi",
         "Kalan Bütçe / Kalan Kullanılabilir",
         "Pazarlıklı Tasarruf",
-        "Diğer Tasarruf",
+        "Optimizasyon Tasarrufu",
         "İptal Edilen Bütçe",
         "Mutabakat Toplamı",
         "Mutabakat Farkı",
@@ -2721,7 +2715,7 @@ export default function DashboardView() {
       );
       appendRowsToWorkbook(
         workbook,
-        "Diğer Tasarruf Detayı",
+        "Optimizasyon Tasarrufu Detayı",
         buildUnusedBudgetExportRows(unusedBudgetItems),
         ["Toplam Bütçe", "Harcama", "Kullanılmayacak", "Kalan Kullanılabilir"],
         ["Güncelleme Tarihi"]
@@ -3140,7 +3134,7 @@ export default function DashboardView() {
                   filterKey: "total_negotiated_saving" as const
                 },
                 {
-                  title: "Diğer Tasarruf",
+                  title: "Optimizasyon Tasarrufu",
                   value: formattedOtherSaving,
                   subtitle: `${savingsSummary?.other_saving_item_count ?? savingsSummary?.unused_item_count ?? 0} kullanılmayacak kayıt`,
                   icon: <WarningAmberOutlinedIcon sx={{ fontSize: 18, color: "common.white" }} />,
@@ -3150,7 +3144,7 @@ export default function DashboardView() {
                 {
                   title: "Toplam Tasarruf",
                   value: formattedCombinedSaving,
-                  subtitle: "Pazarlıklı + Diğer Tasarruf",
+                  subtitle: "Pazarlıklı + Optimizasyon Tasarrufu",
                   icon: <TrendingUpOutlinedIcon sx={{ fontSize: 18, color: "common.white" }} />,
                   iconColor: "success.dark",
                   filterKey: "total_combined_saving" as const
@@ -4019,14 +4013,14 @@ export default function DashboardView() {
         maxWidth="lg"
         fullWidth
       >
-        <DialogTitle>Diğer Tasarruf Detayı</DialogTitle>
+        <DialogTitle>Optimizasyon Tasarrufu Detayı</DialogTitle>
         <DialogContent dividers>
           <DetailSummaryGrid
             items={[
               { label: "Toplam Bütçe", value: formatCurrency(unusedBudgetTotals.plan) },
               {
-                label: "Toplam Diğer Tasarruf",
-                value: formatCurrency(normalizedKpi.total_other_saving ?? unusedBudgetTotals.unused),
+                label: "Toplam Optimizasyon Tasarrufu",
+                value: formatCurrency(otherSavingTotal),
                 color: "warning.main"
               },
               {
@@ -4038,7 +4032,7 @@ export default function DashboardView() {
           />
           {unusedBudgetItems.length === 0 ? (
             <Typography variant="body2" color="text.secondary">
-              Diğer tasarruf olarak izlenen kullanılmayacak bütçe bulunamadı.
+              Optimizasyon tasarrufu olarak izlenen kullanılmayacak bütçe bulunamadı.
             </Typography>
           ) : (
             <DetailTableWrap>
@@ -4068,7 +4062,7 @@ export default function DashboardView() {
                       onClick={() =>
                         openDashboardSavingDetail(
                           item,
-                          "Diğer Tasarruf",
+                          "Optimizasyon Tasarrufu",
                           toSafeNumber(item.unused_amount ?? item.over),
                           toSafeNumber(item.unused_amount ?? item.over)
                         )
@@ -4129,7 +4123,7 @@ export default function DashboardView() {
               },
               {
                 label: "Toplam Pazarlıklı Tasarruf",
-                value: formatCurrency(negotiatedSavingTotals.saving),
+                value: formatCurrency(negotiatedSavingTotal),
                 color: "success.main"
               },
               { label: "Kalem Sayısı", value: String(negotiatedSavingItems.length) }
@@ -4208,17 +4202,17 @@ export default function DashboardView() {
             items={[
               {
                 label: "Pazarlıklı Tasarruf",
-                value: formatCurrency(negotiatedSavingTotals.saving),
+                value: formatCurrency(negotiatedSavingTotal),
                 color: "success.main"
               },
               {
-                label: "Diğer Tasarruf",
-                value: formatCurrency(unusedBudgetTotals.unused),
+                label: "Optimizasyon Tasarrufu",
+                value: formatCurrency(otherSavingTotal),
                 color: "warning.main"
               },
               {
                 label: "Toplam Tasarruf",
-                value: formatCurrency(negotiatedSavingTotals.saving + unusedBudgetTotals.unused),
+                value: formatCurrency(combinedSavingTotal),
                 color: "success.dark"
               },
               { label: "Kalem Sayısı", value: String(combinedSavingItems.length) }

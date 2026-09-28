@@ -27,6 +27,11 @@ export interface OverBudgetSummary {
   remaining_item_count: number;
   saving_total: number;
   saving_item_count: number;
+  negotiated_saving_total?: number;
+  negotiated_saving_item_count?: number;
+  other_saving_total?: number;
+  other_saving_item_count?: number;
+  total_saving_total?: number;
   unused_total?: number;
   unused_item_count?: number;
 }

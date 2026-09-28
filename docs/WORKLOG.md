@@ -290,3 +290,9 @@ AGENTS ve docs içindeki TL/TRY/sembol eşleşmeleri kural açıklamaları ve ta
 - Gerçek local PostgreSQL ve tarayıcı kabulünde `TAHAKKUK TEST`, CAPEX, Sistem, Donanım, Mart 2027, 12 ay ve `$12.565,00` kaydedildi. SQL sonucu 12 satır, 2027=10, 2028=2, toplam `12565.00`; 2028 Plan Yönetimi Ocak/Şubat badge'leri ve Dashboard `Yeni $2.094,20 + Devreden $10.652,50 = $12.746,70` doğrulandı. Hazırlama tablo sayıları önce/sonra `1|1|12` kaldı.
 - Kabul testi grubu (UUID `2974369a-e9ab-40f7-b6ae-cfbf3fbf8da7`), yalnız ona ait 12 PlanEntry, boşta kalan test BudgetItem ve testte oluşturulan boş 2028 Scenario transaction içinde temizlendi. Mevcut kullanıcı verisine dokunulmadı; test kayıtları kalıcı değildir.
 - Yalnız `C:\ButceTakip_Codex` local API/frontend imajları build edilip recreate edildi; DB container ve volume korunmuştur. Production bağlantısı/deploy, push ve main merge yapılmadı.
+
+### 2026-09-28 — Dashboard Toplam Tasarruf hotfix'i
+- Dashboard tasarruf tutarları, `/dashboard/over-budget` özetindeki `negotiated_saving_total` ve `other_saving_total` alanlarından; bunlar yoksa normalize KPI karşılıklarından alınır. Toplam Tasarruf yalnız bu iki bileşenin toplamıdır; eski `total_saving_total` alanına güvenilmez ve çift sayım yapılmaz.
+- Pazarlıklı, Optimizasyon ve Toplam Tasarruf kartları aynı hesaplama sonucunu kullanır. Toplam kartının açıklaması `Pazarlıklı + Optimizasyon Tasarrufu` oldu; Toplam Tasarruf detay özeti ve Dashboard genel Excel özetindeki değer de aynı birleşik toplam kaynağına bağlandı.
+- Regresyon testi `$592.957,20 + $519.773,99 = $1.112.731,19` örneğini ve normalize KPI fallback'ini doğruladı: 2/2 başarılı. Mevcut backend/tahakkuk paketi 52 testte başarılı, 1 PostgreSQL testi kullanımda olan test yılı nedeniyle skip oldu.
+- Frontend production build 2.294 modülle başarılıdır; yalnız mevcut yaklaşık 1,98 MB ana chunk uyarısı sürer. `git diff --check` temizdir. Production deploy, push ve main merge yapılmadı.
