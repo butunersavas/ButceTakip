@@ -14,6 +14,7 @@ from app.models import (
     BudgetItem,
     BudgetTransfer,
     Expense,
+    ExpenseAccrualUsage,
     ExpenseAllocation,
     ExpenseStatus,
     PlanAccrual,
@@ -1527,13 +1528,27 @@ def reverse_domain_accrual(
             .where(PlanAccrualAllocation.accrual_id == accrual.id)
             .with_for_update()
         ).all()
-        if any(money(row.used_amount) > 0 for row in allocations):
+        allocation_ids = [row.id for row in allocations if row.id is not None]
+        usages = session.exec(
+            select(ExpenseAccrualUsage)
+            .where(ExpenseAccrualUsage.accrual_allocation_id.in_(allocation_ids or {0}))
+            .with_for_update()
+        ).all()
+        usage_total = sum((money(row.amount) for row in usages), Decimal("0.00"))
+        allocation_used_total = sum(
+            (money(row.used_amount) for row in allocations), Decimal("0.00")
+        )
+        if usage_total > 0 or allocation_used_total > 0:
             raise HTTPException(
                 status_code=409,
                 detail="Bu tahakkuktan harcama yapıldığı için geri alınamaz.",
             )
+        for row in usages:
+            session.delete(row)
+        session.flush()
         for row in allocations:
             session.delete(row)
+        session.flush()
         session.delete(accrual)
         session.commit()
     except HTTPException:

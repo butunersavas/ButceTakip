@@ -17,6 +17,7 @@ from app.models import (
     ExpenseAllocation,
     ExpenseStatus,
     PlanAccrual,
+    PlanAccrualAllocation,
     PlanEntry,
     Scenario,
     User,
@@ -185,6 +186,71 @@ class PlanAccrualReservationTests(unittest.TestCase):
         reverse_domain_accrual(result.id, self.session, self.user)
         self.assertIsNone(self.session.get(PlanAccrual, result.id))
         self.assertIsNotNone(self.session.get(PlanEntry, self.source_plan.id))
+
+    def test_zero_usage_rows_and_normal_operational_records_do_not_block_reverse(self) -> None:
+        result = self.create_accrual("3900.00", 4)
+        allocation = self.session.exec(
+            select(PlanAccrualAllocation)
+            .where(PlanAccrualAllocation.accrual_id == result.id)
+            .order_by(PlanAccrualAllocation.year, PlanAccrualAllocation.month)
+        ).first()
+        expense = Expense(
+            budget_item_id=self.item.id,
+            budget_code=self.item.code,
+            scenario_id=self.target_scenario.id,
+            expense_date=date(2028, 1, 15),
+            amount=100.0,
+            status=ExpenseStatus.RECORDED,
+            is_out_of_budget=False,
+        )
+        self.session.add(expense)
+        self.session.flush()
+        expense_allocation = ExpenseAllocation(
+            expense_id=expense.id,
+            budget_item_id=self.item.id,
+            scenario_id=self.target_scenario.id,
+            year=2028,
+            month=1,
+            allocated_amount=100.0,
+        )
+        self.session.add(expense_allocation)
+        self.session.flush()
+        self.session.add(ExpenseAccrualUsage(
+            expense_id=expense.id,
+            expense_allocation_id=expense_allocation.id,
+            accrual_allocation_id=allocation.id,
+            amount=Decimal("0.00"),
+        ))
+        self.session.commit()
+
+        reverse_domain_accrual(result.id, self.session, self.user)
+
+        self.assertIsNone(self.session.get(PlanAccrual, result.id))
+        self.assertIsNotNone(self.session.get(PlanEntry, self.source_plan.id))
+        self.assertIsNotNone(self.session.get(Expense, expense.id))
+        self.assertIsNotNone(self.session.get(ExpenseAllocation, expense_allocation.id))
+        self.assertEqual([], self.session.exec(select(ExpenseAccrualUsage)).all())
+
+    def test_one_dollar_usage_blocks_reverse(self) -> None:
+        result = self.create_accrual("3900.00", 4)
+        allocation = self.session.exec(
+            select(PlanAccrualAllocation)
+            .where(PlanAccrualAllocation.accrual_id == result.id)
+            .order_by(PlanAccrualAllocation.year, PlanAccrualAllocation.month)
+        ).first()
+        allocation.used_amount = Decimal("1.00")
+        self.session.add(allocation)
+        self.session.commit()
+
+        with self.assertRaises(HTTPException) as raised:
+            reverse_domain_accrual(result.id, self.session, self.user)
+
+        self.assertEqual(409, raised.exception.status_code)
+        self.assertEqual(
+            "Bu tahakkuktan harcama yapıldığı için geri alınamaz.",
+            raised.exception.detail,
+        )
+        self.assertIsNotNone(self.session.get(PlanAccrual, result.id))
 
     def test_expense_uses_carryover_first_then_current_budget_and_blocks_reverse(self) -> None:
         result = self.create_accrual("6000.00", 2)

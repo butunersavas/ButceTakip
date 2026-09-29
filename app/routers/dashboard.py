@@ -48,6 +48,7 @@ from app.services.analytics import (
     compute_negotiated_saving_statuses,
     compute_remaining_budget_statuses,
 )
+from app.services.unused_reason import UNUSED_REASON_ALIASES
 from app.services.accruals import accrual_allocations_for_year, carryover_totals, money
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
@@ -1469,7 +1470,7 @@ def get_overbudget(
     ]
     saving_items = [serialize_status(item) for item in saving_statuses]
     remaining_items = [serialize_status(item) for item in remaining_statuses]
-    unused_items = _unused_budget_items(
+    all_unused_items = _unused_budget_items(
         session,
         year=resolved_year,
         month_range=month_range,
@@ -1478,10 +1479,33 @@ def get_overbudget(
         department=department,
         capex_opex=capex_filter,
     )
+    cancelled_items = [
+        item
+        for item in all_unused_items
+        if UNUSED_REASON_ALIASES.get(item.reason, item.reason) == "purchase_cancelled"
+    ]
+    unused_items = [
+        item
+        for item in all_unused_items
+        if UNUSED_REASON_ALIASES.get(item.reason, item.reason) != "purchase_cancelled"
+    ]
     items.sort(key=lambda item: item.over, reverse=True)
     saving_items.sort(key=lambda item: item.over, reverse=True)
     remaining_items.sort(key=lambda item: item.over, reverse=True)
     unused_items.sort(key=lambda item: item.unused_amount, reverse=True)
+    cancelled_items.sort(key=lambda item: item.unused_amount, reverse=True)
+    canonical_cancelled_remaining = float(reconciliation.canceled_budget_amount)
+    canonical_cancelled_items: list[OverBudgetItem] = []
+    for item in cancelled_items:
+        canonical_amount = min(float(item.unused_amount), canonical_cancelled_remaining)
+        if canonical_amount <= 0.005:
+            continue
+        canonical_cancelled_items.append(
+            item.copy(update={"unused_amount": canonical_amount, "over": canonical_amount})
+        )
+        canonical_cancelled_remaining = round(
+            canonical_cancelled_remaining - canonical_amount, 2
+        )
     over_total = sum(item.over for item in items)
     unused_total = reconciliation.other_saving_amount
     negotiated_saving_total = reconciliation.negotiated_saving_amount
@@ -1511,6 +1535,7 @@ def get_overbudget(
         saving_items=saving_items,
         remaining_items=remaining_items,
         unused_items=unused_items,
+        cancelled_items=canonical_cancelled_items,
     )
 
 

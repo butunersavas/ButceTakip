@@ -14,6 +14,7 @@ from app.models import (
     PlanEntry,
     PurchaseFormStatusExt,
 )
+from app.services.unused_reason import UNUSED_REASON_ALIASES
 
 
 @dataclass
@@ -243,7 +244,12 @@ def compute_budget_scope_statuses(
         key = (plan.budget_item_id, plan.year, plan.month, plan.scenario_id)
         scope = scope_map.setdefault(key, BudgetScopeAggregate())
         scope.revised_plan += float(plan.amount or 0)
-        scope.unused_amount += float(plan.unused_amount or 0)
+        unused_amount = float(plan.unused_amount or 0)
+        unused_reason = UNUSED_REASON_ALIASES.get(plan.unused_reason, plan.unused_reason)
+        if unused_reason == "purchase_cancelled":
+            scope.cancelled_amount += unused_amount
+        else:
+            scope.unused_amount += unused_amount
         item = plan_item_map.get(plan.budget_item_id)
         budget_code = (plan.budget_code or (item.code if item else "") or "").strip().upper()
         if (
@@ -353,92 +359,6 @@ def compute_budget_scope_statuses(
         )
         scope_map.setdefault(key, BudgetScopeAggregate()).actual += float(
             row.actual_total or 0
-        )
-
-    cancelled_allocation_query = (
-        select(
-            ExpenseAllocation.budget_item_id,
-            ExpenseAllocation.year,
-            ExpenseAllocation.month,
-            ExpenseAllocation.scenario_id,
-            func.sum(ExpenseAllocation.allocated_amount).label("cancelled_total"),
-        )
-        .select_from(ExpenseAllocation)
-        .join(Expense, Expense.id == ExpenseAllocation.expense_id)
-        .where(ExpenseAllocation.year == year)
-        .where(ExpenseAllocation.month.in_(months))
-        .where(Expense.status == ExpenseStatus.CANCELLED)
-        .where(Expense.is_out_of_budget.is_(False))
-    )
-    cancelled_fallback_query = (
-        select(
-            Expense.budget_item_id,
-            func.extract("year", Expense.expense_date).label("year"),
-            func.extract("month", Expense.expense_date).label("month"),
-            Expense.scenario_id,
-            func.sum(Expense.amount).label("cancelled_total"),
-        )
-        .where(func.extract("year", Expense.expense_date) == year)
-        .where(func.extract("month", Expense.expense_date).in_(months))
-        .where(Expense.status == ExpenseStatus.CANCELLED)
-        .where(Expense.is_out_of_budget.is_(False))
-        .where(~exists().where(ExpenseAllocation.expense_id == Expense.id))
-    )
-    if scenario_id is not None:
-        cancelled_allocation_query = cancelled_allocation_query.where(
-            ExpenseAllocation.scenario_id == scenario_id
-        )
-        cancelled_fallback_query = cancelled_fallback_query.where(
-            Expense.scenario_id == scenario_id
-        )
-    if budget_item_id is not None:
-        cancelled_allocation_query = cancelled_allocation_query.where(
-            ExpenseAllocation.budget_item_id == budget_item_id
-        )
-        cancelled_fallback_query = cancelled_fallback_query.where(
-            Expense.budget_item_id == budget_item_id
-        )
-    if department_budget_ids is not None:
-        cancelled_allocation_query = cancelled_allocation_query.where(
-            ExpenseAllocation.budget_item_id.in_(department_budget_ids or {0})
-        )
-        cancelled_fallback_query = cancelled_fallback_query.where(
-            Expense.budget_item_id.in_(department_budget_ids or {0})
-        )
-    if capex_filter:
-        cancelled_allocation_query = cancelled_allocation_query.join(
-            BudgetItem, BudgetItem.id == ExpenseAllocation.budget_item_id
-        ).where(_capex_opex_column() == capex_filter)
-        cancelled_fallback_query = cancelled_fallback_query.join(
-            BudgetItem, BudgetItem.id == Expense.budget_item_id
-        ).where(_capex_opex_column() == capex_filter)
-
-    cancelled_allocation_rows = session.exec(
-        cancelled_allocation_query.group_by(
-            ExpenseAllocation.budget_item_id,
-            ExpenseAllocation.year,
-            ExpenseAllocation.month,
-            ExpenseAllocation.scenario_id,
-        )
-    ).all()
-    cancelled_fallback_rows = session.exec(
-        cancelled_fallback_query.group_by(
-            Expense.budget_item_id,
-            func.extract("year", Expense.expense_date),
-            func.extract("month", Expense.expense_date),
-            Expense.scenario_id,
-        )
-    ).all()
-
-    for row in [*cancelled_allocation_rows, *cancelled_fallback_rows]:
-        key = (
-            int(row.budget_item_id),
-            int(row.year),
-            int(row.month),
-            row.scenario_id,
-        )
-        scope_map.setdefault(key, BudgetScopeAggregate()).cancelled_amount += float(
-            row.cancelled_total or 0
         )
 
     transfer_query = select(BudgetTransfer).where(

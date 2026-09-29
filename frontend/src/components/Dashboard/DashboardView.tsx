@@ -1367,39 +1367,6 @@ export default function DashboardView() {
     }
   });
 
-  const { data: cancelledExpenses = [] } = useQuery<DashboardExpense[]>({
-    queryKey: [
-      "dashboard",
-      "cancelled-expenses",
-      debouncedFilters.year,
-      debouncedFilters.scenarioId,
-      debouncedFilters.selectedMonthKey,
-      debouncedFilters.budgetItemId,
-      debouncedFilters.department,
-      debouncedFilters.capexOpex
-    ],
-    queryFn: async () => {
-      const params: Record<string, number | string | boolean> = {
-        year: debouncedFilters.year,
-        status_filter: "cancelled",
-        include_out_of_budget: true,
-        show_out_of_budget: true,
-        show_cancelled: true
-      };
-      if (debouncedFilters.scenarioId) params.scenario_id = debouncedFilters.scenarioId;
-      if (debouncedFilters.budgetItemId) params.budget_item_id = debouncedFilters.budgetItemId;
-      if (debouncedFilters.department) params.department = debouncedFilters.department;
-      if (debouncedFilters.capexOpex) params.capex_opex = debouncedFilters.capexOpex;
-      if (debouncedFilters.selectedMonthKey) params.month_list = debouncedFilters.selectedMonthKey;
-      const { data } = await client.get<DashboardExpense[]>("/expenses", {
-        params,
-        suppressGlobalError: true
-      });
-      return data.filter((expense) => expense.status === "cancelled" || expense.is_cancelled);
-    },
-    enabled: Boolean(debouncedFilters.year)
-  });
-
   const {
     data: realizedExpenses = [],
     isFetching: isRealizedExpensesFetching
@@ -1764,14 +1731,7 @@ export default function DashboardView() {
       ? toSafeNumber(normalizedKpi.budget_outside_amount)
       : outOfBudgetDetailTotal;
   const formattedOutOfBudget = formatCurrency(outOfBudgetTotal);
-  const cancelledExpensesTotal = useMemo(
-    () => cancelledExpenses.reduce((sum, expense) => sum + toSafeNumber(expense.amount), 0),
-    [cancelledExpenses]
-  );
-  const cancelledTotal =
-    dashboard?.reconciliation || dashboard?.kpi.canceled_budget_amount !== undefined
-      ? toSafeNumber(normalizedKpi.total_cancelled)
-      : Math.max(toSafeNumber(normalizedKpi.total_cancelled), cancelledExpensesTotal);
+  const cancelledTotal = toSafeNumber(normalizedKpi.canceled_budget_amount);
   const formattedCancelled = formatCurrency(cancelledTotal);
   const realizedExpensesPlanTotal = useMemo(
     () => sumUniqueExpensePlanScopes(realizedExpenses),
@@ -1829,6 +1789,7 @@ export default function DashboardView() {
   const overBudgetTopItems = useMemo(() => overBudgetItems.slice(0, 10), [overBudgetItems]);
   const negotiatedSavingItems = overBudget?.saving_items ?? [];
   const unusedBudgetItems = (overBudget?.unused_items ?? []) as UnusedBudgetItem[];
+  const cancelledBudgetItems = (overBudget?.cancelled_items ?? []) as UnusedBudgetItem[];
   const combinedSavingItems = useMemo(
     () => [
       ...negotiatedSavingItems.map((item) => ({
@@ -2316,10 +2277,10 @@ export default function DashboardView() {
 
   const handleExportCancelledExpenses = () => {
     exportRowsToExcel(
-      buildExpenseExportRows(cancelledExpenses),
+      buildUnusedBudgetExportRows(cancelledBudgetItems),
       buildDashboardExportFileName("iptal_detayi"),
-      "İptal Edilenler",
-      ["Tutar"]
+      "İptal Edilen Bütçe",
+      ["Toplam Bütçe", "Harcama", "Kullanılmayacak", "Kalan Kullanılabilir"]
     );
   };
 
@@ -2581,9 +2542,7 @@ export default function DashboardView() {
       )
     : "Tümü";
 
-  const fetchDashboardExpenseRowsForExport = async (
-    kind: "realized" | "out_of_budget" | "cancelled"
-  ) => {
+  const fetchDashboardExpenseRowsForExport = async (kind: "realized" | "out_of_budget") => {
     const params: Record<string, number | string | boolean> = {
       year: debouncedFilters.year
     };
@@ -2598,11 +2557,6 @@ export default function DashboardView() {
       params.show_out_of_budget = true;
       params.only_out_of_budget = true;
       params.show_cancelled = false;
-    } else {
-      params.status_filter = "cancelled";
-      params.include_out_of_budget = true;
-      params.show_out_of_budget = true;
-      params.show_cancelled = true;
     }
     if (debouncedFilters.scenarioId) params.scenario_id = debouncedFilters.scenarioId;
     if (debouncedFilters.selectedMonthKey) params.month_list = debouncedFilters.selectedMonthKey;
@@ -2616,12 +2570,10 @@ export default function DashboardView() {
   const handleExportAllDashboardCards = async () => {
     setIsExportingAllCards(true);
     try {
-      const [exportRealizedExpenses, exportOutOfBudgetExpenses, exportCancelledExpenses] =
-        await Promise.all([
-          fetchDashboardExpenseRowsForExport("realized"),
-          fetchDashboardExpenseRowsForExport("out_of_budget"),
-          fetchDashboardExpenseRowsForExport("cancelled")
-        ]);
+      const [exportRealizedExpenses, exportOutOfBudgetExpenses] = await Promise.all([
+        fetchDashboardExpenseRowsForExport("realized"),
+        fetchDashboardExpenseRowsForExport("out_of_budget")
+      ]);
       const remainingItems = overBudget?.remaining_items ?? [];
       const workbook = XLSX.utils.book_new();
       const filterSummary = [
@@ -2697,7 +2649,7 @@ export default function DashboardView() {
         {
           "Kart Adı": "İptal",
           Tutar: normalizedKpi.total_cancelled,
-          Açıklama: "İptal edilmiş harcama kayıtları"
+          Açıklama: "Alımdan Vazgeçildi olarak işaretlenen bütçe"
         }
       ];
       const reconciliationRows = [
@@ -2840,8 +2792,9 @@ export default function DashboardView() {
       appendRowsToWorkbook(
         workbook,
         "İptal Detayı",
-        buildExpenseExportRows(exportCancelledExpenses),
-        ["Tutar"]
+        buildUnusedBudgetExportRows(cancelledBudgetItems),
+        ["Toplam Bütçe", "Harcama", "Kullanılmayacak", "Kalan Kullanılabilir"],
+        ["Güncelleme Tarihi"]
       );
 
       const monthFilePart =
@@ -3270,7 +3223,7 @@ export default function DashboardView() {
                 {
                   title: "İptal",
                   value: formattedCancelled,
-                  subtitle: `${cancelledExpenses.length} iptal kaydı`,
+                  subtitle: `${cancelledBudgetItems.length} iptal edilen bütçe kaydı`,
                   icon: <WarningAmberOutlinedIcon sx={{ fontSize: 18, color: "common.white" }} />,
                   iconColor: "error.dark",
                   filterKey: "total_cancelled" as const
@@ -4115,7 +4068,7 @@ export default function DashboardView() {
         maxWidth="lg"
         fullWidth
       >
-        <DialogTitle>İptal Edilenler</DialogTitle>
+        <DialogTitle>İptal Edilen Bütçe Detayı</DialogTitle>
         <DialogContent dividers>
           <Stack spacing={2}>
             <DetailSummaryGrid
@@ -4125,7 +4078,7 @@ export default function DashboardView() {
                   value: formatCurrency(cancelledTotal),
                   color: "error.main"
                 },
-                { label: "Kayıt Sayısı", value: String(cancelledExpenses.length) },
+                { label: "Kayıt Sayısı", value: String(cancelledBudgetItems.length) },
                 { label: "Seçili Ay/Dönem", value: selectedMonthsLabel },
                 { label: "Departman", value: debouncedFilters.department || "Tümü" }
               ]}
@@ -4134,55 +4087,40 @@ export default function DashboardView() {
               <Table size="small" stickyHeader>
                 <TableHead>
                   <TableRow>
-                    <TableCell>Tarih</TableCell>
-                    <TableCell>Bütçe Kalemi / Açıklama</TableCell>
+                    <TableCell>Bütçe Kalemi</TableCell>
                     <TableCell>Ay / Dönem</TableCell>
                     <TableCell>Departman</TableCell>
                     <TableCell>Capex/Opex</TableCell>
                     <TableCell>Nitelik</TableCell>
-                    <TableCell align="right">Tutar</TableCell>
-                    <TableCell>Satıcı</TableCell>
-                    <TableCell>Kaydı Giren</TableCell>
+                    <TableCell align="right">İptal Edilen Bütçe</TableCell>
+                    <TableCell>Not</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {cancelledExpenses.length === 0 ? (
+                  {cancelledBudgetItems.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={9}>
+                      <TableCell colSpan={7}>
                         <Typography variant="body2" color="text.secondary">
-                          İptal kaydı bulunamadı.
+                          Alımdan Vazgeçildi olarak işaretlenen bütçe bulunamadı.
                         </Typography>
                       </TableCell>
                     </TableRow>
                   ) : (
-                    cancelledExpenses.map((expense) => {
-                      const rawDate = expense.expense_date ?? expense.date ?? "";
-                      const displayDate = rawDate ? new Date(rawDate).toLocaleDateString("tr-TR") : "-";
-                      const budgetLabel =
-                        formatBudgetItemLabel({
-                          code: expense.budget_code ?? "",
-                          name: expense.budget_name ?? ""
-                        }) || expense.description || "-";
-                      const nitelik = expense.asset_type ?? expense.map_nitelik ?? expense.nitelik ?? "-";
-                      return (
-                        <TableRow
-                          key={expense.id ?? `${rawDate}-${expense.budget_code}-${expense.amount}`}
-                          hover
-                          sx={{ cursor: "pointer" }}
-                          onClick={() => openDashboardExpenseDetail(expense, "İptal Detayı")}
-                        >
-                          <TableCell>{displayDate}</TableCell>
-                          <TableCell>{budgetLabel}</TableCell>
-                          <TableCell>{formatExpensePeriod(expense)}</TableCell>
-                          <TableCell>{expense.department || "-"}</TableCell>
-                          <TableCell>{expense.capex_opex ?? expense.map_capex_opex ?? "-"}</TableCell>
-                          <TableCell>{nitelik}</TableCell>
-                          <TableCell align="right">{formatCurrency(toSafeNumber(expense.amount))}</TableCell>
-                          <TableCell>{expense.vendor || "-"}</TableCell>
-                          <TableCell>{formatExpenseOwner(expense)}</TableCell>
-                        </TableRow>
-                      );
-                    })
+                    cancelledBudgetItems.map((item, index) => (
+                      <TableRow key={`${item.budget_item_id}-${item.month ?? index}`}>
+                        <TableCell>
+                          {formatBudgetItemLabel({ code: item.budget_code, name: item.budget_name })}
+                        </TableCell>
+                        <TableCell>{formatBudgetPeriod(item)}</TableCell>
+                        <TableCell>{item.department || "-"}</TableCell>
+                        <TableCell>{item.capex_opex || "-"}</TableCell>
+                        <TableCell>{item.asset_type || "-"}</TableCell>
+                        <TableCell align="right">
+                          {formatCurrency(toSafeNumber(item.unused_amount ?? item.over))}
+                        </TableCell>
+                        <TableCell>{item.note || "-"}</TableCell>
+                      </TableRow>
+                    ))
                   )}
                 </TableBody>
               </Table>
@@ -4193,7 +4131,7 @@ export default function DashboardView() {
           <Button
             variant="outlined"
             onClick={handleExportCancelledExpenses}
-            disabled={cancelledExpenses.length === 0}
+            disabled={cancelledBudgetItems.length === 0}
           >
             Excel'e Aktar
           </Button>

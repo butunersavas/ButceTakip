@@ -3876,7 +3876,7 @@ export default function ExpensesView() {
                     </Alert>
                   </Grid>
                 )}
-                {!formIsOutOfBudget && (
+                {!formIsOutOfBudget && Number(accrualAvailabilityQuery.data?.remaining_amount ?? 0) > 0 && (
                   <Grid item xs={12} md={4}>
                     <TextField
                       select

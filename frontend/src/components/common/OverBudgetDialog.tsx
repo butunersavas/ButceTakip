@@ -64,6 +64,7 @@ export interface OverBudgetResponse {
   saving_items?: OverBudgetItem[];
   remaining_items?: OverBudgetItem[];
   unused_items?: OverBudgetItem[];
+  cancelled_items?: OverBudgetItem[];
 }
 
 export type BudgetStatusCategory = "overrun" | "saving" | "remaining";

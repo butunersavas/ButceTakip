@@ -1835,6 +1835,7 @@ class OverBudgetResponse(BaseModel):
     saving_items: list[OverBudgetItem] = Field(default_factory=list)
     remaining_items: list[OverBudgetItem] = Field(default_factory=list)
     unused_items: list[OverBudgetItem] = Field(default_factory=list)
+    cancelled_items: list[OverBudgetItem] = Field(default_factory=list)
 
 
 class SpendMonthlySummary(BaseModel):

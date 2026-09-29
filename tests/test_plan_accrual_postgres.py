@@ -17,7 +17,7 @@ from app.models import (
     Scenario,
     User,
 )
-from app.routers.plans import create_domain_accrual
+from app.routers.plans import create_domain_accrual, reverse_domain_accrual
 from app.schemas import AccrualConversionInput
 from app.services.accruals import apply_expense_accrual_usage
 
@@ -133,6 +133,62 @@ class PlanAccrualPostgresTests(unittest.TestCase):
         self.assertEqual(Decimal("1000.00"), used)
         self.assertEqual(1, len(self.session.exec(select(ExpenseAccrualUsage)).all()))
         self.assertEqual(accrual.id, self.session.exec(select(PlanAccrual.id)).one())
+
+    def test_zero_usage_reverse_respects_postgresql_foreign_keys(self) -> None:
+        accrual = create_domain_accrual(
+            self.source_plan.id,
+            AccrualConversionInput(
+                total_amount=Decimal("2000.00"),
+                start_year=2097,
+                start_month=12,
+                month_count=2,
+            ),
+            self.session,
+            self.user,
+        )
+        self.accrual_id = accrual.id
+        accrual_allocation = self.session.exec(
+            select(PlanAccrualAllocation)
+            .where(PlanAccrualAllocation.accrual_id == accrual.id)
+            .order_by(PlanAccrualAllocation.year, PlanAccrualAllocation.month)
+        ).first()
+        expense = Expense(
+            budget_item_id=self.item.id,
+            budget_code=self.item.code,
+            scenario_id=self.target_scenario.id,
+            expense_date=date(2098, 1, 1),
+            amount=100,
+            status=ExpenseStatus.RECORDED,
+            is_out_of_budget=False,
+        )
+        self.session.add(expense)
+        self.session.flush()
+        self.expense = expense
+        expense_allocation = ExpenseAllocation(
+            expense_id=expense.id,
+            budget_item_id=self.item.id,
+            scenario_id=self.target_scenario.id,
+            year=2098,
+            month=1,
+            allocated_amount=100,
+        )
+        self.session.add(expense_allocation)
+        self.session.flush()
+        self.session.add(ExpenseAccrualUsage(
+            expense_id=expense.id,
+            expense_allocation_id=expense_allocation.id,
+            accrual_allocation_id=accrual_allocation.id,
+            amount=Decimal("0.00"),
+        ))
+        self.session.commit()
+
+        reverse_domain_accrual(accrual.id, self.session, self.user)
+
+        self.assertIsNone(self.session.get(PlanAccrual, accrual.id))
+        self.assertIsNotNone(self.session.get(PlanEntry, self.source_plan.id))
+        self.assertIsNotNone(self.session.get(Expense, expense.id))
+        self.assertIsNotNone(self.session.get(ExpenseAllocation, expense_allocation.id))
+        self.assertEqual([], self.session.exec(select(ExpenseAccrualUsage)).all())
 
 
 if __name__ == "__main__":
