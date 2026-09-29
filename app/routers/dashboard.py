@@ -1,5 +1,6 @@
 from datetime import date
 from dataclasses import fields
+from decimal import Decimal
 from types import SimpleNamespace
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -20,6 +21,8 @@ from app.models import (
 )
 from app.schemas import (
     BudgetReconciliationRead,
+    DashboardAccrualItem,
+    DashboardAccrualSummary,
     DashboardPurchaseAlertItem,
     DashboardPurchaseAlertResponse,
     DashboardKPI,
@@ -126,6 +129,78 @@ def _dashboard_month_range(
     if month is not None:
         return [month]
     return list(range(1, 13)) if default_all else []
+
+
+def _dashboard_accrual_summary(
+    session: Session,
+    *,
+    year: int,
+    month_range: list[int],
+    scenario_ids: list[int | None],
+    budget_item_id: int | None,
+    department: str | None,
+    capex_opex: str | None,
+) -> DashboardAccrualSummary:
+    query = (
+        select(PlanEntry, BudgetItem, Scenario)
+        .join(BudgetItem, BudgetItem.id == PlanEntry.budget_item_id)
+        .join(Scenario, Scenario.id == PlanEntry.scenario_id)
+        .where(PlanEntry.is_accrual.is_(True))
+        .where(PlanEntry.year == year)
+        .where(PlanEntry.month.in_(month_range))
+        .where(PlanEntry.accrual_group_id.is_not(None))
+    )
+    resolved_scenario_ids = [value for value in scenario_ids if value is not None]
+    if resolved_scenario_ids:
+        query = query.where(PlanEntry.scenario_id.in_(resolved_scenario_ids))
+    if budget_item_id is not None:
+        query = query.where(PlanEntry.budget_item_id == budget_item_id)
+    if department is not None:
+        query = query.where(PlanEntry.department == department)
+    if capex_opex in {"capex", "opex"}:
+        query = query.where(func.lower(func.trim(BudgetItem.map_category)) == capex_opex)
+
+    items: list[DashboardAccrualItem] = []
+    total = Decimal("0.00")
+    carryover_total = Decimal("0.00")
+    group_ids: set[str] = set()
+    for plan, budget_item, scenario in session.exec(
+        query.order_by(PlanEntry.year, PlanEntry.month, BudgetItem.name, PlanEntry.id)
+    ).all():
+        amount = Decimal(str(plan.accrual_amount or plan.amount or 0)).quantize(Decimal("0.01"))
+        source_year = plan.accrual_source_year or plan.year
+        source_month = plan.accrual_source_month or plan.month
+        is_carryover = source_year < plan.year
+        total += amount
+        if is_carryover:
+            carryover_total += amount
+        if plan.accrual_group_id:
+            group_ids.add(plan.accrual_group_id)
+        items.append(DashboardAccrualItem(
+            plan_id=plan.id,
+            budget_item_id=plan.budget_item_id,
+            budget_code=budget_item.code,
+            budget_name=budget_item.name,
+            scenario_id=plan.scenario_id,
+            scenario_name=scenario.name,
+            department=plan.department,
+            capex_opex=budget_item.map_category,
+            asset_type=budget_item.map_attribute,
+            source_year=source_year,
+            source_month=source_month,
+            year=plan.year,
+            month=plan.month,
+            amount=amount,
+            accrual_group_id=plan.accrual_group_id,
+            source_plan_id=plan.accrual_source_plan_id,
+            is_carryover=is_carryover,
+        ))
+    return DashboardAccrualSummary(
+        accrual_plan_amount=total,
+        accrual_group_count=len(group_ids),
+        carryover_accrual_amount=carryover_total,
+        items=items,
+    )
 
 
 @router.get("/purchase-alert", response_model=DashboardPurchaseAlertResponse)
@@ -764,6 +839,15 @@ def get_dashboard(
     total_other_saving = total_unused
     total_combined_saving = total_negotiated_saving + total_other_saving
     total_cancelled = reconciliation.canceled_budget_amount
+    accruals = _dashboard_accrual_summary(
+        session,
+        year=year,
+        month_range=month_range,
+        scenario_ids=effective_scenario_ids,
+        budget_item_id=budget_item_id,
+        department=department,
+        capex_opex=capex_filter,
+    )
     return DashboardResponse(
         kpi=DashboardKPI(
             total_plan=total_plan,
@@ -832,6 +916,9 @@ def get_dashboard(
             new_budget_plan_amount=new_budget_plan_amount,
             carryover_plan_amount=carryover_plan_amount,
             effective_plan_amount=reconciliation.total_plan_amount,
+            accrual_plan_amount=float(accruals.accrual_plan_amount),
+            accrual_group_count=accruals.accrual_group_count,
+            carryover_accrual_amount=float(accruals.carryover_accrual_amount),
         ),
         monthly=[
             DashboardSummary(
@@ -901,6 +988,7 @@ def get_dashboard(
                 reconciliation.unclassified_reconciliation_difference
             ),
         ),
+        accruals=accruals,
     )
 
 

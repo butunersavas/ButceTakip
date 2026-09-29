@@ -450,6 +450,7 @@ def _apply_schema_upgrades() -> None:
             "accrual_amount": "NUMERIC(16, 2)",
             "accrual_source_year": "INTEGER",
             "accrual_source_month": "INTEGER",
+            "accrual_source_plan_id": "INTEGER",
         }
         for column_name, column_type in accrual_columns.items():
             if column_name not in plan_columns:

@@ -141,6 +141,36 @@ interface DashboardKPI {
   new_budget_plan_amount?: number;
   carryover_plan_amount?: number;
   effective_plan_amount?: number;
+  accrual_plan_amount?: number;
+  accrual_group_count?: number;
+  carryover_accrual_amount?: number;
+}
+
+interface DashboardAccrualItem {
+  plan_id: number;
+  budget_item_id: number;
+  budget_code?: string | null;
+  budget_name?: string | null;
+  scenario_id: number;
+  scenario_name?: string | null;
+  department?: string | null;
+  capex_opex?: string | null;
+  asset_type?: string | null;
+  source_year: number;
+  source_month: number;
+  year: number;
+  month: number;
+  amount: number;
+  accrual_group_id: string;
+  source_plan_id?: number | null;
+  is_carryover: boolean;
+}
+
+interface DashboardAccrualSummary {
+  accrual_plan_amount: number;
+  accrual_group_count: number;
+  carryover_accrual_amount: number;
+  items: DashboardAccrualItem[];
 }
 
 interface DashboardReconciliation {
@@ -190,6 +220,7 @@ interface DashboardResponse {
   kpi: DashboardKPI;
   monthly: DashboardSummary[];
   reconciliation?: DashboardReconciliation | null;
+  accruals?: DashboardAccrualSummary;
 }
 
 interface DashboardExpense {
@@ -798,6 +829,7 @@ export default function DashboardView() {
   const [isRealizedDialogOpen, setIsRealizedDialogOpen] = useState(false);
   const [isOutOfBudgetDialogOpen, setIsOutOfBudgetDialogOpen] = useState(false);
   const [isUnusedBudgetDialogOpen, setIsUnusedBudgetDialogOpen] = useState(false);
+  const [isAccrualPlanDialogOpen, setIsAccrualPlanDialogOpen] = useState(false);
   const [savingPurchaseStatus, setSavingPurchaseStatus] = useState<number | null>(null);
   const [purchaseStatusFeedback, setPurchaseStatusFeedback] = useState<
     { message: string; severity: "success" | "error" } | null
@@ -815,6 +847,7 @@ export default function DashboardView() {
     | "total_unused"
     | "total_cancelled"
     | "out_of_budget"
+    | "accrual_plan"
     | null
   >(null);
   const [savingDetailDialog, setSavingDetailDialog] = useState<
@@ -855,6 +888,7 @@ export default function DashboardView() {
     setIsRealizedDialogOpen(false);
     setIsOutOfBudgetDialogOpen(false);
     setIsUnusedBudgetDialogOpen(false);
+    setIsAccrualPlanDialogOpen(false);
     setSavingDetailDialog(null);
     setSelectedOverrunItem(null);
     setIsCancelledDialogOpen(false);
@@ -1708,6 +1742,15 @@ export default function DashboardView() {
   const formattedTotalPlan = formatCurrency(normalizedKpi.total_plan);
   const formattedActual = formatCurrency(normalizedKpi.total_actual);
   const formattedRemaining = formatCurrency(normalizedKpi.total_remaining);
+  const accrualPlanAmount = toSafeNumber(
+    dashboard?.accruals?.accrual_plan_amount ?? dashboard?.kpi.accrual_plan_amount
+  );
+  const accrualGroupCount =
+    dashboard?.accruals?.accrual_group_count ?? dashboard?.kpi.accrual_group_count ?? 0;
+  const carryoverAccrualAmount = toSafeNumber(
+    dashboard?.accruals?.carryover_accrual_amount ?? dashboard?.kpi.carryover_accrual_amount
+  );
+  const accrualPlanItems = dashboard?.accruals?.items ?? [];
   const outOfBudgetDetailTotal = useMemo(
     () => outOfBudgetExpenses.reduce((sum, expense) => sum + toSafeNumber(expense.amount), 0),
     [outOfBudgetExpenses]
@@ -1893,6 +1936,20 @@ export default function DashboardView() {
   }, []);
 
   const handleSummaryCardClick = (filterKey: string) => {
+    setIsAccrualPlanDialogOpen(false);
+    if (filterKey === "accrual_plan") {
+      setSelectedKpiFilter("accrual_plan");
+      setIsPlanDetailDialogOpen(false);
+      setIsRealizedDialogOpen(false);
+      setIsOutOfBudgetDialogOpen(false);
+      setSavingDetailDialog(null);
+      setIsUnusedBudgetDialogOpen(false);
+      setBudgetStatusDialogCategory(null);
+      setIsCancelledDialogOpen(false);
+      setSelectedOverrunItem(null);
+      setIsAccrualPlanDialogOpen(true);
+      return;
+    }
     if (filterKey === "total_plan") {
       setSelectedKpiFilter("total_plan");
       setIsPlanDetailDialogOpen(true);
@@ -2143,6 +2200,32 @@ export default function DashboardView() {
       buildDashboardExportFileName("toplam_butce_detayi"),
       "Toplam Bütçe",
       ["Toplam Bütçe"]
+    );
+  };
+
+  const buildAccrualPlanExportRows = (items: DashboardAccrualItem[]) =>
+    items.map((item) => ({
+      "Bütçe Kalemi": formatBudgetItemLabel({ code: item.budget_code, name: item.budget_name }),
+      Scenario: item.scenario_name || item.scenario_id,
+      Departman: item.department || "-",
+      "Capex/Opex": item.capex_opex || "-",
+      Nitelik: item.asset_type || "-",
+      "Kaynak Yıl": item.source_year,
+      "Kaynak Ay": monthLabels[item.source_month - 1] ?? item.source_month,
+      Yıl: item.year,
+      Ay: monthLabels[item.month - 1] ?? item.month,
+      Tutar: toSafeNumber(item.amount),
+      "Tahakkuk Grup": item.accrual_group_id,
+      "Kaynak Plan": item.source_plan_id ?? "-",
+      Durum: item.is_carryover ? `${item.source_year}'den Devreden` : "TAHAKKUKLU"
+    }));
+
+  const handleExportAccrualPlans = () => {
+    exportRowsToExcel(
+      buildAccrualPlanExportRows(accrualPlanItems),
+      buildDashboardExportFileName("tahakkuklu_plan_detayi"),
+      "Tahakkuklu Plan",
+      ["Tutar"]
     );
   };
 
@@ -2563,6 +2646,11 @@ export default function DashboardView() {
           Açıklama: "Planlanan bütçe"
         },
         {
+          "Kart Adı": "Tahakkuklu Plan",
+          Tutar: accrualPlanAmount,
+          Açıklama: "Toplam Plan içindeki tahakkuklu plan alt kümesi"
+        },
+        {
           "Kart Adı": "Gerçekleşen",
           Tutar: normalizedKpi.total_actual,
           Açıklama: "Aktif ve bütçe içi harcamalar"
@@ -2682,6 +2770,12 @@ export default function DashboardView() {
         "Toplam Plan Detayı",
         buildPlanExportRows(planDetailItems),
         ["Toplam Bütçe"]
+      );
+      appendRowsToWorkbook(
+        workbook,
+        "Tahakkuklu Plan Detayı",
+        buildAccrualPlanExportRows(accrualPlanItems),
+        ["Tutar"]
       );
       appendRowsToWorkbook(
         workbook,
@@ -3096,6 +3190,20 @@ export default function DashboardView() {
                   ),
                   iconColor: "primary.main",
                   filterKey: "total_plan" as const
+                },
+                {
+                  title: "Tahakkuklu Plan",
+                  value: formatCurrency(accrualPlanAmount),
+                  subtitle: carryoverAccrualAmount > 0
+                    ? `${accrualGroupCount} tahakkuk grubu · ${formatCurrency(carryoverAccrualAmount)} devreden`
+                    : `${accrualGroupCount} tahakkuk grubu`,
+                  icon: (
+                    <AccountBalanceWalletOutlinedIcon
+                      sx={{ fontSize: 18, color: "common.white" }}
+                    />
+                  ),
+                  iconColor: "info.main",
+                  filterKey: "accrual_plan" as const
                 },
                 {
                   title: "Gerçekleşen",
@@ -3628,6 +3736,84 @@ export default function DashboardView() {
           </Stack>
         </Stack>
       </Box>
+      <Dialog
+        open={isAccrualPlanDialogOpen}
+        onClose={() => setIsAccrualPlanDialogOpen(false)}
+        maxWidth="xl"
+        fullWidth
+      >
+        <DialogTitle>Tahakkuklu Plan Detayı</DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={2}>
+            <DetailSummaryGrid
+              items={[
+                { label: "Tahakkuklu Plan", value: formatCurrency(accrualPlanAmount), color: "info.main" },
+                { label: "Tahakkuk Grup Sayısı", value: String(accrualGroupCount) },
+                { label: "Devreden Tahakkuk", value: formatCurrency(carryoverAccrualAmount) },
+                { label: "Toplam Plan", value: formatCurrency(normalizedKpi.total_plan) }
+              ]}
+            />
+            <Alert severity="info">
+              Tahakkuklu Plan, Toplam Plan tutarının alt kümesidir; Toplam Plan'a yeniden eklenmez.
+            </Alert>
+            <DetailTableWrap>
+              <Table size="small" stickyHeader>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Bütçe Kalemi</TableCell>
+                    <TableCell>Scenario</TableCell>
+                    <TableCell>Departman</TableCell>
+                    <TableCell>Capex/Opex</TableCell>
+                    <TableCell>Nitelik</TableCell>
+                    <TableCell>Kaynak Yıl</TableCell>
+                    <TableCell>Ay</TableCell>
+                    <TableCell align="right">Tutar</TableCell>
+                    <TableCell>Tahakkuk Grup</TableCell>
+                    <TableCell>Durum</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {accrualPlanItems.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={10}>
+                        <Typography variant="body2" color="text.secondary">
+                          Seçili filtrelerde tahakkuklu plan bulunamadı.
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  ) : accrualPlanItems.map((item) => (
+                    <TableRow key={item.plan_id} hover>
+                      <TableCell>{formatBudgetItemLabel({ code: item.budget_code, name: item.budget_name })}</TableCell>
+                      <TableCell>{item.scenario_name || item.scenario_id}</TableCell>
+                      <TableCell>{item.department || "-"}</TableCell>
+                      <TableCell>{item.capex_opex || "-"}</TableCell>
+                      <TableCell>{item.asset_type || "-"}</TableCell>
+                      <TableCell>{item.source_year}</TableCell>
+                      <TableCell>{monthLabels[item.month - 1]} {item.year}</TableCell>
+                      <TableCell align="right">{formatCurrency(item.amount)}</TableCell>
+                      <TableCell>{item.accrual_group_id}</TableCell>
+                      <TableCell>
+                        <Chip
+                          size="small"
+                          label={item.is_carryover ? `${item.source_year}'den Devreden` : "TAHAKKUKLU"}
+                          color="info"
+                          variant={item.is_carryover ? "outlined" : "filled"}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </DetailTableWrap>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button variant="outlined" onClick={handleExportAccrualPlans} disabled={!accrualPlanItems.length}>
+            Excel'e Aktar
+          </Button>
+          <Button onClick={() => setIsAccrualPlanDialogOpen(false)}>Kapat</Button>
+        </DialogActions>
+      </Dialog>
       <Dialog
         open={isPlanDetailDialogOpen}
         onClose={() => setIsPlanDetailDialogOpen(false)}

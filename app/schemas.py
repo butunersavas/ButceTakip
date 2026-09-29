@@ -655,6 +655,37 @@ class AccrualPlanInput(BaseModel):
         return _normalize_placeholder(value)
 
 
+class AccrualConversionInput(BaseModel):
+    start_year: int
+    start_month: int
+    month_count: int = Field(ge=1, le=36)
+
+    @validator("start_year")
+    def validate_start_year(cls, value: int) -> int:  # noqa: D417
+        if value < 2000 or value > 2200:
+            raise ValueError("Başlangıç yılı 2000 ile 2200 arasında olmalıdır.")
+        return value
+
+    @validator("start_month")
+    def validate_start_month(cls, value: int) -> int:  # noqa: D417
+        if not 1 <= value <= 12:
+            raise ValueError("Başlangıç ayı 1 ile 12 arasında olmalıdır.")
+        return value
+
+
+class AccrualPreviewEntry(BaseModel):
+    year: int
+    month: int
+    amount: Decimal
+    has_existing_plan: bool = False
+
+
+class AccrualConversionPreview(BaseModel):
+    source_plan_id: int
+    total_amount: Decimal
+    entries: list[AccrualPreviewEntry] = Field(default_factory=list)
+
+
 class PlanEntryUpdate(BaseModel):
     year: Optional[int] = None
     month: Optional[int] = None
@@ -792,6 +823,7 @@ class PlanEntryRead(SQLModel, table=False):
     accrual_amount: Optional[Decimal] = None
     accrual_source_year: Optional[int] = None
     accrual_source_month: Optional[int] = None
+    accrual_source_plan_id: Optional[int] = None
     is_accrual: bool = False
 
     class Config:
@@ -807,6 +839,7 @@ class AccrualPlanRead(BaseModel):
     scenario_id: int
     budget_item_id: int
     department: Optional[str] = None
+    source_plan_id: Optional[int] = None
     entries: list[PlanEntryRead] = Field(default_factory=list)
 
 
@@ -1659,6 +1692,36 @@ class DashboardKPI(BaseModel):
     new_budget_plan_amount: float = 0
     carryover_plan_amount: float = 0
     effective_plan_amount: float = 0
+    accrual_plan_amount: float = 0
+    accrual_group_count: int = 0
+    carryover_accrual_amount: float = 0
+
+
+class DashboardAccrualItem(BaseModel):
+    plan_id: int
+    budget_item_id: int
+    budget_code: Optional[str] = None
+    budget_name: Optional[str] = None
+    scenario_id: int
+    scenario_name: Optional[str] = None
+    department: Optional[str] = None
+    capex_opex: Optional[str] = None
+    asset_type: Optional[str] = None
+    source_year: int
+    source_month: int
+    year: int
+    month: int
+    amount: Decimal
+    accrual_group_id: str
+    source_plan_id: Optional[int] = None
+    is_carryover: bool = False
+
+
+class DashboardAccrualSummary(BaseModel):
+    accrual_plan_amount: Decimal = Decimal("0.00")
+    accrual_group_count: int = 0
+    carryover_accrual_amount: Decimal = Decimal("0.00")
+    items: list[DashboardAccrualItem] = Field(default_factory=list)
 
 
 class BudgetReconciliationRead(BaseModel):
@@ -1708,6 +1771,7 @@ class DashboardResponse(BaseModel):
     kpi: DashboardKPI
     monthly: list[DashboardSummary]
     reconciliation: BudgetReconciliationRead | None = None
+    accruals: DashboardAccrualSummary = Field(default_factory=DashboardAccrualSummary)
 
 
 class OverBudgetSummary(BaseModel):

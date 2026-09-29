@@ -26,6 +26,8 @@ import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/DeleteOutline";
 import SwapHorizIcon from "@mui/icons-material/SwapHoriz";
 import UndoOutlinedIcon from "@mui/icons-material/UndoOutlined";
+import AutorenewOutlinedIcon from "@mui/icons-material/AutorenewOutlined";
+import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import { DataGrid, GridColDef, type GridPaginationModel } from "@mui/x-data-grid";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
@@ -38,6 +40,7 @@ import { formatBudgetItemLabel, stripBudgetCode } from "../../utils/budgetLabel"
 import { formatBudgetItemMeta } from "../../utils/budgetItem";
 import FiltersBar from "../Filters/FiltersBar";
 import { formatCurrency } from "../../utils/currency";
+import { buildAccrualDistribution } from "../../utils/accrualDistribution";
 import { formatUnusedReason, normalizeUnusedReason, UNUSED_REASON_OPTIONS } from "../../utils/unusedReason";
 import UnusedBudgetDialog from "../common/UnusedBudgetDialog";
 import { useConfirmDialog } from "../../context/ConfirmDialogContext";
@@ -111,6 +114,7 @@ interface PlanEntry {
   accrual_amount?: number | null;
   accrual_source_year?: number | null;
   accrual_source_month?: number | null;
+  accrual_source_plan_id?: number | null;
   is_accrual?: boolean;
 }
 
@@ -123,7 +127,21 @@ interface AccrualPlan {
   scenario_id: number;
   budget_item_id: number;
   department?: string | null;
+  source_plan_id?: number | null;
   entries: PlanEntry[];
+}
+
+interface AccrualConversionPreviewEntry {
+  year: number;
+  month: number;
+  amount: number;
+  has_existing_plan: boolean;
+}
+
+interface AccrualConversionPreview {
+  source_plan_id: number;
+  total_amount: number;
+  entries: AccrualConversionPreviewEntry[];
 }
 
 type AccrualMutationPayload = {
@@ -325,6 +343,12 @@ export default function PlansView() {
   const [accrualTotal, setAccrualTotal] = useState("");
   const [accrualStartMonth, setAccrualStartMonth] = useState(1);
   const [accrualMonthCount, setAccrualMonthCount] = useState(12);
+  const [conversionPlan, setConversionPlan] = useState<PlanEntry | null>(null);
+  const [conversionStartYear, setConversionStartYear] = useState(currentYear);
+  const [conversionStartMonth, setConversionStartMonth] = useState(1);
+  const [conversionMonthCount, setConversionMonthCount] = useState(12);
+  const [conversionError, setConversionError] = useState<string | null>(null);
+  const [accrualDetail, setAccrualDetail] = useState<AccrualPlan | null>(null);
   const [isNewBudgetMode, setIsNewBudgetMode] = useState(false);
   const [transferDialogOpen, setTransferDialogOpen] = useState(false);
   const [transferError, setTransferError] = useState<string | null>(null);
@@ -364,22 +388,30 @@ export default function PlansView() {
 
   const accrualPreview = useMemo(() => {
     const total = parseLocaleNumber(accrualTotal);
-    if (!Number.isFinite(total) || total <= 0 || accrualMonthCount < 1 || accrualMonthCount > 36) {
-      return { rows: [] as Array<{ year: number; month: number; cents: number }>, totalCents: 0 };
-    }
-    const totalCents = Math.round(total * 100);
-    const baseCents = Math.floor(totalCents / accrualMonthCount);
-    const remainder = totalCents - baseCents * accrualMonthCount;
-    const rows = Array.from({ length: accrualMonthCount }, (_, index) => {
-      const absoluteMonth = accrualStartMonth - 1 + index;
-      return {
-        year: formYear + Math.floor(absoluteMonth / 12),
-        month: (absoluteMonth % 12) + 1,
-        cents: baseCents + (index === accrualMonthCount - 1 ? remainder : 0)
-      };
-    });
-    return { rows, totalCents };
+    return buildAccrualDistribution(total, formYear, accrualStartMonth, accrualMonthCount);
   }, [accrualMonthCount, accrualStartMonth, accrualTotal, formYear]);
+
+  const conversionPreviewQuery = useQuery<AccrualConversionPreview>({
+    queryKey: [
+      "plan-accrual-conversion-preview",
+      conversionPlan?.id,
+      conversionStartYear,
+      conversionStartMonth,
+      conversionMonthCount
+    ],
+    enabled: Boolean(conversionPlan?.id),
+    queryFn: async () => {
+      const { data } = await client.post<AccrualConversionPreview>(
+        `/plans/${conversionPlan!.id}/accrual-preview`,
+        {
+          start_year: conversionStartYear,
+          start_month: conversionStartMonth,
+          month_count: conversionMonthCount
+        }
+      );
+      return data;
+    }
+  });
 
   const { data: scenarios } = useQuery<Scenario[]>({
     queryKey: ["scenarios"],
@@ -642,6 +674,34 @@ export default function PlansView() {
     }
   });
 
+  const conversionMutation = useMutation({
+    mutationFn: async () => {
+      if (!conversionPlan) throw new Error("Dönüştürülecek plan seçilmedi.");
+      const { data } = await client.post<AccrualPlan>(
+        `/plans/${conversionPlan.id}/convert-to-accrual`,
+        {
+          start_year: conversionStartYear,
+          start_month: conversionStartMonth,
+          month_count: conversionMonthCount
+        }
+      );
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["plans"] });
+      queryClient.invalidateQueries({ queryKey: ["plan-aggregate"] });
+      queryClient.invalidateQueries({ queryKey: ["scenarios"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["pending-budget-actions"] });
+      setConversionPlan(null);
+      setConversionError(null);
+      setToast({ message: "Plan kaydı tahakkuka dönüştürüldü.", severity: "success" });
+    },
+    onError: (error) => {
+      setConversionError(resolveApiErrorMessage(error, "Plan kaydı tahakkuka dönüştürülemedi."));
+    }
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async ({ planId, deleteRelated }: DeletePlanPayload) => {
       await client.delete(`/plans/${planId}`, {
@@ -807,6 +867,27 @@ export default function PlansView() {
     setDialogOpen(true);
     setFormError(null);
   }, [applyFormBudgetItem, budgetItemId, budgetItems, findDefaultScenarioForYear, year]);
+
+  const handleOpenConversion = useCallback((plan: PlanEntry) => {
+    setConversionPlan(plan);
+    setConversionStartYear(plan.year);
+    setConversionStartMonth(plan.month);
+    setConversionMonthCount(12);
+    setConversionError(null);
+  }, []);
+
+  const handleOpenAccrualDetail = useCallback(async (plan: PlanEntry) => {
+    if (!plan.accrual_group_id) return;
+    try {
+      const { data } = await client.get<AccrualPlan>(`/plans/accruals/${plan.accrual_group_id}`);
+      setAccrualDetail(data);
+    } catch (error) {
+      setToast({
+        message: resolveApiErrorMessage(error, "Tahakkuk detayı alınamadı."),
+        severity: "error"
+      });
+    }
+  }, [client, resolveApiErrorMessage]);
 
   const handleEdit = useCallback(async (plan: PlanEntry) => {
     let accrual: AccrualPlan | null = null;
@@ -1521,6 +1602,31 @@ export default function PlansView() {
         }
       },
       {
+        field: "plan_type",
+        headerName: "Plan Tipi",
+        width: 190,
+        sortable: false,
+        renderCell: ({ row }) => {
+          if (!row.is_accrual) {
+            return <Chip size="small" label="Normal" variant="outlined" />;
+          }
+          const isCarried = Number(row.year) > Number(row.accrual_source_year ?? row.year);
+          return (
+            <Stack spacing={0.5} alignItems="flex-start">
+              <Chip size="small" label="TAHAKKUKLU" color="info" />
+              {isCarried ? (
+                <Chip
+                  size="small"
+                  label={`${row.accrual_source_year}'den Devreden`}
+                  color="primary"
+                  variant="outlined"
+                />
+              ) : null}
+            </Stack>
+          );
+        }
+      },
+      {
         field: "status",
         headerName: "Durum",
         width: 190,
@@ -1534,17 +1640,6 @@ export default function PlansView() {
               : "Aktif";
         },
         renderCell: ({ row }) => {
-          if (row.is_accrual) {
-            const isCarried = Number(row.year) > Number(row.accrual_source_year ?? row.year);
-            return (
-              <Chip
-                size="small"
-                label={isCarried ? `${row.accrual_source_year}'den Devreden` : "Tahakkuklu"}
-                color="info"
-                variant="outlined"
-              />
-            );
-          }
           const unused = Number((row as any).unused_amount) || 0;
           const available = Number((row as any).scope_available_amount ?? (row as any).available_amount) || 0;
           const full = unused > 0 && available <= 0.005;
@@ -1563,8 +1658,8 @@ export default function PlansView() {
         field: "actions",
         headerName: "İşlemler",
         sortable: false,
-        width: 330,
-        minWidth: 320,
+        width: 410,
+        minWidth: 400,
         align: "center",
         headerAlign: "center",
         filterable: false,
@@ -1613,6 +1708,32 @@ export default function PlansView() {
                     </span>
                   </Tooltip>
                 ) : null}
+                {!row.is_accrual ? (
+                  <Tooltip title="Tahakkuka Çevir">
+                    <span>
+                      <IconButton
+                        size="small"
+                        color="info"
+                        onClick={() => handleOpenConversion(row)}
+                        disabled={!canManagePlans}
+                      >
+                        <AutorenewOutlinedIcon fontSize="small" />
+                      </IconButton>
+                    </span>
+                  </Tooltip>
+                ) : (
+                  <Tooltip title="Tahakkuk Detayı">
+                    <span>
+                      <IconButton
+                        size="small"
+                        color="info"
+                        onClick={() => void handleOpenAccrualDetail(row)}
+                      >
+                        <VisibilityOutlinedIcon fontSize="small" />
+                      </IconButton>
+                    </span>
+                  </Tooltip>
+                )}
                 <Tooltip title={row.is_accrual ? "Tahakkuk Planını Düzenle" : "Güncelle"}>
                   <span>
                     <IconButton
@@ -1649,6 +1770,8 @@ export default function PlansView() {
     handleClearUnused,
     handleDelete,
     handleEdit,
+    handleOpenAccrualDetail,
+    handleOpenConversion,
     handleOpenUnusedDialog,
     isViewer,
     purchaseRevertMutation.isPending
@@ -1735,6 +1858,13 @@ export default function PlansView() {
       plansQuery.refetch();
     }, 0);
   };
+
+  const conversionPreview = conversionPreviewQuery.data;
+  const conversionHasConflicts = Boolean(
+    conversionPreview?.entries.some((entry) => entry.has_existing_plan)
+  );
+  const conversionDisplay = conversionPlan ? getPlanDisplayValues(conversionPlan) : null;
+  const accrualDetailSource = accrualDetail?.entries[0] ?? null;
 
   return (
     <Stack spacing={4}>
@@ -1988,6 +2118,200 @@ export default function PlansView() {
           </Card>
         </Grid>
       </Grid>
+
+      <Dialog
+        open={Boolean(conversionPlan)}
+        onClose={() => {
+          if (!conversionMutation.isPending) setConversionPlan(null);
+        }}
+        fullWidth
+        maxWidth="md"
+      >
+        <DialogTitle>Tahakkuka Çevir</DialogTitle>
+        <DialogContent sx={{ pt: 2 }}>
+          <Stack spacing={2.5}>
+            {conversionError ? <Alert severity="error">{conversionError}</Alert> : null}
+            {conversionPreviewQuery.isError ? (
+              <Alert severity="error">Tahakkuk önizlemesi alınamadı.</Alert>
+            ) : null}
+            <Alert severity="info">
+              Yalnız seçilen plan satırı tahakkuka dönüştürülür. Aynı bütçe kaleminin diğer ayları değişmez.
+            </Alert>
+            <Grid container spacing={2}>
+              {[
+                ["Bütçe Kalemi", conversionDisplay?.budgetLabel ?? "-"],
+                ["Scenario", conversionDisplay?.scenario ?? "-"],
+                ["Departman", conversionDisplay?.department ?? "-"],
+                ["CAPEX/OPEX", conversionDisplay?.capexOpex ?? "-"],
+                ["Nitelik", conversionDisplay?.nitelik ?? "-"],
+                ["Mevcut Plan Tutarı", formatCurrency(Number(conversionPlan?.amount) || 0)]
+              ].map(([label, value]) => (
+                <Grid item xs={12} sm={6} key={label}>
+                  <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1.5, p: 1.5 }}>
+                    <Typography variant="caption" color="text.secondary">{label}</Typography>
+                    <Typography fontWeight={700}>{value}</Typography>
+                  </Box>
+                </Grid>
+              ))}
+              <Grid item xs={12} md={4}>
+                <TextField
+                  label="Başlangıç Yılı"
+                  type="number"
+                  value={conversionStartYear}
+                  onChange={(event) => setConversionStartYear(Number(event.target.value))}
+                  inputProps={{ min: 2000, max: 2200 }}
+                  fullWidth
+                />
+              </Grid>
+              <Grid item xs={12} md={4}>
+                <TextField
+                  select
+                  label="Başlangıç Ayı"
+                  value={conversionStartMonth}
+                  onChange={(event) => setConversionStartMonth(Number(event.target.value))}
+                  fullWidth
+                >
+                  {monthOptions.map((label, index) => (
+                    <MenuItem key={label} value={index + 1}>{label}</MenuItem>
+                  ))}
+                </TextField>
+              </Grid>
+              <Grid item xs={12} md={4}>
+                <TextField
+                  label="Dağıtılacak Ay Sayısı"
+                  type="number"
+                  value={conversionMonthCount}
+                  onChange={(event) => setConversionMonthCount(Number(event.target.value))}
+                  inputProps={{ min: 1, max: 36 }}
+                  fullWidth
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  label="Toplam Tutar"
+                  value={formatCurrency(Number(conversionPlan?.amount) || 0)}
+                  InputProps={{ readOnly: true }}
+                  helperText="Tutarı değiştirmek için önce normal Plan Düzenle işlemini kullanın."
+                  fullWidth
+                />
+              </Grid>
+            </Grid>
+            {conversionHasConflicts ? (
+              <Alert severity="warning">
+                Bu dönemde aynı bütçe kalemi için mevcut plan bulunmaktadır. Tahakkuk ayrı plan satırı olarak oluşturulacaktır.
+              </Alert>
+            ) : null}
+            {conversionPreview?.entries.length ? (
+              <Card variant="outlined">
+                <CardContent>
+                  <Typography variant="h6" sx={{ mb: 2 }}>Tahakkuk Önizleme</Typography>
+                  <Stack spacing={2}>
+                    {Array.from(new Set(conversionPreview.entries.map((entry) => entry.year))).map((previewYear) => (
+                      <Box key={previewYear}>
+                        <Typography color="primary" fontWeight={800} sx={{ mb: 1 }}>{previewYear}</Typography>
+                        <Grid container spacing={1}>
+                          {conversionPreview.entries.filter((entry) => entry.year === previewYear).map((entry) => (
+                            <Grid item xs={6} sm={4} md={3} key={`${entry.year}-${entry.month}`}>
+                              <Card
+                                variant="outlined"
+                                sx={{
+                                  height: "100%",
+                                  borderColor: entry.has_existing_plan ? "warning.main" : "divider"
+                                }}
+                              >
+                                <CardContent sx={{ textAlign: "center", py: 1.5, "&:last-child": { pb: 1.5 } }}>
+                                  <Typography color="primary" fontWeight={700}>
+                                    {monthOptions[entry.month - 1]}
+                                  </Typography>
+                                  <Typography fontWeight={700}>{formatCurrency(Number(entry.amount))}</Typography>
+                                  {entry.has_existing_plan ? (
+                                    <Chip size="small" color="warning" label="Mevcut plan var" sx={{ mt: 0.75 }} />
+                                  ) : null}
+                                </CardContent>
+                              </Card>
+                            </Grid>
+                          ))}
+                        </Grid>
+                      </Box>
+                    ))}
+                    <Stack direction={{ xs: "column", sm: "row" }} spacing={2} justifyContent="space-between">
+                      <Typography>Toplam Bütçe: <strong>{formatCurrency(Number(conversionPreview.total_amount))}</strong></Typography>
+                      <Typography>Aylara Dağıtılan: <strong>{formatCurrency(conversionPreview.entries.reduce((sum, entry) => sum + Number(entry.amount), 0))}</strong></Typography>
+                      <Typography color="success.main">Kalan: <strong>{formatCurrency(0)}</strong></Typography>
+                    </Stack>
+                  </Stack>
+                </CardContent>
+              </Card>
+            ) : null}
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5 }}>
+          <Button onClick={() => setConversionPlan(null)} disabled={conversionMutation.isPending}>Vazgeç</Button>
+          <Button
+            variant="contained"
+            onClick={() => conversionMutation.mutate()}
+            disabled={
+              conversionMutation.isPending ||
+              conversionPreviewQuery.isFetching ||
+              !conversionPreview?.entries.length ||
+              conversionMonthCount < 1 ||
+              conversionMonthCount > 36
+            }
+          >
+            Tahakkuka Çevir
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={Boolean(accrualDetail)} onClose={() => setAccrualDetail(null)} fullWidth maxWidth="md">
+        <DialogTitle>Tahakkuk Detayı</DialogTitle>
+        <DialogContent sx={{ pt: 2 }}>
+          {accrualDetail ? (
+            <Stack spacing={2.5}>
+              <Grid container spacing={2}>
+                {[
+                  ["Tahakkuk Grup ID", accrualDetail.accrual_group_id],
+                  ["Bütçe Kalemi", accrualDetailSource ? getPlanDisplayValues(accrualDetailSource).budgetLabel : "-"],
+                  ["Toplam Tahakkuk Tutarı", formatCurrency(Number(accrualDetail.total_amount))],
+                  ["Başlangıç", `${monthOptions[accrualDetail.start_month - 1]} ${accrualDetail.start_year}`],
+                  ["Ay Sayısı", String(accrualDetail.month_count)],
+                  ["Kaynak Plan", accrualDetail.source_plan_id ? `#${accrualDetail.source_plan_id}` : "Yeni tahakkuk planı"]
+                ].map(([label, value]) => (
+                  <Grid item xs={12} sm={6} key={label}>
+                    <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1.5, p: 1.5 }}>
+                      <Typography variant="caption" color="text.secondary">{label}</Typography>
+                      <Typography fontWeight={700} sx={{ wordBreak: "break-word" }}>{value || "-"}</Typography>
+                    </Box>
+                  </Grid>
+                ))}
+              </Grid>
+              <Box>
+                <Typography variant="h6" sx={{ mb: 1.5 }}>Aylık Dağılım</Typography>
+                <Grid container spacing={1}>
+                  {accrualDetail.entries.map((entry) => (
+                    <Grid item xs={6} sm={4} md={3} key={entry.id}>
+                      <Card variant="outlined">
+                        <CardContent sx={{ textAlign: "center", py: 1.5, "&:last-child": { pb: 1.5 } }}>
+                          <Typography color="primary" fontWeight={700}>
+                            {monthOptions[entry.month - 1]} {entry.year}
+                          </Typography>
+                          <Typography fontWeight={700}>
+                            {formatCurrency(Number(entry.accrual_amount ?? entry.amount))}
+                          </Typography>
+                          {Number(entry.year) > Number(entry.accrual_source_year ?? entry.year) ? (
+                            <Chip size="small" label={`${entry.accrual_source_year}'den Devreden`} variant="outlined" color="primary" sx={{ mt: 0.75 }} />
+                          ) : null}
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                  ))}
+                </Grid>
+              </Box>
+            </Stack>
+          ) : null}
+        </DialogContent>
+        <DialogActions><Button onClick={() => setAccrualDetail(null)}>Kapat</Button></DialogActions>
+      </Dialog>
 
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} fullWidth maxWidth="md">
         <DialogTitle>

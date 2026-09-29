@@ -115,6 +115,7 @@ class PlanEntry(TimestampMixin, SQLModel, table=True):
     )
     accrual_source_year: Optional[int] = Field(default=None, nullable=True, index=True)
     accrual_source_month: Optional[int] = Field(default=None, nullable=True)
+    accrual_source_plan_id: Optional[int] = Field(default=None, nullable=True, index=True)
     is_accrual: bool = Field(default=False, nullable=False, index=True)
 
     scenario: Scenario = Relationship(back_populates="plans")
