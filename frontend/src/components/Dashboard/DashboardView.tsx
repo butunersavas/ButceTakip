@@ -147,22 +147,22 @@ interface DashboardKPI {
 }
 
 interface DashboardAccrualItem {
-  plan_id: number;
+  accrual_id: number;
+  allocation_id: number;
   budget_item_id: number;
   budget_code?: string | null;
   budget_name?: string | null;
-  scenario_id: number;
+  source_scenario_id: number;
   scenario_name?: string | null;
   department?: string | null;
   capex_opex?: string | null;
   asset_type?: string | null;
   source_year: number;
-  source_month: number;
   year: number;
   month: number;
   amount: number;
-  accrual_group_id: string;
-  source_plan_id?: number | null;
+  used_amount: number;
+  remaining_amount: number;
   is_carryover: boolean;
 }
 
@@ -170,6 +170,8 @@ interface DashboardAccrualSummary {
   accrual_plan_amount: number;
   accrual_group_count: number;
   carryover_accrual_amount: number;
+  carryover_used_amount: number;
+  carryover_remaining_amount: number;
   items: DashboardAccrualItem[];
 }
 
@@ -1750,6 +1752,8 @@ export default function DashboardView() {
   const carryoverAccrualAmount = toSafeNumber(
     dashboard?.accruals?.carryover_accrual_amount ?? dashboard?.kpi.carryover_accrual_amount
   );
+  const carryoverAccrualUsed = toSafeNumber(dashboard?.accruals?.carryover_used_amount);
+  const carryoverAccrualRemaining = toSafeNumber(dashboard?.accruals?.carryover_remaining_amount);
   const accrualPlanItems = dashboard?.accruals?.items ?? [];
   const outOfBudgetDetailTotal = useMemo(
     () => outOfBudgetExpenses.reduce((sum, expense) => sum + toSafeNumber(expense.amount), 0),
@@ -2206,26 +2210,26 @@ export default function DashboardView() {
   const buildAccrualPlanExportRows = (items: DashboardAccrualItem[]) =>
     items.map((item) => ({
       "Bütçe Kalemi": formatBudgetItemLabel({ code: item.budget_code, name: item.budget_name }),
-      Scenario: item.scenario_name || item.scenario_id,
+      Scenario: item.scenario_name || item.source_scenario_id,
       Departman: item.department || "-",
       "Capex/Opex": item.capex_opex || "-",
       Nitelik: item.asset_type || "-",
       "Kaynak Yıl": item.source_year,
-      "Kaynak Ay": monthLabels[item.source_month - 1] ?? item.source_month,
       Yıl: item.year,
       Ay: monthLabels[item.month - 1] ?? item.month,
       Tutar: toSafeNumber(item.amount),
-      "Tahakkuk Grup": item.accrual_group_id,
-      "Kaynak Plan": item.source_plan_id ?? "-",
+      Kullanılan: toSafeNumber(item.used_amount),
+      Kalan: toSafeNumber(item.remaining_amount),
+      "Tahakkuk ID": item.accrual_id,
       Durum: item.is_carryover ? `${item.source_year}'den Devreden` : "TAHAKKUKLU"
     }));
 
   const handleExportAccrualPlans = () => {
     exportRowsToExcel(
       buildAccrualPlanExportRows(accrualPlanItems),
-      buildDashboardExportFileName("tahakkuklu_plan_detayi"),
-      "Tahakkuklu Plan",
-      ["Tutar"]
+      buildDashboardExportFileName("devreden_tahakkuk_detayi"),
+      "Devreden Tahakkuk",
+      ["Tutar", "Kullanılan", "Kalan"]
     );
   };
 
@@ -2646,8 +2650,8 @@ export default function DashboardView() {
           Açıklama: "Planlanan bütçe"
         },
         {
-          "Kart Adı": "Tahakkuklu Plan",
-          Tutar: accrualPlanAmount,
+          "Kart Adı": "Devreden Tahakkuk",
+          Tutar: carryoverAccrualAmount,
           Açıklama: "Toplam Plan içindeki tahakkuklu plan alt kümesi"
         },
         {
@@ -2773,7 +2777,7 @@ export default function DashboardView() {
       );
       appendRowsToWorkbook(
         workbook,
-        "Tahakkuklu Plan Detayı",
+        "Devreden Tahakkuk Detayı",
         buildAccrualPlanExportRows(accrualPlanItems),
         ["Tutar"]
       );
@@ -3192,11 +3196,9 @@ export default function DashboardView() {
                   filterKey: "total_plan" as const
                 },
                 {
-                  title: "Tahakkuklu Plan",
-                  value: formatCurrency(accrualPlanAmount),
-                  subtitle: carryoverAccrualAmount > 0
-                    ? `${accrualGroupCount} tahakkuk grubu · ${formatCurrency(carryoverAccrualAmount)} devreden`
-                    : `${accrualGroupCount} tahakkuk grubu`,
+                  title: "Devreden Tahakkuk",
+                  value: formatCurrency(carryoverAccrualAmount),
+                  subtitle: `${accrualGroupCount} tahakkuk · Kullanılan ${formatCurrency(carryoverAccrualUsed)} · Kalan ${formatCurrency(carryoverAccrualRemaining)}`,
                   icon: (
                     <AccountBalanceWalletOutlinedIcon
                       sx={{ fontSize: 18, color: "common.white" }}
@@ -3742,19 +3744,20 @@ export default function DashboardView() {
         maxWidth="xl"
         fullWidth
       >
-        <DialogTitle>Tahakkuklu Plan Detayı</DialogTitle>
+        <DialogTitle>Devreden Tahakkuk Detayı</DialogTitle>
         <DialogContent dividers>
           <Stack spacing={2}>
             <DetailSummaryGrid
               items={[
-                { label: "Tahakkuklu Plan", value: formatCurrency(accrualPlanAmount), color: "info.main" },
-                { label: "Tahakkuk Grup Sayısı", value: String(accrualGroupCount) },
-                { label: "Devreden Tahakkuk", value: formatCurrency(carryoverAccrualAmount) },
+                { label: "Devreden Tahakkuk", value: formatCurrency(carryoverAccrualAmount), color: "info.main" },
+                { label: "Tahakkuk Sayısı", value: String(accrualGroupCount) },
+                { label: "Kullanılan", value: formatCurrency(carryoverAccrualUsed) },
+                { label: "Kalan", value: formatCurrency(carryoverAccrualRemaining) },
                 { label: "Toplam Plan", value: formatCurrency(normalizedKpi.total_plan) }
               ]}
             />
             <Alert severity="info">
-              Tahakkuklu Plan, Toplam Plan tutarının alt kümesidir; Toplam Plan'a yeniden eklenmez.
+              Efektif bütçe, yeni yıl bütçesi ile devreden tahakkukun toplamıdır. Devreden tutar yalnız bir kez eklenir.
             </Alert>
             <DetailTableWrap>
               <Table size="small" stickyHeader>
@@ -3768,30 +3771,34 @@ export default function DashboardView() {
                     <TableCell>Kaynak Yıl</TableCell>
                     <TableCell>Ay</TableCell>
                     <TableCell align="right">Tutar</TableCell>
-                    <TableCell>Tahakkuk Grup</TableCell>
+                    <TableCell align="right">Kullanılan</TableCell>
+                    <TableCell align="right">Kalan</TableCell>
+                    <TableCell>Tahakkuk ID</TableCell>
                     <TableCell>Durum</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {accrualPlanItems.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={10}>
+                      <TableCell colSpan={12}>
                         <Typography variant="body2" color="text.secondary">
                           Seçili filtrelerde tahakkuklu plan bulunamadı.
                         </Typography>
                       </TableCell>
                     </TableRow>
                   ) : accrualPlanItems.map((item) => (
-                    <TableRow key={item.plan_id} hover>
+                    <TableRow key={item.allocation_id} hover>
                       <TableCell>{formatBudgetItemLabel({ code: item.budget_code, name: item.budget_name })}</TableCell>
-                      <TableCell>{item.scenario_name || item.scenario_id}</TableCell>
+                      <TableCell>{item.scenario_name || item.source_scenario_id}</TableCell>
                       <TableCell>{item.department || "-"}</TableCell>
                       <TableCell>{item.capex_opex || "-"}</TableCell>
                       <TableCell>{item.asset_type || "-"}</TableCell>
                       <TableCell>{item.source_year}</TableCell>
                       <TableCell>{monthLabels[item.month - 1]} {item.year}</TableCell>
                       <TableCell align="right">{formatCurrency(item.amount)}</TableCell>
-                      <TableCell>{item.accrual_group_id}</TableCell>
+                      <TableCell align="right">{formatCurrency(item.used_amount)}</TableCell>
+                      <TableCell align="right">{formatCurrency(item.remaining_amount)}</TableCell>
+                      <TableCell>#{item.accrual_id}</TableCell>
                       <TableCell>
                         <Chip
                           size="small"

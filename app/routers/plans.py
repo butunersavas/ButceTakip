@@ -3,23 +3,22 @@ from decimal import Decimal
 import logging
 import re
 import unicodedata
-from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import and_, exists, func, or_, text
+from sqlalchemy import and_, exists, func, or_
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlmodel import Session, select
 
 from app.dependencies import get_admin_user, get_current_user, get_db_session
 from app.models import (
     BudgetItem,
-    BudgetPreparationItem,
     BudgetTransfer,
     Expense,
     ExpenseAllocation,
     ExpenseStatus,
+    PlanAccrual,
+    PlanAccrualAllocation,
     PlanEntry,
-    PurchaseFormStatus,
     PurchaseFormStatusExt,
     Scenario,
     User,
@@ -27,7 +26,6 @@ from app.models import (
 from app.schemas import (
     AccrualConversionInput,
     AccrualConversionPreview,
-    AccrualPlanInput,
     AccrualPlanRead,
     AccrualPreviewEntry,
     BudgetAvailableRead,
@@ -42,6 +40,12 @@ from app.schemas import (
     PlanUnusedUpdate,
     PlanUnusedApply,
     PlanUnusedOptionsRead,
+)
+from app.services.accruals import (
+    accrual_amounts,
+    accrual_periods,
+    money,
+    source_budget_summary,
 )
 from app.services.related_records import count_related_file_records, delete_related_file_records
 from app.services.budget_availability import calculate_budget_availability
@@ -616,6 +620,26 @@ def _build_plan_read(
     row_available_amount = calculate_budget_availability(
         revised_amount, actual_amount, row_unused_amount
     ).available_amount
+    accrual = session.exec(
+        select(PlanAccrual)
+        .where(
+            PlanAccrual.source_plan_id == row.get("id"),
+            PlanAccrual.status == "ACTIVE",
+        )
+        .order_by(PlanAccrual.id.desc())
+    ).first()
+    accrual_total = Decimal("0.00")
+    future_reserved = Decimal("0.00")
+    if accrual:
+        accrual_total = money(accrual.total_amount)
+        future_reserved = money(session.exec(
+            select(func.coalesce(func.sum(PlanAccrualAllocation.amount), 0)).where(
+                PlanAccrualAllocation.accrual_id == accrual.id,
+                PlanAccrualAllocation.year > accrual.source_year,
+            )
+        ).one())
+        scope_available_amount = max(scope_available_amount - float(future_reserved), 0.0)
+        row_available_amount = max(row_available_amount - float(future_reserved), 0.0)
     return PlanEntryRead(
         id=row.get("id"),
         year=row.get("year"),
@@ -685,6 +709,10 @@ def _build_plan_read(
         accrual_source_month=row.get("accrual_source_month"),
         accrual_source_plan_id=row.get("accrual_source_plan_id"),
         is_accrual=bool(row.get("is_accrual")),
+        plan_accrual_id=accrual.id if accrual else None,
+        has_accrual=accrual is not None,
+        plan_accrual_total=accrual_total,
+        plan_accrual_future_reserved=future_reserved,
     )
 
 
@@ -1203,503 +1231,317 @@ def create_manual_plan_entry(
     return _fetch_plan_read(session, plan.id)
 
 
-def _accrual_amounts(total_amount: Decimal, month_count: int) -> list[Decimal]:
-    total_cents = int((total_amount.quantize(Decimal("0.01")) * 100).to_integral_exact())
-    base_cents, remainder = divmod(total_cents, month_count)
-    amounts = [Decimal(base_cents) / Decimal(100) for _ in range(month_count)]
-    amounts[-1] += Decimal(remainder) / Decimal(100)
-    return amounts
-
-
-def _accrual_periods(start_year: int, start_month: int, month_count: int):
-    for offset in range(month_count):
-        absolute_month = start_month - 1 + offset
-        yield start_year + absolute_month // 12, absolute_month % 12 + 1
-
-
-def _resolve_accrual_budget_item(session: Session, payload: AccrualPlanInput) -> BudgetItem:
-    item = session.get(BudgetItem, payload.budget_item_id) if payload.budget_item_id else None
-    budget_name = _clean_text(payload.budget_name)
-    budget_code = _clean_text(payload.budget_code)
-    if payload.budget_item_id and item is None:
-        raise HTTPException(status_code=400, detail="Bütçe kalemi bulunamadı.")
-    if item is None and budget_code:
-        item = session.exec(
-            select(BudgetItem).where(func.upper(func.trim(BudgetItem.code)) == budget_code.upper())
-        ).first()
-    if item is None and budget_name:
-        item = session.exec(
-            select(BudgetItem).where(func.lower(func.trim(BudgetItem.name)) == budget_name.lower())
-        ).first()
-    if item is None:
-        if not budget_name:
-            raise HTTPException(status_code=400, detail="Bütçe kalemi zorunludur.")
-        item = BudgetItem(
-            code=budget_code or _generate_manual_code(session),
-            name=budget_name,
-            description=_clean_text(payload.description),
-            map_category=_normalize_capex_opex(payload.map_category),
-            map_attribute=_clean_text(payload.map_attribute),
-        )
-        session.add(item)
-        session.flush()
-    return item
-
-
-def _resolve_accrual_scenarios(
-    session: Session, source: Scenario, years: set[int]
-) -> dict[int, Scenario]:
-    result: dict[int, Scenario] = {source.year: source}
-    for target_year in sorted(years):
-        if target_year == source.year:
-            continue
-        if session.get_bind().dialect.name == "postgresql":
-            session.execute(
-                text("SELECT pg_advisory_xact_lock(hashtext(:scenario_key))"),
-                {"scenario_key": f"accrual-scenario:{target_year}:{source.name.strip().lower()}"},
-            )
-        scenario = session.exec(
-            select(Scenario)
-            .where(Scenario.year == target_year)
-            .where(func.lower(func.trim(Scenario.name)) == source.name.strip().lower())
-            .with_for_update()
-        ).first()
-        if scenario is None:
-            has_primary = session.exec(
-                select(Scenario.id).where(
-                    Scenario.year == target_year, Scenario.is_primary.is_(True)
-                )
-            ).first()
-            scenario = Scenario(
-                name=source.name.strip(),
-                year=target_year,
-                description=source.description,
-                is_primary=bool(source.is_primary and not has_primary),
-            )
-            session.add(scenario)
-            session.flush()
-        result[target_year] = scenario
-    return result
-
-
-def _scope_has_expense(session: Session, plan: PlanEntry) -> bool:
-    allocated = session.exec(
-        select(ExpenseAllocation.id)
-        .where(ExpenseAllocation.budget_item_id == plan.budget_item_id)
-        .where(ExpenseAllocation.year == plan.year)
-        .where(ExpenseAllocation.month == plan.month)
-        .where(ExpenseAllocation.scenario_id == plan.scenario_id)
-    ).first()
-    if allocated:
-        return True
-    return session.exec(
-        select(Expense.id)
-        .where(Expense.budget_item_id == plan.budget_item_id)
-        .where(Expense.scenario_id == plan.scenario_id)
-        .where(func.extract("year", Expense.expense_date) == plan.year)
-        .where(func.extract("month", Expense.expense_date) == plan.month)
-        .where(~exists().where(ExpenseAllocation.expense_id == Expense.id))
-    ).first() is not None
-
-
-def _plan_conversion_dependencies(session: Session, plan: PlanEntry) -> list[str]:
-    dependencies: list[str] = []
-    if _scope_has_expense(session, plan):
-        dependencies.append("harcama")
-    if session.exec(
-        select(BudgetTransfer.id).where(
-            or_(
-                and_(
-                    BudgetTransfer.source_budget_item_id == plan.budget_item_id,
-                    BudgetTransfer.source_year == plan.year,
-                    BudgetTransfer.source_month == plan.month,
-                    BudgetTransfer.source_scenario_id == plan.scenario_id,
-                ),
-                and_(
-                    BudgetTransfer.target_budget_item_id == plan.budget_item_id,
-                    BudgetTransfer.target_year == plan.year,
-                    BudgetTransfer.target_month == plan.month,
-                    BudgetTransfer.target_scenario_id == plan.scenario_id,
-                ),
-            )
-        )
-    ).first():
-        dependencies.append("aktarım")
-    if float(plan.unused_amount or 0) > 0:
-        dependencies.append("kullanılmayacak tutar")
-    if bool(plan.purchase_requested):
-        dependencies.append("satın alma talebi")
-
-    budget_item = session.get(BudgetItem, plan.budget_item_id)
-    budget_code = (plan.budget_code or (budget_item.code if budget_item else "") or "").strip()
-    department = (plan.department or "").strip()
-    has_purchase_status = session.exec(
-        select(PurchaseFormStatusExt.id).where(
-            func.upper(func.trim(PurchaseFormStatusExt.budget_code)) == budget_code.upper(),
-            PurchaseFormStatusExt.year == plan.year,
-            PurchaseFormStatusExt.month == plan.month,
-            PurchaseFormStatusExt.scenario_id == plan.scenario_id,
-            func.coalesce(PurchaseFormStatusExt.department, "") == department,
-            PurchaseFormStatusExt.is_form_prepared.is_(True),
-        )
-    ).first()
-    legacy_purchase_status = session.exec(
-        select(PurchaseFormStatus.id).where(
-            PurchaseFormStatus.budget_item_id == plan.budget_item_id,
-            PurchaseFormStatus.year == plan.year,
-            PurchaseFormStatus.month == plan.month,
-            PurchaseFormStatus.is_prepared.is_(True),
-        )
-    ).first()
-    if has_purchase_status or legacy_purchase_status:
-        dependencies.append("satın alma durumu")
-    if session.exec(
-        select(BudgetPreparationItem.id).where(BudgetPreparationItem.source_plan_id == plan.id)
-    ).first():
-        dependencies.append("bütçe hazırlama referansı")
-    if count_related_file_records(session, "plan_entries", plan.id):
-        dependencies.append("ek/dosya")
-    return dependencies
-
-
-def _conversion_conflict_scenario(
-    session: Session,
-    source_scenario: Scenario,
-    target_year: int,
-) -> Scenario | None:
-    if target_year == source_scenario.year:
-        return source_scenario
-    return session.exec(
-        select(Scenario)
-        .where(Scenario.year == target_year)
-        .where(func.lower(func.trim(Scenario.name)) == source_scenario.name.strip().lower())
-    ).first()
-
-
-def _get_accrual_rows(session: Session, group_id: str, *, lock: bool = False) -> list[PlanEntry]:
-    statement = (
-        select(PlanEntry)
-        .where(PlanEntry.accrual_group_id == group_id)
-        .where(PlanEntry.is_accrual.is_(True))
-        .order_by(PlanEntry.year, PlanEntry.month, PlanEntry.id)
+def _build_domain_accrual_read(session: Session, accrual_id: int) -> AccrualPlanRead:
+    accrual = session.get(PlanAccrual, accrual_id)
+    if not accrual or accrual.status != "ACTIVE":
+        raise HTTPException(status_code=404, detail="Tahakkuk kaydı bulunamadı.")
+    item = session.get(BudgetItem, accrual.budget_item_id)
+    scenario = session.get(Scenario, accrual.source_scenario_id)
+    allocations = session.exec(
+        select(PlanAccrualAllocation)
+        .where(PlanAccrualAllocation.accrual_id == accrual.id)
+        .order_by(PlanAccrualAllocation.year, PlanAccrualAllocation.month)
+    ).all()
+    used = sum((money(row.used_amount) for row in allocations), Decimal("0.00"))
+    carryover = sum(
+        (money(row.amount) for row in allocations if row.year > accrual.source_year),
+        Decimal("0.00"),
     )
-    if lock:
-        statement = statement.with_for_update()
-    rows = list(session.exec(statement).all())
-    if not rows:
-        raise HTTPException(status_code=404, detail="Tahakkuk planı bulunamadı.")
-    return rows
-
-
-def _build_accrual_read(session: Session, group_id: str) -> AccrualPlanRead:
-    rows = _get_accrual_rows(session, group_id)
-    source = next(
-        (row for row in rows if row.year == row.accrual_source_year and row.month == row.accrual_source_month),
-        rows[0],
-    )
-    entries = [_fetch_plan_read(session, row.id) for row in rows]
     return AccrualPlanRead(
-        accrual_group_id=group_id,
-        total_amount=sum((Decimal(str(row.accrual_amount or 0)) for row in rows), Decimal("0.00")),
-        start_year=source.accrual_source_year or source.year,
-        start_month=source.accrual_source_month or source.month,
-        month_count=len(rows),
-        scenario_id=source.scenario_id,
-        budget_item_id=source.budget_item_id,
-        department=source.department,
-        source_plan_id=source.accrual_source_plan_id,
-        entries=entries,
+        id=accrual.id,
+        total_amount=money(accrual.total_amount),
+        start_year=accrual.start_year,
+        start_month=accrual.start_month,
+        month_count=accrual.month_count,
+        source_year=accrual.source_year,
+        source_scenario_id=accrual.source_scenario_id,
+        source_scenario_name=scenario.name if scenario else None,
+        budget_item_id=accrual.budget_item_id,
+        budget_code=item.code if item else None,
+        budget_name=item.name if item else None,
+        department=accrual.department,
+        source_plan_id=accrual.source_plan_id,
+        created_by_id=accrual.created_by_id,
+        status=accrual.status,
+        used_amount=money(used),
+        remaining_amount=money(max(money(accrual.total_amount) - used, Decimal("0.00"))),
+        carryover_amount=money(carryover),
+        allocations=[
+            {
+                "id": row.id,
+                "year": row.year,
+                "month": row.month,
+                "amount": money(row.amount),
+                "used_amount": money(row.used_amount),
+                "remaining_amount": money(
+                    max(money(row.amount) - money(row.used_amount), Decimal("0.00"))
+                ),
+            }
+            for row in allocations
+        ],
     )
 
 
-def _remove_accrual_contributions(session: Session, rows: list[PlanEntry]) -> None:
-    dependencies = sorted({
-        dependency
-        for row in rows
-        for dependency in _plan_conversion_dependencies(session, row)
-    })
-    if dependencies:
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                "Bu tahakkuka operasyonel kayıtlar bağlı olduğu için işlem yapılamaz: "
-                f"{', '.join(dependencies)}."
-            ),
-        )
-    for row in rows:
-        contribution = Decimal(str(row.accrual_amount or row.amount or 0))
-        remaining = Decimal(str(row.amount or 0)) - contribution
-        if remaining > Decimal("0.005"):
-            row.amount = float(remaining.quantize(Decimal("0.01")))
-            row.accrual_group_id = None
-            row.accrual_amount = None
-            row.accrual_source_year = None
-            row.accrual_source_month = None
-            row.accrual_source_plan_id = None
-            row.is_accrual = False
-            row.updated_at = datetime.utcnow()
-            session.add(row)
-        else:
-            session.delete(row)
-    session.flush()
-
-
-def _create_accrual_rows(
+def _domain_accrual_preview(
     session: Session,
-    payload: AccrualPlanInput,
-    group_id: str,
+    source: PlanEntry,
+    conversion: AccrualConversionInput,
     *,
-    source_plan_id: int | None = None,
-) -> None:
-    source_scenario = session.get(Scenario, payload.scenario_id)
-    if source_scenario is None:
-        raise HTTPException(status_code=400, detail="Scenario bulunamadı.")
-    if source_scenario.year != payload.start_year:
+    exclude_accrual_id: int | None = None,
+) -> AccrualConversionPreview:
+    summary = source_budget_summary(
+        session,
+        budget_item_id=source.budget_item_id,
+        source_year=source.year,
+        source_scenario_id=source.scenario_id,
+        department=source.department,
+        exclude_accrual_id=exclude_accrual_id,
+    )
+    if money(conversion.total_amount) > money(summary["available"]):
         raise HTTPException(
             status_code=400,
-            detail="Başlangıç yılı ile kaynak Scenario yılı aynı olmalıdır.",
+            detail=(
+                "Tahakkuk tutarı kalan kullanılabilir bütçeden fazla olamaz. "
+                f"Maksimum tutar: ${money(summary['available']):,.2f}"
+            ),
         )
-    item = _resolve_accrual_budget_item(session, payload)
-    periods = list(_accrual_periods(payload.start_year, payload.start_month, payload.month_count))
-    scenarios = _resolve_accrual_scenarios(session, source_scenario, {year for year, _ in periods})
-    amounts = _accrual_amounts(payload.total_amount, payload.month_count)
-    department = _clean_text(payload.department)
-    for (target_year, target_month), amount in zip(periods, amounts):
-        scenario = scenarios[target_year]
-        existing = session.exec(
-            select(PlanEntry)
-            .where(PlanEntry.year == target_year)
-            .where(PlanEntry.month == target_month)
-            .where(PlanEntry.scenario_id == scenario.id)
-            .where(PlanEntry.budget_item_id == item.id)
-            .where(func.coalesce(PlanEntry.department, "") == (department or ""))
-            .order_by(PlanEntry.id)
-            .with_for_update()
-        ).first()
-        if existing and payload.merge_mode == "merge":
-            if existing.is_accrual:
-                raise HTTPException(
-                    status_code=409,
-                    detail="Bu dönemde aynı bütçe kalemi için başka bir tahakkuk planı bulunmaktadır. Ayrı kayıt oluşturmayı seçin.",
-                )
-            existing.amount = float((Decimal(str(existing.amount or 0)) + amount).quantize(Decimal("0.01")))
-            existing.accrual_group_id = group_id
-            existing.accrual_amount = amount
-            existing.accrual_source_year = payload.start_year
-            existing.accrual_source_month = payload.start_month
-            existing.accrual_source_plan_id = source_plan_id
-            existing.is_accrual = True
-            existing.updated_at = datetime.utcnow()
-            session.add(existing)
-        else:
-            session.add(PlanEntry(
-                year=target_year,
-                month=target_month,
-                amount=float(amount),
-                scenario_id=scenario.id,
-                budget_item_id=item.id,
-                budget_code=item.code,
-                department=department,
-                accrual_group_id=group_id,
-                accrual_amount=amount,
-                accrual_source_year=payload.start_year,
-                accrual_source_month=payload.start_month,
-                accrual_source_plan_id=source_plan_id,
-                is_accrual=True,
-            ))
-    session.flush()
-
-
-@router.post("/accruals", response_model=AccrualPlanRead, status_code=status.HTTP_201_CREATED)
-def create_accrual_plan(
-    payload: AccrualPlanInput,
-    session: Session = Depends(get_db_session),
-    _: User = Depends(get_admin_user),
-) -> AccrualPlanRead:
-    group_id = str(uuid4())
-    try:
-        _create_accrual_rows(session, payload, group_id)
-        session.commit()
-        return _build_accrual_read(session, group_id)
-    except HTTPException:
-        session.rollback()
-        raise
-    except (IntegrityError, SQLAlchemyError) as exc:
-        session.rollback()
-        logger.exception("Tahakkuk planı oluşturulamadı")
-        raise HTTPException(status_code=409, detail="Tahakkuk planı kaydedilemedi.") from exc
-
-
-@router.get("/accruals/{group_id}", response_model=AccrualPlanRead)
-def get_accrual_plan(
-    group_id: str,
-    session: Session = Depends(get_db_session),
-    _: User = Depends(get_current_user),
-) -> AccrualPlanRead:
-    return _build_accrual_read(session, group_id)
-
-
-@router.put("/accruals/{group_id}", response_model=AccrualPlanRead)
-def update_accrual_plan(
-    group_id: str,
-    payload: AccrualPlanInput,
-    session: Session = Depends(get_db_session),
-    _: User = Depends(get_admin_user),
-) -> AccrualPlanRead:
-    try:
-        rows = _get_accrual_rows(session, group_id, lock=True)
-        source_plan_id = next(
-            (row.accrual_source_plan_id for row in rows if row.accrual_source_plan_id),
-            None,
-        )
-        _remove_accrual_contributions(session, rows)
-        _create_accrual_rows(
-            session,
-            payload,
-            group_id,
-            source_plan_id=source_plan_id,
-        )
-        session.commit()
-        return _build_accrual_read(session, group_id)
-    except HTTPException:
-        session.rollback()
-        raise
-    except (IntegrityError, SQLAlchemyError) as exc:
-        session.rollback()
-        logger.exception("Tahakkuk planı güncellenemedi")
-        raise HTTPException(status_code=409, detail="Tahakkuk planı güncellenemedi.") from exc
-
-
-@router.delete("/accruals/{group_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_accrual_plan(
-    group_id: str,
-    session: Session = Depends(get_db_session),
-    _: User = Depends(get_admin_user),
-) -> None:
-    try:
-        rows = _get_accrual_rows(session, group_id, lock=True)
-        _remove_accrual_contributions(session, rows)
-        session.commit()
-    except HTTPException:
-        session.rollback()
-        raise
+    periods = list(accrual_periods(
+        conversion.start_year, conversion.start_month, conversion.month_count
+    ))
+    amounts = accrual_amounts(conversion.total_amount, conversion.month_count)
+    entries = [
+        AccrualPreviewEntry(year=year, month=month, amount=amount)
+        for (year, month), amount in zip(periods, amounts)
+    ]
+    future_reserved = sum(
+        (entry.amount for entry in entries if entry.year > source.year), Decimal("0.00")
+    )
+    return AccrualConversionPreview(
+        source_plan_id=source.id,
+        total_amount=money(conversion.total_amount),
+        source_plan_total=money(summary["revised"]),
+        source_actual_total=money(summary["actual"]),
+        source_unused_total=money(summary["unused"]),
+        source_reserved_total=money(summary["reserved"]),
+        source_available_total=money(summary["available"]),
+        future_reserved_amount=money(future_reserved),
+        entries=entries,
+    )
 
 
 @router.post("/{plan_id}/accrual-preview", response_model=AccrualConversionPreview)
-def preview_plan_accrual_conversion(
-    plan_id: int,
-    payload: AccrualConversionInput,
-    session: Session = Depends(get_db_session),
-    _: User = Depends(get_current_user),
-) -> AccrualConversionPreview:
-    plan = session.get(PlanEntry, plan_id)
-    if not plan:
-        raise HTTPException(status_code=404, detail="Plan kaydı bulunamadı.")
-    if plan.is_accrual:
-        raise HTTPException(status_code=409, detail="Bu plan kaydı zaten tahakkukludur.")
-    source_scenario = session.get(Scenario, plan.scenario_id)
-    if not source_scenario:
-        raise HTTPException(status_code=409, detail="Kaynak Scenario bulunamadı.")
-
-    periods = list(_accrual_periods(payload.start_year, payload.start_month, payload.month_count))
-    amounts = _accrual_amounts(Decimal(str(plan.amount)), payload.month_count)
-    entries: list[AccrualPreviewEntry] = []
-    for (target_year, target_month), amount in zip(periods, amounts):
-        target_scenario = _conversion_conflict_scenario(session, source_scenario, target_year)
-        has_existing = False
-        if target_scenario:
-            has_existing = session.exec(
-                select(PlanEntry.id)
-                .where(PlanEntry.id != plan.id)
-                .where(PlanEntry.year == target_year)
-                .where(PlanEntry.month == target_month)
-                .where(PlanEntry.scenario_id == target_scenario.id)
-                .where(PlanEntry.budget_item_id == plan.budget_item_id)
-                .where(func.coalesce(PlanEntry.department, "") == (plan.department or ""))
-            ).first() is not None
-        entries.append(AccrualPreviewEntry(
-            year=target_year,
-            month=target_month,
-            amount=amount,
-            has_existing_plan=has_existing,
-        ))
-    return AccrualConversionPreview(
-        source_plan_id=plan.id,
-        total_amount=Decimal(str(plan.amount)).quantize(Decimal("0.01")),
-        entries=entries,
-    )
-
-
-@router.post("/{plan_id}/convert-to-accrual", response_model=AccrualPlanRead)
-def convert_plan_to_accrual(
+def preview_domain_accrual(
     plan_id: int,
     conversion: AccrualConversionInput,
     session: Session = Depends(get_db_session),
-    _: User = Depends(get_admin_user),
+    _: User = Depends(get_current_user),
+) -> AccrualConversionPreview:
+    source = session.get(PlanEntry, plan_id)
+    if not source:
+        raise HTTPException(status_code=404, detail="Plan kaydı bulunamadı.")
+    return _domain_accrual_preview(session, source, conversion)
+
+
+@router.post("/{plan_id}/convert-to-accrual", response_model=AccrualPlanRead, status_code=201)
+def create_domain_accrual(
+    plan_id: int,
+    conversion: AccrualConversionInput,
+    session: Session = Depends(get_db_session),
+    current_user: User = Depends(get_admin_user),
 ) -> AccrualPlanRead:
-    group_id = str(uuid4())
     try:
         source = session.exec(
             select(PlanEntry).where(PlanEntry.id == plan_id).with_for_update()
         ).first()
         if not source:
             raise HTTPException(status_code=404, detail="Plan kaydı bulunamadı.")
-        if source.is_accrual:
-            raise HTTPException(status_code=409, detail="Bu plan kaydı zaten tahakkukludur.")
-        dependencies = _plan_conversion_dependencies(session, source)
-        if dependencies:
-            dependency_text = ", ".join(dependencies)
+        existing_accrual = session.exec(
+            select(PlanAccrual.id).where(
+                PlanAccrual.source_plan_id == source.id,
+                PlanAccrual.status == "ACTIVE",
+            )
+        ).first()
+        if existing_accrual:
             raise HTTPException(
                 status_code=409,
-                detail=(
-                    "Bu plan kaydına operasyonel kayıtlar bağlı olduğu için tahakkuka "
-                    f"dönüştürülemez: {dependency_text}."
-                ),
+                detail="Bu plan kaydı için aktif bir tahakkuk zaten bulunmaktadır.",
             )
-        source_scenario = session.get(Scenario, source.scenario_id)
-        budget_item = session.get(BudgetItem, source.budget_item_id)
-        if not source_scenario or not budget_item:
-            raise HTTPException(status_code=409, detail="Kaynak plan bilgileri eksik.")
-        start_scenario = _resolve_accrual_scenarios(
-            session,
-            source_scenario,
-            {conversion.start_year},
-        )[conversion.start_year]
-        payload = AccrualPlanInput(
-            total_amount=Decimal(str(source.amount)),
+        preview = _domain_accrual_preview(session, source, conversion)
+        accrual = PlanAccrual(
+            source_plan_id=source.id,
+            budget_item_id=source.budget_item_id,
+            source_year=source.year,
+            source_scenario_id=source.scenario_id,
+            department=source.department,
+            total_amount=money(conversion.total_amount),
             start_year=conversion.start_year,
             start_month=conversion.start_month,
             month_count=conversion.month_count,
-            scenario_id=start_scenario.id,
-            budget_item_id=source.budget_item_id,
-            budget_code=source.budget_code or budget_item.code,
-            budget_name=budget_item.name,
-            department=source.department,
-            map_category=budget_item.map_category,
-            map_attribute=budget_item.map_attribute,
-            description=budget_item.description,
-            merge_mode="separate",
+            created_by_id=current_user.id,
+            status="ACTIVE",
         )
-        session.delete(source)
+        session.add(accrual)
         session.flush()
-        _create_accrual_rows(
-            session,
-            payload,
-            group_id,
-            source_plan_id=plan_id,
-        )
+        for entry in preview.entries:
+            session.add(PlanAccrualAllocation(
+                accrual_id=accrual.id,
+                year=entry.year,
+                month=entry.month,
+                amount=money(entry.amount),
+                used_amount=Decimal("0.00"),
+            ))
         session.commit()
-        return _build_accrual_read(session, group_id)
+        return _build_domain_accrual_read(session, accrual.id)
     except HTTPException:
         session.rollback()
         raise
-    except (IntegrityError, SQLAlchemyError) as exc:
+    except SQLAlchemyError as exc:
         session.rollback()
-        logger.exception("Plan kaydı tahakkuka dönüştürülemedi")
-        raise HTTPException(
-            status_code=409,
-            detail="Plan kaydı tahakkuka dönüştürülemedi; kaynak kayıt korundu.",
-        ) from exc
+        logger.exception("Tahakkuk oluşturulamadı")
+        raise HTTPException(status_code=409, detail="Tahakkuk oluşturulamadı.") from exc
+
+
+@router.get("/accruals/carryover", response_model=list[AccrualPlanRead])
+def list_carryover_accruals(
+    year: int = Query(...),
+    budget_item_id: int | None = None,
+    session: Session = Depends(get_db_session),
+    _: User = Depends(get_current_user),
+) -> list[AccrualPlanRead]:
+    query = (
+        select(PlanAccrual.id)
+        .join(PlanAccrualAllocation, PlanAccrualAllocation.accrual_id == PlanAccrual.id)
+        .where(
+            PlanAccrual.status == "ACTIVE",
+            PlanAccrual.source_year < year,
+            PlanAccrualAllocation.year == year,
+        )
+        .distinct()
+    )
+    if budget_item_id is not None:
+        query = query.where(PlanAccrual.budget_item_id == budget_item_id)
+    results: list[AccrualPlanRead] = []
+    for accrual_id in session.exec(query).all():
+        item = _build_domain_accrual_read(session, accrual_id)
+        year_allocations = [row for row in item.allocations if row.year == year]
+        item.carryover_amount = money(sum(
+            (row.amount for row in year_allocations), Decimal("0.00")
+        ))
+        item.used_amount = money(sum(
+            (row.used_amount for row in year_allocations), Decimal("0.00")
+        ))
+        item.remaining_amount = money(sum(
+            (row.remaining_amount for row in year_allocations), Decimal("0.00")
+        ))
+        results.append(item)
+    return results
+
+
+@router.get("/accruals/{accrual_id}", response_model=AccrualPlanRead)
+def get_domain_accrual(
+    accrual_id: int,
+    session: Session = Depends(get_db_session),
+    _: User = Depends(get_current_user),
+) -> AccrualPlanRead:
+    return _build_domain_accrual_read(session, accrual_id)
+
+
+@router.put("/accruals/{accrual_id}", response_model=AccrualPlanRead)
+def update_domain_accrual(
+    accrual_id: int,
+    conversion: AccrualConversionInput,
+    session: Session = Depends(get_db_session),
+    _: User = Depends(get_admin_user),
+) -> AccrualPlanRead:
+    try:
+        accrual = session.exec(
+            select(PlanAccrual).where(PlanAccrual.id == accrual_id).with_for_update()
+        ).first()
+        if not accrual or accrual.status != "ACTIVE":
+            raise HTTPException(status_code=404, detail="Tahakkuk kaydı bulunamadı.")
+        allocations = session.exec(
+            select(PlanAccrualAllocation)
+            .where(PlanAccrualAllocation.accrual_id == accrual.id)
+            .with_for_update()
+        ).all()
+        if any(money(row.used_amount) > 0 for row in allocations):
+            raise HTTPException(
+                status_code=409,
+                detail="Bu tahakkuktan harcama yapıldığı için değiştirilemez.",
+            )
+        source = session.get(PlanEntry, accrual.source_plan_id) if accrual.source_plan_id else None
+        if not source:
+            source = session.exec(
+                select(PlanEntry).where(
+                    PlanEntry.budget_item_id == accrual.budget_item_id,
+                    PlanEntry.year == accrual.source_year,
+                    PlanEntry.scenario_id == accrual.source_scenario_id,
+                )
+            ).first()
+        if not source:
+            raise HTTPException(status_code=409, detail="Kaynak plan bulunamadı.")
+        preview = _domain_accrual_preview(
+            session, source, conversion, exclude_accrual_id=accrual.id
+        )
+        for row in allocations:
+            session.delete(row)
+        accrual.total_amount = money(conversion.total_amount)
+        accrual.start_year = conversion.start_year
+        accrual.start_month = conversion.start_month
+        accrual.month_count = conversion.month_count
+        accrual.updated_at = datetime.utcnow()
+        session.add(accrual)
+        session.flush()
+        for entry in preview.entries:
+            session.add(PlanAccrualAllocation(
+                accrual_id=accrual.id,
+                year=entry.year,
+                month=entry.month,
+                amount=money(entry.amount),
+                used_amount=Decimal("0.00"),
+            ))
+        session.commit()
+        return _build_domain_accrual_read(session, accrual.id)
+    except HTTPException:
+        session.rollback()
+        raise
+    except SQLAlchemyError as exc:
+        session.rollback()
+        raise HTTPException(status_code=409, detail="Tahakkuk güncellenemedi.") from exc
+
+
+@router.delete("/accruals/{accrual_id}", status_code=204)
+def reverse_domain_accrual(
+    accrual_id: int,
+    session: Session = Depends(get_db_session),
+    _: User = Depends(get_admin_user),
+) -> None:
+    try:
+        accrual = session.exec(
+            select(PlanAccrual).where(PlanAccrual.id == accrual_id).with_for_update()
+        ).first()
+        if not accrual or accrual.status != "ACTIVE":
+            raise HTTPException(status_code=404, detail="Tahakkuk kaydı bulunamadı.")
+        allocations = session.exec(
+            select(PlanAccrualAllocation)
+            .where(PlanAccrualAllocation.accrual_id == accrual.id)
+            .with_for_update()
+        ).all()
+        if any(money(row.used_amount) > 0 for row in allocations):
+            raise HTTPException(
+                status_code=409,
+                detail="Bu tahakkuktan harcama yapıldığı için geri alınamaz.",
+            )
+        for row in allocations:
+            session.delete(row)
+        session.delete(accrual)
+        session.commit()
+    except HTTPException:
+        session.rollback()
+        raise
+    except SQLAlchemyError as exc:
+        session.rollback()
+        raise HTTPException(status_code=409, detail="Tahakkuk geri alınamadı.") from exc
 
 
 def _remaining_plan_scopes(session: Session, plan: PlanEntry) -> list[tuple[PlanEntry, BudgetAvailableRead]]:

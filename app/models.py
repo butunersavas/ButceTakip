@@ -122,6 +122,43 @@ class PlanEntry(TimestampMixin, SQLModel, table=True):
     budget_item: BudgetItem = Relationship(back_populates="plans")
 
 
+class PlanAccrual(TimestampMixin, SQLModel, table=True):
+    __tablename__ = "plan_accruals"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    source_plan_id: Optional[int] = Field(
+        default=None, foreign_key="plan_entries.id", nullable=True, index=True
+    )
+    budget_item_id: int = Field(foreign_key="budget_items.id", nullable=False, index=True)
+    source_year: int = Field(nullable=False, index=True)
+    source_scenario_id: int = Field(foreign_key="scenarios.id", nullable=False, index=True)
+    department: Optional[str] = Field(default=None, nullable=True, index=True, max_length=100)
+    total_amount: Decimal = Field(
+        sa_column=Column(Numeric(16, 2), nullable=False)
+    )
+    start_year: int = Field(nullable=False, index=True)
+    start_month: int = Field(nullable=False, ge=1, le=12)
+    month_count: int = Field(nullable=False, ge=1, le=36)
+    created_by_id: Optional[int] = Field(default=None, foreign_key="users.id", index=True)
+    status: str = Field(default="ACTIVE", nullable=False, index=True, max_length=20)
+
+
+class PlanAccrualAllocation(TimestampMixin, SQLModel, table=True):
+    __tablename__ = "plan_accrual_allocations"
+    __table_args__ = (
+        UniqueConstraint("accrual_id", "year", "month", name="uq_plan_accrual_year_month"),
+    )
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    accrual_id: int = Field(foreign_key="plan_accruals.id", nullable=False, index=True)
+    year: int = Field(nullable=False, index=True)
+    month: int = Field(nullable=False, ge=1, le=12, index=True)
+    amount: Decimal = Field(sa_column=Column(Numeric(16, 2), nullable=False))
+    used_amount: Decimal = Field(
+        default=Decimal("0.00"), sa_column=Column(Numeric(16, 2), nullable=False)
+    )
+
+
 class BudgetPreparation(TimestampMixin, SQLModel, table=True):
     __tablename__ = "budget_preparations"
 
@@ -310,6 +347,20 @@ class ExpenseAllocation(TimestampMixin, SQLModel, table=True):
     allocated_amount: float = Field(nullable=False)
 
     expense: Expense = Relationship(back_populates="allocations")
+
+
+class ExpenseAccrualUsage(TimestampMixin, SQLModel, table=True):
+    __tablename__ = "expense_accrual_usages"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    expense_id: int = Field(foreign_key="expenses.id", nullable=False, index=True)
+    expense_allocation_id: Optional[int] = Field(
+        default=None, foreign_key="expense_allocations.id", nullable=True, index=True
+    )
+    accrual_allocation_id: int = Field(
+        foreign_key="plan_accrual_allocations.id", nullable=False, index=True
+    )
+    amount: Decimal = Field(sa_column=Column(Numeric(16, 2), nullable=False))
 
 
 class ExpenseAttachment(TimestampMixin, SQLModel, table=True):

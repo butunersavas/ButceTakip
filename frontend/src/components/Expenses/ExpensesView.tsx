@@ -137,6 +137,8 @@ export interface Expense {
   has_attachment?: boolean;
   allocation_count?: number;
   allocations?: ExpenseAllocation[];
+  accrual_used_amount?: number;
+  current_budget_amount?: number;
 }
 
 interface ExpenseAllocation {
@@ -205,8 +207,19 @@ interface ExpensePayload {
   allocation_start_month?: number | null;
   allocation_month_count?: number | null;
   allocation_method?: "equal" | "plan_amount" | null;
+  funding_source: "automatic" | "carryover" | "current";
   client_hostname?: string | null;
   kaydi_giren_kullanici?: string | null;
+}
+
+interface ExpenseAccrualAvailability {
+  budget_item_id: number;
+  year: number;
+  total_amount: number;
+  used_amount: number;
+  remaining_amount: number;
+  item_count: number;
+  source_years: number[];
 }
 
 type ExpenseMutationPayload = ExpensePayload & {
@@ -391,6 +404,22 @@ function formatCurrency(value: number) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   }).format(value ?? 0)}`;
+}
+
+function formatCarryoverYears(years: number[]) {
+  const suffixByLastDigit: Record<number, string> = {
+    0: "dan",
+    1: "den",
+    2: "den",
+    3: "ten",
+    4: "ten",
+    5: "ten",
+    6: "dan",
+    7: "den",
+    8: "den",
+    9: "dan"
+  };
+  return years.map((year) => `${year}'${suffixByLastDigit[Math.abs(year) % 10]}`).join(", ");
 }
 
 function sumUniqueExpensePlanScopes(expenses: Expense[]) {
@@ -680,6 +709,7 @@ export default function ExpensesView() {
   const [allocationStartMonth, setAllocationStartMonth] = useState<number>(new Date().getMonth() + 1);
   const [allocationMonthCount, setAllocationMonthCount] = useState<string>("1");
   const [allocationMethod, setAllocationMethod] = useState<"equal" | "plan_amount">("equal");
+  const [fundingSource, setFundingSource] = useState<"automatic" | "carryover" | "current">("automatic");
   const [formMarkPlanPurchased, setFormMarkPlanPurchased] = useState(true);
   const [isUnusedBudgetMode, setIsUnusedBudgetMode] = useState(false);
   const [unusedBudgetReason, setUnusedBudgetReason] = useState(unusedBudgetReasonOptions[0].value);
@@ -1120,6 +1150,21 @@ export default function ExpensesView() {
     }
   });
 
+  const accrualAvailabilityQuery = useQuery<ExpenseAccrualAvailability>({
+    queryKey: ["expense-accrual-availability", formBudgetItemId, formScenarioId, formExpenseDate],
+    enabled: dialogOpen && !formIsOutOfBudget && Boolean(formBudgetItemId && formScenarioId && formExpenseDate),
+    queryFn: async () => {
+      const { data } = await client.get<ExpenseAccrualAvailability>("/expenses/accrual-availability", {
+        params: {
+          budget_item_id: formBudgetItemId,
+          scenario_id: Number(formScenarioId),
+          year: dayjs(formExpenseDate).year()
+        }
+      });
+      return data;
+    }
+  });
+
   const mutation = useMutation({
     mutationFn: async (payload: ExpenseMutationPayload) => {
       try {
@@ -1256,6 +1301,7 @@ export default function ExpensesView() {
     setAllocationStartMonth(new Date().getMonth() + 1);
     setAllocationMonthCount("1");
     setAllocationMethod("equal");
+    setFundingSource("automatic");
     setFormMarkPlanPurchased(true);
     setIsUnusedBudgetMode(false);
     setUnusedBudgetReason(unusedBudgetReasonOptions[0].value);
@@ -1316,6 +1362,9 @@ export default function ExpensesView() {
         setAllocationMonthCount("1");
       }
       setAllocationMethod("equal");
+      setFundingSource(
+        isOutOfBudget ? "current" : Number(expense.accrual_used_amount ?? 0) > 0 ? "automatic" : "current"
+      );
       setFormMarkPlanPurchased(!isOutOfBudget);
       setIsUnusedBudgetMode(false);
       setUnusedBudgetReason(unusedBudgetReasonOptions[0].value);
@@ -1512,6 +1561,7 @@ export default function ExpensesView() {
       allocation_month_count:
         !isOutOfBudget && allocationMode === "planned_months" ? Number(allocationMonthCount) : null,
       allocation_method: !isOutOfBudget && allocationMode === "planned_months" ? allocationMethod : null,
+      funding_source: isOutOfBudget ? "current" : fundingSource,
       client_hostname: editingExpense?.client_hostname ?? undefined,
       kaydi_giren_kullanici:
         editingExpense?.kaydi_giren_kullanici ?? user?.username ?? user?.full_name ?? undefined,
@@ -3817,6 +3867,30 @@ export default function ExpensesView() {
                     fullWidth
                   />
                 </Grid>
+                {!formIsOutOfBudget && Number(accrualAvailabilityQuery.data?.remaining_amount ?? 0) > 0 && (
+                  <Grid item xs={12}>
+                    <Alert severity="info">
+                      Bu bütçe kalemi için {formatCarryoverYears(accrualAvailabilityQuery.data?.source_years ?? [])} devreden tahakkuk bulunmaktadır.
+                      Toplam {formatCurrency(Number(accrualAvailabilityQuery.data?.total_amount ?? 0))} · Kullanılan {formatCurrency(Number(accrualAvailabilityQuery.data?.used_amount ?? 0))} · Kalan {formatCurrency(Number(accrualAvailabilityQuery.data?.remaining_amount ?? 0))}.
+                      Otomatik seçim önce devreden tahakkuku, kalan tutar için mevcut yıl bütçesini kullanır.
+                    </Alert>
+                  </Grid>
+                )}
+                {!formIsOutOfBudget && (
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      select
+                      label="Harcama Kaynağı"
+                      value={fundingSource}
+                      onChange={(event) => setFundingSource(event.target.value as "automatic" | "carryover" | "current")}
+                      fullWidth
+                    >
+                      <MenuItem value="automatic">Otomatik — Önce Devreden Tahakkuk</MenuItem>
+                      <MenuItem value="carryover" disabled={Number(accrualAvailabilityQuery.data?.remaining_amount ?? 0) <= 0}>Devreden Tahakkuk</MenuItem>
+                      <MenuItem value="current">Cari Yıl Bütçesi</MenuItem>
+                    </TextField>
+                  </Grid>
+                )}
                 <Grid item xs={12} md={4}>
                   <TextField
                     select

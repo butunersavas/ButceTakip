@@ -613,58 +613,24 @@ class PlanManualCreate(BaseModel):
         return raw if raw in {"merge", "separate"} else "merge"
 
 
-class AccrualPlanInput(BaseModel):
+class AccrualConversionInput(BaseModel):
     total_amount: Decimal
     start_year: int
     start_month: int
     month_count: int = Field(ge=1, le=36)
-    scenario_id: int
-    budget_item_id: Optional[int] = None
-    budget_code: Optional[str] = None
-    budget_name: Optional[str] = None
-    department: str | None = Field(default=None, max_length=100)
-    map_category: Optional[str] = None
-    map_attribute: Optional[str] = None
-    description: Optional[str] = None
-    merge_mode: Literal["merge", "separate"] = "merge"
+
+    @validator("start_year")
+    def validate_start_year(cls, value: int) -> int:  # noqa: D417
+        if value < 2000 or value > 2200:
+            raise ValueError("Başlangıç yılı 2000 ile 2200 arasında olmalıdır.")
+        return value
 
     @validator("total_amount", pre=True)
     def validate_total_amount(cls, value) -> Decimal:  # noqa: D417
         parsed = _parse_decimal_value(value)
         if parsed is None or parsed <= 0:
-            raise ValueError("Toplam tutar 0'dan büyük olmalıdır.")
+            raise ValueError("Tahakkuk tutarı 0'dan büyük olmalıdır.")
         return parsed.quantize(Decimal("0.01"))
-
-    @validator("start_year")
-    def validate_start_year(cls, value: int) -> int:  # noqa: D417
-        if value < 2000 or value > 2200:
-            raise ValueError("Başlangıç yılı 2000 ile 2200 arasında olmalıdır.")
-        return value
-
-    @validator("start_month")
-    def validate_start_month(cls, value: int) -> int:  # noqa: D417
-        if not 1 <= value <= 12:
-            raise ValueError("Başlangıç ayı 1 ile 12 arasında olmalıdır.")
-        return value
-
-    @validator(
-        "budget_code", "budget_name", "department", "map_category",
-        "map_attribute", "description", pre=True,
-    )
-    def normalize_accrual_text(cls, value: str | None) -> str | None:  # noqa: D417
-        return _normalize_placeholder(value)
-
-
-class AccrualConversionInput(BaseModel):
-    start_year: int
-    start_month: int
-    month_count: int = Field(ge=1, le=36)
-
-    @validator("start_year")
-    def validate_start_year(cls, value: int) -> int:  # noqa: D417
-        if value < 2000 or value > 2200:
-            raise ValueError("Başlangıç yılı 2000 ile 2200 arasında olmalıdır.")
-        return value
 
     @validator("start_month")
     def validate_start_month(cls, value: int) -> int:  # noqa: D417
@@ -683,6 +649,12 @@ class AccrualPreviewEntry(BaseModel):
 class AccrualConversionPreview(BaseModel):
     source_plan_id: int
     total_amount: Decimal
+    source_plan_total: Decimal = Decimal("0.00")
+    source_actual_total: Decimal = Decimal("0.00")
+    source_unused_total: Decimal = Decimal("0.00")
+    source_reserved_total: Decimal = Decimal("0.00")
+    source_available_total: Decimal = Decimal("0.00")
+    future_reserved_amount: Decimal = Decimal("0.00")
     entries: list[AccrualPreviewEntry] = Field(default_factory=list)
 
 
@@ -825,22 +797,44 @@ class PlanEntryRead(SQLModel, table=False):
     accrual_source_month: Optional[int] = None
     accrual_source_plan_id: Optional[int] = None
     is_accrual: bool = False
+    plan_accrual_id: Optional[int] = None
+    has_accrual: bool = False
+    plan_accrual_total: Decimal = Decimal("0.00")
+    plan_accrual_future_reserved: Decimal = Decimal("0.00")
 
     class Config:
         orm_mode = True
 
 
+class PlanAccrualAllocationRead(BaseModel):
+    id: int
+    year: int
+    month: int
+    amount: Decimal
+    used_amount: Decimal = Decimal("0.00")
+    remaining_amount: Decimal = Decimal("0.00")
+
+
 class AccrualPlanRead(BaseModel):
-    accrual_group_id: str
+    id: int
     total_amount: Decimal
     start_year: int
     start_month: int
     month_count: int
-    scenario_id: int
+    source_year: int
+    source_scenario_id: int
+    source_scenario_name: Optional[str] = None
     budget_item_id: int
+    budget_code: Optional[str] = None
+    budget_name: Optional[str] = None
     department: Optional[str] = None
     source_plan_id: Optional[int] = None
-    entries: list[PlanEntryRead] = Field(default_factory=list)
+    created_by_id: Optional[int] = None
+    status: str = "ACTIVE"
+    used_amount: Decimal = Decimal("0.00")
+    remaining_amount: Decimal = Decimal("0.00")
+    carryover_amount: Decimal = Decimal("0.00")
+    allocations: list[PlanAccrualAllocationRead] = Field(default_factory=list)
 
 
 class PlanAggregateRead(BaseModel):
@@ -1020,6 +1014,7 @@ class ExpenseBase(BaseModel):
     allocation_method: Optional[str] = None
     client_hostname: Optional[str] = None
     kaydi_giren_kullanici: Optional[str] = None
+    funding_source: Literal["automatic", "carryover", "current"] = "automatic"
 
     @validator("expense_date", pre=True)
     def parse_expense_date(cls, value: date | str) -> date:  # noqa: D417
@@ -1084,6 +1079,7 @@ class ExpenseBase(BaseModel):
             values["allocation_start_month"] = None
             values["allocation_month_count"] = None
             values["allocation_method"] = None
+            values["funding_source"] = "current"
             return values
         if not values.get("budget_item_id"):
             raise ValueError("budget_item_id is required")
@@ -1219,6 +1215,7 @@ class ExpenseUpdate(BaseModel):
     allocation_method: Optional[str] = None
     client_hostname: Optional[str] = None
     kaydi_giren_kullanici: Optional[str] = None
+    funding_source: Optional[Literal["automatic", "carryover", "current"]] = None
 
     @validator("expense_date", pre=True)
     def parse_expense_date(cls, value: date | str | None) -> date | None:  # noqa: D417
@@ -1291,6 +1288,8 @@ class ExpenseAllocationRead(BaseModel):
     scope_remaining_amount: Optional[float] = None
     scope_saving_amount: Optional[float] = None
     scope_overrun_amount: Optional[float] = None
+    accrual_used_amount: float = 0
+    current_budget_amount: float = 0
 
     class Config:
         orm_mode = True
@@ -1329,6 +1328,8 @@ class ExpenseRead(SQLModel, table=False):
     has_attachment: bool = False
     allocation_count: int = 0
     allocations: list[ExpenseAllocationRead] = Field(default_factory=list)
+    accrual_used_amount: float = 0
+    current_budget_amount: float = 0
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     scenario_name: Optional[str] = None
@@ -1698,30 +1699,42 @@ class DashboardKPI(BaseModel):
 
 
 class DashboardAccrualItem(BaseModel):
-    plan_id: int
+    accrual_id: int
+    allocation_id: int
     budget_item_id: int
     budget_code: Optional[str] = None
     budget_name: Optional[str] = None
-    scenario_id: int
+    source_scenario_id: int
     scenario_name: Optional[str] = None
     department: Optional[str] = None
     capex_opex: Optional[str] = None
     asset_type: Optional[str] = None
     source_year: int
-    source_month: int
     year: int
     month: int
     amount: Decimal
-    accrual_group_id: str
-    source_plan_id: Optional[int] = None
-    is_carryover: bool = False
+    used_amount: Decimal = Decimal("0.00")
+    remaining_amount: Decimal = Decimal("0.00")
+    is_carryover: bool = True
 
 
 class DashboardAccrualSummary(BaseModel):
     accrual_plan_amount: Decimal = Decimal("0.00")
     accrual_group_count: int = 0
     carryover_accrual_amount: Decimal = Decimal("0.00")
+    carryover_used_amount: Decimal = Decimal("0.00")
+    carryover_remaining_amount: Decimal = Decimal("0.00")
     items: list[DashboardAccrualItem] = Field(default_factory=list)
+
+
+class ExpenseAccrualAvailabilityRead(BaseModel):
+    budget_item_id: int
+    year: int
+    total_amount: Decimal = Decimal("0.00")
+    used_amount: Decimal = Decimal("0.00")
+    remaining_amount: Decimal = Decimal("0.00")
+    item_count: int = 0
+    source_years: list[int] = Field(default_factory=list)
 
 
 class BudgetReconciliationRead(BaseModel):

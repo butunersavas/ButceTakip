@@ -48,6 +48,7 @@ from app.services.analytics import (
     compute_negotiated_saving_statuses,
     compute_remaining_budget_statuses,
 )
+from app.services.accruals import accrual_allocations_for_year, carryover_totals, money
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
@@ -141,65 +142,72 @@ def _dashboard_accrual_summary(
     department: str | None,
     capex_opex: str | None,
 ) -> DashboardAccrualSummary:
-    query = (
-        select(PlanEntry, BudgetItem, Scenario)
-        .join(BudgetItem, BudgetItem.id == PlanEntry.budget_item_id)
-        .join(Scenario, Scenario.id == PlanEntry.scenario_id)
-        .where(PlanEntry.is_accrual.is_(True))
-        .where(PlanEntry.year == year)
-        .where(PlanEntry.month.in_(month_range))
-        .where(PlanEntry.accrual_group_id.is_not(None))
-    )
     resolved_scenario_ids = [value for value in scenario_ids if value is not None]
-    if resolved_scenario_ids:
-        query = query.where(PlanEntry.scenario_id.in_(resolved_scenario_ids))
-    if budget_item_id is not None:
-        query = query.where(PlanEntry.budget_item_id == budget_item_id)
-    if department is not None:
-        query = query.where(PlanEntry.department == department)
-    if capex_opex in {"capex", "opex"}:
-        query = query.where(func.lower(func.trim(BudgetItem.map_category)) == capex_opex)
-
+    target_scenario_id = resolved_scenario_ids[0] if resolved_scenario_ids else None
+    rows = accrual_allocations_for_year(
+        session,
+        year=year,
+        budget_item_id=budget_item_id,
+        scenario_id=target_scenario_id,
+        department=department,
+        capex_opex=capex_opex,
+    )
+    rows = [row for row in rows if row[0].month in month_range]
     items: list[DashboardAccrualItem] = []
-    total = Decimal("0.00")
-    carryover_total = Decimal("0.00")
-    group_ids: set[str] = set()
-    for plan, budget_item, scenario in session.exec(
-        query.order_by(PlanEntry.year, PlanEntry.month, BudgetItem.name, PlanEntry.id)
-    ).all():
-        amount = Decimal(str(plan.accrual_amount or plan.amount or 0)).quantize(Decimal("0.01"))
-        source_year = plan.accrual_source_year or plan.year
-        source_month = plan.accrual_source_month or plan.month
-        is_carryover = source_year < plan.year
-        total += amount
-        if is_carryover:
-            carryover_total += amount
-        if plan.accrual_group_id:
-            group_ids.add(plan.accrual_group_id)
+    for allocation, accrual, budget_item, source_scenario in rows:
+        amount = money(allocation.amount)
+        used = money(allocation.used_amount)
         items.append(DashboardAccrualItem(
-            plan_id=plan.id,
-            budget_item_id=plan.budget_item_id,
+            accrual_id=accrual.id,
+            allocation_id=allocation.id,
+            budget_item_id=accrual.budget_item_id,
             budget_code=budget_item.code,
             budget_name=budget_item.name,
-            scenario_id=plan.scenario_id,
-            scenario_name=scenario.name,
-            department=plan.department,
+            source_scenario_id=accrual.source_scenario_id,
+            scenario_name=source_scenario.name,
+            department=accrual.department,
             capex_opex=budget_item.map_category,
             asset_type=budget_item.map_attribute,
-            source_year=source_year,
-            source_month=source_month,
-            year=plan.year,
-            month=plan.month,
+            source_year=accrual.source_year,
+            year=allocation.year,
+            month=allocation.month,
             amount=amount,
-            accrual_group_id=plan.accrual_group_id,
-            source_plan_id=plan.accrual_source_plan_id,
-            is_carryover=is_carryover,
+            used_amount=used,
+            remaining_amount=max(amount - used, Decimal("0.00")),
+            is_carryover=True,
         ))
+    totals = carryover_totals(rows)
     return DashboardAccrualSummary(
-        accrual_plan_amount=total,
-        accrual_group_count=len(group_ids),
-        carryover_accrual_amount=carryover_total,
+        accrual_plan_amount=totals["total"],
+        accrual_group_count=totals["item_count"],
+        carryover_accrual_amount=totals["total"],
+        carryover_used_amount=totals["used"],
+        carryover_remaining_amount=totals["remaining"],
         items=items,
+    )
+
+
+def _effective_metrics_with_carryover(
+    *,
+    realized: float,
+    remaining: float,
+    overrun: float,
+    carryover_used: float,
+    carryover_remaining: float,
+) -> tuple[float, float, float]:
+    """Re-attribute actuals already counted against the current budget to carryover."""
+    absorbed_overrun = min(max(overrun, 0.0), max(carryover_used, 0.0))
+    current_budget_offset = min(
+        max(realized, 0.0),
+        max(carryover_used - absorbed_overrun, 0.0),
+    )
+    effective_actual = realized - current_budget_offset + carryover_used
+    effective_remaining = remaining + current_budget_offset + carryover_remaining
+    effective_overrun = overrun - absorbed_overrun
+    return (
+        round(effective_actual, 2),
+        round(effective_remaining, 2),
+        round(effective_overrun, 2),
     )
 
 
@@ -827,18 +835,6 @@ def get_dashboard(
     ]
     reconciliation = _sum_reconciliations(reconciliations)
     new_budget_plan_amount = reconciliations[0].total_plan_amount
-    carryover_plan_amount = round(
-        sum(value.total_plan_amount for value in reconciliations[1:]), 2
-    )
-    total_plan = reconciliation.total_plan_amount
-    total_actual = reconciliation.realized_plan_inside_amount
-    total_remaining = reconciliation.remaining_available_amount
-    total_negotiated_saving = reconciliation.negotiated_saving_amount
-    total_overrun = reconciliation.overrun_amount
-    total_unused = reconciliation.other_saving_amount
-    total_other_saving = total_unused
-    total_combined_saving = total_negotiated_saving + total_other_saving
-    total_cancelled = reconciliation.canceled_budget_amount
     accruals = _dashboard_accrual_summary(
         session,
         year=year,
@@ -848,6 +844,46 @@ def get_dashboard(
         department=department,
         capex_opex=capex_filter,
     )
+    carryover_accrual_total = float(accruals.carryover_accrual_amount)
+    carryover_accrual_used = float(accruals.carryover_used_amount)
+    carryover_accrual_remaining = float(accruals.carryover_remaining_amount)
+    carryover_plan_amount = round(
+        sum(value.total_plan_amount for value in reconciliations[1:])
+        + carryover_accrual_total,
+        2,
+    )
+    total_plan = round(reconciliation.total_plan_amount + carryover_accrual_total, 2)
+    total_actual, total_remaining, total_overrun = _effective_metrics_with_carryover(
+        realized=reconciliation.realized_plan_inside_amount,
+        remaining=reconciliation.remaining_available_amount,
+        overrun=reconciliation.overrun_amount,
+        carryover_used=carryover_accrual_used,
+        carryover_remaining=carryover_accrual_remaining,
+    )
+    total_negotiated_saving = reconciliation.negotiated_saving_amount
+    total_unused = reconciliation.other_saving_amount
+    total_other_saving = total_unused
+    total_combined_saving = total_negotiated_saving + total_other_saving
+    total_cancelled = reconciliation.canceled_budget_amount
+    accrual_plan_by_category = {"capex": 0.0, "opex": 0.0, "unclassified": 0.0}
+    accrual_used_by_category = {"capex": 0.0, "opex": 0.0, "unclassified": 0.0}
+    accrual_remaining_by_category = {"capex": 0.0, "opex": 0.0, "unclassified": 0.0}
+    for item in accruals.items:
+        key = (item.capex_opex or "").strip().lower()
+        category = key if key in {"capex", "opex"} else "unclassified"
+        accrual_plan_by_category[category] += float(item.amount)
+        accrual_used_by_category[category] += float(item.used_amount)
+        accrual_remaining_by_category[category] += float(item.remaining_amount)
+    category_metrics = {
+        category: _effective_metrics_with_carryover(
+            realized=getattr(reconciliation, f"{category}_realized_plan_inside_amount"),
+            remaining=getattr(reconciliation, f"{category}_remaining_available_amount"),
+            overrun=getattr(reconciliation, f"{category}_overrun_amount"),
+            carryover_used=accrual_used_by_category[category],
+            carryover_remaining=accrual_remaining_by_category[category],
+        )
+        for category in ("capex", "opex", "unclassified")
+    }
     return DashboardResponse(
         kpi=DashboardKPI(
             total_plan=total_plan,
@@ -860,21 +896,17 @@ def get_dashboard(
             total_other_saving=total_other_saving,
             total_combined_saving=total_combined_saving,
             total_cancelled=total_cancelled,
-            capex_total_plan_amount=reconciliation.capex_total_plan_amount,
-            opex_total_plan_amount=reconciliation.opex_total_plan_amount,
-            unclassified_total_plan_amount=reconciliation.unclassified_total_plan_amount,
-            realized_plan_inside_amount=reconciliation.realized_plan_inside_amount,
-            capex_realized_plan_inside_amount=reconciliation.capex_realized_plan_inside_amount,
-            opex_realized_plan_inside_amount=reconciliation.opex_realized_plan_inside_amount,
-            unclassified_realized_plan_inside_amount=(
-                reconciliation.unclassified_realized_plan_inside_amount
-            ),
-            remaining_available_amount=reconciliation.remaining_available_amount,
-            capex_remaining_available_amount=reconciliation.capex_remaining_available_amount,
-            opex_remaining_available_amount=reconciliation.opex_remaining_available_amount,
-            unclassified_remaining_available_amount=(
-                reconciliation.unclassified_remaining_available_amount
-            ),
+            capex_total_plan_amount=reconciliation.capex_total_plan_amount + accrual_plan_by_category["capex"],
+            opex_total_plan_amount=reconciliation.opex_total_plan_amount + accrual_plan_by_category["opex"],
+            unclassified_total_plan_amount=reconciliation.unclassified_total_plan_amount + accrual_plan_by_category["unclassified"],
+            realized_plan_inside_amount=total_actual,
+            capex_realized_plan_inside_amount=category_metrics["capex"][0],
+            opex_realized_plan_inside_amount=category_metrics["opex"][0],
+            unclassified_realized_plan_inside_amount=category_metrics["unclassified"][0],
+            remaining_available_amount=total_remaining,
+            capex_remaining_available_amount=category_metrics["capex"][1],
+            opex_remaining_available_amount=category_metrics["opex"][1],
+            unclassified_remaining_available_amount=category_metrics["unclassified"][1],
             negotiated_saving_amount=reconciliation.negotiated_saving_amount,
             capex_negotiated_saving_amount=reconciliation.capex_negotiated_saving_amount,
             opex_negotiated_saving_amount=reconciliation.opex_negotiated_saving_amount,
@@ -891,10 +923,10 @@ def get_dashboard(
             unclassified_canceled_budget_amount=(
                 reconciliation.unclassified_canceled_budget_amount
             ),
-            overrun_amount=reconciliation.overrun_amount,
-            capex_overrun_amount=reconciliation.capex_overrun_amount,
-            opex_overrun_amount=reconciliation.opex_overrun_amount,
-            unclassified_overrun_amount=reconciliation.unclassified_overrun_amount,
+            overrun_amount=total_overrun,
+            capex_overrun_amount=category_metrics["capex"][2],
+            opex_overrun_amount=category_metrics["opex"][2],
+            unclassified_overrun_amount=category_metrics["unclassified"][2],
             budget_outside_amount=reconciliation.budget_outside_amount,
             capex_budget_outside_amount=reconciliation.capex_budget_outside_amount,
             opex_budget_outside_amount=reconciliation.opex_budget_outside_amount,
@@ -915,7 +947,7 @@ def get_dashboard(
             ),
             new_budget_plan_amount=new_budget_plan_amount,
             carryover_plan_amount=carryover_plan_amount,
-            effective_plan_amount=reconciliation.total_plan_amount,
+            effective_plan_amount=total_plan,
             accrual_plan_amount=float(accruals.accrual_plan_amount),
             accrual_group_count=accruals.accrual_group_count,
             carryover_accrual_amount=float(accruals.carryover_accrual_amount),
@@ -933,22 +965,18 @@ def get_dashboard(
             for item in monthly
         ],
         reconciliation=BudgetReconciliationRead(
-            total_plan_amount=reconciliation.total_plan_amount,
-            capex_total_plan_amount=reconciliation.capex_total_plan_amount,
-            opex_total_plan_amount=reconciliation.opex_total_plan_amount,
-            unclassified_total_plan_amount=reconciliation.unclassified_total_plan_amount,
-            realized_plan_inside_amount=reconciliation.realized_plan_inside_amount,
-            capex_realized_plan_inside_amount=reconciliation.capex_realized_plan_inside_amount,
-            opex_realized_plan_inside_amount=reconciliation.opex_realized_plan_inside_amount,
-            unclassified_realized_plan_inside_amount=(
-                reconciliation.unclassified_realized_plan_inside_amount
-            ),
-            remaining_available_amount=reconciliation.remaining_available_amount,
-            capex_remaining_available_amount=reconciliation.capex_remaining_available_amount,
-            opex_remaining_available_amount=reconciliation.opex_remaining_available_amount,
-            unclassified_remaining_available_amount=(
-                reconciliation.unclassified_remaining_available_amount
-            ),
+            total_plan_amount=total_plan,
+            capex_total_plan_amount=reconciliation.capex_total_plan_amount + accrual_plan_by_category["capex"],
+            opex_total_plan_amount=reconciliation.opex_total_plan_amount + accrual_plan_by_category["opex"],
+            unclassified_total_plan_amount=reconciliation.unclassified_total_plan_amount + accrual_plan_by_category["unclassified"],
+            realized_plan_inside_amount=total_actual,
+            capex_realized_plan_inside_amount=category_metrics["capex"][0],
+            opex_realized_plan_inside_amount=category_metrics["opex"][0],
+            unclassified_realized_plan_inside_amount=category_metrics["unclassified"][0],
+            remaining_available_amount=total_remaining,
+            capex_remaining_available_amount=category_metrics["capex"][1],
+            opex_remaining_available_amount=category_metrics["opex"][1],
+            unclassified_remaining_available_amount=category_metrics["unclassified"][1],
             negotiated_saving_amount=reconciliation.negotiated_saving_amount,
             capex_negotiated_saving_amount=reconciliation.capex_negotiated_saving_amount,
             opex_negotiated_saving_amount=reconciliation.opex_negotiated_saving_amount,
@@ -965,21 +993,21 @@ def get_dashboard(
             unclassified_canceled_budget_amount=(
                 reconciliation.unclassified_canceled_budget_amount
             ),
-            overrun_amount=reconciliation.overrun_amount,
-            capex_overrun_amount=reconciliation.capex_overrun_amount,
-            opex_overrun_amount=reconciliation.opex_overrun_amount,
-            unclassified_overrun_amount=reconciliation.unclassified_overrun_amount,
+            overrun_amount=total_overrun,
+            capex_overrun_amount=category_metrics["capex"][2],
+            opex_overrun_amount=category_metrics["opex"][2],
+            unclassified_overrun_amount=category_metrics["unclassified"][2],
             budget_outside_amount=reconciliation.budget_outside_amount,
             capex_budget_outside_amount=reconciliation.capex_budget_outside_amount,
             opex_budget_outside_amount=reconciliation.opex_budget_outside_amount,
             unclassified_budget_outside_amount=(
                 reconciliation.unclassified_budget_outside_amount
             ),
-            reconciliation_total=reconciliation.reconciliation_total,
-            capex_reconciliation_total=reconciliation.capex_reconciliation_total,
-            opex_reconciliation_total=reconciliation.opex_reconciliation_total,
+            reconciliation_total=reconciliation.reconciliation_total + carryover_accrual_total,
+            capex_reconciliation_total=reconciliation.capex_reconciliation_total + accrual_plan_by_category["capex"],
+            opex_reconciliation_total=reconciliation.opex_reconciliation_total + accrual_plan_by_category["opex"],
             unclassified_reconciliation_total=(
-                reconciliation.unclassified_reconciliation_total
+                reconciliation.unclassified_reconciliation_total + accrual_plan_by_category["unclassified"]
             ),
             reconciliation_difference=reconciliation.reconciliation_difference,
             capex_reconciliation_difference=reconciliation.capex_reconciliation_difference,
@@ -1117,6 +1145,19 @@ def get_risky_budget_items(
         scenario_id=scenario_id,
         effective_primary=effective_primary,
     )
+    carryover_by_budget_item: dict[int, float] = {}
+    for allocation, accrual, *_ in accrual_allocations_for_year(
+        session,
+        year=year,
+        scenario_id=effective_ids[0] if effective_ids else scenario_id,
+        department=department,
+        capex_opex=_normalize_capex_opex(capex_opex),
+    ):
+        if allocation.month in month_range:
+            carryover_by_budget_item[accrual.budget_item_id] = (
+                carryover_by_budget_item.get(accrual.budget_item_id, 0.0)
+                + float(allocation.amount or 0)
+            )
     remaining_statuses = [
         row
         for effective_id in effective_ids
@@ -1144,7 +1185,9 @@ def get_risky_budget_items(
     items: list[RiskyItem] = []
 
     for row in [*remaining_statuses, *overrun_statuses]:
-        plan = float(row.revised_plan or 0)
+        plan = float(row.revised_plan or 0) + carryover_by_budget_item.get(
+            row.budget_item_id, 0.0
+        )
         actual = float(row.actual or 0)
         if plan <= 0:
             continue
@@ -1328,6 +1371,21 @@ def get_overbudget(
             select(BudgetItem.id).where(BudgetItem.code == budget_code)
         ).first()
 
+    carryover_by_budget_item: dict[int, float] = {}
+    for allocation, accrual, *_ in accrual_allocations_for_year(
+        session,
+        year=resolved_year,
+        budget_item_id=budget_item_id,
+        scenario_id=scenario_id,
+        department=department,
+        capex_opex=capex_filter,
+    ):
+        if allocation.month in month_range:
+            carryover_by_budget_item[accrual.budget_item_id] = (
+                carryover_by_budget_item.get(accrual.budget_item_id, 0.0)
+                + float(allocation.amount or 0)
+            )
+
     statuses = compute_budget_item_statuses(
         session,
         year=resolved_year,
@@ -1366,10 +1424,14 @@ def get_overbudget(
         capex_opex=capex_filter,
     )
 
-    def serialize_status(item) -> OverBudgetItem:
+    def serialize_status(item, *, include_carryover: bool = False) -> OverBudgetItem:
+        plan = float(item.revised_plan or 0)
+        if include_carryover:
+            plan += carryover_by_budget_item.get(item.budget_item_id, 0.0)
+        over = max(float(item.actual or 0) - plan, 0.0) if include_carryover else item.difference
         over_pct = (
-            item.difference / item.revised_plan * 100
-            if item.revised_plan > 0
+            over / plan * 100
+            if plan > 0
             else 0.0
         )
         return OverBudgetItem(
@@ -1380,9 +1442,9 @@ def get_overbudget(
             capex_opex=item.capex_opex,
             asset_type=item.asset_type,
             department=item.department,
-            plan=item.revised_plan,
+            plan=plan,
             actual=item.actual,
-            over=item.difference,
+            over=over,
             over_pct=over_pct,
             year=resolved_year,
             month=item.months[0] if len(item.months) == 1 else None,
@@ -1400,7 +1462,11 @@ def get_overbudget(
         monthly_scope=budget_item_id is not None or month is not None or bool(month_list),
     )
 
-    items = [serialize_status(item) for item in overrun_statuses]
+    items = [
+        serialized
+        for item in overrun_statuses
+        if (serialized := serialize_status(item, include_carryover=True)).over > 0
+    ]
     saving_items = [serialize_status(item) for item in saving_statuses]
     remaining_items = [serialize_status(item) for item in remaining_statuses]
     unused_items = _unused_budget_items(
@@ -1416,7 +1482,7 @@ def get_overbudget(
     saving_items.sort(key=lambda item: item.over, reverse=True)
     remaining_items.sort(key=lambda item: item.over, reverse=True)
     unused_items.sort(key=lambda item: item.unused_amount, reverse=True)
-    over_total = reconciliation.overrun_amount
+    over_total = sum(item.over for item in items)
     unused_total = reconciliation.other_saving_amount
     negotiated_saving_total = reconciliation.negotiated_saving_amount
     negotiated_saving_item_count = len(saving_statuses)
@@ -1425,10 +1491,8 @@ def get_overbudget(
         summary=OverBudgetSummary(
             over_total=over_total,
             over_item_count=len(items),
-            total_revised_plan=sum(
-                item.revised_plan for item in overrun_statuses
-            ),
-            total_actual=sum(item.actual for item in overrun_statuses),
+            total_revised_plan=sum(item.plan for item in items),
+            total_actual=sum(item.actual for item in items),
             total_valid_actual=sum(item.overall_actual for item in statuses),
             remaining_total=reconciliation.remaining_available_amount,
             remaining_item_count=len(remaining_items),

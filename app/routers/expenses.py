@@ -16,6 +16,7 @@ from app.models import (
     BudgetItem,
     BudgetTransfer,
     Expense,
+    ExpenseAccrualUsage,
     ExpenseAllocation,
     ExpenseAttachment,
     ExpenseStatus,
@@ -27,6 +28,7 @@ from app.models import (
 from app.schemas import (
     DeleteDependencyInfo,
     ExpenseAllocationRead,
+    ExpenseAccrualAvailabilityRead,
     ExpenseAttachmentRead,
     ExpenseCreate,
     ExpenseRead,
@@ -46,6 +48,13 @@ from app.services.analytics import (
 )
 from app.services.related_records import count_related_file_records, delete_related_file_records
 from app.services.budget_availability import calculate_budget_availability
+from app.services.accruals import (
+    accrual_allocations_for_year,
+    apply_expense_accrual_usage,
+    carryover_totals,
+    money,
+    release_expense_accrual_usage,
+)
 
 router = APIRouter(prefix="/expenses", tags=["Expenses"])
 logger = logging.getLogger(__name__)
@@ -435,9 +444,14 @@ def _create_expense_allocations(
     session: Session,
     expense: Expense,
     allocation_data: list[dict[str, int | float]],
-) -> None:
+) -> list[ExpenseAllocation]:
+    allocations: list[ExpenseAllocation] = []
     for item in allocation_data:
-        session.add(ExpenseAllocation(expense_id=expense.id, **item))
+        allocation = ExpenseAllocation(expense_id=expense.id, **item)
+        session.add(allocation)
+        allocations.append(allocation)
+    session.flush()
+    return allocations
 
 
 def _build_expense_read(
@@ -447,6 +461,7 @@ def _build_expense_read(
     budget_scope_map: dict[BudgetScopeKey, BudgetScopeAggregate] | None = None,
     attachment_count_map: dict[int, int] | None = None,
     allocation_map: dict[int, list[ExpenseAllocationRead]] | None = None,
+    accrual_usage_map: dict[int, float] | None = None,
 ) -> ExpenseRead:
     created_name = (
         row.get("created_full_name")
@@ -565,6 +580,7 @@ def _build_expense_read(
     available_amount = max(plan_amount - actual_amount, 0.0)
     saving_amount = 0.0
     attachment_count = int((attachment_count_map or {}).get(row.get("id"), 0))
+    accrual_used_amount = float((accrual_usage_map or {}).get(row.get("id"), 0.0))
     return ExpenseRead(
         id=row.get("id"),
         budget_item_id=row.get("budget_item_id"),
@@ -612,6 +628,8 @@ def _build_expense_read(
         nitelik=row.get("asset_type") or outside_asset_type,
         created_at=row.get("created_at"),
         updated_at=row.get("updated_at"),
+        accrual_used_amount=round(accrual_used_amount, 2),
+        current_budget_amount=round(max(amount - accrual_used_amount, 0.0), 2),
     )
 
 
@@ -786,6 +804,15 @@ def _build_expense_reads(
     department_map = _build_department_map(session, budget_ids, year, scenario_id)
     attachment_count_map = _build_attachment_count_map(session, expense_ids)
     allocation_map = _build_allocation_map(session, expense_ids)
+    usage_rows = session.exec(
+        select(
+            ExpenseAccrualUsage.expense_id,
+            func.coalesce(func.sum(ExpenseAccrualUsage.amount), 0),
+        )
+        .where(ExpenseAccrualUsage.expense_id.in_(expense_ids))
+        .group_by(ExpenseAccrualUsage.expense_id)
+    ).all() if expense_ids else []
+    accrual_usage_map = {int(expense_id): float(amount or 0) for expense_id, amount in usage_rows}
     plan_amount_map = _build_plan_amount_map(session, row_maps, allocation_map)
     budget_scope_map: dict[BudgetScopeKey, BudgetScopeAggregate] = {}
     scope_months_by_year: dict[int, set[int]] = {}
@@ -816,6 +843,7 @@ def _build_expense_reads(
             budget_scope_map,
             attachment_count_map,
             allocation_map,
+            accrual_usage_map,
         )
         for row in row_maps
     ]
@@ -903,6 +931,32 @@ def _fetch_expense_read(
     if not row:
         raise HTTPException(status_code=404, detail="Expense not found")
     return _build_expense_reads(session, [row], year, scenario_id)[0]
+
+
+@router.get("/accrual-availability", response_model=ExpenseAccrualAvailabilityRead)
+def get_expense_accrual_availability(
+    budget_item_id: int = Query(...),
+    year: int = Query(...),
+    scenario_id: int = Query(...),
+    session: Session = Depends(get_db_session),
+    _: User = Depends(get_current_user),
+) -> ExpenseAccrualAvailabilityRead:
+    rows = accrual_allocations_for_year(
+        session,
+        year=year,
+        budget_item_id=budget_item_id,
+        scenario_id=scenario_id,
+    )
+    totals = carryover_totals(rows)
+    return ExpenseAccrualAvailabilityRead(
+        year=year,
+        budget_item_id=budget_item_id,
+        total_amount=totals["total"],
+        used_amount=totals["used"],
+        remaining_amount=totals["remaining"],
+        item_count=totals["item_count"],
+        source_years=sorted({row[1].source_year for row in rows}),
+    )
 
 
 @router.get("", response_model=list[ExpenseRead])
@@ -1447,6 +1501,7 @@ def create_expense(
             "client_hostname",
             "kaydi_giren_kullanici",
             "mark_plan_purchased",
+            "funding_source",
             *ALLOCATION_INPUT_FIELDS,
         }
     )
@@ -1471,13 +1526,22 @@ def create_expense(
     try:
         session.add(expense)
         session.flush()
-        _create_expense_allocations(session, expense, allocation_data)
+        allocations = _create_expense_allocations(session, expense, allocation_data)
+        apply_expense_accrual_usage(
+            session,
+            expense=expense,
+            expense_allocations=allocations,
+            funding_source=expense_in.funding_source,
+        )
         if mark_plan_purchased and expense.status == ExpenseStatus.RECORDED:
             scopes = _allocation_data_scopes(allocation_data) or _expense_plan_scopes(session, expense)
             for scope in scopes:
                 _set_plan_purchase_status(session, scope, True, current_user.id)
         session.commit()
         session.refresh(expense)
+    except HTTPException:
+        session.rollback()
+        raise
     except SQLAlchemyError as exc:
         session.rollback()
         detail = str(exc.orig) if getattr(exc, "orig", None) else "DB constraint error"
@@ -1506,8 +1570,14 @@ def update_expense(
     allocation_mode_supplied = "allocation_mode" in expense_in.__fields_set__
     update_data = expense_in.dict(
         exclude_unset=True,
-        exclude={"mark_plan_purchased", *ALLOCATION_INPUT_FIELDS},
+        exclude={"mark_plan_purchased", "funding_source", *ALLOCATION_INPUT_FIELDS},
     )
+    has_accrual_usage = session.exec(
+        select(ExpenseAccrualUsage.id)
+        .where(ExpenseAccrualUsage.expense_id == expense.id)
+        .limit(1)
+    ).first() is not None
+    funding_source = expense_in.funding_source or ("automatic" if has_accrual_usage else "current")
     will_be_out_of_budget = bool(update_data.get("is_out_of_budget", expense.is_out_of_budget))
     if will_be_out_of_budget:
         update_data["budget_item_id"] = None
@@ -1557,10 +1627,21 @@ def update_expense(
     try:
         session.add(expense)
         session.flush()
+        release_expense_accrual_usage(session, expense.id)
         if allocation_data is not None:
             _delete_expense_allocations(session, expense.id)
             session.flush()
-            _create_expense_allocations(session, expense, allocation_data)
+            expense_allocations = _create_expense_allocations(session, expense, allocation_data)
+        else:
+            expense_allocations = list(session.exec(
+                select(ExpenseAllocation).where(ExpenseAllocation.expense_id == expense.id)
+            ).all())
+        apply_expense_accrual_usage(
+            session,
+            expense=expense,
+            expense_allocations=expense_allocations,
+            funding_source=funding_source,
+        )
         new_scopes = (
             _allocation_data_scopes(allocation_data)
             if allocation_data is not None
@@ -1586,6 +1667,9 @@ def update_expense(
                 sync_scope(scope)
         session.commit()
         session.refresh(expense)
+    except HTTPException:
+        session.rollback()
+        raise
     except SQLAlchemyError as exc:
         session.rollback()
         detail = str(exc.orig) if getattr(exc, "orig", None) else "DB constraint error"
@@ -1912,6 +1996,7 @@ def delete_expense(
         scopes = _expense_plan_scopes(session, expense)
         if delete_related:
             delete_related_file_records(session, "expenses", expense_id)
+        release_expense_accrual_usage(session, expense_id)
         _delete_expense_allocations(session, expense_id)
         session.delete(expense)
         session.flush()
