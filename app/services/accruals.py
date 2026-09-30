@@ -87,6 +87,7 @@ def source_budget_summary(
             ExpenseAllocation.scenario_id == source_scenario_id,
             Expense.status == ExpenseStatus.RECORDED,
             Expense.is_out_of_budget.is_(False),
+            Expense.funding_source != "carryover",
         )
     ).one()
     fallback_actual = session.exec(
@@ -96,6 +97,7 @@ def source_budget_summary(
             func.extract("year", Expense.expense_date) == source_year,
             Expense.status == ExpenseStatus.RECORDED,
             Expense.is_out_of_budget.is_(False),
+            Expense.funding_source != "carryover",
             ~select(ExpenseAllocation.id)
             .where(ExpenseAllocation.expense_id == Expense.id)
             .exists(),
@@ -103,14 +105,15 @@ def source_budget_summary(
     ).one()
 
     reserve_query = (
-        select(func.coalesce(func.sum(PlanAccrualAllocation.amount), 0))
+        select(func.coalesce(func.sum(
+            PlanAccrualAllocation.amount - PlanAccrualAllocation.used_amount
+        ), 0))
         .join(PlanAccrual, PlanAccrual.id == PlanAccrualAllocation.accrual_id)
         .where(
             PlanAccrual.budget_item_id == budget_item_id,
             PlanAccrual.source_year == source_year,
             PlanAccrual.source_scenario_id == source_scenario_id,
             PlanAccrual.status == "ACTIVE",
-            PlanAccrualAllocation.year > source_year,
         )
     )
     if department is not None:
@@ -177,6 +180,46 @@ def accrual_allocations_for_year(
             )
     if lock:
         query = query.with_for_update()
+    return list(session.exec(query).all())
+
+
+def accrual_reservations_for_source_year(
+    session: Session,
+    *,
+    source_year: int,
+    source_months: list[int] | None = None,
+    budget_item_id: int | None = None,
+    scenario_ids: list[int | None] | None = None,
+    department: str | None = None,
+    capex_opex: str | None = None,
+) -> list[tuple[PlanAccrualAllocation, PlanAccrual, BudgetItem]]:
+    query = (
+        select(PlanAccrualAllocation, PlanAccrual, BudgetItem)
+        .join(PlanAccrual, PlanAccrual.id == PlanAccrualAllocation.accrual_id)
+        .join(BudgetItem, BudgetItem.id == PlanAccrual.budget_item_id)
+        .join(PlanEntry, PlanEntry.id == PlanAccrual.source_plan_id)
+        .where(
+            PlanAccrual.status == "ACTIVE",
+            PlanAccrual.source_year == source_year,
+        )
+        .order_by(
+            PlanAccrual.source_year,
+            PlanAccrualAllocation.year,
+            PlanAccrualAllocation.month,
+            PlanAccrualAllocation.id,
+        )
+    )
+    if source_months:
+        query = query.where(PlanEntry.month.in_(source_months))
+    if budget_item_id is not None:
+        query = query.where(PlanAccrual.budget_item_id == budget_item_id)
+    resolved_scenario_ids = [value for value in (scenario_ids or []) if value is not None]
+    if resolved_scenario_ids:
+        query = query.where(PlanAccrual.source_scenario_id.in_(resolved_scenario_ids))
+    if department is not None:
+        query = query.where(func.coalesce(PlanAccrual.department, "") == department)
+    if capex_opex in {"capex", "opex"}:
+        query = query.where(func.lower(func.trim(BudgetItem.map_category)) == capex_opex)
     return list(session.exec(query).all())
 
 

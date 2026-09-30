@@ -650,6 +650,8 @@ class AccrualConversionPreview(BaseModel):
     source_plan_id: int
     total_amount: Decimal
     source_plan_total: Decimal = Decimal("0.00")
+    source_annual_plan_total: Decimal = Decimal("0.00")
+    source_revised_plan_total: Decimal = Decimal("0.00")
     source_actual_total: Decimal = Decimal("0.00")
     source_unused_total: Decimal = Decimal("0.00")
     source_reserved_total: Decimal = Decimal("0.00")
@@ -801,6 +803,8 @@ class PlanEntryRead(SQLModel, table=False):
     has_accrual: bool = False
     plan_accrual_total: Decimal = Decimal("0.00")
     plan_accrual_future_reserved: Decimal = Decimal("0.00")
+    plan_accrual_open_amount: Decimal = Decimal("0.00")
+    plan_accrual_allocation_amount: Decimal = Decimal("0.00")
 
     class Config:
         orm_mode = True
@@ -1015,6 +1019,10 @@ class ExpenseBase(BaseModel):
     client_hostname: Optional[str] = None
     kaydi_giren_kullanici: Optional[str] = None
     funding_source: Literal["automatic", "carryover", "current"] = "automatic"
+    is_periodic: bool = False
+    period_start_year: Optional[int] = None
+    period_start_month: Optional[int] = None
+    period_month_count: Optional[int] = None
 
     @validator("expense_date", pre=True)
     def parse_expense_date(cls, value: date | str) -> date:  # noqa: D417
@@ -1080,9 +1088,20 @@ class ExpenseBase(BaseModel):
             values["allocation_month_count"] = None
             values["allocation_method"] = None
             values["funding_source"] = "current"
+            values["is_periodic"] = False
+            values["period_start_year"] = None
+            values["period_start_month"] = None
+            values["period_month_count"] = None
             return values
         if not values.get("budget_item_id"):
             raise ValueError("budget_item_id is required")
+        if values.get("is_periodic"):
+            if not values.get("period_start_year"):
+                raise ValueError("period_start_year is required")
+            if not values.get("period_start_month") or not 1 <= values["period_start_month"] <= 12:
+                raise ValueError("period_start_month must be between 1 and 12")
+            if not values.get("period_month_count") or not 1 <= values["period_month_count"] <= 36:
+                raise ValueError("period_month_count must be between 1 and 36")
         return values
 
     class Config:
@@ -1216,6 +1235,10 @@ class ExpenseUpdate(BaseModel):
     client_hostname: Optional[str] = None
     kaydi_giren_kullanici: Optional[str] = None
     funding_source: Optional[Literal["automatic", "carryover", "current"]] = None
+    is_periodic: Optional[bool] = None
+    period_start_year: Optional[int] = None
+    period_start_month: Optional[int] = None
+    period_month_count: Optional[int] = None
 
     @validator("expense_date", pre=True)
     def parse_expense_date(cls, value: date | str | None) -> date | None:  # noqa: D417
@@ -1295,6 +1318,15 @@ class ExpenseAllocationRead(BaseModel):
         orm_mode = True
 
 
+class ExpensePeriodAllocationRead(BaseModel):
+    year: int
+    month: int
+    amount: Decimal
+
+    class Config:
+        orm_mode = True
+
+
 class ExpenseRead(SQLModel, table=False):
     id: int
     scenario_id: Optional[int] = None
@@ -1330,6 +1362,13 @@ class ExpenseRead(SQLModel, table=False):
     allocations: list[ExpenseAllocationRead] = Field(default_factory=list)
     accrual_used_amount: float = 0
     current_budget_amount: float = 0
+    funding_source: str = "current"
+    budget_source_year: Optional[int] = None
+    is_periodic: bool = False
+    period_start_year: Optional[int] = None
+    period_start_month: Optional[int] = None
+    period_month_count: Optional[int] = None
+    period_allocations: list[ExpensePeriodAllocationRead] = Field(default_factory=list)
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     scenario_name: Optional[str] = None
@@ -1696,6 +1735,10 @@ class DashboardKPI(BaseModel):
     accrual_plan_amount: float = 0
     accrual_group_count: int = 0
     carryover_accrual_amount: float = 0
+    accrual_reserve_amount: float = 0
+    capex_accrual_reserve_amount: float = 0
+    opex_accrual_reserve_amount: float = 0
+    unclassified_accrual_reserve_amount: float = 0
 
 
 class DashboardAccrualItem(BaseModel):
@@ -1762,6 +1805,10 @@ class BudgetReconciliationRead(BaseModel):
     capex_canceled_budget_amount: float
     opex_canceled_budget_amount: float
     unclassified_canceled_budget_amount: float
+    accrual_reserve_amount: float = 0
+    capex_accrual_reserve_amount: float = 0
+    opex_accrual_reserve_amount: float = 0
+    unclassified_accrual_reserve_amount: float = 0
     overrun_amount: float
     capex_overrun_amount: float
     opex_overrun_amount: float

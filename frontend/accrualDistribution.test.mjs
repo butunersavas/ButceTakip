@@ -28,3 +28,26 @@ test("12.565 USD cent farkını son aya ekler", () => {
   assert.equal(result.rows[11].cents, 104712);
   assert.equal(result.rows.reduce((sum, row) => sum + row.cents, 0), 1256500);
 });
+
+test("Sarkan tahakkuk UI normal plan toplamından ayrı tutulur", async () => {
+  const dashboard = await readFile(new URL("./src/components/Dashboard/DashboardView.tsx", import.meta.url), "utf8");
+  const plans = await readFile(new URL("./src/components/Plans/PlansView.tsx", import.meta.url), "utf8");
+  const expenses = await readFile(new URL("./src/components/Expenses/ExpensesView.tsx", import.meta.url), "utf8");
+  assert.ok(dashboard.includes('title: "Sarkan Tahakkuk"'));
+  assert.ok(dashboard.includes('subtitle: "Seçilen yılın normal planı"'));
+  assert.ok(!dashboard.includes('title: "Devreden Tahakkuk"'));
+  assert.ok(plans.includes('label: "Toplam Bütçe"'));
+  assert.ok(plans.includes('label: "Açık Tahakkuk / Taahhüt"'));
+  assert.ok(!plans.includes('label: "Efektif Toplam Bütçe"'));
+  assert.ok(expenses.includes("Tahakkuklu / Dönemsel Harcama"));
+  assert.ok(expenses.includes("Önceki Yıl Tahakkuku"));
+});
+
+test("Plan tahakkuk etiketi aylık allocation tutarını ve yıllık özeti kullanır", async () => {
+  const plans = await readFile(new URL("./src/components/Plans/PlansView.tsx", import.meta.url), "utf8");
+  assert.ok(plans.includes('label="TAHAKKUK VAR"'));
+  assert.ok(plans.includes("Bu aya düşen:"));
+  assert.ok(plans.includes('"Yıllık Planlanan Bütçe"'));
+  assert.ok(plans.includes('"Güncel Toplam Bütçe"'));
+  assert.ok(!plans.includes('"Mevcut Plan Tutarı"'));
+});

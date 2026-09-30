@@ -113,6 +113,8 @@ interface PlanEntry {
   has_accrual?: boolean;
   plan_accrual_total?: number;
   plan_accrual_future_reserved?: number;
+  plan_accrual_open_amount?: number;
+  plan_accrual_allocation_amount?: number;
 }
 
 interface AccrualPlan {
@@ -154,6 +156,8 @@ interface AccrualConversionPreview {
   source_plan_id: number;
   total_amount: number;
   source_plan_total: number;
+  source_annual_plan_total: number;
+  source_revised_plan_total: number;
   source_actual_total: number;
   source_unused_total: number;
   source_reserved_total: number;
@@ -643,10 +647,24 @@ export default function PlansView() {
   });
 
   const carryoverAccrualsQuery = useQuery<AccrualPlan[]>({
-    queryKey: ["plan-accrual-carryover", year],
+    queryKey: [
+      "plan-accrual-carryover",
+      year,
+      scenarioId,
+      budgetItemId,
+      monthFilter || "",
+      departmentFilter || "",
+      capexOpex
+    ],
     queryFn: async () => {
+      const params: Record<string, number | string> = { year };
+      if (scenarioId) params.scenario_id = scenarioId;
+      if (budgetItemId) params.budget_item_id = budgetItemId;
+      if (monthFilter !== "") params.month = Number(monthFilter);
+      if (departmentFilter) params.department = departmentFilter;
+      if (capexOpex) params.capex_opex = capexOpex;
       const { data } = await client.get<AccrualPlan[]>("/plans/accruals/carryover", {
-        params: { year }
+        params
       });
       return data;
     }
@@ -669,6 +687,7 @@ export default function PlansView() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["plans"] });
       queryClient.invalidateQueries({ queryKey: ["plan-aggregate"] });
+      queryClient.invalidateQueries({ queryKey: ["plan-accrual-carryover"] });
       queryClient.invalidateQueries({ queryKey: ["scenarios"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["pending-budget-actions"] });
@@ -865,6 +884,18 @@ export default function PlansView() {
     }
   }, [client, resolveApiErrorMessage]);
 
+  const handleOpenAccrualById = useCallback(async (accrualId: number) => {
+    try {
+      const { data } = await client.get<AccrualPlan>(`/plans/accruals/${accrualId}`);
+      setAccrualDetail(data);
+    } catch (error) {
+      setToast({
+        message: resolveApiErrorMessage(error, "Tahakkuk detayı alınamadı."),
+        severity: "error"
+      });
+    }
+  }, [client, resolveApiErrorMessage]);
+
   const handleReverseAccrual = useCallback(async () => {
     if (!accrualDetail) return;
     const confirmed = await requestConfirmation({
@@ -878,6 +909,7 @@ export default function PlansView() {
       await client.delete(`/plans/accruals/${accrualDetail.id}`);
       setAccrualDetail(null);
       queryClient.invalidateQueries({ queryKey: ["plans"] });
+      queryClient.invalidateQueries({ queryKey: ["plan-accrual-carryover"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       setToast({ message: "Tahakkuk geri alındı.", severity: "success" });
     } catch (error) {
@@ -1532,13 +1564,17 @@ export default function PlansView() {
         sortable: false,
         renderCell: ({ row }) => {
           if (!row.has_accrual) return <Typography color="text.secondary">-</Typography>;
-          return <Chip
-            size="small"
-            label={`Tahakkuk Var · ${formatCurrency(Number(row.plan_accrual_future_reserved ?? 0))} Devreden`}
-            color="info"
-            variant="outlined"
-            onClick={() => void handleOpenAccrualDetail(row)}
-          />;
+          return (
+            <Tooltip title={`Bu aya düşen: ${formatCurrency(Number(row.plan_accrual_allocation_amount ?? 0))}`}>
+              <Chip
+                size="small"
+                label="TAHAKKUK VAR"
+                color="info"
+                variant="outlined"
+                onClick={() => void handleOpenAccrualDetail(row)}
+              />
+            </Tooltip>
+          );
         }
       },
       {
@@ -1740,12 +1776,29 @@ export default function PlansView() {
       },
       { totalBudget: 0, actual: 0, unused: 0, cancelled: 0, available: 0 }
     );
-    const futureReserved = baseRows.reduce(
-      (sum, plan) => sum + Number(plan.plan_accrual_future_reserved ?? 0),
+    const openAccrual = baseRows.reduce(
+      (sum, plan) => sum + Number(plan.plan_accrual_open_amount ?? 0),
       0
     );
-    return { ...totals, available: Math.max(totals.available - futureReserved, 0) };
+    return {
+      ...totals,
+      openAccrual,
+      available: Math.max(totals.available - openAccrual, 0)
+    };
   }, [baseRows]);
+
+  const carryoverTotals = useMemo(
+    () =>
+      (carryoverAccrualsQuery.data ?? []).reduce(
+        (totals, accrual) => ({
+          total: totals.total + Number(accrual.carryover_amount ?? 0),
+          used: totals.used + Number(accrual.used_amount ?? 0),
+          remaining: totals.remaining + Number(accrual.remaining_amount ?? 0)
+        }),
+        { total: 0, used: 0, remaining: 0 }
+      ),
+    [carryoverAccrualsQuery.data]
+  );
 
   const transferAvailable = transferAvailableQuery.data;
   const recentTransfers = transfersQuery.data?.slice(0, 6) ?? [];
@@ -1897,9 +1950,9 @@ export default function PlansView() {
 
       <Card variant="outlined">
         <CardContent>
-          <Typography variant="h6" sx={{ mb: 1.5 }}>Devreden Tahakkuklar</Typography>
+          <Typography variant="h6" sx={{ mb: 1.5 }}>Önceki Yıldan Sarkan Tahakkuklar</Typography>
           {(carryoverAccrualsQuery.data ?? []).length === 0 ? (
-            <Typography color="text.secondary">Seçili yıl için devreden tahakkuk bulunmuyor.</Typography>
+            <Typography color="text.secondary">Seçili yıl için sarkan tahakkuk bulunmuyor.</Typography>
           ) : (
             <Stack spacing={1}>
               {(carryoverAccrualsQuery.data ?? []).map((accrual) => (
@@ -1913,12 +1966,13 @@ export default function PlansView() {
                 >
                   <Box>
                     <Typography fontWeight={700}>{accrual.budget_name || accrual.budget_code || `Tahakkuk #${accrual.id}`}</Typography>
-                    <Typography variant="caption" color="text.secondary">{accrual.source_year}'den devreden · {accrual.department || "Departman yok"}</Typography>
+                    <Typography variant="caption" color="text.secondary">{accrual.source_year} bütçesinden sarkan · {accrual.department || "Departman yok"}</Typography>
                   </Box>
                   <Stack direction="row" spacing={2} alignItems="center">
                     <Typography>Toplam {formatCurrency(Number(accrual.carryover_amount))}</Typography>
+                    <Typography color="info.main">Ödenen/Kullanılan {formatCurrency(Number(accrual.used_amount))}</Typography>
                     <Typography color="success.main">Kalan {formatCurrency(Number(accrual.remaining_amount))}</Typography>
-                    <Button size="small" onClick={() => setAccrualDetail(accrual)}>Detay</Button>
+                    <Button size="small" onClick={() => void handleOpenAccrualById(accrual.id)}>Detay</Button>
                   </Stack>
                 </Stack>
               ))}
@@ -1981,40 +2035,61 @@ export default function PlansView() {
               <Grid container spacing={1.5} sx={{ mb: 2 }}>
                 {[
                   {
-                    id: "" as PlanCardFilter,
+                    filter: "" as PlanCardFilter,
                     label: "Toplam Bütçe",
                     value: formatCurrency(planTableTotals.totalBudget),
                     color: "primary.main"
                   },
                   {
-                    id: "actual" as PlanCardFilter,
-                    label: "Harcanan",
+                    label: "Sarkan Tahakkuk",
+                    value: formatCurrency(carryoverTotals.total),
+                    subtitle: `Ödenen/Kullanılan ${formatCurrency(carryoverTotals.used)} · Kalan ${formatCurrency(carryoverTotals.remaining)}`,
+                    color: "info.main"
+                  },
+                  {
+                    filter: "actual" as PlanCardFilter,
+                    label: "Gerçekleşen",
                     value: formatCurrency(planTableTotals.actual),
                     color: "success.main"
                   },
                   {
-                    id: "unused" as PlanCardFilter,
+                    filter: "unused" as PlanCardFilter,
                     label: "Kullanılmayacak",
                     value: formatCurrency(planTableTotals.unused),
                     color: "warning.main"
                   },
                   {
-                    id: "available" as PlanCardFilter,
+                    label: "Açık Tahakkuk / Taahhüt",
+                    value: formatCurrency(planTableTotals.openAccrual),
+                    subtitle: "Kaynak yıl bütçesinde bağlı tutar",
+                    color: "secondary.main"
+                  },
+                  {
+                    filter: "available" as PlanCardFilter,
                     label: "Kalan Kullanılabilir",
                     value: formatCurrency(planTableTotals.available),
                     color: "text.primary"
                   }
                 ].map((item) => (
                   <Grid item xs={12} sm={6} md={3} key={item.label}>
-                    <CardActionArea onClick={() => handleCardFilter(item.id)} sx={{ borderRadius: 1 }}>
+                    <CardActionArea
+                      component={item.filter === undefined ? "div" : "button"}
+                      disableRipple={item.filter === undefined}
+                      onClick={
+                        item.filter === undefined
+                          ? undefined
+                          : () => handleCardFilter(item.filter as PlanCardFilter)
+                      }
+                      sx={{ borderRadius: 1, cursor: item.filter === undefined ? "default" : "pointer" }}
+                    >
                       <Box
                         sx={{
                           border: "1px solid",
-                          borderColor: activeCard === item.id ? "primary.main" : "divider",
+                          borderColor: item.filter !== undefined && activeCard === item.filter ? "primary.main" : "divider",
                           borderRadius: 1,
-                          bgcolor: activeCard === item.id ? "action.selected" : "background.default",
+                          bgcolor: item.filter !== undefined && activeCard === item.filter ? "action.selected" : "background.default",
                           p: 1.25,
-                          minHeight: 72
+                          minHeight: 88
                         }}
                       >
                         <Typography variant="caption" color="text.secondary">
@@ -2023,6 +2098,11 @@ export default function PlansView() {
                         <Typography variant="subtitle1" fontWeight={700} color={item.color}>
                           {item.value}
                         </Typography>
+                        {item.subtitle && (
+                          <Typography variant="caption" color="text.secondary">
+                            {item.subtitle}
+                          </Typography>
+                        )}
                       </Box>
                     </CardActionArea>
                   </Grid>
@@ -2095,7 +2175,11 @@ export default function PlansView() {
                 ["Departman", conversionDisplay?.department ?? "-"],
                 ["CAPEX/OPEX", conversionDisplay?.capexOpex ?? "-"],
                 ["Nitelik", conversionDisplay?.nitelik ?? "-"],
-                ["Mevcut Plan Tutarı", formatCurrency(Number(conversionPlan?.amount) || 0)]
+                ["Yıllık Planlanan Bütçe", formatCurrency(Number(conversionPreview?.source_annual_plan_total ?? 0))],
+                ["Güncel Toplam Bütçe", formatCurrency(Number(conversionPreview?.source_revised_plan_total ?? conversionPreview?.source_plan_total ?? 0))],
+                ["Harcanan", formatCurrency(Number(conversionPreview?.source_actual_total ?? 0))],
+                ["Açık Tahakkuk", formatCurrency(Number(conversionPreview?.source_reserved_total ?? 0))],
+                ["Kalan Kullanılabilir", formatCurrency(Number(conversionPreview?.source_available_total ?? 0))]
               ].map(([label, value]) => (
                 <Grid item xs={12} sm={6} key={label}>
                   <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1.5, p: 1.5 }}>
@@ -2228,7 +2312,7 @@ export default function PlansView() {
                   ["Toplam Tahakkuk Tutarı", formatCurrency(Number(accrualDetail.total_amount))],
                   ["Kullanılan", formatCurrency(Number(accrualDetail.used_amount))],
                   ["Kalan", formatCurrency(Number(accrualDetail.remaining_amount))],
-                  ["Devreden", formatCurrency(Number(accrualDetail.carryover_amount))],
+                  ["Sarkan Tutar", formatCurrency(Number(accrualDetail.carryover_amount))],
                   ["Başlangıç", `${monthOptions[accrualDetail.start_month - 1]} ${accrualDetail.start_year}`],
                   ["Ay Sayısı", String(accrualDetail.month_count)],
                   ["Kaynak Plan", accrualDetail.source_plan_id ? `#${accrualDetail.source_plan_id}` : "Yeni tahakkuk planı"]
@@ -2255,10 +2339,10 @@ export default function PlansView() {
                             {formatCurrency(Number(entry.amount))}
                           </Typography>
                           <Typography variant="caption" color="text.secondary">
-                            Kullanılan {formatCurrency(Number(entry.used_amount))} · Kalan {formatCurrency(Number(entry.remaining_amount))}
+                            Ödenen/Kullanılan {formatCurrency(Number(entry.used_amount))} · Kalan {formatCurrency(Number(entry.remaining_amount))}
                           </Typography>
                           {entry.year > accrualDetail.source_year ? (
-                            <Chip size="small" label={`${accrualDetail.source_year}'den Devreden`} variant="outlined" color="primary" sx={{ mt: 0.75 }} />
+                            <Chip size="small" label={`${accrualDetail.source_year} Bütçesinden`} variant="outlined" color="primary" sx={{ mt: 0.75 }} />
                           ) : null}
                         </CardContent>
                       </Card>

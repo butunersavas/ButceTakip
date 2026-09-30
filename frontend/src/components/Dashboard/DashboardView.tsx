@@ -144,6 +144,10 @@ interface DashboardKPI {
   accrual_plan_amount?: number;
   accrual_group_count?: number;
   carryover_accrual_amount?: number;
+  accrual_reserve_amount?: number;
+  capex_accrual_reserve_amount?: number;
+  opex_accrual_reserve_amount?: number;
+  unclassified_accrual_reserve_amount?: number;
 }
 
 interface DashboardAccrualItem {
@@ -200,6 +204,10 @@ interface DashboardReconciliation {
   capex_canceled_budget_amount: number;
   opex_canceled_budget_amount: number;
   unclassified_canceled_budget_amount: number;
+  accrual_reserve_amount: number;
+  capex_accrual_reserve_amount: number;
+  opex_accrual_reserve_amount: number;
+  unclassified_accrual_reserve_amount: number;
   overrun_amount: number;
   capex_overrun_amount: number;
   opex_overrun_amount: number;
@@ -1552,7 +1560,7 @@ export default function DashboardView() {
     const reconciliation = dashboard?.reconciliation ?? null;
     const totalPlan = reconciliation?.total_plan_amount ?? dashboard?.kpi.total_plan ?? 0;
     const totalActual =
-      reconciliation?.realized_plan_inside_amount ?? dashboard?.kpi.total_actual ?? 0;
+      dashboard?.kpi.total_actual ?? reconciliation?.realized_plan_inside_amount ?? 0;
     const negotiatedSaving =
       reconciliation?.negotiated_saving_amount ??
       dashboard?.kpi.total_negotiated_saving ??
@@ -1652,6 +1660,20 @@ export default function DashboardView() {
         reconciliation?.unclassified_canceled_budget_amount ??
         dashboard?.kpi.unclassified_canceled_budget_amount ??
         0,
+      accrual_reserve_amount:
+        reconciliation?.accrual_reserve_amount ?? dashboard?.kpi.accrual_reserve_amount ?? 0,
+      capex_accrual_reserve_amount:
+        reconciliation?.capex_accrual_reserve_amount ??
+        dashboard?.kpi.capex_accrual_reserve_amount ??
+        0,
+      opex_accrual_reserve_amount:
+        reconciliation?.opex_accrual_reserve_amount ??
+        dashboard?.kpi.opex_accrual_reserve_amount ??
+        0,
+      unclassified_accrual_reserve_amount:
+        reconciliation?.unclassified_accrual_reserve_amount ??
+        dashboard?.kpi.unclassified_accrual_reserve_amount ??
+        0,
       overrun_amount: reconciliation?.overrun_amount ?? dashboard?.kpi.total_overrun ?? 0,
       capex_overrun_amount:
         reconciliation?.capex_overrun_amount ?? dashboard?.kpi.capex_overrun_amount ?? 0,
@@ -1722,6 +1744,12 @@ export default function DashboardView() {
   const carryoverAccrualUsed = toSafeNumber(dashboard?.accruals?.carryover_used_amount);
   const carryoverAccrualRemaining = toSafeNumber(dashboard?.accruals?.carryover_remaining_amount);
   const accrualPlanItems = dashboard?.accruals?.items ?? [];
+  const carryoverSourceYears = Array.from(
+    new Set(accrualPlanItems.map((item) => item.source_year))
+  ).sort((left, right) => left - right);
+  const carryoverSourceLabel = carryoverSourceYears.length
+    ? `${carryoverSourceYears.map((value) => `${value} bütçesinden`).join(", ")} sarkan`
+    : "Sarkan kaynak yok";
   const outOfBudgetDetailTotal = useMemo(
     () => outOfBudgetExpenses.reduce((sum, expense) => sum + toSafeNumber(expense.amount), 0),
     [outOfBudgetExpenses]
@@ -2188,8 +2216,8 @@ export default function DashboardView() {
   const handleExportAccrualPlans = () => {
     exportRowsToExcel(
       buildAccrualPlanExportRows(accrualPlanItems),
-      buildDashboardExportFileName("devreden_tahakkuk_detayi"),
-      "Devreden Tahakkuk",
+      buildDashboardExportFileName("sarkan_tahakkuk_detayi"),
+      "Sarkan Tahakkuk",
       ["Tutar", "Kullanılan", "Kalan"]
     );
   };
@@ -2602,9 +2630,14 @@ export default function DashboardView() {
           Açıklama: "Planlanan bütçe"
         },
         {
-          "Kart Adı": "Devreden Tahakkuk",
+          "Kart Adı": "Sarkan Tahakkuk",
           Tutar: carryoverAccrualAmount,
-          Açıklama: "Toplam Plan içindeki tahakkuklu plan alt kümesi"
+          Açıklama: `Ödenen/Kullanılan ${formatCurrency(carryoverAccrualUsed)} · Kalan ${formatCurrency(carryoverAccrualRemaining)}`
+        },
+        {
+          "Kart Adı": "Açık Tahakkuk / Taahhüt",
+          Tutar: normalizedKpi.accrual_reserve_amount ?? 0,
+          Açıklama: "Kaynak yıl bütçesinde bağlı, henüz ödenmemiş tutar"
         },
         {
           "Kart Adı": "Gerçekleşen",
@@ -2661,6 +2694,7 @@ export default function DashboardView() {
           "Pazarlıklı Tasarruf": normalizedKpi.negotiated_saving_amount ?? 0,
           "Optimizasyon Tasarrufu": otherSavingTotal,
           "İptal Edilen Bütçe": normalizedKpi.canceled_budget_amount ?? 0,
+          "Açık Tahakkuk / Taahhüt": normalizedKpi.accrual_reserve_amount ?? 0,
           "Mutabakat Toplamı": normalizedKpi.reconciliation_total ?? 0,
           "Mutabakat Farkı": normalizedKpi.reconciliation_difference ?? 0,
           "Aşım": normalizedKpi.overrun_amount ?? normalizedKpi.total_overrun,
@@ -2674,6 +2708,7 @@ export default function DashboardView() {
           "Pazarlıklı Tasarruf": normalizedKpi.capex_negotiated_saving_amount ?? 0,
           "Diğer Tasarruf": normalizedKpi.capex_other_saving_amount ?? 0,
           "İptal Edilen Bütçe": normalizedKpi.capex_canceled_budget_amount ?? 0,
+          "Açık Tahakkuk / Taahhüt": normalizedKpi.capex_accrual_reserve_amount ?? 0,
           "Mutabakat Toplamı": normalizedKpi.capex_reconciliation_total ?? 0,
           "Mutabakat Farkı": normalizedKpi.capex_reconciliation_difference ?? 0,
           "Aşım": normalizedKpi.capex_overrun_amount ?? 0,
@@ -2687,6 +2722,7 @@ export default function DashboardView() {
           "Pazarlıklı Tasarruf": normalizedKpi.opex_negotiated_saving_amount ?? 0,
           "Diğer Tasarruf": normalizedKpi.opex_other_saving_amount ?? 0,
           "İptal Edilen Bütçe": normalizedKpi.opex_canceled_budget_amount ?? 0,
+          "Açık Tahakkuk / Taahhüt": normalizedKpi.opex_accrual_reserve_amount ?? 0,
           "Mutabakat Toplamı": normalizedKpi.opex_reconciliation_total ?? 0,
           "Mutabakat Farkı": normalizedKpi.opex_reconciliation_difference ?? 0,
           "Aşım": normalizedKpi.opex_overrun_amount ?? 0,
@@ -2701,6 +2737,7 @@ export default function DashboardView() {
           "Pazarlıklı Tasarruf": normalizedKpi.unclassified_negotiated_saving_amount ?? 0,
           "Diğer Tasarruf": normalizedKpi.unclassified_other_saving_amount ?? 0,
           "İptal Edilen Bütçe": normalizedKpi.unclassified_canceled_budget_amount ?? 0,
+          "Açık Tahakkuk / Taahhüt": normalizedKpi.unclassified_accrual_reserve_amount ?? 0,
           "Mutabakat Toplamı": normalizedKpi.unclassified_reconciliation_total ?? 0,
           "Mutabakat Farkı": normalizedKpi.unclassified_reconciliation_difference ?? 0,
           "Aşım": normalizedKpi.unclassified_overrun_amount ?? 0,
@@ -2716,6 +2753,7 @@ export default function DashboardView() {
         "Pazarlıklı Tasarruf",
         "Optimizasyon Tasarrufu",
         "İptal Edilen Bütçe",
+        "Açık Tahakkuk / Taahhüt",
         "Mutabakat Toplamı",
         "Mutabakat Farkı",
         "Aşım",
@@ -2729,7 +2767,7 @@ export default function DashboardView() {
       );
       appendRowsToWorkbook(
         workbook,
-        "Devreden Tahakkuk Detayı",
+        "Sarkan Tahakkuk Detayı",
         buildAccrualPlanExportRows(accrualPlanItems),
         ["Tutar"]
       );
@@ -3137,9 +3175,7 @@ export default function DashboardView() {
                 {
                   title: "Toplam Plan",
                   value: formattedTotalPlan,
-                  subtitle: (dashboard?.kpi.carryover_plan_amount ?? 0) > 0
-                    ? `Yeni ${formatCurrency(dashboard?.kpi.new_budget_plan_amount ?? 0)} + Devreden ${formatCurrency(dashboard?.kpi.carryover_plan_amount ?? 0)}`
-                    : "Planlanan bütçe",
+                  subtitle: "Seçilen yılın normal planı",
                   icon: (
                     <AccountBalanceWalletOutlinedIcon
                       sx={{ fontSize: 18, color: "common.white" }}
@@ -3147,18 +3183,6 @@ export default function DashboardView() {
                   ),
                   iconColor: "primary.main",
                   filterKey: "total_plan" as const
-                },
-                {
-                  title: "Devreden Tahakkuk",
-                  value: formatCurrency(carryoverAccrualAmount),
-                  subtitle: `${accrualGroupCount} tahakkuk · Kullanılan ${formatCurrency(carryoverAccrualUsed)} · Kalan ${formatCurrency(carryoverAccrualRemaining)}`,
-                  icon: (
-                    <AccountBalanceWalletOutlinedIcon
-                      sx={{ fontSize: 18, color: "common.white" }}
-                    />
-                  ),
-                  iconColor: "info.main",
-                  filterKey: "accrual_plan" as const
                 },
                 {
                   title: "Gerçekleşen",
@@ -3171,14 +3195,6 @@ export default function DashboardView() {
                   ),
                   iconColor: "primary.main",
                   filterKey: "total_actual" as const
-                },
-                {
-                  title: "Bütçe Dışı",
-                  value: formattedOutOfBudget,
-                  subtitle: `${outOfBudgetExpenses.length} bütçe dışı harcama`,
-                  icon: <WarningAmberOutlinedIcon sx={{ fontSize: 18, color: "common.white" }} />,
-                  iconColor: "warning.main",
-                  filterKey: "out_of_budget" as const
                 },
                 {
                   title: "Kalan Bütçe",
@@ -3211,6 +3227,18 @@ export default function DashboardView() {
                   icon: <TrendingUpOutlinedIcon sx={{ fontSize: 18, color: "common.white" }} />,
                   iconColor: "success.dark",
                   filterKey: "total_combined_saving" as const
+                },
+                {
+                  title: "Sarkan Tahakkuk",
+                  value: formatCurrency(carryoverAccrualAmount),
+                  subtitle: `${accrualGroupCount} kalem · ${carryoverSourceLabel} · ${formatCurrency(carryoverAccrualUsed)} ödendi · ${formatCurrency(carryoverAccrualRemaining)} kalan`,
+                  icon: (
+                    <AccountBalanceWalletOutlinedIcon
+                      sx={{ fontSize: 18, color: "common.white" }}
+                    />
+                  ),
+                  iconColor: "info.main",
+                  filterKey: "accrual_plan" as const
                 },
                 {
                   title: "Aşım",
@@ -3252,6 +3280,17 @@ export default function DashboardView() {
                       }`
                     )
                   }
+                />
+              </Grid>
+              <Grid item xs={12} sm={6} md={4}>
+                <SummaryCard
+                  title="Bütçe Dışı"
+                  value={formattedOutOfBudget}
+                  subtitle={`${outOfBudgetExpenses.length} bütçe dışı harcama`}
+                  icon={<WarningAmberOutlinedIcon sx={{ fontSize: 18, color: "common.white" }} />}
+                  iconColor="warning.main"
+                  selected={selectedKpiFilter === "out_of_budget"}
+                  onClick={() => handleSummaryCardClick("out_of_budget")}
                 />
               </Grid>
             </Grid>
@@ -3697,20 +3736,20 @@ export default function DashboardView() {
         maxWidth="xl"
         fullWidth
       >
-        <DialogTitle>Devreden Tahakkuk Detayı</DialogTitle>
+        <DialogTitle>Sarkan Tahakkuk Detayı</DialogTitle>
         <DialogContent dividers>
           <Stack spacing={2}>
             <DetailSummaryGrid
               items={[
-                { label: "Devreden Tahakkuk", value: formatCurrency(carryoverAccrualAmount), color: "info.main" },
+                { label: "Sarkan Tahakkuk", value: formatCurrency(carryoverAccrualAmount), color: "info.main" },
                 { label: "Tahakkuk Sayısı", value: String(accrualGroupCount) },
-                { label: "Kullanılan", value: formatCurrency(carryoverAccrualUsed) },
+                { label: "Ödenen/Kullanılan", value: formatCurrency(carryoverAccrualUsed) },
                 { label: "Kalan", value: formatCurrency(carryoverAccrualRemaining) },
                 { label: "Toplam Plan", value: formatCurrency(normalizedKpi.total_plan) }
               ]}
             />
             <Alert severity="info">
-              Efektif bütçe, yeni yıl bütçesi ile devreden tahakkukun toplamıdır. Devreden tutar yalnız bir kez eklenir.
+              Bu tutar önceki yıl bütçesine aittir; seçilen yılın Toplam Plan ve Kalan Bütçe hesaplarına eklenmez.
             </Alert>
             <DetailTableWrap>
               <Table size="small" stickyHeader>
@@ -3755,7 +3794,7 @@ export default function DashboardView() {
                       <TableCell>
                         <Chip
                           size="small"
-                          label={item.is_carryover ? `${item.source_year}'den Devreden` : "TAHAKKUKLU"}
+                          label={item.is_carryover ? `${item.source_year} Bütçesinden` : "TAHAKKUKLU"}
                           color="info"
                           variant={item.is_carryover ? "outlined" : "filled"}
                         />

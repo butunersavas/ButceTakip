@@ -1,8 +1,8 @@
 export const UNUSED_REASON_OPTIONS = [
-  { value: "purchase_cancelled", label: "Alımdan Vazgeçildi." },
-  { value: "no_longer_needed", label: "İhtiyaç Kalmadı." },
-  { value: "other_budget", label: "Başka Bütçeden Karşılandı." },
-  { value: "unused", label: "Kullanılmayacak." }
+  { value: "purchase_cancelled", label: "Alımdan Vazgeçildi.", helper: "(İptal'e Gider)" },
+  { value: "no_longer_needed", label: "İhtiyaç Kalmadı.", helper: "(Optimizasyon'a Gider)" },
+  { value: "other_budget", label: "Başka Bütçeden Karşılandı.", helper: "(Optimizasyon'a Gider)" },
+  { value: "unused", label: "Kullanılmayacak.", helper: "(Optimizasyon'a Gider)" }
 ] as const;
 
 const legacyLabels: Record<string, string> = {

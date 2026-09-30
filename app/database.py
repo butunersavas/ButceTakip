@@ -411,6 +411,21 @@ def _apply_schema_upgrades() -> None:
                         "WHERE updated_by_id IS NULL"
                     )
                 )
+        expense_columns = {column["name"] for column in inspect(engine).get_columns("expenses")}
+        expense_column_definitions = {
+            "funding_source": "VARCHAR(20) NOT NULL DEFAULT 'current'",
+            "budget_source_year": "INTEGER",
+            "is_periodic": "BOOLEAN NOT NULL DEFAULT FALSE" if is_postgres else "BOOLEAN NOT NULL DEFAULT 0",
+            "period_start_year": "INTEGER",
+            "period_start_month": "INTEGER",
+            "period_month_count": "INTEGER",
+        }
+        for column_name, column_definition in expense_column_definitions.items():
+            if column_name not in expense_columns:
+                with engine.begin() as connection:
+                    connection.execute(text(
+                        f"ALTER TABLE expenses ADD COLUMN {column_name} {column_definition}"
+                    ))
 
     if inspector.has_table("plan_entries"):
         plan_columns = {column["name"] for column in inspector.get_columns("plan_entries")}

@@ -1,4 +1,5 @@
 import unittest
+from uuid import uuid4
 from datetime import date
 from decimal import Decimal
 
@@ -30,10 +31,11 @@ class PlanAccrualPostgresTests(unittest.TestCase):
     def setUp(self) -> None:
         SQLModel.metadata.create_all(engine)
         self.session = Session(engine)
+        suffix = uuid4().hex[:8]
         self.source_scenario = Scenario(name="Accrual PG", year=2097, is_primary=False)
         self.target_scenario = Scenario(name="Accrual PG", year=2098, is_primary=False)
-        self.item = BudgetItem(code="ACCRUAL-PG-REGRESSION", name="Accrual PG Regression")
-        self.user = User(username="accrual-pg-admin", hashed_password="unused", is_admin=True)
+        self.item = BudgetItem(code=f"ACCRUAL-PG-{suffix}", name="Accrual PG Regression")
+        self.user = User(username=f"accrual-pg-{suffix}", hashed_password="unused", is_admin=True)
         self.session.add_all([self.source_scenario, self.target_scenario, self.item, self.user])
         self.session.commit()
         for row in (self.source_scenario, self.target_scenario, self.item, self.user):
@@ -100,7 +102,9 @@ class PlanAccrualPostgresTests(unittest.TestCase):
             self.user,
         )
         self.accrual_id = accrual.id
-        self.assertEqual(1, len(self.session.exec(select(PlanEntry)).all()))
+        self.assertEqual(1, len(self.session.exec(
+            select(PlanEntry).where(PlanEntry.scenario_id == self.source_scenario.id)
+        ).all()))
         expense = Expense(
             budget_item_id=self.item.id,
             budget_code=self.item.code,
@@ -131,8 +135,12 @@ class PlanAccrualPostgresTests(unittest.TestCase):
         )
         self.session.commit()
         self.assertEqual(Decimal("1000.00"), used)
-        self.assertEqual(1, len(self.session.exec(select(ExpenseAccrualUsage)).all()))
-        self.assertEqual(accrual.id, self.session.exec(select(PlanAccrual.id)).one())
+        self.assertEqual(1, len(self.session.exec(
+            select(ExpenseAccrualUsage).where(ExpenseAccrualUsage.expense_id == expense.id)
+        ).all()))
+        self.assertEqual(accrual.id, self.session.exec(
+            select(PlanAccrual.id).where(PlanAccrual.id == accrual.id)
+        ).one())
 
     def test_zero_usage_reverse_respects_postgresql_foreign_keys(self) -> None:
         accrual = create_domain_accrual(

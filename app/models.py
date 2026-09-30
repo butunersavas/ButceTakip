@@ -311,6 +311,12 @@ class Expense(TimestampMixin, SQLModel, table=True):
     description: Optional[str] = Field(default=None)
     status: ExpenseStatus = Field(default=ExpenseStatus.RECORDED, nullable=False)
     is_out_of_budget: bool = Field(default=False, nullable=False)
+    funding_source: str = Field(default="current", nullable=False, index=True, max_length=20)
+    budget_source_year: Optional[int] = Field(default=None, nullable=True, index=True)
+    is_periodic: bool = Field(default=False, nullable=False)
+    period_start_year: Optional[int] = Field(default=None, nullable=True)
+    period_start_month: Optional[int] = Field(default=None, nullable=True)
+    period_month_count: Optional[int] = Field(default=None, nullable=True)
     created_by_id: Optional[int] = Field(default=None, foreign_key="users.id")
     updated_by_id: Optional[int] = Field(default=None, foreign_key="users.id")
     created_by_user_id: Optional[int] = Field(default=None, foreign_key="users.id")
@@ -330,6 +336,7 @@ class Expense(TimestampMixin, SQLModel, table=True):
     )
     attachments: list["ExpenseAttachment"] = Relationship(back_populates="expense")
     allocations: list["ExpenseAllocation"] = Relationship(back_populates="expense")
+    period_allocations: list["ExpensePeriodAllocation"] = Relationship(back_populates="expense")
 
 
 class ExpenseAllocation(TimestampMixin, SQLModel, table=True):
@@ -347,6 +354,21 @@ class ExpenseAllocation(TimestampMixin, SQLModel, table=True):
     allocated_amount: float = Field(nullable=False)
 
     expense: Expense = Relationship(back_populates="allocations")
+
+
+class ExpensePeriodAllocation(TimestampMixin, SQLModel, table=True):
+    __tablename__ = "expense_period_allocations"
+    __table_args__ = (
+        UniqueConstraint("expense_id", "year", "month", name="uq_expense_period_year_month"),
+    )
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    expense_id: int = Field(foreign_key="expenses.id", nullable=False, index=True)
+    year: int = Field(nullable=False, index=True)
+    month: int = Field(nullable=False, ge=1, le=12, index=True)
+    amount: Decimal = Field(sa_column=Column(Numeric(16, 2), nullable=False))
+
+    expense: Expense = Relationship(back_populates="period_allocations")
 
 
 class ExpenseAccrualUsage(TimestampMixin, SQLModel, table=True):

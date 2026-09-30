@@ -91,7 +91,14 @@ export default function UnusedBudgetDialog({ planId, onClose, onSuccess }: {
         {mode === "custom" && <TextField autoFocus label="Kullanılmayacak Tutar" value={amount} onChange={(e) => { setAmount(e.target.value); setError(null); }} inputProps={{ inputMode: "decimal" }} helperText={`Bu ay için en fazla ${formatCurrency(data.current_month_available)}`} />}
         <TextField select required label="Kullanılmayacak Sebebi" value={reason} onChange={(e) => { setReason(e.target.value); setError(null); }}>
           <MenuItem value=""><em>Seçiniz</em></MenuItem>
-          {UNUSED_REASON_OPTIONS.map((item) => <MenuItem key={item.value} value={item.value}>{item.label}</MenuItem>)}
+          {UNUSED_REASON_OPTIONS.map((item) => <MenuItem key={item.value} value={item.value}>
+            <Stack>
+              <Typography variant="body2">{item.label}</Typography>
+              <Typography variant="caption" sx={{ color: "text.disabled", fontStyle: "italic", fontSize: "0.7rem" }}>
+                {item.helper}
+              </Typography>
+            </Stack>
+          </MenuItem>)}
         </TextField>
         <TextField multiline minRows={2} label="Not" value={note} onChange={(e) => setNote(e.target.value)} inputProps={{ maxLength: 500 }} helperText={`${note.length}/500 · İsteğe bağlı açıklama ekleyebilirsiniz`} />
       </>}

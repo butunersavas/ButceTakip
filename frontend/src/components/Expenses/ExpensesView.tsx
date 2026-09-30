@@ -139,6 +139,13 @@ export interface Expense {
   allocations?: ExpenseAllocation[];
   accrual_used_amount?: number;
   current_budget_amount?: number;
+  funding_source?: "automatic" | "carryover" | "current";
+  budget_source_year?: number | null;
+  is_periodic?: boolean;
+  period_start_year?: number | null;
+  period_start_month?: number | null;
+  period_month_count?: number | null;
+  period_allocations?: Array<{ year: number; month: number; amount: number }>;
 }
 
 interface ExpenseAllocation {
@@ -208,6 +215,10 @@ interface ExpensePayload {
   allocation_month_count?: number | null;
   allocation_method?: "equal" | "plan_amount" | null;
   funding_source: "automatic" | "carryover" | "current";
+  is_periodic: boolean;
+  period_start_year?: number | null;
+  period_start_month?: number | null;
+  period_month_count?: number | null;
   client_hostname?: string | null;
   kaydi_giren_kullanici?: string | null;
 }
@@ -220,6 +231,14 @@ interface ExpenseAccrualAvailability {
   remaining_amount: number;
   item_count: number;
   source_years: number[];
+}
+
+interface CarryoverPlanOption {
+  budget_item_id: number;
+  source_year: number;
+  carryover_amount: number;
+  used_amount: number;
+  remaining_amount: number;
 }
 
 type ExpenseMutationPayload = ExpensePayload & {
@@ -710,6 +729,10 @@ export default function ExpensesView() {
   const [allocationMonthCount, setAllocationMonthCount] = useState<string>("1");
   const [allocationMethod, setAllocationMethod] = useState<"equal" | "plan_amount">("equal");
   const [fundingSource, setFundingSource] = useState<"automatic" | "carryover" | "current">("automatic");
+  const [isPeriodicExpense, setIsPeriodicExpense] = useState(false);
+  const [periodStartYear, setPeriodStartYear] = useState<number>(new Date().getFullYear());
+  const [periodStartMonth, setPeriodStartMonth] = useState<number>(new Date().getMonth() + 1);
+  const [periodMonthCount, setPeriodMonthCount] = useState<string>("12");
   const [formMarkPlanPurchased, setFormMarkPlanPurchased] = useState(true);
   const [isUnusedBudgetMode, setIsUnusedBudgetMode] = useState(false);
   const [unusedBudgetReason, setUnusedBudgetReason] = useState(unusedBudgetReasonOptions[0].value);
@@ -1165,6 +1188,24 @@ export default function ExpensesView() {
     }
   });
 
+  const carryoverOptionsQuery = useQuery<CarryoverPlanOption[]>({
+    queryKey: ["expense-carryover-options", formScenarioId, formExpenseDate],
+    enabled: dialogOpen && !formIsOutOfBudget && Boolean(formScenarioId && formExpenseDate),
+    queryFn: async () => (await client.get<CarryoverPlanOption[]>("/plans/accruals/carryover", {
+      params: { year: dayjs(formExpenseDate).year(), scenario_id: Number(formScenarioId) }
+    })).data
+  });
+  const carryoverByBudgetItem = useMemo(() => {
+    const result = new Map<number, { sourceYears: number[]; remaining: number }>();
+    (carryoverOptionsQuery.data ?? []).forEach((item) => {
+      const current = result.get(item.budget_item_id) ?? { sourceYears: [], remaining: 0 };
+      if (!current.sourceYears.includes(item.source_year)) current.sourceYears.push(item.source_year);
+      current.remaining += Number(item.remaining_amount ?? 0);
+      result.set(item.budget_item_id, current);
+    });
+    return result;
+  }, [carryoverOptionsQuery.data]);
+
   const mutation = useMutation({
     mutationFn: async (payload: ExpenseMutationPayload) => {
       try {
@@ -1302,6 +1343,10 @@ export default function ExpensesView() {
     setAllocationMonthCount("1");
     setAllocationMethod("equal");
     setFundingSource("automatic");
+    setIsPeriodicExpense(false);
+    setPeriodStartYear(Number.isFinite(routeYear) ? routeYear : new Date().getFullYear());
+    setPeriodStartMonth(Number.isInteger(routeMonth) && routeMonth >= 1 && routeMonth <= 12 ? routeMonth : new Date().getMonth() + 1);
+    setPeriodMonthCount("12");
     setFormMarkPlanPurchased(true);
     setIsUnusedBudgetMode(false);
     setUnusedBudgetReason(unusedBudgetReasonOptions[0].value);
@@ -1363,8 +1408,12 @@ export default function ExpensesView() {
       }
       setAllocationMethod("equal");
       setFundingSource(
-        isOutOfBudget ? "current" : Number(expense.accrual_used_amount ?? 0) > 0 ? "automatic" : "current"
+        isOutOfBudget ? "current" : expense.funding_source ?? (Number(expense.accrual_used_amount ?? 0) > 0 ? "carryover" : "current")
       );
+      setIsPeriodicExpense(Boolean(expense.is_periodic));
+      setPeriodStartYear(expense.period_start_year ?? dayjs(expense.expense_date).year());
+      setPeriodStartMonth(expense.period_start_month ?? dayjs(expense.expense_date).month() + 1);
+      setPeriodMonthCount(String(expense.period_month_count ?? 12));
       setFormMarkPlanPurchased(!isOutOfBudget);
       setIsUnusedBudgetMode(false);
       setUnusedBudgetReason(unusedBudgetReasonOptions[0].value);
@@ -1562,6 +1611,10 @@ export default function ExpensesView() {
         !isOutOfBudget && allocationMode === "planned_months" ? Number(allocationMonthCount) : null,
       allocation_method: !isOutOfBudget && allocationMode === "planned_months" ? allocationMethod : null,
       funding_source: isOutOfBudget ? "current" : fundingSource,
+      is_periodic: !isOutOfBudget && isPeriodicExpense,
+      period_start_year: !isOutOfBudget && isPeriodicExpense ? periodStartYear : null,
+      period_start_month: !isOutOfBudget && isPeriodicExpense ? periodStartMonth : null,
+      period_month_count: !isOutOfBudget && isPeriodicExpense ? Number(periodMonthCount) : null,
       client_hostname: editingExpense?.client_hostname ?? undefined,
       kaydi_giren_kullanici:
         editingExpense?.kaydi_giren_kullanici ?? user?.username ?? user?.full_name ?? undefined,
@@ -3752,6 +3805,19 @@ export default function ExpensesView() {
                     filterOptions={budgetFilterOptions}
                     isOptionEqualToValue={(option, value) => option.id === value.id}
                     disabled={formIsOutOfBudget}
+                    renderOption={(props, option) => {
+                      const carryover = carryoverByBudgetItem.get(option.id);
+                      return <li {...props} key={option.id}>
+                        <Stack spacing={0.25}>
+                          <Typography variant="body2">{formatBudgetItemLabel(option) || "-"}</Typography>
+                          {carryover && carryover.remaining > 0 ? (
+                            <Typography variant="caption" color="info.main">
+                              [{carryover.sourceYears.join(", ")}'DAN SARKAN TAHAKKUK] Kalan: {formatCurrency(carryover.remaining)}
+                            </Typography>
+                          ) : null}
+                        </Stack>
+                      </li>;
+                    }}
                     renderInput={(params) => (
                       <TextField {...params} label="Bütçe Kalemi" required={!formIsOutOfBudget} fullWidth />
                     )}
@@ -3870,9 +3936,8 @@ export default function ExpensesView() {
                 {!formIsOutOfBudget && Number(accrualAvailabilityQuery.data?.remaining_amount ?? 0) > 0 && (
                   <Grid item xs={12}>
                     <Alert severity="info">
-                      Bu bütçe kalemi için {formatCarryoverYears(accrualAvailabilityQuery.data?.source_years ?? [])} devreden tahakkuk bulunmaktadır.
-                      Toplam {formatCurrency(Number(accrualAvailabilityQuery.data?.total_amount ?? 0))} · Kullanılan {formatCurrency(Number(accrualAvailabilityQuery.data?.used_amount ?? 0))} · Kalan {formatCurrency(Number(accrualAvailabilityQuery.data?.remaining_amount ?? 0))}.
-                      Otomatik seçim önce devreden tahakkuku, kalan tutar için mevcut yıl bütçesini kullanır.
+                      Bu bütçe kalemi için {formatCarryoverYears(accrualAvailabilityQuery.data?.source_years ?? [])} bütçesinden sarkan tahakkuk bulunmaktadır.
+                      Toplam {formatCurrency(Number(accrualAvailabilityQuery.data?.total_amount ?? 0))} · Ödenen/Kullanılan {formatCurrency(Number(accrualAvailabilityQuery.data?.used_amount ?? 0))} · Kalan {formatCurrency(Number(accrualAvailabilityQuery.data?.remaining_amount ?? 0))}.
                     </Alert>
                   </Grid>
                 )}
@@ -3885,11 +3950,44 @@ export default function ExpensesView() {
                       onChange={(event) => setFundingSource(event.target.value as "automatic" | "carryover" | "current")}
                       fullWidth
                     >
-                      <MenuItem value="automatic">Otomatik — Önce Devreden Tahakkuk</MenuItem>
-                      <MenuItem value="carryover" disabled={Number(accrualAvailabilityQuery.data?.remaining_amount ?? 0) <= 0}>Devreden Tahakkuk</MenuItem>
+                      <MenuItem value="automatic">Otomatik — Uygun Sarkan Tahakkuk</MenuItem>
+                      <MenuItem value="carryover" disabled={Number(accrualAvailabilityQuery.data?.remaining_amount ?? 0) <= 0}>Önceki Yıl Tahakkuku</MenuItem>
                       <MenuItem value="current">Cari Yıl Bütçesi</MenuItem>
                     </TextField>
                   </Grid>
+                )}
+                {!formIsOutOfBudget && (
+                  <Grid item xs={12}>
+                    <Stack spacing={1}>
+                      <Stack direction="row" spacing={1} alignItems="center">
+                        <Switch
+                          checked={isPeriodicExpense}
+                          onChange={(event) => setIsPeriodicExpense(event.target.checked)}
+                        />
+                        <Typography variant="body2">Tahakkuklu / Dönemsel Harcama</Typography>
+                      </Stack>
+                      {isPeriodicExpense ? (
+                        <Alert severity="info">
+                          Tek Expense kaydı oluşturulur. Dönem dağılımı bilgi amaçlıdır ve sonraki yılın normal bütçesini tüketmez.
+                        </Alert>
+                      ) : null}
+                    </Stack>
+                  </Grid>
+                )}
+                {!formIsOutOfBudget && isPeriodicExpense && (
+                  <>
+                    <Grid item xs={12} md={4}>
+                      <TextField label="Tahakkuk Başlangıç Yılı" type="number" value={periodStartYear} onChange={(event) => setPeriodStartYear(Number(event.target.value))} fullWidth required />
+                    </Grid>
+                    <Grid item xs={12} md={4}>
+                      <TextField select label="Tahakkuk Başlangıç Ayı" value={periodStartMonth} onChange={(event) => setPeriodStartMonth(Number(event.target.value))} fullWidth required>
+                        {monthOptions.map((label, index) => <MenuItem key={label} value={index + 1}>{label}</MenuItem>)}
+                      </TextField>
+                    </Grid>
+                    <Grid item xs={12} md={4}>
+                      <TextField label="Ay Sayısı" type="number" value={periodMonthCount} onChange={(event) => setPeriodMonthCount(event.target.value)} inputProps={{ min: 1, max: 36 }} fullWidth required />
+                    </Grid>
+                  </>
                 )}
                 <Grid item xs={12} md={4}>
                   <TextField

@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from decimal import Decimal
 import ipaddress
 import logging
 import re
@@ -19,7 +20,10 @@ from app.models import (
     ExpenseAccrualUsage,
     ExpenseAllocation,
     ExpenseAttachment,
+    ExpensePeriodAllocation,
     ExpenseStatus,
+    PlanAccrual,
+    PlanAccrualAllocation,
     PlanEntry,
     PurchaseFormStatusExt,
     Scenario,
@@ -28,6 +32,7 @@ from app.models import (
 from app.schemas import (
     DeleteDependencyInfo,
     ExpenseAllocationRead,
+    ExpensePeriodAllocationRead,
     ExpenseAccrualAvailabilityRead,
     ExpenseAttachmentRead,
     ExpenseCreate,
@@ -203,6 +208,7 @@ def _has_active_expense_for_scope(
         .where(ExpenseAllocation.month == month)
         .where(Expense.status == ExpenseStatus.RECORDED)
         .where(Expense.is_out_of_budget.is_(False))
+        .where(Expense.funding_source != "carryover")
     ).first()
     if allocated_expense is not None:
         return True
@@ -214,6 +220,7 @@ def _has_active_expense_for_scope(
         .where(Expense.expense_date < end_date)
         .where(Expense.status == ExpenseStatus.RECORDED)
         .where(Expense.is_out_of_budget.is_(False))
+        .where(Expense.funding_source != "carryover")
     ).first()
     return active_expense is not None
 
@@ -300,6 +307,22 @@ def _delete_expense_allocations(session: Session, expense_id: int) -> None:
 def _split_cents_evenly(total_cents: int, count: int) -> list[int]:
     base = total_cents // count
     return [base] * (count - 1) + [total_cents - (base * (count - 1))]
+
+
+def _resolve_funding_source(session: Session, expense: Expense, requested_source: str) -> str:
+    if requested_source != "automatic" or expense.is_out_of_budget or not expense.budget_item_id:
+        return requested_source
+    rows = accrual_allocations_for_year(
+        session,
+        year=expense.expense_date.year,
+        budget_item_id=expense.budget_item_id,
+        scenario_id=expense.scenario_id,
+    )
+    remaining = sum(
+        (max(money(row.amount) - money(row.used_amount), Decimal("0.00")) for row, *_ in rows),
+        Decimal("0.00"),
+    )
+    return "carryover" if remaining >= money(expense.amount) and remaining > 0 else "current"
 
 
 def _build_scope_summary(
@@ -454,6 +477,31 @@ def _create_expense_allocations(
     return allocations
 
 
+def _replace_expense_period_allocations(session: Session, expense: Expense) -> None:
+    existing = session.exec(
+        select(ExpensePeriodAllocation).where(ExpensePeriodAllocation.expense_id == expense.id)
+    ).all()
+    for row in existing:
+        session.delete(row)
+    if not expense.is_periodic:
+        session.flush()
+        return
+    if not expense.period_start_year or not expense.period_start_month or not expense.period_month_count:
+        raise HTTPException(status_code=400, detail="Tahakkuk/hizmet dönemi bilgileri eksik.")
+    if not 1 <= expense.period_month_count <= 36:
+        raise HTTPException(status_code=400, detail="Ay sayısı 1-36 arasında olmalıdır.")
+    amounts = _split_cents_evenly(int(round(float(expense.amount or 0) * 100)), expense.period_month_count)
+    for offset, amount_cents in enumerate(amounts):
+        absolute_month = expense.period_start_month - 1 + offset
+        session.add(ExpensePeriodAllocation(
+            expense_id=expense.id,
+            year=expense.period_start_year + absolute_month // 12,
+            month=absolute_month % 12 + 1,
+            amount=Decimal(amount_cents) / Decimal(100),
+        ))
+    session.flush()
+
+
 def _build_expense_read(
     row: dict,
     department_map: dict[tuple[int, int | None], str] | None = None,
@@ -462,6 +510,7 @@ def _build_expense_read(
     attachment_count_map: dict[int, int] | None = None,
     allocation_map: dict[int, list[ExpenseAllocationRead]] | None = None,
     accrual_usage_map: dict[int, float] | None = None,
+    period_allocation_map: dict[int, list[ExpensePeriodAllocationRead]] | None = None,
 ) -> ExpenseRead:
     created_name = (
         row.get("created_full_name")
@@ -630,6 +679,13 @@ def _build_expense_read(
         updated_at=row.get("updated_at"),
         accrual_used_amount=round(accrual_used_amount, 2),
         current_budget_amount=round(max(amount - accrual_used_amount, 0.0), 2),
+        funding_source=row.get("funding_source") or "current",
+        budget_source_year=row.get("budget_source_year"),
+        is_periodic=bool(row.get("is_periodic")),
+        period_start_year=row.get("period_start_year"),
+        period_start_month=row.get("period_start_month"),
+        period_month_count=row.get("period_month_count"),
+        period_allocations=(period_allocation_map or {}).get(row.get("id"), []),
     )
 
 
@@ -813,6 +869,20 @@ def _build_expense_reads(
         .group_by(ExpenseAccrualUsage.expense_id)
     ).all() if expense_ids else []
     accrual_usage_map = {int(expense_id): float(amount or 0) for expense_id, amount in usage_rows}
+    period_rows = session.exec(
+        select(ExpensePeriodAllocation)
+        .where(ExpensePeriodAllocation.expense_id.in_(expense_ids))
+        .order_by(ExpensePeriodAllocation.year, ExpensePeriodAllocation.month)
+    ).all() if expense_ids else []
+    period_allocation_map: dict[int, list[ExpensePeriodAllocationRead]] = {}
+    for period_row in period_rows:
+        period_allocation_map.setdefault(period_row.expense_id, []).append(
+            ExpensePeriodAllocationRead(
+                year=period_row.year,
+                month=period_row.month,
+                amount=money(period_row.amount),
+            )
+        )
     plan_amount_map = _build_plan_amount_map(session, row_maps, allocation_map)
     budget_scope_map: dict[BudgetScopeKey, BudgetScopeAggregate] = {}
     scope_months_by_year: dict[int, set[int]] = {}
@@ -844,6 +914,7 @@ def _build_expense_reads(
             attachment_count_map,
             allocation_map,
             accrual_usage_map,
+            period_allocation_map,
         )
         for row in row_maps
     ]
@@ -880,6 +951,12 @@ def _expense_read_query(
             Expense.updated_by_user_id,
             Expense.client_hostname,
             Expense.kaydi_giren_kullanici,
+            Expense.funding_source,
+            Expense.budget_source_year,
+            Expense.is_periodic,
+            Expense.period_start_year,
+            Expense.period_start_month,
+            Expense.period_month_count,
             BudgetItem.code.label("budget_code"),
             BudgetItem.name.label("budget_name"),
             BudgetItem.map_category.label("capex_opex"),
@@ -1507,6 +1584,8 @@ def create_expense(
     )
     expense = Expense(
         **expense_data,
+        funding_source="current",
+        budget_source_year=expense_in.expense_date.year,
         budget_code=budget_item.code if budget_item else None,
         created_by_id=current_user.id,
         updated_by_id=current_user.id,
@@ -1515,7 +1594,9 @@ def create_expense(
         client_hostname=client_hostname,
         kaydi_giren_kullanici=current_user.username,
     )
-    allocation_data = _build_allocation_data(
+    effective_funding_source = _resolve_funding_source(session, expense, expense_in.funding_source)
+    expense.funding_source = effective_funding_source
+    allocation_data = [] if effective_funding_source == "carryover" else _build_allocation_data(
         session,
         expense,
         expense_in.allocation_mode,
@@ -1531,9 +1612,22 @@ def create_expense(
             session,
             expense=expense,
             expense_allocations=allocations,
-            funding_source=expense_in.funding_source,
+            funding_source=effective_funding_source,
         )
-        if mark_plan_purchased and expense.status == ExpenseStatus.RECORDED:
+        if effective_funding_source == "carryover":
+            source_year = session.exec(
+                select(func.min(PlanAccrual.source_year))
+                .join(PlanAccrualAllocation, PlanAccrualAllocation.accrual_id == PlanAccrual.id)
+                .join(ExpenseAccrualUsage, ExpenseAccrualUsage.accrual_allocation_id == PlanAccrualAllocation.id)
+                .where(ExpenseAccrualUsage.expense_id == expense.id)
+            ).one()
+            expense.budget_source_year = int(source_year) if source_year is not None else expense.expense_date.year
+        _replace_expense_period_allocations(session, expense)
+        if (
+            mark_plan_purchased
+            and effective_funding_source != "carryover"
+            and expense.status == ExpenseStatus.RECORDED
+        ):
             scopes = _allocation_data_scopes(allocation_data) or _expense_plan_scopes(session, expense)
             for scope in scopes:
                 _set_plan_purchase_status(session, scope, True, current_user.id)
@@ -1577,7 +1671,7 @@ def update_expense(
         .where(ExpenseAccrualUsage.expense_id == expense.id)
         .limit(1)
     ).first() is not None
-    funding_source = expense_in.funding_source or ("automatic" if has_accrual_usage else "current")
+    requested_funding_source = expense_in.funding_source or ("carryover" if has_accrual_usage else "current")
     will_be_out_of_budget = bool(update_data.get("is_out_of_budget", expense.is_out_of_budget))
     if will_be_out_of_budget:
         update_data["budget_item_id"] = None
@@ -1605,13 +1699,16 @@ def update_expense(
             continue
         setattr(expense, field, value)
 
+    funding_source = _resolve_funding_source(session, expense, requested_funding_source)
+    expense.funding_source = funding_source
+
     quantity = expense.quantity or 1
     unit_price = expense.unit_price or 0
     if not expense.amount and quantity and unit_price:
         expense.amount = round(quantity * unit_price, 2)
 
-    allocation_data = [] if will_be_out_of_budget else None
-    if allocation_mode_supplied and not will_be_out_of_budget:
+    allocation_data = [] if will_be_out_of_budget or funding_source == "carryover" else None
+    if allocation_mode_supplied and not will_be_out_of_budget and funding_source != "carryover":
         allocation_data = _build_allocation_data(
             session,
             expense,
@@ -1642,6 +1739,17 @@ def update_expense(
             expense_allocations=expense_allocations,
             funding_source=funding_source,
         )
+        if funding_source == "carryover":
+            _delete_expense_allocations(session, expense.id)
+            expense.budget_source_year = session.exec(
+                select(func.min(PlanAccrual.source_year))
+                .join(PlanAccrualAllocation, PlanAccrualAllocation.accrual_id == PlanAccrual.id)
+                .join(ExpenseAccrualUsage, ExpenseAccrualUsage.accrual_allocation_id == PlanAccrualAllocation.id)
+                .where(ExpenseAccrualUsage.expense_id == expense.id)
+            ).one() or expense.expense_date.year
+        elif not expense.budget_source_year:
+            expense.budget_source_year = expense.expense_date.year
+        _replace_expense_period_allocations(session, expense)
         new_scopes = (
             _allocation_data_scopes(allocation_data)
             if allocation_data is not None
@@ -1659,7 +1767,12 @@ def update_expense(
         ):
             for scope in old_scopes:
                 sync_scope(scope)
-        if mark_plan_purchased is True and expense.status == ExpenseStatus.RECORDED and new_scopes:
+        if (
+            mark_plan_purchased is True
+            and funding_source != "carryover"
+            and expense.status == ExpenseStatus.RECORDED
+            and new_scopes
+        ):
             for scope in new_scopes:
                 _set_plan_purchase_status(session, scope, True, current_user.id)
         elif expense.status != ExpenseStatus.RECORDED:
@@ -1998,6 +2111,10 @@ def delete_expense(
             delete_related_file_records(session, "expenses", expense_id)
         release_expense_accrual_usage(session, expense_id)
         _delete_expense_allocations(session, expense_id)
+        for period_row in session.exec(
+            select(ExpensePeriodAllocation).where(ExpensePeriodAllocation.expense_id == expense_id)
+        ).all():
+            session.delete(period_row)
         session.delete(expense)
         session.flush()
         for scope in scopes:

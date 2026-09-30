@@ -43,6 +43,7 @@ from app.schemas import (
     PlanUnusedOptionsRead,
 )
 from app.services.accruals import (
+    accrual_allocations_for_year,
     accrual_amounts,
     accrual_periods,
     money,
@@ -193,6 +194,7 @@ def _actual_amount_for_scope(
         .where(ExpenseAllocation.scenario_id == scenario_id)
         .where(Expense.status == ExpenseStatus.RECORDED)
         .where(Expense.is_out_of_budget.is_(False))
+        .where(Expense.funding_source != "carryover")
     ).one()
     fallback = session.exec(
         select(func.coalesce(func.sum(Expense.amount), 0))
@@ -202,6 +204,7 @@ def _actual_amount_for_scope(
         .where(func.extract("month", Expense.expense_date) == month)
         .where(Expense.status == ExpenseStatus.RECORDED)
         .where(Expense.is_out_of_budget.is_(False))
+        .where(Expense.funding_source != "carryover")
         .where(~exists().where(ExpenseAllocation.expense_id == Expense.id))
     ).one()
     return float(allocated or 0) + float(fallback or 0)
@@ -621,7 +624,7 @@ def _build_plan_read(
     row_available_amount = calculate_budget_availability(
         revised_amount, actual_amount, row_unused_amount
     ).available_amount
-    accrual = session.exec(
+    source_accrual = session.exec(
         select(PlanAccrual)
         .where(
             PlanAccrual.source_plan_id == row.get("id"),
@@ -629,8 +632,25 @@ def _build_plan_read(
         )
         .order_by(PlanAccrual.id.desc())
     ).first()
+    allocation_match = session.exec(
+        select(PlanAccrualAllocation, PlanAccrual)
+        .join(PlanAccrual, PlanAccrual.id == PlanAccrualAllocation.accrual_id)
+        .where(
+            PlanAccrual.status == "ACTIVE",
+            PlanAccrual.budget_item_id == row.get("budget_item_id"),
+            PlanAccrual.source_year == row.get("year"),
+            PlanAccrual.source_scenario_id == row.get("scenario_id"),
+            func.coalesce(PlanAccrual.department, "") == (row.get("department") or ""),
+            PlanAccrualAllocation.year == row.get("year"),
+            PlanAccrualAllocation.month == row.get("month"),
+        )
+        .order_by(PlanAccrual.id.desc())
+    ).first()
+    allocation = allocation_match[0] if allocation_match else None
+    accrual = allocation_match[1] if allocation_match else None
     accrual_total = Decimal("0.00")
     future_reserved = Decimal("0.00")
+    open_amount = Decimal("0.00")
     if accrual:
         accrual_total = money(accrual.total_amount)
         future_reserved = money(session.exec(
@@ -639,8 +659,14 @@ def _build_plan_read(
                 PlanAccrualAllocation.year > accrual.source_year,
             )
         ).one())
-        scope_available_amount = max(scope_available_amount - float(future_reserved), 0.0)
-        row_available_amount = max(row_available_amount - float(future_reserved), 0.0)
+    if source_accrual:
+        open_amount = money(session.exec(
+            select(func.coalesce(func.sum(
+                PlanAccrualAllocation.amount - PlanAccrualAllocation.used_amount
+            ), 0)).where(PlanAccrualAllocation.accrual_id == source_accrual.id)
+        ).one())
+        scope_available_amount = max(scope_available_amount - float(open_amount), 0.0)
+        row_available_amount = max(row_available_amount - float(open_amount), 0.0)
     return PlanEntryRead(
         id=row.get("id"),
         year=row.get("year"),
@@ -714,6 +740,8 @@ def _build_plan_read(
         has_accrual=accrual is not None,
         plan_accrual_total=accrual_total,
         plan_accrual_future_reserved=future_reserved,
+        plan_accrual_open_amount=open_amount,
+        plan_accrual_allocation_amount=money(allocation.amount) if allocation else Decimal("0.00"),
     )
 
 
@@ -1321,6 +1349,8 @@ def _domain_accrual_preview(
         source_plan_id=source.id,
         total_amount=money(conversion.total_amount),
         source_plan_total=money(summary["revised"]),
+        source_annual_plan_total=money(summary["plan"]),
+        source_revised_plan_total=money(summary["revised"]),
         source_actual_total=money(summary["actual"]),
         source_unused_total=money(summary["unused"]),
         source_reserved_total=money(summary["reserved"]),
@@ -1406,27 +1436,41 @@ def create_domain_accrual(
 def list_carryover_accruals(
     year: int = Query(...),
     budget_item_id: int | None = None,
+    month: int | None = Query(default=None, ge=1, le=12),
+    scenario_id: int | None = None,
+    department: str | None = None,
+    capex_opex: str | None = None,
     session: Session = Depends(get_db_session),
     _: User = Depends(get_current_user),
 ) -> list[AccrualPlanRead]:
-    query = (
-        select(PlanAccrual.id)
-        .join(PlanAccrualAllocation, PlanAccrualAllocation.accrual_id == PlanAccrual.id)
-        .where(
-            PlanAccrual.status == "ACTIVE",
-            PlanAccrual.source_year < year,
-            PlanAccrualAllocation.year == year,
-        )
-        .distinct()
+    rows = accrual_allocations_for_year(
+        session,
+        year=year,
+        budget_item_id=budget_item_id,
+        scenario_id=scenario_id,
+        department=department,
+        capex_opex=_normalize_capex_opex(capex_opex),
     )
-    if budget_item_id is not None:
-        query = query.where(PlanAccrual.budget_item_id == budget_item_id)
+    if month is not None:
+        rows = [row for row in rows if row[0].month == month]
+    allocations_by_accrual: dict[int, list[PlanAccrualAllocation]] = {}
+    for allocation, accrual, _item, _scenario in rows:
+        allocations_by_accrual.setdefault(accrual.id, []).append(allocation)
     results: list[AccrualPlanRead] = []
-    for accrual_id in session.exec(query).all():
+    for accrual_id, allocations in allocations_by_accrual.items():
         item = _build_domain_accrual_read(session, accrual_id)
-        year_allocations = [row for row in item.allocations if row.year == year]
+        allocation_ids = {row.id for row in allocations}
+        year_allocations = [row for row in item.allocations if row.id in allocation_ids]
+        item.allocations = year_allocations
         item.carryover_amount = money(sum(
             (row.amount for row in year_allocations), Decimal("0.00")
+        ))
+        item.used_amount = money(sum(
+            (row.used_amount for row in year_allocations), Decimal("0.00")
+        ))
+        item.remaining_amount = money(sum(
+            (max(row.amount - row.used_amount, Decimal("0.00")) for row in year_allocations),
+            Decimal("0.00"),
         ))
         item.used_amount = money(sum(
             (row.used_amount for row in year_allocations), Decimal("0.00")

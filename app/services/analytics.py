@@ -291,6 +291,7 @@ def compute_budget_scope_statuses(
         .where(ExpenseAllocation.month.in_(months))
         .where(Expense.status == ExpenseStatus.RECORDED)
         .where(Expense.is_out_of_budget.is_(False))
+        .where(Expense.funding_source != "carryover")
     )
     fallback_query = (
         select(
@@ -304,6 +305,7 @@ def compute_budget_scope_statuses(
         .where(func.extract("month", Expense.expense_date).in_(months))
         .where(Expense.status == ExpenseStatus.RECORDED)
         .where(Expense.is_out_of_budget.is_(False))
+        .where(Expense.funding_source != "carryover")
         .where(~exists().where(ExpenseAllocation.expense_id == Expense.id))
     )
     if scenario_id is not None:
@@ -1384,6 +1386,7 @@ def compute_monthly_summary(
         .where(ExpenseAllocation.year == year)
         .where(Expense.status == ExpenseStatus.RECORDED)
         .where(Expense.is_out_of_budget.is_(False))
+        .where(Expense.funding_source != "carryover")
     )
     if capex_opex in {"capex", "opex"}:
         allocation_query = allocation_query.join(
@@ -1411,6 +1414,7 @@ def compute_monthly_summary(
         .where(func.extract("year", Expense.expense_date) == year)
         .where(Expense.status == ExpenseStatus.RECORDED)
         .where(Expense.is_out_of_budget.is_(False))
+        .where(Expense.funding_source != "carryover")
         .where(~allocation_exists)
     )
     if capex_opex in {"capex", "opex"}:
