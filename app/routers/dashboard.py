@@ -157,6 +157,7 @@ def _dashboard_accrual_summary(
         scenario_id=target_scenario_id,
         department=department,
         capex_opex=capex_opex,
+        include_source_year=True,
     )
     rows = [row for row in rows if row[0].month in month_range]
     items: list[DashboardAccrualItem] = []
@@ -180,15 +181,19 @@ def _dashboard_accrual_summary(
             amount=amount,
             used_amount=used,
             remaining_amount=max(amount - used, Decimal("0.00")),
-            is_carryover=True,
+            is_carryover=accrual.source_year < allocation.year,
         ))
     totals = carryover_totals(rows)
+    carryover_rows = [row for row in rows if row[1].source_year < row[0].year]
+    carryover = carryover_totals(carryover_rows)
     return DashboardAccrualSummary(
         accrual_plan_amount=totals["total"],
+        accrual_used_amount=totals["used"],
+        accrual_remaining_amount=totals["remaining"],
         accrual_group_count=totals["item_count"],
-        carryover_accrual_amount=totals["total"],
-        carryover_used_amount=totals["used"],
-        carryover_remaining_amount=totals["remaining"],
+        carryover_accrual_amount=carryover["total"],
+        carryover_used_amount=carryover["used"],
+        carryover_remaining_amount=carryover["remaining"],
         items=items,
     )
 
@@ -865,6 +870,8 @@ def get_dashboard(
     total_cancelled = reconciliation.canceled_budget_amount
     accrual_used_by_category = {"capex": 0.0, "opex": 0.0, "unclassified": 0.0}
     for item in accruals.items:
+        if not item.is_carryover:
+            continue
         key = (item.capex_opex or "").strip().lower()
         category = key if key in {"capex", "opex"} else "unclassified"
         accrual_used_by_category[category] += float(item.used_amount)
@@ -1482,6 +1489,29 @@ def get_overbudget(
     ]
     saving_items = [serialize_status(item) for item in saving_statuses]
     remaining_items = [serialize_status(item) for item in remaining_statuses]
+    reservation_by_scope: dict[tuple[int, int | None], float] = {}
+    for allocation, accrual, _item in accrual_reservations_for_source_year(
+        session,
+        source_year=resolved_year,
+        source_months=month_range,
+        budget_item_id=budget_item_id,
+        scenario_ids=[scenario_id],
+        department=department,
+        capex_opex=capex_filter,
+    ):
+        key = (accrual.budget_item_id, accrual.source_scenario_id)
+        reservation_by_scope[key] = reservation_by_scope.get(key, 0.0) + float(max(
+            money(allocation.amount) - money(allocation.used_amount),
+            money(0),
+        ))
+    canonical_remaining_items: list[OverBudgetItem] = []
+    for item in remaining_items:
+        key = (item.budget_item_id, item.scenario)
+        available = round(max(float(item.over) - reservation_by_scope.get(key, 0.0), 0.0), 2)
+        if available <= 0.005:
+            continue
+        canonical_remaining_items.append(item.copy(update={"over": available}))
+    remaining_items = canonical_remaining_items
     all_unused_items = _unused_budget_items(
         session,
         year=resolved_year,
@@ -1530,7 +1560,7 @@ def get_overbudget(
             total_revised_plan=sum(item.plan for item in items),
             total_actual=sum(item.actual for item in items),
             total_valid_actual=sum(item.overall_actual for item in statuses),
-            remaining_total=reconciliation.remaining_available_amount,
+            remaining_total=round(sum(item.over for item in remaining_items), 2),
             remaining_item_count=len(remaining_items),
             saving_total=negotiated_saving_total,
             saving_item_count=negotiated_saving_item_count,

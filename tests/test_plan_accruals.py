@@ -23,7 +23,7 @@ from app.models import (
     Scenario,
     User,
 )
-from app.routers.dashboard import get_dashboard
+from app.routers.dashboard import get_dashboard, get_overbudget
 from app.routers.expenses import _fetch_expense_read, _replace_expense_period_allocations
 from app.routers.expenses import get_expense_accrual_availability
 from app.routers.plans import (
@@ -213,6 +213,113 @@ class PlanAccrualReservationTests(unittest.TestCase):
                 self.user,
             )
         self.assertEqual(400, raised.exception.status_code)
+
+    def test_selected_year_accrual_cards_split_source_and_carryover_allocations(self) -> None:
+        accrual = PlanAccrual(
+            source_plan_id=self.source_plan.id,
+            source_year=2027,
+            source_scenario_id=self.source_scenario.id,
+            budget_item_id=self.item.id,
+            department="Sistem",
+            total_amount=Decimal("112500.00"),
+            start_year=2027,
+            start_month=6,
+            month_count=12,
+            created_by_id=self.user.id,
+            status="ACTIVE",
+        )
+        self.session.add(accrual)
+        self.session.flush()
+        periods = [(2027, month) for month in range(6, 13)] + [
+            (2028, month) for month in range(1, 6)
+        ]
+        self.session.add_all([
+            PlanAccrualAllocation(
+                accrual_id=accrual.id,
+                year=allocation_year,
+                month=allocation_month,
+                amount=Decimal("9375.00"),
+                used_amount=Decimal("0.00"),
+            )
+            for allocation_year, allocation_month in periods
+        ])
+        self.session.commit()
+
+        source_dashboard = get_dashboard(
+            year=2027,
+            scenario_id=self.source_scenario.id,
+            month=None,
+            month_list=None,
+            budget_item_id=self.item.id,
+            department="Sistem",
+            capex_opex="capex",
+            effective_primary=False,
+            session=self.session,
+            _=self.user,
+        )
+        target_dashboard = get_dashboard(
+            year=2028,
+            scenario_id=self.target_scenario.id,
+            month=None,
+            month_list=None,
+            budget_item_id=self.item.id,
+            department="Sistem",
+            capex_opex="capex",
+            effective_primary=False,
+            session=self.session,
+            _=self.user,
+        )
+        self.assertEqual(65625.0, float(source_dashboard.accruals.accrual_plan_amount))
+        self.assertEqual(46875.0, float(target_dashboard.accruals.accrual_plan_amount))
+        self.assertEqual(0.0, float(source_dashboard.accruals.carryover_accrual_amount))
+        self.assertEqual(46875.0, float(target_dashboard.accruals.carryover_accrual_amount))
+        self.assertEqual(120000.0, source_dashboard.kpi.total_plan)
+        self.assertEqual(0.0, target_dashboard.kpi.total_plan)
+
+        source_details = get_overbudget(
+            year=2027,
+            scenario_id=self.source_scenario.id,
+            months=None,
+            month=None,
+            month_list=None,
+            start_month=None,
+            end_month=None,
+            budget_item_id=self.item.id,
+            budget_code=None,
+            department="Sistem",
+            capex_opex="capex",
+            session=self.session,
+            _=self.user,
+        )
+        self.assertEqual(source_dashboard.kpi.total_remaining, source_details.summary.remaining_total)
+        self.assertEqual(
+            source_dashboard.kpi.total_remaining,
+            sum(item.over for item in source_details.remaining_items),
+        )
+
+        source_plan_accruals = list_carryover_accruals(
+            year=2027,
+            budget_item_id=self.item.id,
+            month=None,
+            scenario_id=self.source_scenario.id,
+            department="Sistem",
+            capex_opex="capex",
+            include_source_year=True,
+            session=self.session,
+            _=self.user,
+        )
+        target_plan_accruals = list_carryover_accruals(
+            year=2028,
+            budget_item_id=self.item.id,
+            month=None,
+            scenario_id=self.target_scenario.id,
+            department="Sistem",
+            capex_opex="capex",
+            session=self.session,
+            _=self.user,
+        )
+        self.assertEqual(Decimal("65625.00"), source_plan_accruals[0].carryover_amount)
+        self.assertEqual(Decimal("46875.00"), target_plan_accruals[0].carryover_amount)
 
     def test_excel_import_remains_normal_and_is_not_duplicated_by_accrual(self) -> None:
         workbook = Workbook()

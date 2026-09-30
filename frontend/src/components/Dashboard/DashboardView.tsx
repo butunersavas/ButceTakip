@@ -172,6 +172,8 @@ interface DashboardAccrualItem {
 
 interface DashboardAccrualSummary {
   accrual_plan_amount: number;
+  accrual_used_amount: number;
+  accrual_remaining_amount: number;
   accrual_group_count: number;
   carryover_accrual_amount: number;
   carryover_used_amount: number;
@@ -1738,18 +1740,19 @@ export default function DashboardView() {
   );
   const accrualGroupCount =
     dashboard?.accruals?.accrual_group_count ?? dashboard?.kpi.accrual_group_count ?? 0;
-  const carryoverAccrualAmount = toSafeNumber(
-    dashboard?.accruals?.carryover_accrual_amount ?? dashboard?.kpi.carryover_accrual_amount
+  const accrualUsedAmount = toSafeNumber(
+    dashboard?.accruals?.accrual_used_amount ?? dashboard?.accruals?.carryover_used_amount
   );
-  const carryoverAccrualUsed = toSafeNumber(dashboard?.accruals?.carryover_used_amount);
-  const carryoverAccrualRemaining = toSafeNumber(dashboard?.accruals?.carryover_remaining_amount);
+  const accrualRemainingAmount = toSafeNumber(
+    dashboard?.accruals?.accrual_remaining_amount ?? dashboard?.accruals?.carryover_remaining_amount
+  );
   const accrualPlanItems = dashboard?.accruals?.items ?? [];
   const carryoverSourceYears = Array.from(
     new Set(accrualPlanItems.map((item) => item.source_year))
   ).sort((left, right) => left - right);
   const carryoverSourceLabel = carryoverSourceYears.length
-    ? `${carryoverSourceYears.map((value) => `${value} bütçesinden`).join(", ")} sarkan`
-    : "Sarkan kaynak yok";
+    ? `${carryoverSourceYears.map((value) => `${value} bütçesinden`).join(", ")} · ${debouncedFilters.year} dönemine ait`
+    : "Tahakkuk kaydı yok";
   const outOfBudgetDetailTotal = useMemo(
     () => outOfBudgetExpenses.reduce((sum, expense) => sum + toSafeNumber(expense.amount), 0),
     [outOfBudgetExpenses]
@@ -2216,8 +2219,8 @@ export default function DashboardView() {
   const handleExportAccrualPlans = () => {
     exportRowsToExcel(
       buildAccrualPlanExportRows(accrualPlanItems),
-      buildDashboardExportFileName("sarkan_tahakkuk_detayi"),
-      "Sarkan Tahakkuk",
+      buildDashboardExportFileName("tahakkuk_detayi"),
+      "Tahakkuk",
       ["Tutar", "Kullanılan", "Kalan"]
     );
   };
@@ -2630,14 +2633,9 @@ export default function DashboardView() {
           Açıklama: "Planlanan bütçe"
         },
         {
-          "Kart Adı": "Sarkan Tahakkuk",
-          Tutar: carryoverAccrualAmount,
-          Açıklama: `Ödenen/Kullanılan ${formatCurrency(carryoverAccrualUsed)} · Kalan ${formatCurrency(carryoverAccrualRemaining)}`
-        },
-        {
-          "Kart Adı": "Açık Tahakkuk / Taahhüt",
-          Tutar: normalizedKpi.accrual_reserve_amount ?? 0,
-          Açıklama: "Kaynak yıl bütçesinde bağlı, henüz ödenmemiş tutar"
+          "Kart Adı": "TAHAKKUK",
+          Tutar: accrualPlanAmount,
+          Açıklama: `Ödenen/Kullanılan ${formatCurrency(accrualUsedAmount)} · Kalan ${formatCurrency(accrualRemainingAmount)}`
         },
         {
           "Kart Adı": "Gerçekleşen",
@@ -2767,7 +2765,7 @@ export default function DashboardView() {
       );
       appendRowsToWorkbook(
         workbook,
-        "Sarkan Tahakkuk Detayı",
+        "Tahakkuk Detayı",
         buildAccrualPlanExportRows(accrualPlanItems),
         ["Tutar"]
       );
@@ -2819,13 +2817,6 @@ export default function DashboardView() {
         "Aşım Detayı",
         buildBudgetStatusExportRows(overBudgetItems, "Aşım"),
         ["Toplam Bütçe", "Gerçekleşen Harcama", "Aşım"]
-      );
-      appendRowsToWorkbook(
-        workbook,
-        "Kullanılmayacak Bütçe Detayı",
-        buildUnusedBudgetExportRows(unusedBudgetItems),
-        ["Toplam Bütçe", "Harcama", "Kullanılmayacak", "Kalan Kullanılabilir"],
-        ["Güncelleme Tarihi"]
       );
       appendRowsToWorkbook(
         workbook,
@@ -3229,9 +3220,9 @@ export default function DashboardView() {
                   filterKey: "total_combined_saving" as const
                 },
                 {
-                  title: "Sarkan Tahakkuk",
-                  value: formatCurrency(carryoverAccrualAmount),
-                  subtitle: `${accrualGroupCount} kalem · ${carryoverSourceLabel} · ${formatCurrency(carryoverAccrualUsed)} ödendi · ${formatCurrency(carryoverAccrualRemaining)} kalan`,
+                  title: "TAHAKKUK",
+                  value: formatCurrency(accrualPlanAmount),
+                  subtitle: `${accrualGroupCount} kalem · ${carryoverSourceLabel} · ${formatCurrency(accrualUsedAmount)} ödendi · ${formatCurrency(accrualRemainingAmount)} kalan`,
                   icon: (
                     <AccountBalanceWalletOutlinedIcon
                       sx={{ fontSize: 18, color: "common.white" }}
@@ -3736,20 +3727,20 @@ export default function DashboardView() {
         maxWidth="xl"
         fullWidth
       >
-        <DialogTitle>Sarkan Tahakkuk Detayı</DialogTitle>
+        <DialogTitle>TAHAKKUK Detayı</DialogTitle>
         <DialogContent dividers>
           <Stack spacing={2}>
             <DetailSummaryGrid
               items={[
-                { label: "Sarkan Tahakkuk", value: formatCurrency(carryoverAccrualAmount), color: "info.main" },
+                { label: "TAHAKKUK", value: formatCurrency(accrualPlanAmount), color: "info.main" },
                 { label: "Tahakkuk Sayısı", value: String(accrualGroupCount) },
-                { label: "Ödenen/Kullanılan", value: formatCurrency(carryoverAccrualUsed) },
-                { label: "Kalan", value: formatCurrency(carryoverAccrualRemaining) },
+                { label: "Ödenen/Kullanılan", value: formatCurrency(accrualUsedAmount) },
+                { label: "Kalan", value: formatCurrency(accrualRemainingAmount) },
                 { label: "Toplam Plan", value: formatCurrency(normalizedKpi.total_plan) }
               ]}
             />
             <Alert severity="info">
-              Bu tutar önceki yıl bütçesine aittir; seçilen yılın Toplam Plan ve Kalan Bütçe hesaplarına eklenmez.
+              Tahakkuk, seçilen yılın allocation toplamıdır ve Toplam Plan'a eklenmez. Kaynak bütçe yılı her satırda ayrıca gösterilir.
             </Alert>
             <DetailTableWrap>
               <Table size="small" stickyHeader>

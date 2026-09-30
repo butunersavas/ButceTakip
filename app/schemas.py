@@ -1763,6 +1763,8 @@ class DashboardAccrualItem(BaseModel):
 
 class DashboardAccrualSummary(BaseModel):
     accrual_plan_amount: Decimal = Decimal("0.00")
+    accrual_used_amount: Decimal = Decimal("0.00")
+    accrual_remaining_amount: Decimal = Decimal("0.00")
     accrual_group_count: int = 0
     carryover_accrual_amount: Decimal = Decimal("0.00")
     carryover_used_amount: Decimal = Decimal("0.00")

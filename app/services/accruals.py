@@ -146,6 +146,7 @@ def accrual_allocations_for_year(
     scenario_id: int | None = None,
     department: str | None = None,
     capex_opex: str | None = None,
+    include_source_year: bool = False,
     lock: bool = False,
 ) -> list[tuple[PlanAccrualAllocation, PlanAccrual, BudgetItem, Scenario]]:
     source_scenario = Scenario
@@ -156,7 +157,7 @@ def accrual_allocations_for_year(
         .join(source_scenario, source_scenario.id == PlanAccrual.source_scenario_id)
         .where(
             PlanAccrual.status == "ACTIVE",
-            PlanAccrual.source_year < year,
+            PlanAccrual.source_year <= year if include_source_year else PlanAccrual.source_year < year,
             PlanAccrualAllocation.year == year,
         )
         .order_by(

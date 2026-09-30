@@ -657,7 +657,10 @@ export default function PlansView() {
       capexOpex
     ],
     queryFn: async () => {
-      const params: Record<string, number | string> = { year };
+      const params: Record<string, number | string | boolean> = {
+        year,
+        include_source_year: true
+      };
       if (scenarioId) params.scenario_id = scenarioId;
       if (budgetItemId) params.budget_item_id = budgetItemId;
       if (monthFilter !== "") params.month = Number(monthFilter);
@@ -1565,7 +1568,7 @@ export default function PlansView() {
         renderCell: ({ row }) => {
           if (!row.has_accrual) return <Typography color="text.secondary">-</Typography>;
           return (
-            <Tooltip title={`Bu aya düşen: ${formatCurrency(Number(row.plan_accrual_allocation_amount ?? 0))}`}>
+            <Tooltip title={`Bu aya düşen tahakkuk: ${formatCurrency(Number(row.plan_accrual_allocation_amount ?? 0))}`}>
               <Chip
                 size="small"
                 label="TAHAKKUK VAR"
@@ -1950,9 +1953,9 @@ export default function PlansView() {
 
       <Card variant="outlined">
         <CardContent>
-          <Typography variant="h6" sx={{ mb: 1.5 }}>Önceki Yıldan Sarkan Tahakkuklar</Typography>
+          <Typography variant="h6" sx={{ mb: 1.5 }}>Tahakkuklar</Typography>
           {(carryoverAccrualsQuery.data ?? []).length === 0 ? (
-            <Typography color="text.secondary">Seçili yıl için sarkan tahakkuk bulunmuyor.</Typography>
+            <Typography color="text.secondary">Seçili yıl için tahakkuk bulunmuyor.</Typography>
           ) : (
             <Stack spacing={1}>
               {(carryoverAccrualsQuery.data ?? []).map((accrual) => (
@@ -1966,7 +1969,7 @@ export default function PlansView() {
                 >
                   <Box>
                     <Typography fontWeight={700}>{accrual.budget_name || accrual.budget_code || `Tahakkuk #${accrual.id}`}</Typography>
-                    <Typography variant="caption" color="text.secondary">{accrual.source_year} bütçesinden sarkan · {accrual.department || "Departman yok"}</Typography>
+                    <Typography variant="caption" color="text.secondary">{accrual.source_year} bütçesinden · {year} dönemine ait · {accrual.department || "Departman yok"}</Typography>
                   </Box>
                   <Stack direction="row" spacing={2} alignItems="center">
                     <Typography>Toplam {formatCurrency(Number(accrual.carryover_amount))}</Typography>
@@ -2041,28 +2044,22 @@ export default function PlansView() {
                     color: "primary.main"
                   },
                   {
-                    label: "Sarkan Tahakkuk",
-                    value: formatCurrency(carryoverTotals.total),
-                    subtitle: `Ödenen/Kullanılan ${formatCurrency(carryoverTotals.used)} · Kalan ${formatCurrency(carryoverTotals.remaining)}`,
-                    color: "info.main"
-                  },
-                  {
                     filter: "actual" as PlanCardFilter,
                     label: "Gerçekleşen",
                     value: formatCurrency(planTableTotals.actual),
                     color: "success.main"
                   },
                   {
+                    label: "TAHAKKUK",
+                    value: formatCurrency(carryoverTotals.total),
+                    subtitle: `Ödenen/Kullanılan ${formatCurrency(carryoverTotals.used)} · Kalan ${formatCurrency(carryoverTotals.remaining)}`,
+                    color: "info.main"
+                  },
+                  {
                     filter: "unused" as PlanCardFilter,
                     label: "Kullanılmayacak",
                     value: formatCurrency(planTableTotals.unused),
                     color: "warning.main"
-                  },
-                  {
-                    label: "Açık Tahakkuk / Taahhüt",
-                    value: formatCurrency(planTableTotals.openAccrual),
-                    subtitle: "Kaynak yıl bütçesinde bağlı tutar",
-                    color: "secondary.main"
                   },
                   {
                     filter: "available" as PlanCardFilter,

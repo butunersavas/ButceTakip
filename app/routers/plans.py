@@ -1440,6 +1440,7 @@ def list_carryover_accruals(
     scenario_id: int | None = None,
     department: str | None = None,
     capex_opex: str | None = None,
+    include_source_year: bool = False,
     session: Session = Depends(get_db_session),
     _: User = Depends(get_current_user),
 ) -> list[AccrualPlanRead]:
@@ -1450,6 +1451,7 @@ def list_carryover_accruals(
         scenario_id=scenario_id,
         department=department,
         capex_opex=_normalize_capex_opex(capex_opex),
+        include_source_year=include_source_year,
     )
     if month is not None:
         rows = [row for row in rows if row[0].month == month]
@@ -1464,13 +1466,6 @@ def list_carryover_accruals(
         item.allocations = year_allocations
         item.carryover_amount = money(sum(
             (row.amount for row in year_allocations), Decimal("0.00")
-        ))
-        item.used_amount = money(sum(
-            (row.used_amount for row in year_allocations), Decimal("0.00")
-        ))
-        item.remaining_amount = money(sum(
-            (max(row.amount - row.used_amount, Decimal("0.00")) for row in year_allocations),
-            Decimal("0.00"),
         ))
         item.used_amount = money(sum(
             (row.used_amount for row in year_allocations), Decimal("0.00")
