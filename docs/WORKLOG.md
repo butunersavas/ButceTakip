@@ -371,3 +371,10 @@ AGENTS ve docs içindeki TL/TRY/sembol eşleşmeleri kural açıklamaları ve ta
 - Garanti listelerinin dört tipine `Kaydı Giren` ve `Son Güncelleyen` kolonları eklendi. Create yalnız authenticated kullanıcıyı creator olarak yazar; updater ilk kayıtta boş kalır ve ilk gerçek update'te authenticated kullanıcıdan set edilir. Eski bilinmeyen updater için creator uyduran migration fallback'i kaldırıldı.
 - İzole backend tahakkuk + garanti audit paketi 17/17, tam backend paketi 65 başarılı + 1 PostgreSQL-only güvenli skip, gerçek local PostgreSQL tahakkuk transaction paketi 2/2 ve frontend regresyonları 8/8 başarılıdır. Frontend production build 2.297 modülle başarılıdır; mevcut yaklaşık 2 MB chunk uyarısı sürer. `git diff --check` temizdir.
 - Local API/frontend image'ları rebuild edilip yalnız bu iki servis recreate edildi; `butce_db` container ve volume korundu. Login ekranı tarayıcıda açıldı. Secret/parola okunmadığı ve güvenli authenticated fixture oturumu bulunmadığı için authenticated browser acceptance tamamlanamadı. Production bağlantısı/deploy, push ve main merge yapılmadı.
+## 2026-10-01 — Plan Tahakkuklar modalı runtime import düzeltmesi
+
+- `PlansView.tsx` içindeki Tahakkuklar modalında kullanılan `Table`, `TableBody`, `TableCell`, `TableHead` ve `TableRow` MUI importları eklendi. Kullanılmayan `TableContainer` eklenmedi; business logic değiştirilmedi.
+- Frontend regresyonları 8/8 ve production build 2.297 modülle başarılıdır; yalnız mevcut yaklaşık 2 MB chunk uyarısı sürer. `git diff --check` temizdir.
+- Yalnız local frontend image'ı rebuild edildi ve `butce_frontend` `--no-deps` ile recreate edildi. API ve sağlıklı DB container'ı korunmuştur.
+- `http://localhost:5173/plans` isteği authenticated oturum bulunmadığı için login ekranına yönlendi. Login ekranında beyaz ekran ve browser console error/warning yoktur; Tahakkuk kartı → liste → detay tıklama kabulü güvenli oturum/parola kullanılmadan tamamlanamadı.
+- Production bağlantısı/deploy, push veya main merge yapılmadı.
