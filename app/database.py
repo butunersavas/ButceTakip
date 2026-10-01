@@ -198,8 +198,8 @@ def ensure_warranty_schema(inspector) -> None:
             connection.execute(text("ALTER TABLE warranty_items ADD COLUMN updated_by_id INTEGER"))
             connection.execute(
                 text(
-                    "UPDATE warranty_items SET updated_by_id = COALESCE(updated_by_user_id, created_by_id) "
-                    "WHERE updated_by_id IS NULL"
+                    "UPDATE warranty_items SET updated_by_id = updated_by_user_id "
+                    "WHERE updated_by_id IS NULL AND updated_by_user_id IS NOT NULL"
                 )
             )
     if "created_by_user_id" not in warranty_columns:

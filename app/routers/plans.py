@@ -1278,6 +1278,7 @@ def _build_domain_accrual_read(session: Session, accrual_id: int) -> AccrualPlan
     )
     return AccrualPlanRead(
         id=accrual.id,
+        monthly_amount=money(money(accrual.total_amount) / Decimal(accrual.month_count)),
         total_amount=money(accrual.total_amount),
         start_year=accrual.start_year,
         start_month=accrual.start_month,
@@ -1326,18 +1327,16 @@ def _domain_accrual_preview(
         department=source.department,
         exclude_accrual_id=exclude_accrual_id,
     )
-    if money(conversion.total_amount) > money(summary["available"]):
+    total_amount = money(conversion.monthly_amount * conversion.month_count)
+    if total_amount > money(summary["available"]):
         raise HTTPException(
             status_code=400,
-            detail=(
-                "Tahakkuk tutarı kalan kullanılabilir bütçeden fazla olamaz. "
-                f"Maksimum tutar: ${money(summary['available']):,.2f}"
-            ),
+            detail="Toplam tahakkuk tutarı kalan kullanılabilir bütçeyi aşamaz.",
         )
     periods = list(accrual_periods(
         conversion.start_year, conversion.start_month, conversion.month_count
     ))
-    amounts = accrual_amounts(conversion.total_amount, conversion.month_count)
+    amounts = accrual_amounts(conversion.monthly_amount, conversion.month_count)
     entries = [
         AccrualPreviewEntry(year=year, month=month, amount=amount)
         for (year, month), amount in zip(periods, amounts)
@@ -1347,7 +1346,8 @@ def _domain_accrual_preview(
     )
     return AccrualConversionPreview(
         source_plan_id=source.id,
-        total_amount=money(conversion.total_amount),
+        monthly_amount=money(conversion.monthly_amount),
+        total_amount=total_amount,
         source_plan_total=money(summary["revised"]),
         source_annual_plan_total=money(summary["plan"]),
         source_revised_plan_total=money(summary["revised"]),
@@ -1404,7 +1404,7 @@ def create_domain_accrual(
             source_year=source.year,
             source_scenario_id=source.scenario_id,
             department=source.department,
-            total_amount=money(conversion.total_amount),
+            total_amount=money(conversion.monthly_amount * conversion.month_count),
             start_year=conversion.start_year,
             start_month=conversion.start_month,
             month_count=conversion.month_count,
@@ -1525,7 +1525,7 @@ def update_domain_accrual(
         )
         for row in allocations:
             session.delete(row)
-        accrual.total_amount = money(conversion.total_amount)
+        accrual.total_amount = money(conversion.monthly_amount * conversion.month_count)
         accrual.start_year = conversion.start_year
         accrual.start_month = conversion.start_month
         accrual.month_count = conversion.month_count

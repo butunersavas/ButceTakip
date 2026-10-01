@@ -93,7 +93,7 @@ class PlanAccrualPostgresTests(unittest.TestCase):
         accrual = create_domain_accrual(
             self.source_plan.id,
             AccrualConversionInput(
-                total_amount=Decimal("2000.00"),
+                monthly_amount=Decimal("1000.00"),
                 start_year=2097,
                 start_month=12,
                 month_count=2,
@@ -146,7 +146,7 @@ class PlanAccrualPostgresTests(unittest.TestCase):
         accrual = create_domain_accrual(
             self.source_plan.id,
             AccrualConversionInput(
-                total_amount=Decimal("2000.00"),
+                monthly_amount=Decimal("1000.00"),
                 start_year=2097,
                 start_month=12,
                 month_count=2,

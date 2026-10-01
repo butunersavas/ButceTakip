@@ -5,14 +5,14 @@ export interface AccrualDistributionRow {
 }
 
 export function buildAccrualDistribution(
-  total: number,
+  monthlyAmount: number,
   startYear: number,
   startMonth: number,
   monthCount: number
 ) {
   if (
-    !Number.isFinite(total) ||
-    total <= 0 ||
+    !Number.isFinite(monthlyAmount) ||
+    monthlyAmount <= 0 ||
     !Number.isInteger(startYear) ||
     !Number.isInteger(startMonth) ||
     startMonth < 1 ||
@@ -23,15 +23,14 @@ export function buildAccrualDistribution(
   ) {
     return { rows: [] as AccrualDistributionRow[], totalCents: 0 };
   }
-  const totalCents = Math.round(total * 100);
-  const baseCents = Math.floor(totalCents / monthCount);
-  const remainder = totalCents - baseCents * monthCount;
+  const monthlyCents = Math.round(monthlyAmount * 100);
+  const totalCents = monthlyCents * monthCount;
   const rows = Array.from({ length: monthCount }, (_, index) => {
     const absoluteMonth = startMonth - 1 + index;
     return {
       year: startYear + Math.floor(absoluteMonth / 12),
       month: (absoluteMonth % 12) + 1,
-      cents: baseCents + (index === monthCount - 1 ? remainder : 0)
+      cents: monthlyCents
     };
   });
   return { rows, totalCents };

@@ -119,6 +119,7 @@ interface PlanEntry {
 
 interface AccrualPlan {
   id: number;
+  monthly_amount: number;
   total_amount: number;
   start_year: number;
   start_month: number;
@@ -154,6 +155,7 @@ interface AccrualConversionPreviewEntry {
 
 interface AccrualConversionPreview {
   source_plan_id: number;
+  monthly_amount: number;
   total_amount: number;
   source_plan_total: number;
   source_annual_plan_total: number;
@@ -344,6 +346,7 @@ export default function PlansView() {
   const [conversionMonthCount, setConversionMonthCount] = useState(12);
   const [conversionAmount, setConversionAmount] = useState("");
   const [conversionError, setConversionError] = useState<string | null>(null);
+  const [isAccrualListOpen, setIsAccrualListOpen] = useState(false);
   const [accrualDetail, setAccrualDetail] = useState<AccrualPlan | null>(null);
   const [isNewBudgetMode, setIsNewBudgetMode] = useState(false);
   const [transferDialogOpen, setTransferDialogOpen] = useState(false);
@@ -396,7 +399,7 @@ export default function PlansView() {
       const { data } = await client.post<AccrualConversionPreview>(
         `/plans/${conversionPlan!.id}/accrual-preview`,
         {
-          total_amount: parseLocaleNumber(conversionAmount),
+          monthly_amount: parseLocaleNumber(conversionAmount),
           start_year: conversionStartYear,
           start_month: conversionStartMonth,
           month_count: conversionMonthCount
@@ -679,7 +682,7 @@ export default function PlansView() {
       const { data } = await client.post<AccrualPlan>(
         `/plans/${conversionPlan.id}/convert-to-accrual`,
         {
-          total_amount: parseLocaleNumber(conversionAmount),
+          monthly_amount: parseLocaleNumber(conversionAmount),
           start_year: conversionStartYear,
           start_month: conversionStartMonth,
           month_count: conversionMonthCount
@@ -870,7 +873,7 @@ export default function PlansView() {
     setConversionStartYear(plan.year);
     setConversionStartMonth(plan.month);
     setConversionMonthCount(12);
-    setConversionAmount(String(plan.scope_available_amount ?? plan.available_amount ?? plan.amount));
+    setConversionAmount(String(plan.amount));
     setConversionError(null);
   }, []);
 
@@ -1571,7 +1574,7 @@ export default function PlansView() {
             <Tooltip title={`Bu aya düşen tahakkuk: ${formatCurrency(Number(row.plan_accrual_allocation_amount ?? 0))}`}>
               <Chip
                 size="small"
-                label="TAHAKKUK VAR"
+                label="Tahakkuk var"
                 color="info"
                 variant="outlined"
                 onClick={() => void handleOpenAccrualDetail(row)}
@@ -1951,39 +1954,6 @@ export default function PlansView() {
         </TextField>
       </FiltersBar>
 
-      <Card variant="outlined">
-        <CardContent>
-          <Typography variant="h6" sx={{ mb: 1.5 }}>Tahakkuklar</Typography>
-          {(carryoverAccrualsQuery.data ?? []).length === 0 ? (
-            <Typography color="text.secondary">Seçili yıl için tahakkuk bulunmuyor.</Typography>
-          ) : (
-            <Stack spacing={1}>
-              {(carryoverAccrualsQuery.data ?? []).map((accrual) => (
-                <Stack
-                  key={accrual.id}
-                  direction={{ xs: "column", sm: "row" }}
-                  justifyContent="space-between"
-                  alignItems={{ xs: "flex-start", sm: "center" }}
-                  spacing={1}
-                  sx={{ borderBottom: "1px solid", borderColor: "divider", pb: 1 }}
-                >
-                  <Box>
-                    <Typography fontWeight={700}>{accrual.budget_name || accrual.budget_code || `Tahakkuk #${accrual.id}`}</Typography>
-                    <Typography variant="caption" color="text.secondary">{accrual.source_year} bütçesinden · {year} dönemine ait · {accrual.department || "Departman yok"}</Typography>
-                  </Box>
-                  <Stack direction="row" spacing={2} alignItems="center">
-                    <Typography>Toplam {formatCurrency(Number(accrual.carryover_amount))}</Typography>
-                    <Typography color="info.main">Ödenen/Kullanılan {formatCurrency(Number(accrual.used_amount))}</Typography>
-                    <Typography color="success.main">Kalan {formatCurrency(Number(accrual.remaining_amount))}</Typography>
-                    <Button size="small" onClick={() => void handleOpenAccrualById(accrual.id)}>Detay</Button>
-                  </Stack>
-                </Stack>
-              ))}
-            </Stack>
-          )}
-        </CardContent>
-      </Card>
-
       <Grid container spacing={3}>
         <Grid item xs={12}>
           <Card>
@@ -2050,10 +2020,11 @@ export default function PlansView() {
                     color: "success.main"
                   },
                   {
-                    label: "TAHAKKUK",
+                    label: "Tahakkuk",
                     value: formatCurrency(carryoverTotals.total),
                     subtitle: `Ödenen/Kullanılan ${formatCurrency(carryoverTotals.used)} · Kalan ${formatCurrency(carryoverTotals.remaining)}`,
-                    color: "info.main"
+                    color: "info.main",
+                    onClick: () => setIsAccrualListOpen(true)
                   },
                   {
                     filter: "unused" as PlanCardFilter,
@@ -2070,14 +2041,10 @@ export default function PlansView() {
                 ].map((item) => (
                   <Grid item xs={12} sm={6} md={3} key={item.label}>
                     <CardActionArea
-                      component={item.filter === undefined ? "div" : "button"}
-                      disableRipple={item.filter === undefined}
-                      onClick={
-                        item.filter === undefined
-                          ? undefined
-                          : () => handleCardFilter(item.filter as PlanCardFilter)
-                      }
-                      sx={{ borderRadius: 1, cursor: item.filter === undefined ? "default" : "pointer" }}
+                      component={item.filter === undefined && !item.onClick ? "div" : "button"}
+                      disableRipple={item.filter === undefined && !item.onClick}
+                      onClick={item.onClick ?? (item.filter === undefined ? undefined : () => handleCardFilter(item.filter as PlanCardFilter))}
+                      sx={{ borderRadius: 1, cursor: item.filter === undefined && !item.onClick ? "default" : "pointer" }}
                     >
                       <Box
                         sx={{
@@ -2220,10 +2187,18 @@ export default function PlansView() {
               </Grid>
               <Grid item xs={12}>
                 <TextField
-                  label="Tahakkuk Tutarı"
+                  label="Aylık Tahakkuk Tutarı"
                   value={conversionAmount}
                   onChange={(event) => setConversionAmount(event.target.value)}
                   helperText={`Kullanılabilir üst sınır: ${formatCurrency(Number(conversionPreview?.source_available_total ?? conversionPlan?.scope_available_amount ?? 0))}`}
+                  fullWidth
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  label="Toplam Tahakkuk"
+                  value={formatCurrency(parseLocaleNumber(conversionAmount) * conversionMonthCount || 0)}
+                  InputProps={{ readOnly: true }}
                   fullWidth
                 />
               </Grid>
@@ -2267,9 +2242,9 @@ export default function PlansView() {
                       </Box>
                     ))}
                     <Stack direction={{ xs: "column", sm: "row" }} spacing={2} justifyContent="space-between">
-                      <Typography>Toplam Bütçe: <strong>{formatCurrency(Number(conversionPreview.total_amount))}</strong></Typography>
-                      <Typography>Aylara Dağıtılan: <strong>{formatCurrency(conversionPreview.entries.reduce((sum, entry) => sum + Number(entry.amount), 0))}</strong></Typography>
-                      <Typography color="success.main">Kalan: <strong>{formatCurrency(0)}</strong></Typography>
+                      <Typography>Aylık Tahakkuk: <strong>{formatCurrency(Number(conversionPreview.monthly_amount))}</strong></Typography>
+                      <Typography>Ay Sayısı: <strong>{conversionMonthCount}</strong></Typography>
+                      <Typography color="success.main">Toplam Tahakkuk: <strong>{formatCurrency(Number(conversionPreview.total_amount))}</strong></Typography>
                     </Stack>
                   </Stack>
                 </CardContent>
@@ -2293,6 +2268,51 @@ export default function PlansView() {
             Tahakkuk Oluştur
           </Button>
         </DialogActions>
+      </Dialog>
+
+      <Dialog open={isAccrualListOpen} onClose={() => setIsAccrualListOpen(false)} fullWidth maxWidth="xl">
+        <DialogTitle>Tahakkuklar</DialogTitle>
+        <DialogContent dividers sx={{ maxHeight: "70vh" }}>
+          <Table size="small" stickyHeader>
+            <TableHead>
+              <TableRow>
+                <TableCell>Bütçe Kalemi</TableCell>
+                <TableCell>Kaynak Yıl</TableCell>
+                <TableCell>Başlangıç</TableCell>
+                <TableCell align="right">Ay Sayısı</TableCell>
+                <TableCell align="right">Aylık Tahakkuk</TableCell>
+                <TableCell align="right">Toplam Tahakkuk</TableCell>
+                <TableCell align="right">Ödenen/Kullanılan</TableCell>
+                <TableCell align="right">Kalan</TableCell>
+                <TableCell>Durum</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {(carryoverAccrualsQuery.data ?? []).length === 0 ? (
+                <TableRow><TableCell colSpan={9}>Seçili filtrelerde tahakkuk bulunamadı.</TableCell></TableRow>
+              ) : (carryoverAccrualsQuery.data ?? []).map((accrual) => (
+                <TableRow
+                  key={accrual.id}
+                  hover
+                  tabIndex={0}
+                  onClick={() => { setIsAccrualListOpen(false); void handleOpenAccrualById(accrual.id); }}
+                  sx={{ cursor: "pointer" }}
+                >
+                  <TableCell>{accrual.budget_name || accrual.budget_code || `#${accrual.id}`}</TableCell>
+                  <TableCell>{accrual.source_year}</TableCell>
+                  <TableCell>{monthOptions[accrual.start_month - 1]} {accrual.start_year}</TableCell>
+                  <TableCell align="right">{accrual.month_count}</TableCell>
+                  <TableCell align="right">{formatCurrency(Number(accrual.monthly_amount))}</TableCell>
+                  <TableCell align="right">{formatCurrency(Number(accrual.total_amount))}</TableCell>
+                  <TableCell align="right">{formatCurrency(Number(accrual.used_amount))}</TableCell>
+                  <TableCell align="right">{formatCurrency(Number(accrual.remaining_amount))}</TableCell>
+                  <TableCell><Chip size="small" color="info" label={accrual.status === "ACTIVE" ? "Aktif" : accrual.status} /></TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </DialogContent>
+        <DialogActions><Button onClick={() => setIsAccrualListOpen(false)}>Kapat</Button></DialogActions>
       </Dialog>
 
       <Dialog open={Boolean(accrualDetail)} onClose={() => setAccrualDetail(null)} fullWidth maxWidth="md">

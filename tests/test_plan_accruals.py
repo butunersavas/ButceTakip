@@ -77,15 +77,15 @@ class PlanAccrualReservationTests(unittest.TestCase):
         self.session.close()
         self.engine.dispose()
 
-    def conversion(self, amount="12000.00", month_count=3) -> AccrualConversionInput:
+    def conversion(self, amount="4000.00", month_count=3) -> AccrualConversionInput:
         return AccrualConversionInput(
-            total_amount=Decimal(amount),
+            monthly_amount=Decimal(amount),
             start_year=2027,
             start_month=12,
             month_count=month_count,
         )
 
-    def create_accrual(self, amount="12000.00", month_count=3):
+    def create_accrual(self, amount="4000.00", month_count=3):
         return create_domain_accrual(
             self.source_plan.id,
             self.conversion(amount, month_count),
@@ -121,10 +121,42 @@ class PlanAccrualReservationTests(unittest.TestCase):
         self.assertEqual(Decimal("12000.00"), plan_read.plan_accrual_open_amount)
         self.assertEqual(108000.0, plan_read.scope_available_amount)
 
+    def test_monthly_30000_for_12_months_creates_360000_without_division(self) -> None:
+        self.source_plan.amount = Decimal("360000.00")
+        self.session.add(self.source_plan)
+        self.session.commit()
+        conversion = AccrualConversionInput(
+            monthly_amount=Decimal("30000.00"),
+            start_year=2027,
+            start_month=9,
+            month_count=12,
+        )
+        preview = preview_domain_accrual(
+            self.source_plan.id, conversion, self.session, self.user
+        )
+        self.assertEqual(Decimal("30000.00"), preview.monthly_amount)
+        self.assertEqual(Decimal("360000.00"), preview.total_amount)
+        self.assertEqual(
+            [Decimal("30000.00")] * 12,
+            [row.amount for row in preview.entries],
+        )
+        created = create_domain_accrual(
+            self.source_plan.id, conversion, self.session, self.user
+        )
+        self.assertEqual(Decimal("360000.00"), created.total_amount)
+        self.assertEqual(
+            Decimal("120000.00"),
+            sum((row.amount for row in created.allocations if row.year == 2027), Decimal("0.00")),
+        )
+        self.assertEqual(
+            Decimal("240000.00"),
+            sum((row.amount for row in created.allocations if row.year == 2028), Decimal("0.00")),
+        )
+
     def test_decimal_distribution_puts_remainder_in_last_month(self) -> None:
         result = self.create_accrual("100.00")
         self.assertEqual(
-            [Decimal("33.33"), Decimal("33.33"), Decimal("33.34")],
+            [Decimal("100.00"), Decimal("100.00"), Decimal("100.00")],
             [row.amount for row in result.allocations],
         )
 
@@ -149,7 +181,7 @@ class PlanAccrualReservationTests(unittest.TestCase):
             self.session.refresh(plan)
 
         conversion = AccrualConversionInput(
-            total_amount=Decimal("112500.00"),
+            monthly_amount=Decimal("9375.00"),
             start_year=2027,
             start_month=4,
             month_count=12,
@@ -213,6 +245,10 @@ class PlanAccrualReservationTests(unittest.TestCase):
                 self.user,
             )
         self.assertEqual(400, raised.exception.status_code)
+        self.assertEqual(
+            "Toplam tahakkuk tutarı kalan kullanılabilir bütçeyi aşamaz.",
+            raised.exception.detail,
+        )
 
     def test_selected_year_accrual_cards_split_source_and_carryover_allocations(self) -> None:
         accrual = PlanAccrual(
@@ -353,7 +389,7 @@ class PlanAccrualReservationTests(unittest.TestCase):
         create_domain_accrual(
             imported[0].id,
             AccrualConversionInput(
-                total_amount=Decimal("6000.00"),
+                monthly_amount=Decimal("2000.00"),
                 start_year=2027,
                 start_month=1,
                 month_count=3,
@@ -374,7 +410,7 @@ class PlanAccrualReservationTests(unittest.TestCase):
         self.assertIsNotNone(self.session.get(PlanEntry, self.source_plan.id))
 
     def test_zero_usage_rows_and_normal_operational_records_do_not_block_reverse(self) -> None:
-        result = self.create_accrual("3900.00", 4)
+        result = self.create_accrual("975.00", 4)
         allocation = self.session.exec(
             select(PlanAccrualAllocation)
             .where(PlanAccrualAllocation.accrual_id == result.id)
@@ -418,7 +454,7 @@ class PlanAccrualReservationTests(unittest.TestCase):
         self.assertEqual([], self.session.exec(select(ExpenseAccrualUsage)).all())
 
     def test_one_dollar_usage_blocks_reverse(self) -> None:
-        result = self.create_accrual("3900.00", 4)
+        result = self.create_accrual("975.00", 4)
         allocation = self.session.exec(
             select(PlanAccrualAllocation)
             .where(PlanAccrualAllocation.accrual_id == result.id)
@@ -439,7 +475,7 @@ class PlanAccrualReservationTests(unittest.TestCase):
         self.assertIsNotNone(self.session.get(PlanAccrual, result.id))
 
     def test_previous_year_payment_does_not_consume_current_budget_and_blocks_reverse(self) -> None:
-        result = self.create_accrual("6000.00", 2)
+        result = self.create_accrual("3000.00", 2)
         self.session.add(PlanEntry(
             year=2028,
             month=1,
@@ -519,7 +555,7 @@ class PlanAccrualReservationTests(unittest.TestCase):
         )
 
     def test_current_budget_source_keeps_normal_expense_allocation_unchanged(self) -> None:
-        self.create_accrual("6000.00", 2)
+        self.create_accrual("3000.00", 2)
         expense = Expense(
             budget_item_id=self.item.id,
             budget_code=self.item.code,
@@ -554,7 +590,7 @@ class PlanAccrualReservationTests(unittest.TestCase):
         ).all())
 
     def test_dashboard_keeps_carryover_outside_normal_plan(self) -> None:
-        self.create_accrual("12000.00", 3)
+        self.create_accrual("4000.00", 3)
         self.session.add(PlanEntry(
             year=2028,
             month=1,
@@ -598,7 +634,7 @@ class PlanAccrualReservationTests(unittest.TestCase):
         self.session.add(self.source_plan)
         self.session.add(source_expense)
         self.session.commit()
-        self.create_accrual("30000.00", 3)
+        self.create_accrual("10000.00", 3)
 
         source_dashboard = get_dashboard(
             year=2027,

@@ -181,6 +181,25 @@ interface DashboardAccrualSummary {
   items: DashboardAccrualItem[];
 }
 
+interface AccrualPlanDetail {
+  id: number;
+  monthly_amount: number;
+  total_amount: number;
+  start_year: number;
+  start_month: number;
+  month_count: number;
+  source_year: number;
+  source_scenario_id: number;
+  source_scenario_name?: string | null;
+  budget_name?: string | null;
+  budget_code?: string | null;
+  source_plan_id?: number | null;
+  used_amount: number;
+  remaining_amount: number;
+  status: string;
+  allocations: Array<{ id: number; year: number; month: number; amount: number; used_amount: number; remaining_amount: number }>;
+}
+
 interface DashboardReconciliation {
   total_plan_amount: number;
   capex_total_plan_amount: number;
@@ -842,6 +861,7 @@ export default function DashboardView() {
   const [isOutOfBudgetDialogOpen, setIsOutOfBudgetDialogOpen] = useState(false);
   const [isUnusedBudgetDialogOpen, setIsUnusedBudgetDialogOpen] = useState(false);
   const [isAccrualPlanDialogOpen, setIsAccrualPlanDialogOpen] = useState(false);
+  const [selectedAccrualDetail, setSelectedAccrualDetail] = useState<AccrualPlanDetail | null>(null);
   const [savingPurchaseStatus, setSavingPurchaseStatus] = useState<number | null>(null);
   const [purchaseStatusFeedback, setPurchaseStatusFeedback] = useState<
     { message: string; severity: "success" | "error" } | null
@@ -1750,9 +1770,18 @@ export default function DashboardView() {
   const carryoverSourceYears = Array.from(
     new Set(accrualPlanItems.map((item) => item.source_year))
   ).sort((left, right) => left - right);
-  const carryoverSourceLabel = carryoverSourceYears.length
-    ? `${carryoverSourceYears.map((value) => `${value} bütçesinden`).join(", ")} · ${debouncedFilters.year} dönemine ait`
-    : "Tahakkuk kaydı yok";
+  const accrualYearDescription = carryoverSourceYears.length === 0
+    ? "Tahakkuk kaydı yok"
+    : carryoverSourceYears.length === 1 && carryoverSourceYears[0] === debouncedFilters.year
+      ? `${debouncedFilters.year} yılı içinde tahakkuk eden bütçe`
+      : carryoverSourceYears.length === 1
+        ? `${carryoverSourceYears[0]} yılından ${debouncedFilters.year} yılına tahakkuk eden bütçe`
+        : `${carryoverSourceYears.join(", ")} yıllarından ${debouncedFilters.year} yılına tahakkuk eden bütçe`;
+
+  const handleOpenAccrualDetail = async (accrualId: number) => {
+    const { data } = await client.get<AccrualPlanDetail>(`/plans/accruals/${accrualId}`);
+    setSelectedAccrualDetail(data);
+  };
   const outOfBudgetDetailTotal = useMemo(
     () => outOfBudgetExpenses.reduce((sum, expense) => sum + toSafeNumber(expense.amount), 0),
     [outOfBudgetExpenses]
@@ -2213,7 +2242,7 @@ export default function DashboardView() {
       Kullanılan: toSafeNumber(item.used_amount),
       Kalan: toSafeNumber(item.remaining_amount),
       "Tahakkuk ID": item.accrual_id,
-      Durum: item.is_carryover ? `${item.source_year}'den Devreden` : "TAHAKKUKLU"
+      Durum: item.is_carryover ? `${item.source_year}'den Devreden` : "Tahakkuk var"
     }));
 
   const handleExportAccrualPlans = () => {
@@ -2633,7 +2662,7 @@ export default function DashboardView() {
           Açıklama: "Planlanan bütçe"
         },
         {
-          "Kart Adı": "TAHAKKUK",
+          "Kart Adı": "Tahakkuk",
           Tutar: accrualPlanAmount,
           Açıklama: `Ödenen/Kullanılan ${formatCurrency(accrualUsedAmount)} · Kalan ${formatCurrency(accrualRemainingAmount)}`
         },
@@ -2704,7 +2733,7 @@ export default function DashboardView() {
           "Gerçekleşen Plan İçi": normalizedKpi.capex_realized_plan_inside_amount ?? 0,
           "Kalan Bütçe / Kalan Kullanılabilir": normalizedKpi.capex_remaining_available_amount ?? 0,
           "Pazarlıklı Tasarruf": normalizedKpi.capex_negotiated_saving_amount ?? 0,
-          "Diğer Tasarruf": normalizedKpi.capex_other_saving_amount ?? 0,
+          "Optimizasyon Tasarrufu": normalizedKpi.capex_other_saving_amount ?? 0,
           "İptal Edilen Bütçe": normalizedKpi.capex_canceled_budget_amount ?? 0,
           "Açık Tahakkuk / Taahhüt": normalizedKpi.capex_accrual_reserve_amount ?? 0,
           "Mutabakat Toplamı": normalizedKpi.capex_reconciliation_total ?? 0,
@@ -2718,7 +2747,7 @@ export default function DashboardView() {
           "Gerçekleşen Plan İçi": normalizedKpi.opex_realized_plan_inside_amount ?? 0,
           "Kalan Bütçe / Kalan Kullanılabilir": normalizedKpi.opex_remaining_available_amount ?? 0,
           "Pazarlıklı Tasarruf": normalizedKpi.opex_negotiated_saving_amount ?? 0,
-          "Diğer Tasarruf": normalizedKpi.opex_other_saving_amount ?? 0,
+          "Optimizasyon Tasarrufu": normalizedKpi.opex_other_saving_amount ?? 0,
           "İptal Edilen Bütçe": normalizedKpi.opex_canceled_budget_amount ?? 0,
           "Açık Tahakkuk / Taahhüt": normalizedKpi.opex_accrual_reserve_amount ?? 0,
           "Mutabakat Toplamı": normalizedKpi.opex_reconciliation_total ?? 0,
@@ -2733,7 +2762,7 @@ export default function DashboardView() {
           "Kalan Bütçe / Kalan Kullanılabilir":
             normalizedKpi.unclassified_remaining_available_amount ?? 0,
           "Pazarlıklı Tasarruf": normalizedKpi.unclassified_negotiated_saving_amount ?? 0,
-          "Diğer Tasarruf": normalizedKpi.unclassified_other_saving_amount ?? 0,
+          "Optimizasyon Tasarrufu": normalizedKpi.unclassified_other_saving_amount ?? 0,
           "İptal Edilen Bütçe": normalizedKpi.unclassified_canceled_budget_amount ?? 0,
           "Açık Tahakkuk / Taahhüt": normalizedKpi.unclassified_accrual_reserve_amount ?? 0,
           "Mutabakat Toplamı": normalizedKpi.unclassified_reconciliation_total ?? 0,
@@ -3220,9 +3249,9 @@ export default function DashboardView() {
                   filterKey: "total_combined_saving" as const
                 },
                 {
-                  title: "TAHAKKUK",
+                  title: "Tahakkuk",
                   value: formatCurrency(accrualPlanAmount),
-                  subtitle: `${accrualGroupCount} kalem · ${carryoverSourceLabel} · ${formatCurrency(accrualUsedAmount)} ödendi · ${formatCurrency(accrualRemainingAmount)} kalan`,
+                  subtitle: `${accrualGroupCount} kalem · ${accrualYearDescription} · ${formatCurrency(accrualUsedAmount)} ödendi · ${formatCurrency(accrualRemainingAmount)} kalan`,
                   icon: (
                     <AccountBalanceWalletOutlinedIcon
                       sx={{ fontSize: 18, color: "common.white" }}
@@ -3644,7 +3673,7 @@ export default function DashboardView() {
                                             color: pieColors.negotiatedSaving
                                           },
                                           {
-                                            label: "Diğer Tasarruf",
+                                            label: "Optimizasyon Tasarrufu",
                                             value: quarter.totals.otherSaving,
                                             color: pieColors.otherSaving
                                           },
@@ -3727,12 +3756,12 @@ export default function DashboardView() {
         maxWidth="xl"
         fullWidth
       >
-        <DialogTitle>TAHAKKUK Detayı</DialogTitle>
+        <DialogTitle>Tahakkuklar</DialogTitle>
         <DialogContent dividers>
           <Stack spacing={2}>
             <DetailSummaryGrid
               items={[
-                { label: "TAHAKKUK", value: formatCurrency(accrualPlanAmount), color: "info.main" },
+                { label: "Tahakkuk", value: formatCurrency(accrualPlanAmount), color: "info.main" },
                 { label: "Tahakkuk Sayısı", value: String(accrualGroupCount) },
                 { label: "Ödenen/Kullanılan", value: formatCurrency(accrualUsedAmount) },
                 { label: "Kalan", value: formatCurrency(accrualRemainingAmount) },
@@ -3770,7 +3799,12 @@ export default function DashboardView() {
                       </TableCell>
                     </TableRow>
                   ) : accrualPlanItems.map((item) => (
-                    <TableRow key={item.allocation_id} hover>
+                    <TableRow
+                      key={item.allocation_id}
+                      hover
+                      onClick={() => void handleOpenAccrualDetail(item.accrual_id)}
+                      sx={{ cursor: "pointer" }}
+                    >
                       <TableCell>{formatBudgetItemLabel({ code: item.budget_code, name: item.budget_name })}</TableCell>
                       <TableCell>{item.scenario_name || item.source_scenario_id}</TableCell>
                       <TableCell>{item.department || "-"}</TableCell>
@@ -3785,7 +3819,7 @@ export default function DashboardView() {
                       <TableCell>
                         <Chip
                           size="small"
-                          label={item.is_carryover ? `${item.source_year} Bütçesinden` : "TAHAKKUKLU"}
+                          label={item.is_carryover ? `${item.source_year} Bütçesinden` : "Tahakkuk var"}
                           color="info"
                           variant={item.is_carryover ? "outlined" : "filled"}
                         />
@@ -3803,6 +3837,36 @@ export default function DashboardView() {
           </Button>
           <Button onClick={() => setIsAccrualPlanDialogOpen(false)}>Kapat</Button>
         </DialogActions>
+      </Dialog>
+      <Dialog open={Boolean(selectedAccrualDetail)} onClose={() => setSelectedAccrualDetail(null)} fullWidth maxWidth="md">
+        <DialogTitle>Tahakkuk Detayı</DialogTitle>
+        <DialogContent dividers>
+          {selectedAccrualDetail ? (
+            <Stack spacing={2}>
+              <DetailSummaryGrid items={[
+                { label: "Tahakkuk ID", value: `#${selectedAccrualDetail.id}` },
+                { label: "Bütçe Kalemi", value: selectedAccrualDetail.budget_name || selectedAccrualDetail.budget_code || "-" },
+                { label: "Kaynak Yıl", value: String(selectedAccrualDetail.source_year) },
+                { label: "Kaynak Scenario", value: selectedAccrualDetail.source_scenario_name || `#${selectedAccrualDetail.source_scenario_id}` },
+                { label: "Aylık Tahakkuk", value: formatCurrency(selectedAccrualDetail.monthly_amount) },
+                { label: "Toplam Tahakkuk", value: formatCurrency(selectedAccrualDetail.total_amount) },
+                { label: "Kullanılan", value: formatCurrency(selectedAccrualDetail.used_amount) },
+                { label: "Kalan", value: formatCurrency(selectedAccrualDetail.remaining_amount) },
+                { label: "Başlangıç", value: `${monthLabels[selectedAccrualDetail.start_month - 1]} ${selectedAccrualDetail.start_year}` },
+                { label: "Ay Sayısı", value: String(selectedAccrualDetail.month_count) },
+                { label: "Kaynak Plan", value: selectedAccrualDetail.source_plan_id ? `#${selectedAccrualDetail.source_plan_id}` : "-" }
+              ]} />
+              <Typography variant="h6">Aylık Dağılım</Typography>
+              <Table size="small">
+                <TableHead><TableRow><TableCell>Dönem</TableCell><TableCell align="right">Tutar</TableCell><TableCell align="right">Kullanılan</TableCell><TableCell align="right">Kalan</TableCell></TableRow></TableHead>
+                <TableBody>{selectedAccrualDetail.allocations.map((row) => (
+                  <TableRow key={row.id}><TableCell>{monthLabels[row.month - 1]} {row.year}</TableCell><TableCell align="right">{formatCurrency(row.amount)}</TableCell><TableCell align="right">{formatCurrency(row.used_amount)}</TableCell><TableCell align="right">{formatCurrency(row.remaining_amount)}</TableCell></TableRow>
+                ))}</TableBody>
+              </Table>
+            </Stack>
+          ) : null}
+        </DialogContent>
+        <DialogActions><Button onClick={() => setSelectedAccrualDetail(null)}>Kapat</Button></DialogActions>
       </Dialog>
       <Dialog
         open={isPlanDetailDialogOpen}

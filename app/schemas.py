@@ -614,7 +614,7 @@ class PlanManualCreate(BaseModel):
 
 
 class AccrualConversionInput(BaseModel):
-    total_amount: Decimal
+    monthly_amount: Decimal
     start_year: int
     start_month: int
     month_count: int = Field(ge=1, le=36)
@@ -625,11 +625,11 @@ class AccrualConversionInput(BaseModel):
             raise ValueError("Başlangıç yılı 2000 ile 2200 arasında olmalıdır.")
         return value
 
-    @validator("total_amount", pre=True)
-    def validate_total_amount(cls, value) -> Decimal:  # noqa: D417
+    @validator("monthly_amount", pre=True)
+    def validate_monthly_amount(cls, value) -> Decimal:  # noqa: D417
         parsed = _parse_decimal_value(value)
         if parsed is None or parsed <= 0:
-            raise ValueError("Tahakkuk tutarı 0'dan büyük olmalıdır.")
+            raise ValueError("Aylık tahakkuk tutarı 0'dan büyük olmalıdır.")
         return parsed.quantize(Decimal("0.01"))
 
     @validator("start_month")
@@ -648,6 +648,7 @@ class AccrualPreviewEntry(BaseModel):
 
 class AccrualConversionPreview(BaseModel):
     source_plan_id: int
+    monthly_amount: Decimal
     total_amount: Decimal
     source_plan_total: Decimal = Decimal("0.00")
     source_annual_plan_total: Decimal = Decimal("0.00")
@@ -821,6 +822,7 @@ class PlanAccrualAllocationRead(BaseModel):
 
 class AccrualPlanRead(BaseModel):
     id: int
+    monthly_amount: Decimal
     total_amount: Decimal
     start_year: int
     start_month: int

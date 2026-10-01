@@ -67,6 +67,7 @@ import OverBudgetDialog, {
   type OverBudgetResponse
 } from "../common/OverBudgetDialog";
 import { useConfirmDialog } from "../../context/ConfirmDialogContext";
+import { buildAccrualDistribution } from "../../utils/accrualDistribution";
 
 interface Scenario {
   id: number;
@@ -1371,7 +1372,12 @@ export default function ExpensesView() {
       setEditingExpense(expense);
       const isOutOfBudget = Boolean(expense.is_out_of_budget ?? expense.out_of_budget);
       setFormQuantity(String(expense.quantity ?? 1));
-      setFormUnitPrice(String(expense.unit_price ?? 0));
+      const editMonthCount = Number(expense.period_month_count ?? 1);
+      const editQuantity = Number(expense.quantity ?? 1) || 1;
+      const editUnitPrice = expense.is_periodic && editMonthCount > 0
+        ? Number(expense.amount ?? 0) / editMonthCount / editQuantity
+        : Number(expense.unit_price ?? 0);
+      setFormUnitPrice(String(editUnitPrice));
       setFormBudgetItemId(isOutOfBudget ? null : expense.budget_item_id ?? null);
       setFormIsOutOfBudget(isOutOfBudget);
       setFormBudgetOutsideTitle(
@@ -1571,9 +1577,13 @@ export default function ExpensesView() {
     }
     const quantity = parseLocaleNumber(formData.get("quantity")) || 1;
     const unitPrice = parseLocaleNumber(formData.get("unit_price")) || 0;
-    const amount = Number.isFinite(quantity * unitPrice)
+    const monthlyAmount = Number.isFinite(quantity * unitPrice)
       ? Math.round(quantity * unitPrice * 100) / 100
       : 0;
+    const periodicMonths = Number(periodMonthCount);
+    const amount = isPeriodicExpense && Number.isInteger(periodicMonths) && periodicMonths > 0
+      ? Math.round(monthlyAmount * periodicMonths * 100) / 100
+      : monthlyAmount;
     if (!Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(unitPrice) || unitPrice < 0) {
       setErrorMessage("Adet ve birim fiyat geçerli bir sayı olmalı.");
       return;
@@ -1833,6 +1843,17 @@ export default function ExpensesView() {
     return Math.round(quantityNumber * unitPriceNumber * 100) / 100;
   }, [formQuantity, formUnitPrice]);
 
+  const periodDistributionPreview = useMemo(
+    () => buildAccrualDistribution(
+      totalAmount,
+      periodStartYear,
+      periodStartMonth,
+      Number(periodMonthCount)
+    ),
+    [periodMonthCount, periodStartMonth, periodStartYear, totalAmount]
+  );
+  const periodicTotalAmount = periodDistributionPreview.totalCents / 100;
+
   const formPlanYear = useMemo(() => {
     const parsedDate = dayjs(formExpenseDate);
     if (parsedDate.isValid()) {
@@ -2003,18 +2024,21 @@ export default function ExpensesView() {
     return { rows, message: null };
   }, [allocationMethod, plannedBudgetByMonth, selectedAllocationMonths, totalAmount]);
 
-  const renderTextWithTooltip = useCallback((value?: string | null, fallback = "-") => {
+  const renderTextWithTooltip = useCallback((value?: string | null, fallback = "-", tooltipMinLength = 0) => {
     const displayValue = value?.trim() || fallback;
     if (!displayValue) {
       return "-";
     }
-    return (
-      <Tooltip title={displayValue} placement="top" arrow>
-        <span className="MuiDataGrid-cellContent" style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
-          {displayValue}
-        </span>
-      </Tooltip>
+    const content = (
+      <span className="MuiDataGrid-cellContent" style={{ display: "block", maxWidth: "100%", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+        {displayValue}
+      </span>
     );
+    return displayValue.length > tooltipMinLength ? (
+      <Tooltip title={displayValue} placement="top" arrow>
+        {content}
+      </Tooltip>
+    ) : content;
   }, []);
 
   const buildBudgetSummary = useCallback((expense: Expense) => {
@@ -2610,6 +2634,12 @@ export default function ExpensesView() {
         renderCell: ({ row }) => renderTextWithTooltip(row.vendor)
       },
       {
+        field: "description",
+        headerName: "Açıklama",
+        width: 260,
+        renderCell: ({ row }) => renderTextWithTooltip(row.description, "-", 40)
+      },
+      {
         field: "created_by_name",
         headerName: "Kaydı Giren",
         width: 200,
@@ -2743,7 +2773,7 @@ export default function ExpensesView() {
         unusedAmount: 0
       })),
       ...unusedBudgetItems.map((item) => ({
-        type: "Diğer Tasarruf",
+        type: "Optimizasyon Tasarrufu",
         item,
         amount: Number(item.unused_amount ?? 0) || 0,
         unusedAmount: Number(item.unused_amount ?? 0) || 0
@@ -2783,8 +2813,7 @@ export default function ExpensesView() {
     budgetStatusSummary?.negotiated_saving_total ?? budgetStatusSummary?.saving_total ?? 0;
   const otherSavingTotal =
     budgetStatusSummary?.other_saving_total ?? budgetStatusSummary?.unused_total ?? 0;
-  const combinedSavingTotal =
-    budgetStatusSummary?.total_saving_total ?? negotiatedSavingTotal + otherSavingTotal;
+  const combinedSavingTotal = negotiatedSavingTotal + otherSavingTotal;
   const formattedNegotiatedSaving = formatCurrency(negotiatedSavingTotal);
   const formattedOtherSaving = formatCurrency(otherSavingTotal);
   const formattedCombinedSaving = formatCurrency(combinedSavingTotal);
@@ -3086,7 +3115,7 @@ export default function ExpensesView() {
     },
     {
       key: "OTHER_SAVING",
-      title: "Diğer Tasarruf",
+      title: "Optimizasyon Tasarrufu",
       value: formattedOtherSaving,
       subtitle: `${budgetStatusSummary?.other_saving_item_count ?? budgetStatusSummary?.unused_item_count ?? 0} kullanılmayacak kayıt`,
       icon: <ReportGmailerrorredOutlinedIcon sx={{ fontSize: 18, color: "common.white" }} />,
@@ -3116,7 +3145,7 @@ export default function ExpensesView() {
       key: "TOTAL_SAVING",
       title: "Toplam Tasarruf",
       value: formattedCombinedSaving,
-      subtitle: "Pazarlıklı + Diğer Tasarruf",
+      subtitle: "Pazarlıklı + Optimizasyon Tasarrufu",
       icon: <CheckCircleOutlineOutlinedIcon sx={{ fontSize: 18, color: "common.white" }} />,
       iconColor: "success.dark",
       selected: savingDetailDialog === "total",
@@ -3926,7 +3955,7 @@ export default function ExpensesView() {
                 </Grid>
                 <Grid item xs={12} md={4}>
                   <TextField
-                    label="Toplam Tutar"
+                    label={isPeriodicExpense ? "Aylık Tahakkuk Tutarı" : "Toplam Tutar"}
                     value={totalAmount.toFixed(2)}
                     type="number"
                     InputProps={{ readOnly: true }}
@@ -3986,6 +4015,31 @@ export default function ExpensesView() {
                     </Grid>
                     <Grid item xs={12} md={4}>
                       <TextField label="Ay Sayısı" type="number" value={periodMonthCount} onChange={(event) => setPeriodMonthCount(event.target.value)} inputProps={{ min: 1, max: 36 }} fullWidth required />
+                    </Grid>
+                    <Grid item xs={12}>
+                      <TextField label="Toplam Tahakkuk" value={formatCurrency(periodicTotalAmount)} InputProps={{ readOnly: true }} fullWidth />
+                    </Grid>
+                    <Grid item xs={12}>
+                      <Card variant="outlined">
+                        <CardContent>
+                          <Typography variant="h6" sx={{ mb: 1.5 }}>Tahakkuk Önizleme</Typography>
+                          <Grid container spacing={1}>
+                            {periodDistributionPreview.rows.map((row) => (
+                              <Grid item xs={6} sm={4} md={3} key={`${row.year}-${row.month}`}>
+                                <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1, p: 1, textAlign: "center" }}>
+                                  <Typography color="primary" fontWeight={700}>{monthOptions[row.month - 1]} {row.year}</Typography>
+                                  <Typography fontWeight={700}>{formatCurrency(row.cents / 100)}</Typography>
+                                </Box>
+                              </Grid>
+                            ))}
+                          </Grid>
+                          <Stack direction={{ xs: "column", sm: "row" }} spacing={2} justifyContent="space-between" sx={{ mt: 2 }}>
+                            <Typography>Aylık Tahakkuk: <strong>{formatCurrency(totalAmount)}</strong></Typography>
+                            <Typography>Ay Sayısı: <strong>{periodMonthCount}</strong></Typography>
+                            <Typography color="success.main">Toplam Tahakkuk: <strong>{formatCurrency(periodicTotalAmount)}</strong></Typography>
+                          </Stack>
+                        </CardContent>
+                      </Card>
                     </Grid>
                   </>
                 )}
@@ -4630,7 +4684,7 @@ export default function ExpensesView() {
                 color: "success.main"
               },
               {
-                label: "Diğer Tasarruf",
+                label: "Optimizasyon Tasarrufu",
                 value: formatCurrency(unusedBudgetTotals.unused),
                 color: "warning.main"
               },
@@ -4793,7 +4847,7 @@ export default function ExpensesView() {
         fullWidth
         maxWidth="lg"
       >
-        <DialogTitle>Diğer Tasarruf Detayı</DialogTitle>
+        <DialogTitle>Optimizasyon Tasarrufu Detayı</DialogTitle>
         <DialogContent dividers>
           <DetailSummaryGrid
             items={[
@@ -4812,7 +4866,7 @@ export default function ExpensesView() {
           />
           {unusedBudgetItems.length === 0 ? (
             <Typography variant="body2" color="text.secondary">
-              Diğer tasarruf olarak izlenen kullanılmayacak bütçe bulunamadı.
+              Optimizasyon tasarrufu olarak izlenen kullanılmayacak bütçe bulunamadı.
             </Typography>
           ) : (
             <DetailTableWrap>

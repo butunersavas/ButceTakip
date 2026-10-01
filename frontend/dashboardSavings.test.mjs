@@ -45,3 +45,10 @@ test("özet alanları yoksa normalize KPI değerlerini kullanır", () => {
     }
   );
 });
+
+test("Harcama Yönetimi Toplam Tasarruf eski total alanına güvenmez", async () => {
+  const expenses = await readFile(new URL("./src/components/Expenses/ExpensesView.tsx", import.meta.url), "utf8");
+  assert.ok(expenses.includes("const combinedSavingTotal = negotiatedSavingTotal + otherSavingTotal;"));
+  assert.ok(!expenses.includes("budgetStatusSummary?.total_saving_total ?? negotiatedSavingTotal + otherSavingTotal"));
+  assert.ok(expenses.includes('title: "Optimizasyon Tasarrufu"'));
+});

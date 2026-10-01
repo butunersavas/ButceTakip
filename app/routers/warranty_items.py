@@ -294,9 +294,9 @@ def create_warranty_item(
     item = WarrantyItem(
         **item_data,
         created_by_id=current_user.id,
-        updated_by_id=current_user.id,
+        updated_by_id=None,
         created_by_user_id=current_user.id,
-        updated_by_user_id=current_user.id,
+        updated_by_user_id=None,
     )
     try:
         session.add(item)

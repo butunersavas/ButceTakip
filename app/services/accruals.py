@@ -27,12 +27,15 @@ def money(value: Decimal | float | int | str | None) -> Decimal:
     return Decimal(str(value or 0)).quantize(MONEY, rounding=ROUND_HALF_UP)
 
 
-def accrual_amounts(total_amount: Decimal, month_count: int) -> list[Decimal]:
-    total_cents = int((money(total_amount) * 100).to_integral_exact())
-    base_cents, remainder = divmod(total_cents, month_count)
-    values = [Decimal(base_cents) / Decimal(100) for _ in range(month_count)]
-    values[-1] += Decimal(remainder) / Decimal(100)
-    return [money(value) for value in values]
+def accrual_amounts(monthly_amount: Decimal, month_count: int) -> list[Decimal]:
+    """Return one unchanged monetary amount for every accrual month.
+
+    The accrual form's amount is monthly, not a total that needs to be split.
+    Keeping this rule in the domain service prevents Plan and Expense clients
+    from implementing competing distribution math.
+    """
+    amount = money(monthly_amount)
+    return [amount for _ in range(month_count)]
 
 
 def accrual_periods(start_year: int, start_month: int, month_count: int):

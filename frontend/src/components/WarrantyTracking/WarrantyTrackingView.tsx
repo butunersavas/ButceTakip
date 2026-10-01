@@ -1099,6 +1099,10 @@ export default function WarrantyTrackingView() {
   );
 
   const columns = useMemo<GridColDef[]>(() => {
+    const auditColumns: GridColDef[] = [
+      { field: "created_by_display", headerName: "KAYDI GİREN", flex: 1, minWidth: 170, valueGetter: (_value, row) => toDisplayText((row as any)?.created_by_display) },
+      { field: "updated_by_display", headerName: "SON GÜNCELLEYEN", flex: 1, minWidth: 170, valueGetter: (_value, row) => toDisplayText((row as any)?.updated_by_display) },
+    ];
     if (activeWarrantyType === "DOMAIN_SSL") {
       return [
         { field: "domain", headerName: "DOMAİN ADLARI", flex: 1.5, minWidth: 260, valueGetter: (_value, row) => toDisplayText((row as any)?.domain || (row as any)?.name) },
@@ -1106,6 +1110,7 @@ export default function WarrantyTrackingView() {
         { field: "days_left", headerName: "SÖZLEŞME KALAN GÜN SAYISI", flex: 1.1, minWidth: 240, sortable: false, renderCell: (params) => renderDaysChip(params) },
         { field: "renewal_responsible", headerName: "İLGİLİ FİRMA", flex: 1.2, minWidth: 210, valueGetter: (_value, row) => toDisplayText((row as any)?.renewal_responsible || (row as any)?.renewal_owner) },
         { field: "purchased_from", headerName: "HİZMET ALINAN HOSTİNG FİRMASI", flex: 1.6, minWidth: 300, valueGetter: (_value, row) => toDisplayText((row as any)?.purchased_from || (row as any)?.issuer) },
+        ...auditColumns,
         actionColumn,
       ].map((column) => withSortIndicator(column, activeSortState));
     }
@@ -1118,6 +1123,7 @@ export default function WarrantyTrackingView() {
         { field: "days_left", headerName: "SÖZLEŞME KALAN GÜN SAYISI", flex: 1.1, minWidth: 240, sortable: false, renderCell: (params) => renderDaysChip(params) },
         { field: "purchased_from", headerName: "FİRMA", flex: 1.1, minWidth: 200, valueGetter: (_value, row) => toDisplayText((row as any)?.purchased_from) },
         { field: "note", headerName: "AÇIKLAMA", flex: 1.4, minWidth: 260, valueGetter: (_value, row) => toDisplayText((row as any)?.note) },
+        ...auditColumns,
         actionColumn,
       ].map((column) => withSortIndicator(column, activeSortState));
     }
@@ -1132,6 +1138,7 @@ export default function WarrantyTrackingView() {
         { field: "end_date", headerName: "BİTİŞ TARİHİ", flex: 0.9, minWidth: 160, valueGetter: (_value, row) => formatDate((row as any)?.end_date) },
         { field: "days_left", headerName: "DESTEK KALAN GÜN", flex: 0.9, minWidth: 170, sortable: false, renderCell: (params) => renderDaysChip(params) },
         { field: "status", headerName: "GARANTİ SÜRESİ UZATMA İŞLEMİ YAPILDI MI?", flex: 1.5, minWidth: 300, valueGetter: (_value, row) => toDisplayText((row as any)?.status) },
+        ...auditColumns,
         actionColumn,
       ].map((column) => withSortIndicator(column, activeSortState));
     }
@@ -1152,6 +1159,7 @@ export default function WarrantyTrackingView() {
       { field: "days_left", headerName: "KALAN GÜN", flex: 0.8, minWidth: 130, sortable: false, renderCell: (params) => renderDaysChip(params) },
       { field: "computed_status", headerName: "DURUM", flex: 0.9, minWidth: 150, sortable: false, renderCell: (params) => (<Typography variant="body2">{params?.row?.status_label ?? "Bilinmiyor"}</Typography>) },
       { field: "note", headerName: "NOT", flex: 1.2, minWidth: 190, sortable: false, valueGetter: (_value, row) => toDisplayText((row as any)?.note) },
+      ...auditColumns,
       actionColumn,
     ].map((column) => withSortIndicator(column, activeSortState));
   }, [actionColumn, activeSortState, activeWarrantyType, renderDaysChip]);
