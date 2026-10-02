@@ -44,6 +44,7 @@ import { useAuth } from "../../context/AuthContext";
 import { useThemeMode } from "../../context/ThemeModeContext";
 import brandLogo from "../../assets/brand-logo.svg";
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
+import MarketIndicators from "../Dashboard/MarketIndicators";
 
 const drawerWidth = 260;
 
@@ -224,6 +225,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
         })}
       </List>
       <Box sx={{ p: 2, display: "flex", flexDirection: "column", gap: 1.5 }}>
+        <MarketIndicators />
         <Paper
           variant="outlined"
           sx={{
