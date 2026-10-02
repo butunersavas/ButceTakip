@@ -849,12 +849,9 @@ export default function DashboardView() {
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const currentYear = new Date().getFullYear();
-  const [year, setYear] = usePersistentState<number>("dashboard:year", currentYear);
-  const [scenarioId, setScenarioId] = usePersistentState<number | null>("dashboard:scenarioId", null);
-  const [allScenariosSelected, setAllScenariosSelected] = usePersistentState<boolean>(
-    "dashboard:allScenariosSelected",
-    false
-  );
+  const [year, setYear] = useState<number>(currentYear);
+  const [scenarioId, setScenarioId] = useState<number | null>(null);
+  const [allScenariosSelected, setAllScenariosSelected] = useState(false);
   const [selectedPeriods, setSelectedPeriods] = usePersistentState<DashboardQuarter[]>(
     "dashboard:periods",
     []
@@ -1505,8 +1502,9 @@ export default function DashboardView() {
     applyDashboardScope({
       year: currentYear,
       scenarioId: null,
-      allScenariosSelected: true,
+      allScenariosSelected: false,
       resetNarrowingFilters: true,
+      explicitSelection: false,
     });
   };
 
@@ -3006,7 +3004,7 @@ export default function DashboardView() {
             <TextField
               select
               size="small"
-              label="Scenario"
+              label="Bütçe"
               value={allScenariosSelected ? "" : scenarioId ?? ""}
               SelectProps={{ displayEmpty: true }}
               onChange={(event) => {
@@ -3022,7 +3020,9 @@ export default function DashboardView() {
               }}
               sx={{ minWidth: 240, "& .MuiInputBase-root": { height: 40 } }}
             >
-              <MenuItem value="">Scenario Karşılaştırması (Tümü)</MenuItem>
+              {(scenarios ?? []).filter((scenario) => scenario.year === year).length > 1 && (
+                <MenuItem value="">Tüm Bütçeleri Karşılaştır</MenuItem>
+              )}
               {(scenarios ?? [])
                 .filter((scenario) => scenario.year === year)
                 .map((scenario) => (
@@ -3192,7 +3192,7 @@ export default function DashboardView() {
             </TextField>
           </FiltersBar>
           {allScenariosSelected && <Alert severity="info">
-            Scenario Karşılaştırması görünümündesiniz. Alternatif ve revizyon Scenario tutarları birlikte gösterilir; bu değer normal operasyonel Ana Bütçe toplamı değildir.
+            Bütçe karşılaştırması görünümündesiniz. Alternatif ve revizyon bütçeleri birlikte gösterilir; bu görünüm normal operasyonel Ana Bütçe toplamı değildir.
           </Alert>}
           <Stack direction="row" justifyContent="flex-end">
             <Button
