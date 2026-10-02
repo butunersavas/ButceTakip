@@ -2827,7 +2827,7 @@ export default function DashboardView() {
             realizedOverrunTotal
           )
         ),
-        ["Harcama Tutarı", "Gerçekleşen Plan İçi", "Aşım"]
+        ["Dönem Bütçesi", "Toplam Harcama", "Bütçeden Karşılanan", "Aşım"]
       );
       appendRowsToWorkbook(
         workbook,
@@ -3812,7 +3812,7 @@ export default function DashboardView() {
                 <TableBody>
                   {accrualPlanItems.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={13}>
+                      <TableCell colSpan={12}>
                         <Typography variant="body2" color="text.secondary">
                           Seçili filtrelerde tahakkuklu plan bulunamadı.
                         </Typography>
