@@ -261,7 +261,13 @@ export default function OverBudgetDialog({
   ];
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="xl" fullWidth>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="xl"
+      fullWidth
+      PaperProps={{ sx: { width: "96vw", maxWidth: 1600, maxHeight: "92vh" } }}
+    >
       <DialogTitle>{config.title}</DialogTitle>
       <DialogContent dividers>
         <Grid container spacing={1.5} sx={{ mb: 2 }}>
@@ -292,7 +298,22 @@ export default function OverBudgetDialog({
             {config.emptyMessage}
           </Typography>
         ) : (
-          <Box sx={{ maxHeight: 460, overflow: "auto" }}>
+          <Box
+            sx={{
+              maxHeight: "58vh",
+              overflow: "auto",
+              "& .MuiTableCell-root": {
+                px: 1,
+                py: 0.9,
+                fontSize: "0.8rem",
+                verticalAlign: "top"
+              },
+              "& .MuiTableCell-head": {
+                fontWeight: 700,
+                whiteSpace: "normal"
+              }
+            }}
+          >
             <Table size="small" stickyHeader>
               <TableHead>
                 <TableRow>
