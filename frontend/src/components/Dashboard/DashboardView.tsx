@@ -521,6 +521,14 @@ function sumUniqueExpensePlanScopes(expenses: DashboardExpense[]) {
   }, 0);
 }
 
+function getExpensePeriodBudget(expense: DashboardExpense) {
+  const allocations = expense.allocations ?? [];
+  if (allocations.length > 0) {
+    return allocations.reduce((total, allocation) => total + toSafeNumber(allocation.plan_amount), 0);
+  }
+  return toSafeNumber(expense.plan_amount);
+}
+
 function roundMoney(value: number) {
   return Math.round((Number(value) || 0) * 100) / 100;
 }
@@ -749,11 +757,21 @@ function DetailTableWrap({ children }: { children: ReactNode }) {
   return (
     <Box
       sx={{
-        maxHeight: 480,
+        maxHeight: "58vh",
         overflow: "auto",
         border: 1,
         borderColor: "divider",
-        borderRadius: 1
+        borderRadius: 1,
+        "& .MuiTableCell-root": {
+          px: 1,
+          py: 0.9,
+          fontSize: "0.8rem",
+          verticalAlign: "top"
+        },
+        "& .MuiTableCell-head": {
+          fontWeight: 700,
+          whiteSpace: "normal"
+        }
       }}
     >
       {children}
@@ -2308,8 +2326,9 @@ export default function DashboardView() {
           expense.nitelik ??
           expense.budget_outside_asset_type ??
           "-",
-        "Harcama Tutarı": toSafeNumber(amount),
-        "Gerçekleşen Plan İçi": toSafeNumber(planInside),
+        "Dönem Bütçesi": getExpensePeriodBudget(expense),
+        "Toplam Harcama": toSafeNumber(amount),
+        "Bütçeden Karşılanan": toSafeNumber(planInside),
         Aşım: toSafeNumber(overrun),
         Satıcı: expense.vendor || "-",
         "Kaydı Giren": formatExpenseOwner(expense),
@@ -2322,7 +2341,7 @@ export default function DashboardView() {
       buildRealizedExpenseExportRows(realizedExpenseRows),
       buildDashboardExportFileName("gerceklesen_harcamalar"),
       "Gerçekleşen Harcamalar",
-      ["Harcama Tutarı", "Gerçekleşen Plan İçi", "Aşım"]
+      ["Dönem Bütçesi", "Toplam Harcama", "Bütçeden Karşılanan", "Aşım"]
     );
   };
 
@@ -3755,6 +3774,7 @@ export default function DashboardView() {
         onClose={() => setIsAccrualPlanDialogOpen(false)}
         maxWidth="xl"
         fullWidth
+        PaperProps={{ sx: { width: "96vw", maxWidth: 1600, maxHeight: "92vh" } }}
       >
         <DialogTitle>Tahakkuklar</DialogTitle>
         <DialogContent dividers>
@@ -3792,7 +3812,7 @@ export default function DashboardView() {
                 <TableBody>
                   {accrualPlanItems.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={12}>
+                      <TableCell colSpan={13}>
                         <Typography variant="body2" color="text.secondary">
                           Seçili filtrelerde tahakkuklu plan bulunamadı.
                         </Typography>
@@ -3871,8 +3891,9 @@ export default function DashboardView() {
       <Dialog
         open={isPlanDetailDialogOpen}
         onClose={() => setIsPlanDetailDialogOpen(false)}
-        maxWidth="sm"
+        maxWidth="xl"
         fullWidth
+        PaperProps={{ sx: { width: "96vw", maxWidth: 1600, maxHeight: "92vh" } }}
       >
         <DialogTitle>Toplam Bütçe Detayı</DialogTitle>
         <DialogContent dividers>
@@ -3934,10 +3955,13 @@ export default function DashboardView() {
       <Dialog
         open={isRealizedDialogOpen}
         onClose={() => setIsRealizedDialogOpen(false)}
-        maxWidth="lg"
+        maxWidth="xl"
         fullWidth
         PaperProps={{
           sx: {
+            width: "96vw",
+            maxWidth: 1600,
+            maxHeight: "92vh",
             bgcolor: theme.palette.background.paper,
             border: `1px solid ${theme.palette.divider}`,
             borderRadius: 2
@@ -3949,9 +3973,9 @@ export default function DashboardView() {
           <Stack spacing={2}>
             <DetailSummaryGrid
               items={[
-                { label: "Toplam Bütçe", value: formatCurrency(realizedExpensesPlanTotal) },
+                { label: "Dönem Bütçesi", value: formatCurrency(realizedExpensesPlanTotal) },
                 {
-                  label: "Gerçekleşen Plan İçi",
+                  label: "Bütçeden Karşılanan",
                   value: formatCurrency(realizedPlanInsideDetailTotal),
                   color: "primary.main"
                 },
@@ -3971,8 +3995,9 @@ export default function DashboardView() {
                     <TableCell>Departman</TableCell>
                     <TableCell>Capex/Opex</TableCell>
                     <TableCell>Nitelik</TableCell>
-                    <TableCell align="right">Harcama Tutarı</TableCell>
-                    <TableCell align="right">Gerçekleşen Plan İçi</TableCell>
+                    <TableCell align="right">Dönem Bütçesi</TableCell>
+                    <TableCell align="right">Toplam Harcama</TableCell>
+                    <TableCell align="right">Bütçeden Karşılanan</TableCell>
                     <TableCell align="right">Aşım</TableCell>
                     <TableCell>Satıcı</TableCell>
                     <TableCell>Kaydı Giren</TableCell>
@@ -3982,7 +4007,7 @@ export default function DashboardView() {
                 <TableBody>
                   {isRealizedExpensesFetching ? (
                     <TableRow>
-                      <TableCell colSpan={12}>
+                      <TableCell colSpan={13}>
                         <Typography variant="body2" color="text.secondary">
                           Harcamalar yükleniyor...
                         </Typography>
@@ -3990,7 +4015,7 @@ export default function DashboardView() {
                     </TableRow>
                   ) : realizedExpenses.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={12}>
+                      <TableCell colSpan={13}>
                         <Typography variant="body2" color="text.secondary">
                           Kayıt bulunamadı.
                         </Typography>
@@ -4020,6 +4045,7 @@ export default function DashboardView() {
                           <TableCell>{expense.department || "-"}</TableCell>
                           <TableCell>{capexOpex}</TableCell>
                           <TableCell>{nitelik}</TableCell>
+                          <TableCell align="right">{formatCurrency(getExpensePeriodBudget(expense))}</TableCell>
                           <TableCell align="right">{formatCurrency(toSafeNumber(amount))}</TableCell>
                           <TableCell align="right">{formatCurrency(toSafeNumber(planInside))}</TableCell>
                           <TableCell align="right">{formatCurrency(toSafeNumber(overrun))}</TableCell>
@@ -4058,8 +4084,9 @@ export default function DashboardView() {
       <Dialog
         open={isOutOfBudgetDialogOpen}
         onClose={() => setIsOutOfBudgetDialogOpen(false)}
-        maxWidth="lg"
+        maxWidth="xl"
         fullWidth
+        PaperProps={{ sx: { width: "96vw", maxWidth: 1600, maxHeight: "92vh" } }}
       >
         <DialogTitle>Bütçe Dışı Harcamalar</DialogTitle>
         <DialogContent dividers>
@@ -4159,8 +4186,9 @@ export default function DashboardView() {
       <Dialog
         open={isCancelledDialogOpen}
         onClose={() => setIsCancelledDialogOpen(false)}
-        maxWidth="lg"
+        maxWidth="xl"
         fullWidth
+        PaperProps={{ sx: { width: "96vw", maxWidth: 1600, maxHeight: "92vh" } }}
       >
         <DialogTitle>İptal Edilen Bütçe Detayı</DialogTitle>
         <DialogContent dividers>
@@ -4235,8 +4263,9 @@ export default function DashboardView() {
       <Dialog
         open={isUnusedBudgetDialogOpen}
         onClose={() => setIsUnusedBudgetDialogOpen(false)}
-        maxWidth="lg"
+        maxWidth="xl"
         fullWidth
+        PaperProps={{ sx: { width: "96vw", maxWidth: 1600, maxHeight: "92vh" } }}
       >
         <DialogTitle>Optimizasyon Tasarrufu Detayı</DialogTitle>
         <DialogContent dividers>
@@ -4334,8 +4363,9 @@ export default function DashboardView() {
       <Dialog
         open={savingDetailDialog === "negotiated"}
         onClose={() => setSavingDetailDialog(null)}
-        maxWidth="lg"
+        maxWidth="xl"
         fullWidth
+        PaperProps={{ sx: { width: "96vw", maxWidth: 1600, maxHeight: "92vh" } }}
       >
         <DialogTitle>Pazarlıklı Tasarruf Detayı</DialogTitle>
         <DialogContent dividers>
@@ -4420,6 +4450,7 @@ export default function DashboardView() {
         onClose={() => setSavingDetailDialog(null)}
         maxWidth="xl"
         fullWidth
+        PaperProps={{ sx: { width: "96vw", maxWidth: 1600, maxHeight: "92vh" } }}
       >
         <DialogTitle>Toplam Tasarruf Detayı</DialogTitle>
         <DialogContent dividers>
