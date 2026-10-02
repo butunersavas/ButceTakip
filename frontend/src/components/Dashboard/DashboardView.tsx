@@ -2326,13 +2326,11 @@ export default function DashboardView() {
           expense.nitelik ??
           expense.budget_outside_asset_type ??
           "-",
-        "Dönem Bütçesi": getExpensePeriodBudget(expense),
-        "Toplam Harcama": toSafeNumber(amount),
-        "Bütçeden Karşılanan": toSafeNumber(planInside),
+        Bütçe: getExpensePeriodBudget(expense),
+        Harcama: toSafeNumber(amount),
         Aşım: toSafeNumber(overrun),
         Satıcı: expense.vendor || "-",
-        "Kaydı Giren": formatExpenseOwner(expense),
-        Durum: expense.status === "cancelled" ? "İptal" : "Kaydedildi"
+        "Kaydı Giren": formatExpenseOwner(expense)
       };
     });
 
@@ -2341,7 +2339,7 @@ export default function DashboardView() {
       buildRealizedExpenseExportRows(realizedExpenseRows),
       buildDashboardExportFileName("gerceklesen_harcamalar"),
       "Gerçekleşen Harcamalar",
-      ["Dönem Bütçesi", "Toplam Harcama", "Bütçeden Karşılanan", "Aşım"]
+      ["Bütçe", "Harcama", "Aşım"]
     );
   };
 
@@ -2827,7 +2825,7 @@ export default function DashboardView() {
             realizedOverrunTotal
           )
         ),
-        ["Dönem Bütçesi", "Toplam Harcama", "Bütçeden Karşılanan", "Aşım"]
+        ["Bütçe", "Harcama", "Aşım"]
       );
       appendRowsToWorkbook(
         workbook,
@@ -3973,14 +3971,9 @@ export default function DashboardView() {
           <Stack spacing={2}>
             <DetailSummaryGrid
               items={[
-                { label: "Dönem Bütçesi", value: formatCurrency(realizedExpensesPlanTotal) },
-                {
-                  label: "Bütçeden Karşılanan",
-                  value: formatCurrency(realizedPlanInsideDetailTotal),
-                  color: "primary.main"
-                },
+                { label: "Bütçe", value: formatCurrency(realizedExpensesPlanTotal) },
+                { label: "Harcama", value: formatCurrency(realizedSpendDetailTotal), color: "primary.main" },
                 { label: "Aşım", value: formatCurrency(realizedOverrunDetailTotal), color: "error.main" },
-                { label: "Toplam Harcama", value: formatCurrency(realizedSpendDetailTotal) },
                 { label: "Kayıt Sayısı", value: String(realizedExpenses.length) },
                 { label: "Bütçe Dışı", value: "Hariç" }
               ]}
@@ -3995,19 +3988,17 @@ export default function DashboardView() {
                     <TableCell>Departman</TableCell>
                     <TableCell>Capex/Opex</TableCell>
                     <TableCell>Nitelik</TableCell>
-                    <TableCell align="right">Dönem Bütçesi</TableCell>
-                    <TableCell align="right">Toplam Harcama</TableCell>
-                    <TableCell align="right">Bütçeden Karşılanan</TableCell>
+                    <TableCell align="right">Bütçe</TableCell>
+                    <TableCell align="right">Harcama</TableCell>
                     <TableCell align="right">Aşım</TableCell>
                     <TableCell>Satıcı</TableCell>
                     <TableCell>Kaydı Giren</TableCell>
-                    <TableCell>Durum</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {isRealizedExpensesFetching ? (
                     <TableRow>
-                      <TableCell colSpan={13}>
+                      <TableCell colSpan={11}>
                         <Typography variant="body2" color="text.secondary">
                           Harcamalar yükleniyor...
                         </Typography>
@@ -4015,7 +4006,7 @@ export default function DashboardView() {
                     </TableRow>
                   ) : realizedExpenses.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={13}>
+                      <TableCell colSpan={11}>
                         <Typography variant="body2" color="text.secondary">
                           Kayıt bulunamadı.
                         </Typography>
@@ -4047,17 +4038,9 @@ export default function DashboardView() {
                           <TableCell>{nitelik}</TableCell>
                           <TableCell align="right">{formatCurrency(getExpensePeriodBudget(expense))}</TableCell>
                           <TableCell align="right">{formatCurrency(toSafeNumber(amount))}</TableCell>
-                          <TableCell align="right">{formatCurrency(toSafeNumber(planInside))}</TableCell>
                           <TableCell align="right">{formatCurrency(toSafeNumber(overrun))}</TableCell>
                           <TableCell>{expense.vendor || "-"}</TableCell>
                           <TableCell>{formatExpenseOwner(expense)}</TableCell>
-                          <TableCell>
-                            <Chip
-                              size="small"
-                              color={expense.status === "cancelled" ? "error" : "success"}
-                              label={expense.status === "cancelled" ? "İptal" : "Kaydedildi"}
-                            />
-                          </TableCell>
                         </TableRow>
                       );
                     })
