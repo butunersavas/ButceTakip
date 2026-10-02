@@ -77,6 +77,7 @@ import OverBudgetDialog, {
   type OverBudgetItem,
   type OverBudgetResponse
 } from "../common/OverBudgetDialog";
+import MarketIndicators from "./MarketIndicators";
 
 interface DashboardSummary {
   month: number;
@@ -3188,6 +3189,10 @@ export default function DashboardView() {
               {isExportingAllCards ? "Excel hazırlanıyor..." : "Tüm Kartları Excel’e Aktar"}
             </Button>
           </Stack>
+
+          <DashboardSectionBoundary title="Piyasa Göstergeleri">
+            <MarketIndicators />
+          </DashboardSectionBoundary>
 
           <DashboardSectionBoundary title="Özet kartlar">
             <Grid container spacing={2} sx={{ mb: 3 }}>

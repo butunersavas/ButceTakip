@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "test:dashboard-savings": "node --test dashboardSavings.test.mjs",
-    "test:accrual-distribution": "node --test accrualDistribution.test.mjs"
+    "test:accrual-distribution": "node --test accrualDistribution.test.mjs",
+    "test:market-indicators": "node --test marketIndicators.test.mjs"
   },
   "dependencies": {
     "@emotion/react": "^11.11.4",

@@ -21,6 +21,7 @@ from app.routers import (
     dashboard,
     expenses,
     import_export,
+    market_rates,
     plans,
     purchase_alerts,
     purchase_reminders,
@@ -131,6 +132,7 @@ app.include_router(expenses.router, prefix=API_PREFIX)
 app.include_router(dashboard.router, prefix=API_PREFIX)
 app.include_router(purchase_alerts.router, prefix=API_PREFIX)
 app.include_router(import_export.router, prefix=API_PREFIX)
+app.include_router(market_rates.router, prefix=API_PREFIX)
 app.include_router(purchase_reminders.router, prefix=API_PREFIX)
 app.include_router(reports.router, prefix=API_PREFIX)
 app.include_router(users.router, prefix=API_PREFIX)
