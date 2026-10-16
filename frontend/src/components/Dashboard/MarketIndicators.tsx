@@ -208,6 +208,13 @@ export default function MarketIndicators() {
                   fontSize: "0.68rem",
                   fontWeight: 700,
                   textTransform: "none",
+                  "&.Mui-selected": {
+                    bgcolor: "success.main",
+                    color: "success.contrastText",
+                    "&:hover": {
+                      bgcolor: "success.dark",
+                    },
+                  },
                 },
               }}
             >
