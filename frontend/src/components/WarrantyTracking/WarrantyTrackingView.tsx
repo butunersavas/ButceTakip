@@ -728,6 +728,7 @@ export default function WarrantyTrackingView() {
   const handleSearchChange = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
       setGlobalSearch(event.target.value);
+      setSelectedWarrantyFilter(null);
       resetActivePaginationPage();
     },
     [resetActivePaginationPage]
