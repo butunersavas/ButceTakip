@@ -888,9 +888,9 @@ export default function DashboardView() {
     { message: string; severity: "success" | "error" } | null
   >(null);
   const [isExportingAllCards, setIsExportingAllCards] = useState(false);
-  const [tableSort, setTableSort] = useState<TableSortState>(null);
-  const handleTableSort = useCallback((scope: string, key: string) => {
-    setTableSort((current) => nextTableSort(current, scope, key));
+  const [dashboardSortState, setDashboardSortState] = useState<TableSortState>(null);
+  const handleDashboardSort = useCallback((scope: string, key: string) => {
+    setDashboardSortState((current) => nextTableSort(current, scope, key));
   }, []);
   const [warrantyAlertItems, setWarrantyAlertItems] = useState<WarrantyAlertItem[]>([]);
   const [selectedKpiFilter, setSelectedKpiFilter] = useState<
@@ -3407,15 +3407,15 @@ export default function DashboardView() {
                         <Table size="small">
                           <TableHead>
                             <TableRow>
-                              <SortableTableCell label="Kalem" scope="dashboard-overrun-top" sortKey="budget" sortState={tableSort} onSort={handleTableSort} />
-                              <SortableTableCell align="right" label="Toplam Bütçe" scope="dashboard-overrun-top" sortKey="plan" sortState={tableSort} onSort={handleTableSort} />
-                              <SortableTableCell align="right" label="Gerçekleşen" scope="dashboard-overrun-top" sortKey="actual" sortState={tableSort} onSort={handleTableSort} />
-                              <SortableTableCell align="right" label="Aşım" scope="dashboard-overrun-top" sortKey="over" sortState={tableSort} onSort={handleTableSort} />
-                              <SortableTableCell align="right" label="%" scope="dashboard-overrun-top" sortKey="pct" sortState={tableSort} onSort={handleTableSort} />
+                              <SortableTableCell label="Kalem" scope="dashboard-overrun-top" sortKey="budget" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                              <SortableTableCell align="right" label="Toplam Bütçe" scope="dashboard-overrun-top" sortKey="plan" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                              <SortableTableCell align="right" label="Gerçekleşen" scope="dashboard-overrun-top" sortKey="actual" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                              <SortableTableCell align="right" label="Aşım" scope="dashboard-overrun-top" sortKey="over" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                              <SortableTableCell align="right" label="%" scope="dashboard-overrun-top" sortKey="pct" sortState={dashboardSortState} onSort={handleDashboardSort} />
                             </TableRow>
                           </TableHead>
                           <TableBody>
-                            {sortRowsBy(overBudgetTopItems ?? [], tableSort, "dashboard-overrun-top", {
+                            {sortRowsBy(overBudgetTopItems ?? [], dashboardSortState, "dashboard-overrun-top", {
                               budget: (item) => formatBudgetLabel(item.budget_name, item.budget_code),
                               plan: (item) => toSafeNumber(item.plan),
                               actual: (item) => toSafeNumber(item.actual),
@@ -3809,18 +3809,18 @@ export default function DashboardView() {
               <Table size="small" stickyHeader>
                 <TableHead>
                   <TableRow>
-                    <SortableTableCell label="Bütçe Kalemi" scope="dashboard-accrual-list" sortKey="budget" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell label="Senaryo" scope="dashboard-accrual-list" sortKey="scenario" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell label="Departman" scope="dashboard-accrual-list" sortKey="department" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell label="Capex/Opex" scope="dashboard-accrual-list" sortKey="capex" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell label="Nitelik" scope="dashboard-accrual-list" sortKey="asset" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell label="Kaynak Yıl" scope="dashboard-accrual-list" sortKey="sourceYear" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell label="Ay" scope="dashboard-accrual-list" sortKey="period" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell align="right" label="Tutar" scope="dashboard-accrual-list" sortKey="amount" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell align="right" label="Kullanılan" scope="dashboard-accrual-list" sortKey="used" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell align="right" label="Kalan" scope="dashboard-accrual-list" sortKey="remaining" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell label="Tahakkuk ID" scope="dashboard-accrual-list" sortKey="id" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell label="Durum" scope="dashboard-accrual-list" sortKey="status" sortState={tableSort} onSort={handleTableSort} />
+                    <SortableTableCell label="Bütçe Kalemi" scope="dashboard-accrual-list" sortKey="budget" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell label="Senaryo" scope="dashboard-accrual-list" sortKey="scenario" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell label="Departman" scope="dashboard-accrual-list" sortKey="department" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell label="Capex/Opex" scope="dashboard-accrual-list" sortKey="capex" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell label="Nitelik" scope="dashboard-accrual-list" sortKey="asset" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell label="Kaynak Yıl" scope="dashboard-accrual-list" sortKey="sourceYear" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell label="Ay" scope="dashboard-accrual-list" sortKey="period" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell align="right" label="Tutar" scope="dashboard-accrual-list" sortKey="amount" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell align="right" label="Kullanılan" scope="dashboard-accrual-list" sortKey="used" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell align="right" label="Kalan" scope="dashboard-accrual-list" sortKey="remaining" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell label="Tahakkuk ID" scope="dashboard-accrual-list" sortKey="id" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell label="Durum" scope="dashboard-accrual-list" sortKey="status" sortState={dashboardSortState} onSort={handleDashboardSort} />
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -3832,7 +3832,7 @@ export default function DashboardView() {
                         </Typography>
                       </TableCell>
                     </TableRow>
-                  ) : sortRowsBy(accrualPlanItems, tableSort, "dashboard-accrual-list", {
+                  ) : sortRowsBy(accrualPlanItems, dashboardSortState, "dashboard-accrual-list", {
                     budget: (item) => formatBudgetItemLabel({ code: item.budget_code, name: item.budget_name }),
                     scenario: (item) => item.scenario_name || item.source_scenario_id,
                     department: (item) => item.department,
@@ -3906,12 +3906,12 @@ export default function DashboardView() {
               <Typography variant="h6">Aylık Dağılım</Typography>
               <Table size="small">
                 <TableHead><TableRow>
-                  <SortableTableCell label="Dönem" scope="dashboard-accrual-detail" sortKey="period" sortState={tableSort} onSort={handleTableSort} />
-                  <SortableTableCell align="right" label="Tutar" scope="dashboard-accrual-detail" sortKey="amount" sortState={tableSort} onSort={handleTableSort} />
-                  <SortableTableCell align="right" label="Kullanılan" scope="dashboard-accrual-detail" sortKey="used" sortState={tableSort} onSort={handleTableSort} />
-                  <SortableTableCell align="right" label="Kalan" scope="dashboard-accrual-detail" sortKey="remaining" sortState={tableSort} onSort={handleTableSort} />
+                  <SortableTableCell label="Dönem" scope="dashboard-accrual-detail" sortKey="period" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                  <SortableTableCell align="right" label="Tutar" scope="dashboard-accrual-detail" sortKey="amount" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                  <SortableTableCell align="right" label="Kullanılan" scope="dashboard-accrual-detail" sortKey="used" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                  <SortableTableCell align="right" label="Kalan" scope="dashboard-accrual-detail" sortKey="remaining" sortState={dashboardSortState} onSort={handleDashboardSort} />
                 </TableRow></TableHead>
-                <TableBody>{sortRowsBy(selectedAccrualDetail.allocations, tableSort, "dashboard-accrual-detail", {
+                <TableBody>{sortRowsBy(selectedAccrualDetail.allocations, dashboardSortState, "dashboard-accrual-detail", {
                   period: (row) => row.year * 100 + row.month,
                   amount: (row) => row.amount,
                   used: (row) => row.used_amount,
@@ -3947,8 +3947,8 @@ export default function DashboardView() {
               <Table size="small" stickyHeader>
                 <TableHead>
                   <TableRow>
-                    <SortableTableCell label="Ay / Dönem" scope="dashboard-plan-detail" sortKey="month" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell align="right" label="Toplam Bütçe" scope="dashboard-plan-detail" sortKey="planned" sortState={tableSort} onSort={handleTableSort} />
+                    <SortableTableCell label="Ay / Dönem" scope="dashboard-plan-detail" sortKey="month" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell align="right" label="Toplam Bütçe" scope="dashboard-plan-detail" sortKey="planned" sortState={dashboardSortState} onSort={handleDashboardSort} />
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -3961,7 +3961,7 @@ export default function DashboardView() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    sortRowsBy(planDetailItems, tableSort, "dashboard-plan-detail", {
+                    sortRowsBy(planDetailItems, dashboardSortState, "dashboard-plan-detail", {
                       month: (item) => item.month,
                       planned: (item) => toSafeNumber(item.planned),
                     }).map((item) => (
@@ -4024,17 +4024,17 @@ export default function DashboardView() {
               <Table size="small" stickyHeader>
                 <TableHead>
                   <TableRow>
-                    <SortableTableCell label="Tarih" scope="dashboard-realized" sortKey="date" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell label="Bütçe Kalemi" scope="dashboard-realized" sortKey="budget" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell label="Ay / Dönem" scope="dashboard-realized" sortKey="period" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell label="Departman" scope="dashboard-realized" sortKey="department" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell label="Capex/Opex" scope="dashboard-realized" sortKey="capex" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell label="Nitelik" scope="dashboard-realized" sortKey="asset" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell align="right" label="Bütçe" scope="dashboard-realized" sortKey="budgetAmount" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell align="right" label="Harcama" scope="dashboard-realized" sortKey="amount" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell align="right" label="Aşım" scope="dashboard-realized" sortKey="overrun" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell label="Satıcı" scope="dashboard-realized" sortKey="vendor" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell label="Kaydı Giren" scope="dashboard-realized" sortKey="owner" sortState={tableSort} onSort={handleTableSort} />
+                    <SortableTableCell label="Tarih" scope="dashboard-realized" sortKey="date" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell label="Bütçe Kalemi" scope="dashboard-realized" sortKey="budget" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell label="Ay / Dönem" scope="dashboard-realized" sortKey="period" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell label="Departman" scope="dashboard-realized" sortKey="department" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell label="Capex/Opex" scope="dashboard-realized" sortKey="capex" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell label="Nitelik" scope="dashboard-realized" sortKey="asset" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell align="right" label="Bütçe" scope="dashboard-realized" sortKey="budgetAmount" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell align="right" label="Harcama" scope="dashboard-realized" sortKey="amount" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell align="right" label="Aşım" scope="dashboard-realized" sortKey="overrun" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell label="Satıcı" scope="dashboard-realized" sortKey="vendor" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell label="Kaydı Giren" scope="dashboard-realized" sortKey="owner" sortState={dashboardSortState} onSort={handleDashboardSort} />
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -4055,7 +4055,7 @@ export default function DashboardView() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    sortRowsBy(realizedExpenseRows, tableSort, "dashboard-realized", {
+                    sortRowsBy(realizedExpenseRows, dashboardSortState, "dashboard-realized", {
                       date: (row) => row.expense.expense_date ?? row.expense.date,
                       budget: (row) => formatBudgetItemLabel({ code: row.expense.budget_code ?? "", name: row.expense.budget_name ?? "" }),
                       period: (row) => formatExpensePeriod(row.expense),
@@ -4144,14 +4144,14 @@ export default function DashboardView() {
               <Table size="small" stickyHeader>
                 <TableHead>
                   <TableRow>
-                    <SortableTableCell label="Tarih" scope="dashboard-outside" sortKey="date" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell label="Bütçe Kalemi / Açıklama" scope="dashboard-outside" sortKey="budget" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell label="Departman" scope="dashboard-outside" sortKey="department" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell label="Capex/Opex" scope="dashboard-outside" sortKey="capex" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell label="Nitelik" scope="dashboard-outside" sortKey="asset" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell align="right" label="Tutar" scope="dashboard-outside" sortKey="amount" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell label="Satıcı" scope="dashboard-outside" sortKey="vendor" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell label="Kaydı Giren" scope="dashboard-outside" sortKey="owner" sortState={tableSort} onSort={handleTableSort} />
+                    <SortableTableCell label="Tarih" scope="dashboard-outside" sortKey="date" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell label="Bütçe Kalemi / Açıklama" scope="dashboard-outside" sortKey="budget" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell label="Departman" scope="dashboard-outside" sortKey="department" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell label="Capex/Opex" scope="dashboard-outside" sortKey="capex" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell label="Nitelik" scope="dashboard-outside" sortKey="asset" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell align="right" label="Tutar" scope="dashboard-outside" sortKey="amount" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell label="Satıcı" scope="dashboard-outside" sortKey="vendor" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell label="Kaydı Giren" scope="dashboard-outside" sortKey="owner" sortState={dashboardSortState} onSort={handleDashboardSort} />
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -4164,7 +4164,7 @@ export default function DashboardView() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    sortRowsBy(outOfBudgetExpenses, tableSort, "dashboard-outside", {
+                    sortRowsBy(outOfBudgetExpenses, dashboardSortState, "dashboard-outside", {
                       date: (expense) => expense.expense_date ?? expense.date,
                       budget: (expense) => formatBudgetLabel(expense.budget_name ?? expense.budget_outside_title, expense.budget_code) || expense.description,
                       department: (expense) => expense.department ?? expense.budget_outside_department,
@@ -4255,13 +4255,13 @@ export default function DashboardView() {
               <Table size="small" stickyHeader>
                 <TableHead>
                   <TableRow>
-                    <SortableTableCell label="Bütçe Kalemi" scope="dashboard-cancelled" sortKey="budget" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell label="Ay / Dönem" scope="dashboard-cancelled" sortKey="period" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell label="Departman" scope="dashboard-cancelled" sortKey="department" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell label="Capex/Opex" scope="dashboard-cancelled" sortKey="capex" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell label="Nitelik" scope="dashboard-cancelled" sortKey="asset" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell align="right" label="İptal Edilen Bütçe" scope="dashboard-cancelled" sortKey="amount" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell label="Not" scope="dashboard-cancelled" sortKey="note" sortState={tableSort} onSort={handleTableSort} />
+                    <SortableTableCell label="Bütçe Kalemi" scope="dashboard-cancelled" sortKey="budget" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell label="Ay / Dönem" scope="dashboard-cancelled" sortKey="period" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell label="Departman" scope="dashboard-cancelled" sortKey="department" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell label="Capex/Opex" scope="dashboard-cancelled" sortKey="capex" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell label="Nitelik" scope="dashboard-cancelled" sortKey="asset" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell align="right" label="İptal Edilen Bütçe" scope="dashboard-cancelled" sortKey="amount" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell label="Not" scope="dashboard-cancelled" sortKey="note" sortState={dashboardSortState} onSort={handleDashboardSort} />
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -4274,7 +4274,7 @@ export default function DashboardView() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    sortRowsBy(cancelledBudgetItems, tableSort, "dashboard-cancelled", {
+                    sortRowsBy(cancelledBudgetItems, dashboardSortState, "dashboard-cancelled", {
                       budget: (item) => formatBudgetItemLabel({ code: item.budget_code, name: item.budget_name }),
                       period: (item) => formatBudgetPeriod(item),
                       department: (item) => item.department,
@@ -4347,22 +4347,22 @@ export default function DashboardView() {
               <Table size="small" stickyHeader>
                 <TableHead>
                   <TableRow>
-                    <SortableTableCell label="Bütçe Kalemi" scope="dashboard-unused" sortKey="budget" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell label="Ay / Dönem" scope="dashboard-unused" sortKey="period" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell label="Departman" scope="dashboard-unused" sortKey="department" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell label="Capex/Opex" scope="dashboard-unused" sortKey="capex" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell label="Nitelik" scope="dashboard-unused" sortKey="asset" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell align="right" label="Toplam Bütçe" scope="dashboard-unused" sortKey="plan" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell align="right" label="Harcama" scope="dashboard-unused" sortKey="actual" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell align="right" label="Kullanılmayacak Tutar" scope="dashboard-unused" sortKey="unused" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell align="right" label="Kalan Kullanılabilir" scope="dashboard-unused" sortKey="available" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell label="Sebep" scope="dashboard-unused" sortKey="reason" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell label="Açıklama" scope="dashboard-unused" sortKey="note" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell label="Güncelleme Tarihi" scope="dashboard-unused" sortKey="updated" sortState={tableSort} onSort={handleTableSort} />
+                    <SortableTableCell label="Bütçe Kalemi" scope="dashboard-unused" sortKey="budget" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell label="Ay / Dönem" scope="dashboard-unused" sortKey="period" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell label="Departman" scope="dashboard-unused" sortKey="department" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell label="Capex/Opex" scope="dashboard-unused" sortKey="capex" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell label="Nitelik" scope="dashboard-unused" sortKey="asset" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell align="right" label="Toplam Bütçe" scope="dashboard-unused" sortKey="plan" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell align="right" label="Harcama" scope="dashboard-unused" sortKey="actual" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell align="right" label="Kullanılmayacak Tutar" scope="dashboard-unused" sortKey="unused" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell align="right" label="Kalan Kullanılabilir" scope="dashboard-unused" sortKey="available" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell label="Sebep" scope="dashboard-unused" sortKey="reason" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell label="Açıklama" scope="dashboard-unused" sortKey="note" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell label="Güncelleme Tarihi" scope="dashboard-unused" sortKey="updated" sortState={dashboardSortState} onSort={handleDashboardSort} />
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {sortRowsBy(unusedBudgetItems, tableSort, "dashboard-unused", {
+                  {sortRowsBy(unusedBudgetItems, dashboardSortState, "dashboard-unused", {
                     budget: (item) => formatBudgetItemLabel({ code: item.budget_code, name: item.budget_name }),
                     period: (item) => formatBudgetPeriod(item),
                     department: (item) => item.department,
@@ -4460,18 +4460,18 @@ export default function DashboardView() {
               <Table size="small" stickyHeader>
                 <TableHead>
                   <TableRow>
-                    <SortableTableCell label="Bütçe Kalemi" scope="dashboard-negotiated" sortKey="budget" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell label="Ay / Dönem" scope="dashboard-negotiated" sortKey="period" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell label="Departman" scope="dashboard-negotiated" sortKey="department" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell label="Capex/Opex" scope="dashboard-negotiated" sortKey="capex" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell label="Nitelik" scope="dashboard-negotiated" sortKey="asset" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell align="right" label="Toplam Bütçe" scope="dashboard-negotiated" sortKey="plan" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell align="right" label="Gerçekleşen Harcama" scope="dashboard-negotiated" sortKey="actual" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell align="right" label="Pazarlıklı Tasarruf" scope="dashboard-negotiated" sortKey="saving" sortState={tableSort} onSort={handleTableSort} />
+                    <SortableTableCell label="Bütçe Kalemi" scope="dashboard-negotiated" sortKey="budget" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell label="Ay / Dönem" scope="dashboard-negotiated" sortKey="period" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell label="Departman" scope="dashboard-negotiated" sortKey="department" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell label="Capex/Opex" scope="dashboard-negotiated" sortKey="capex" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell label="Nitelik" scope="dashboard-negotiated" sortKey="asset" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell align="right" label="Toplam Bütçe" scope="dashboard-negotiated" sortKey="plan" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell align="right" label="Gerçekleşen Harcama" scope="dashboard-negotiated" sortKey="actual" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell align="right" label="Pazarlıklı Tasarruf" scope="dashboard-negotiated" sortKey="saving" sortState={dashboardSortState} onSort={handleDashboardSort} />
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {sortRowsBy(negotiatedSavingItems, tableSort, "dashboard-negotiated", {
+                  {sortRowsBy(negotiatedSavingItems, dashboardSortState, "dashboard-negotiated", {
                     budget: (item) => formatBudgetItemLabel({ code: item.budget_code, name: item.budget_name }),
                     period: (item) => formatBudgetPeriod(item),
                     department: (item) => item.department,
@@ -4559,19 +4559,19 @@ export default function DashboardView() {
               <Table size="small" stickyHeader>
                 <TableHead>
                   <TableRow>
-                    <SortableTableCell label="Tür" scope="dashboard-combined" sortKey="type" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell label="Bütçe Kalemi" scope="dashboard-combined" sortKey="budget" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell label="Ay / Dönem" scope="dashboard-combined" sortKey="period" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell label="Departman" scope="dashboard-combined" sortKey="department" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell label="Capex/Opex" scope="dashboard-combined" sortKey="capex" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell label="Nitelik" scope="dashboard-combined" sortKey="asset" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell align="right" label="Toplam Bütçe" scope="dashboard-combined" sortKey="plan" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell align="right" label="Gerçekleşen" scope="dashboard-combined" sortKey="actual" sortState={tableSort} onSort={handleTableSort} />
-                    <SortableTableCell align="right" label="Tasarruf Tutarı" scope="dashboard-combined" sortKey="saving" sortState={tableSort} onSort={handleTableSort} />
+                    <SortableTableCell label="Tür" scope="dashboard-combined" sortKey="type" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell label="Bütçe Kalemi" scope="dashboard-combined" sortKey="budget" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell label="Ay / Dönem" scope="dashboard-combined" sortKey="period" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell label="Departman" scope="dashboard-combined" sortKey="department" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell label="Capex/Opex" scope="dashboard-combined" sortKey="capex" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell label="Nitelik" scope="dashboard-combined" sortKey="asset" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell align="right" label="Toplam Bütçe" scope="dashboard-combined" sortKey="plan" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell align="right" label="Gerçekleşen" scope="dashboard-combined" sortKey="actual" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                    <SortableTableCell align="right" label="Tasarruf Tutarı" scope="dashboard-combined" sortKey="saving" sortState={dashboardSortState} onSort={handleDashboardSort} />
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {sortRowsBy(combinedSavingItems, tableSort, "dashboard-combined", {
+                  {sortRowsBy(combinedSavingItems, dashboardSortState, "dashboard-combined", {
                     type: (row) => row.type,
                     budget: (row) => formatBudgetItemLabel({ code: row.item.budget_code, name: row.item.budget_name }),
                     period: (row) => formatBudgetPeriod(row.item),
@@ -4699,10 +4699,10 @@ export default function DashboardView() {
                 <Table size="small" sx={{ maxHeight: 320 }}>
                   <TableHead>
                     <TableRow sx={{ bgcolor: theme.palette.action.hover }}>
-                      <SortableTableCell label={<Typography fontWeight={700}>Kalem</Typography>} scope="dashboard-purchase" sortKey="title" sortState={tableSort} onSort={handleTableSort} />
-                      <SortableTableCell label={<Typography fontWeight={700}>Departman</Typography>} scope="dashboard-purchase" sortKey="department" sortState={tableSort} onSort={handleTableSort} />
-                      <SortableTableCell align="right" label={<Typography fontWeight={700}>Tutar</Typography>} scope="dashboard-purchase" sortKey="amount" sortState={tableSort} onSort={handleTableSort} />
-                      <SortableTableCell label={<Typography fontWeight={700}>Durum</Typography>} scope="dashboard-purchase" sortKey="status" sortState={tableSort} onSort={handleTableSort} />
+                      <SortableTableCell label={<Typography fontWeight={700}>Kalem</Typography>} scope="dashboard-purchase" sortKey="title" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                      <SortableTableCell label={<Typography fontWeight={700}>Departman</Typography>} scope="dashboard-purchase" sortKey="department" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                      <SortableTableCell align="right" label={<Typography fontWeight={700}>Tutar</Typography>} scope="dashboard-purchase" sortKey="amount" sortState={dashboardSortState} onSort={handleDashboardSort} />
+                      <SortableTableCell label={<Typography fontWeight={700}>Durum</Typography>} scope="dashboard-purchase" sortKey="status" sortState={dashboardSortState} onSort={handleDashboardSort} />
                       {!isViewer && (
                         <TableCell align="right">
                           <Typography fontWeight={700}>İşlem</Typography>
@@ -4711,7 +4711,7 @@ export default function DashboardView() {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {sortRowsBy(filteredPurchaseItems ?? [], tableSort, "dashboard-purchase", {
+                    {sortRowsBy(filteredPurchaseItems ?? [], dashboardSortState, "dashboard-purchase", {
                       title: (item) => item.title,
                       department: (item) => item.department,
                       amount: (item) => toSafeNumber(item.amount),
