@@ -224,44 +224,70 @@ export default function AppLayout({ children }: AppLayoutProps) {
           );
         })}
       </List>
-      <Box sx={{ p: 2, display: "flex", flexDirection: "column", gap: 1.5 }}>
+      <Box sx={{ p: 2, display: "flex", flexDirection: "column", gap: 1 }}>
         <MarketIndicators />
+
         <Paper
           variant="outlined"
           sx={{
-            p: 1.5,
-            borderRadius: 3,
-            backgroundColor: (theme) => `${theme.palette.primary.main}0a`,
-            borderColor: (theme) => `${theme.palette.primary.main}1f`,
+            p: 1,
+            borderRadius: 2.5,
+            backgroundColor: (theme) => `${theme.palette.primary.main}08`,
+            borderColor: (theme) => `${theme.palette.primary.main}18`,
           }}
         >
-          <Stack direction="row" spacing={1} alignItems="center">
-            <Avatar sx={{ bgcolor: "primary.main", width: 36, height: 36 }}>{userInitials}</Avatar>
-            <Box flexGrow={1}>
-              <Typography variant="body1" fontWeight={700}>
+          <Stack direction="row" spacing={0.9} alignItems="center">
+            <Avatar sx={{ bgcolor: "primary.main", width: 32, height: 32, fontSize: "0.8rem" }}>
+              {userInitials}
+            </Avatar>
+            <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+              <Typography variant="body2" fontWeight={700} noWrap>
                 {userDisplayName}
               </Typography>
-              <Typography variant="body2" color="text.secondary">
+              <Typography variant="caption" color="text.secondary" noWrap>
                 {userRoleLabel}
               </Typography>
             </Box>
-            <Button variant="outlined" color="primary" size="small" onClick={(event) => setUserMenuAnchor(event.currentTarget)}>
+            <Button
+              variant="outlined"
+              color="primary"
+              size="small"
+              onClick={(event) => setUserMenuAnchor(event.currentTarget)}
+              sx={{
+                minWidth: 0,
+                px: 1.1,
+                py: 0.45,
+                fontSize: "0.7rem",
+                borderRadius: 2,
+                textTransform: "none",
+              }}
+            >
               Profil
             </Button>
           </Stack>
         </Paper>
+
         <Tooltip title={mode === "dark" ? "Açık moda geç" : "Karanlık moda geç"} placement="top">
-          <ListItemButton onClick={toggleMode} sx={{ borderRadius: 2, color: "text.secondary" }}>
-            <ListItemIcon sx={{ color: "text.secondary" }}>
-              {mode === "dark" ? <DarkModeIcon /> : <LightModeIcon />}
+          <ListItemButton
+            onClick={toggleMode}
+            sx={{
+              minHeight: 40,
+              px: 1,
+              py: 0.4,
+              borderRadius: 2,
+              color: "text.secondary",
+            }}
+          >
+            <ListItemIcon sx={{ minWidth: 30, color: "text.secondary" }}>
+              {mode === "dark" ? <DarkModeIcon fontSize="small" /> : <LightModeIcon fontSize="small" />}
             </ListItemIcon>
             <ListItemText
               primary="Karanlık Mod"
-              secondary={mode === "dark" ? "Aktif" : "Pasif"}
-              secondaryTypographyProps={{ color: "text.secondary" }}
+              primaryTypographyProps={{ variant: "body2", fontWeight: 600 }}
             />
             <Switch
               edge="end"
+              size="small"
               checked={mode === "dark"}
               onChange={(event) => {
                 event.stopPropagation();
