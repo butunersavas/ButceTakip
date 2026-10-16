@@ -190,6 +190,10 @@ export default function OverBudgetDialog({
   fileNamePrefix,
   onItemClick
 }: OverBudgetDialogProps) {
+  const [tableSort, setTableSort] = useState<TableSortState>(null);
+  const handleTableSort = useCallback((scope: string, key: string) => {
+    setTableSort((current) => nextTableSort(current, scope, key));
+  }, []);
   const config = dialogConfig[category];
   const items =
     category === "saving"
