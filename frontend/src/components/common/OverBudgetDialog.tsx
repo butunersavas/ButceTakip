@@ -1,3 +1,4 @@
+import { useCallback, useState } from "react";
 import {
   Box,
   Button,
@@ -16,6 +17,12 @@ import {
 import * as XLSX from "xlsx";
 
 import { formatBudgetItemLabel } from "../../utils/budgetLabel";
+import {
+  SortableTableCell,
+  nextTableSort,
+  sortRowsBy,
+  type TableSortState
+} from "./SortableTable";
 
 export interface OverBudgetSummary {
   over_total: number;
@@ -190,6 +197,18 @@ export default function OverBudgetDialog({
       : category === "remaining"
         ? data?.remaining_items ?? []
         : data?.items ?? [];
+  const tableScope = `over-budget-${category}`;
+  const sortedItems = sortRowsBy(items, tableSort, tableScope, {
+    budget: (item) => formatBudgetItemLabel({ code: item.budget_code, name: item.budget_name }),
+    months: (item) => formatMonths(item.months),
+    capex: (item) => item.capex_opex,
+    asset: (item) => item.asset_type,
+    department: (item) => item.department,
+    plan: (item) => item.plan,
+    actual: (item) => item.actual,
+    result: (item) => item.over,
+  });
+
   const totals = items.reduce(
     (acc, item) => ({
       plan: acc.plan + (Number(item.plan) || 0),
@@ -317,18 +336,18 @@ export default function OverBudgetDialog({
             <Table size="small" stickyHeader>
               <TableHead>
                 <TableRow>
-                  <TableCell>Bütçe Kalemi</TableCell>
-                  <TableCell>{config.monthsLabel}</TableCell>
-                  <TableCell>Capex/Opex</TableCell>
-                  <TableCell>Nitelik</TableCell>
-                  <TableCell>Departman</TableCell>
-                  <TableCell align="right">Toplam Bütçe</TableCell>
-                  <TableCell align="right">Gerçekleşen Harcama</TableCell>
-                  <TableCell align="right">{config.resultLabel}</TableCell>
+                  <SortableTableCell label="Bütçe Kalemi" scope={tableScope} sortKey="budget" sortState={tableSort} onSort={handleTableSort} />
+                  <SortableTableCell label={config.monthsLabel} scope={tableScope} sortKey="months" sortState={tableSort} onSort={handleTableSort} />
+                  <SortableTableCell label="Capex/Opex" scope={tableScope} sortKey="capex" sortState={tableSort} onSort={handleTableSort} />
+                  <SortableTableCell label="Nitelik" scope={tableScope} sortKey="asset" sortState={tableSort} onSort={handleTableSort} />
+                  <SortableTableCell label="Departman" scope={tableScope} sortKey="department" sortState={tableSort} onSort={handleTableSort} />
+                  <SortableTableCell align="right" label="Toplam Bütçe" scope={tableScope} sortKey="plan" sortState={tableSort} onSort={handleTableSort} />
+                  <SortableTableCell align="right" label="Gerçekleşen Harcama" scope={tableScope} sortKey="actual" sortState={tableSort} onSort={handleTableSort} />
+                  <SortableTableCell align="right" label={config.resultLabel} scope={tableScope} sortKey="result" sortState={tableSort} onSort={handleTableSort} />
                 </TableRow>
               </TableHead>
               <TableBody>
-                {items.map((item) => (
+                {sortedItems.map((item) => (
                   <TableRow
                     key={`${item.budget_item_id}-${item.scenario ?? "all"}`}
                     hover
