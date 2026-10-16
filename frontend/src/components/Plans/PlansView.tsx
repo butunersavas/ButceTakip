@@ -48,6 +48,12 @@ import { formatCurrency } from "../../utils/currency";
 import { formatUnusedReason, normalizeUnusedReason, UNUSED_REASON_OPTIONS } from "../../utils/unusedReason";
 import UnusedBudgetDialog from "../common/UnusedBudgetDialog";
 import { useConfirmDialog } from "../../context/ConfirmDialogContext";
+import {
+  SortableTableCell,
+  nextTableSort,
+  sortRowsBy,
+  type TableSortState
+} from "../common/SortableTable";
 
 interface Scenario {
   id: number;
@@ -307,6 +313,7 @@ export default function PlansView() {
     initialCard && ["actual", "unused", "available"].includes(initialCard) ? initialCard : ""
   );
   const [paginationModel, setPaginationModel] = useState<GridPaginationModel>({ pageSize: 12, page: 0 });
+  const [accrualTableSort, setAccrualTableSort] = useState<TableSortState>(null);
   useEffect(() => {
     const card = searchParams.get("card") as PlanCardFilter | null;
     const next = card && ["actual", "unused", "available"].includes(card) ? card : "";
@@ -680,6 +687,23 @@ export default function PlansView() {
       return data;
     }
   });
+
+  const sortedCarryoverAccruals = sortRowsBy(
+    carryoverAccrualsQuery.data ?? [],
+    accrualTableSort,
+    "plan-accrual-list",
+    {
+      budget: (item) => item.budget_name || item.budget_code || `#${item.id}`,
+      sourceYear: (item) => item.source_year,
+      start: (item) => item.start_year * 100 + item.start_month,
+      monthCount: (item) => item.month_count,
+      monthly: (item) => Number(item.monthly_amount),
+      total: (item) => Number(item.total_amount),
+      used: (item) => Number(item.used_amount),
+      remaining: (item) => Number(item.remaining_amount),
+      status: (item) => item.status,
+    }
+  );
 
   const conversionMutation = useMutation({
     mutationFn: async () => {
@@ -2281,21 +2305,21 @@ export default function PlansView() {
           <Table size="small" stickyHeader>
             <TableHead>
               <TableRow>
-                <TableCell>Bütçe Kalemi</TableCell>
-                <TableCell>Kaynak Yıl</TableCell>
-                <TableCell>Başlangıç</TableCell>
-                <TableCell align="right">Ay Sayısı</TableCell>
-                <TableCell align="right">Aylık Tahakkuk</TableCell>
-                <TableCell align="right">Toplam Tahakkuk</TableCell>
-                <TableCell align="right">Ödenen/Kullanılan</TableCell>
-                <TableCell align="right">Kalan</TableCell>
-                <TableCell>Durum</TableCell>
+                <SortableTableCell label="Bütçe Kalemi" scope="plan-accrual-list" sortKey="budget" sortState={accrualTableSort} onSort={(scope, key) => setAccrualTableSort((current) => nextTableSort(current, scope, key))} />
+                <SortableTableCell label="Kaynak Yıl" scope="plan-accrual-list" sortKey="sourceYear" sortState={accrualTableSort} onSort={(scope, key) => setAccrualTableSort((current) => nextTableSort(current, scope, key))} />
+                <SortableTableCell label="Başlangıç" scope="plan-accrual-list" sortKey="start" sortState={accrualTableSort} onSort={(scope, key) => setAccrualTableSort((current) => nextTableSort(current, scope, key))} />
+                <SortableTableCell align="right" label="Ay Sayısı" scope="plan-accrual-list" sortKey="monthCount" sortState={accrualTableSort} onSort={(scope, key) => setAccrualTableSort((current) => nextTableSort(current, scope, key))} />
+                <SortableTableCell align="right" label="Aylık Tahakkuk" scope="plan-accrual-list" sortKey="monthly" sortState={accrualTableSort} onSort={(scope, key) => setAccrualTableSort((current) => nextTableSort(current, scope, key))} />
+                <SortableTableCell align="right" label="Toplam Tahakkuk" scope="plan-accrual-list" sortKey="total" sortState={accrualTableSort} onSort={(scope, key) => setAccrualTableSort((current) => nextTableSort(current, scope, key))} />
+                <SortableTableCell align="right" label="Ödenen/Kullanılan" scope="plan-accrual-list" sortKey="used" sortState={accrualTableSort} onSort={(scope, key) => setAccrualTableSort((current) => nextTableSort(current, scope, key))} />
+                <SortableTableCell align="right" label="Kalan" scope="plan-accrual-list" sortKey="remaining" sortState={accrualTableSort} onSort={(scope, key) => setAccrualTableSort((current) => nextTableSort(current, scope, key))} />
+                <SortableTableCell label="Durum" scope="plan-accrual-list" sortKey="status" sortState={accrualTableSort} onSort={(scope, key) => setAccrualTableSort((current) => nextTableSort(current, scope, key))} />
               </TableRow>
             </TableHead>
             <TableBody>
               {(carryoverAccrualsQuery.data ?? []).length === 0 ? (
                 <TableRow><TableCell colSpan={9}>Seçili filtrelerde tahakkuk bulunamadı.</TableCell></TableRow>
-              ) : (carryoverAccrualsQuery.data ?? []).map((accrual) => (
+              ) : sortedCarryoverAccruals.map((accrual) => (
                 <TableRow
                   key={accrual.id}
                   hover
