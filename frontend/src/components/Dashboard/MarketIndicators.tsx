@@ -1,13 +1,17 @@
 import CurrencyExchangeOutlinedIcon from "@mui/icons-material/CurrencyExchangeOutlined";
 import EuroOutlinedIcon from "@mui/icons-material/EuroOutlined";
+import SwapVertOutlinedIcon from "@mui/icons-material/SwapVertOutlined";
 import {
   Box,
+  Divider,
   Paper,
   Skeleton,
   Stack,
+  TextField,
   Tooltip,
   Typography,
 } from "@mui/material";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import useAuthorizedClient from "../../hooks/useAuthorizedClient";
@@ -19,8 +23,29 @@ import {
 
 const REFRESH_INTERVAL_MS = 20 * 60 * 1000;
 
+function normalizeAmountInput(value: string) {
+  return value.replace(/\s/g, "").replace(",", ".");
+}
+
+function parseAmount(value: string) {
+  const parsed = Number(normalizeAmountInput(value));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function formatConvertedAmount(value: number, fractionDigits = 2) {
+  if (!Number.isFinite(value)) return "";
+  return new Intl.NumberFormat("tr-TR", {
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
+  }).format(value);
+}
+
 export default function MarketIndicators() {
   const client = useAuthorizedClient();
+  const [tryAmount, setTryAmount] = useState("");
+  const [usdAmount, setUsdAmount] = useState("");
+  const [lastEdited, setLastEdited] = useState<"try" | "usd">("try");
+
   const { data, isLoading, isError } = useQuery<MarketRatesResponse>({
     queryKey: ["market-rates"],
     queryFn: async () => {
@@ -33,6 +58,44 @@ export default function MarketIndicators() {
     refetchInterval: REFRESH_INTERVAL_MS,
     retry: false,
   });
+
+  const usdRate = useMemo(() => {
+    const value = Number(data?.usd_try);
+    return Number.isFinite(value) && value > 0 ? value : null;
+  }, [data?.usd_try]);
+
+  useEffect(() => {
+    if (!usdRate) return;
+    if (lastEdited === "try") {
+      const amount = parseAmount(tryAmount);
+      setUsdAmount(amount === null ? "" : formatConvertedAmount(amount / usdRate));
+    } else {
+      const amount = parseAmount(usdAmount);
+      setTryAmount(amount === null ? "" : formatConvertedAmount(amount * usdRate));
+    }
+  }, [lastEdited, usdRate]);
+
+  const handleTryChange = (value: string) => {
+    setLastEdited("try");
+    setTryAmount(value);
+    if (!usdRate) {
+      setUsdAmount("");
+      return;
+    }
+    const amount = parseAmount(value);
+    setUsdAmount(amount === null ? "" : formatConvertedAmount(amount / usdRate));
+  };
+
+  const handleUsdChange = (value: string) => {
+    setLastEdited("usd");
+    setUsdAmount(value);
+    if (!usdRate) {
+      setTryAmount("");
+      return;
+    }
+    const amount = parseAmount(value);
+    setTryAmount(amount === null ? "" : formatConvertedAmount(amount * usdRate));
+  };
 
   const warning = isError ? "TCMB verilerine şu anda ulaşılamıyor." : data?.warning;
   const sourceInfo = warning
@@ -108,6 +171,46 @@ export default function MarketIndicators() {
             {warning ? " · Güncellenemedi" : ""}
           </Typography>
         </Tooltip>
+
+        <Divider sx={{ my: 0.25 }} />
+
+        <Stack spacing={0.75}>
+          <Stack direction="row" alignItems="center" spacing={0.5}>
+            <SwapVertOutlinedIcon sx={{ fontSize: 16, color: "primary.main" }} />
+            <Typography variant="caption" fontWeight={800} color="text.secondary">
+              TL ↔ USD Dönüştürücü
+            </Typography>
+          </Stack>
+          <TextField
+            size="small"
+            label="TL"
+            value={tryAmount}
+            onChange={(event) => handleTryChange(event.target.value)}
+            placeholder="0,00"
+            disabled={!usdRate}
+            inputProps={{ inputMode: "decimal" }}
+            sx={{
+              "& .MuiInputBase-root": { height: 34, fontSize: "0.78rem" },
+              "& .MuiInputLabel-root": { fontSize: "0.78rem" },
+            }}
+          />
+          <TextField
+            size="small"
+            label="USD"
+            value={usdAmount}
+            onChange={(event) => handleUsdChange(event.target.value)}
+            placeholder="0,00"
+            disabled={!usdRate}
+            inputProps={{ inputMode: "decimal" }}
+            sx={{
+              "& .MuiInputBase-root": { height: 34, fontSize: "0.78rem" },
+              "& .MuiInputLabel-root": { fontSize: "0.78rem" },
+            }}
+          />
+          <Typography variant="caption" color="text.disabled" sx={{ lineHeight: 1.2 }}>
+            TCMB USD satış kuru ile hesaplanır.
+          </Typography>
+        </Stack>
       </Stack>
     </Paper>
   );
