@@ -516,8 +516,10 @@ const compareWarrantyRows = (
   type: WarrantyItemType,
   sortState: Exclude<WarrantySortState, null>
 ) => {
-  const leftValue = getWarrantySortValue(left, type, sortState.field);
-  const rightValue = getWarrantySortValue(right, type, sortState.field);
+  const leftType = (left.type || type) as WarrantyItemType;
+  const rightType = (right.type || type) as WarrantyItemType;
+  const leftValue = getWarrantySortValue(left, leftType, sortState.field);
+  const rightValue = getWarrantySortValue(right, rightType, sortState.field);
   const leftEmpty = leftValue === null || leftValue === undefined || leftValue === "";
   const rightEmpty = rightValue === null || rightValue === undefined || rightValue === "";
   if (leftEmpty && rightEmpty) return 0;
@@ -575,7 +577,7 @@ export default function WarrantyTrackingView() {
   const tableRef = useRef<HTMLDivElement | null>(null);
   const hasLoggedWarrantyResponse = useRef(false);
   const [selectedWarrantyFilter, setSelectedWarrantyFilter] = useState<
-    "NEAR" | "EXPIRED" | "UNKNOWN" | null
+    "NEAR" | "EXPIRED" | "UNKNOWN" | "YEAR" | null
   >(null);
   const [activeWarrantyType, setActiveWarrantyType] = useState<WarrantyItemType>("DEVICE");
   const [globalSearch, setGlobalSearch] = useState("");
@@ -601,6 +603,7 @@ export default function WarrantyTrackingView() {
         ? "SÖZLEŞMESİ GÜNCELLENEN SSL SERTİFİKALARI"
         : "Ürün";
   const activeTypeLabel = getTypeLabel(activeWarrantyType);
+  const currentYear = new Date().getFullYear();
   const formDaysLeft = useMemo(() => calcDaysLeft(normalizeDateInput(form.end_date) || null), [form.end_date]);
   const activeSearchText = globalSearch;
   const activeSortState = sortByType[activeWarrantyType] ?? null;
@@ -646,8 +649,19 @@ export default function WarrantyTrackingView() {
   }, [loadItems]);
 
   const sectionItems = useMemo(() => {
-    return globalSearch.trim() ? items : items.filter((item) => item.type === activeWarrantyType);
-  }, [items, activeWarrantyType, globalSearch]);
+    return globalSearch.trim() || selectedWarrantyFilter === "YEAR"
+      ? items
+      : items.filter((item) => item.type === activeWarrantyType);
+  }, [items, activeWarrantyType, globalSearch, selectedWarrantyFilter]);
+
+  const currentYearEndingCount = useMemo(
+    () =>
+      items.filter((item) => {
+        const normalized = normalizeDateInput(item.end_date);
+        return Boolean(normalized && Number(normalized.slice(0, 4)) === currentYear);
+      }).length,
+    [currentYear, items]
+  );
 
   const summary = useMemo(() => {
     const totals = {
@@ -673,6 +687,12 @@ export default function WarrantyTrackingView() {
 
   const statusFilteredItems = useMemo(() => {
     if (!selectedWarrantyFilter) return sectionItems;
+    if (selectedWarrantyFilter === "YEAR") {
+      return sectionItems.filter((item) => {
+        const normalized = normalizeDateInput(item.end_date);
+        return Boolean(normalized && Number(normalized.slice(0, 4)) === currentYear);
+      });
+    }
     if (selectedWarrantyFilter === "NEAR") {
       return sectionItems.filter((item) => item.status_key === "approaching");
     }
@@ -680,7 +700,7 @@ export default function WarrantyTrackingView() {
       return sectionItems.filter((item) => item.status_key === "unknown");
     }
     return sectionItems.filter((item) => item.status_key === "expired");
-  }, [sectionItems, selectedWarrantyFilter]);
+  }, [currentYear, sectionItems, selectedWarrantyFilter]);
 
   const searchFilteredItems = useMemo(() => {
     const search = normalizeSearchText(activeSearchText);
@@ -699,10 +719,11 @@ export default function WarrantyTrackingView() {
 
   const activeFilterLabel = useMemo(() => {
     if (!selectedWarrantyFilter) return null;
+    if (selectedWarrantyFilter === "YEAR") return `${currentYear} İçerisinde Sona Erecekler`;
     if (selectedWarrantyFilter === "NEAR") return "Yaklaşıyor";
     if (selectedWarrantyFilter === "UNKNOWN") return "Bilinmiyor";
     return "Süresi Dolmuş";
-  }, [selectedWarrantyFilter]);
+  }, [currentYear, selectedWarrantyFilter]);
 
   const handleSearchChange = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -1645,10 +1666,16 @@ export default function WarrantyTrackingView() {
           { label: "Yaklaşıyor", value: summary.upcoming, color: "warning", filter: "NEAR" as const },
           { label: "Süresi Dolmuş", value: summary.expired, color: "error", filter: "EXPIRED" as const },
           { label: "Bilinmiyor", value: summary.unknown, color: "grey", filter: "UNKNOWN" as const },
+          {
+            label: "Bu Yıl İçerisinde Sona Erecekler",
+            value: currentYearEndingCount,
+            color: "info",
+            filter: "YEAR" as const,
+          },
         ].map((item) => {
           const isSelected = selectedWarrantyFilter === item.filter;
           return (
-            <Grid item xs={12} sm={6} md={3} key={item.label}>
+            <Grid item xs={12} sm={6} md={4} lg={2.4} key={item.label}>
               <Card
                 variant="outlined"
                 sx={{
@@ -1779,7 +1806,11 @@ export default function WarrantyTrackingView() {
                 sx={{ mb: 1.5 }}
               >
                 <Typography variant="h6" fontWeight={600}>
-                  {activeTypeLabel} Kayıtları
+                  {globalSearch
+                    ? "Arama Sonuçları"
+                    : selectedWarrantyFilter === "YEAR"
+                      ? `${currentYear} İçerisinde Sona Erecekler`
+                      : `${activeTypeLabel} Kayıtları`}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
                   Toplam {sectionItems.length} kayıt / Filtrelenen {visibleItems.length} kayıt
@@ -1839,7 +1870,19 @@ export default function WarrantyTrackingView() {
                 <DataGrid
                   rows={visibleItems ?? []}
                   getRowId={(row) => row?.id}
-                  columns={globalSearch ? [{ field: "type", headerName: "Tür", minWidth: 140, renderCell: (params: any) => getTypeLabel(params.row.type) }, ...columns] : columns}
+                  columns={
+                    globalSearch || selectedWarrantyFilter === "YEAR"
+                      ? [
+                          { field: "type", headerName: "Kategori", minWidth: 140, valueGetter: (_value: any, row: any) => getTypeLabel(row?.type) },
+                          { field: "name", headerName: "Kayıt", minWidth: 260, flex: 1.4, valueGetter: (_value: any, row: any) => toDisplayText(row?.type === "DOMAIN_SSL" ? row?.domain || row?.name : row?.name) },
+                          { field: "end_date", headerName: "Bitiş Tarihi", minWidth: 160, valueGetter: (_value: any, row: any) => formatDate(row?.end_date) },
+                          { field: "days_left", headerName: "Kalan Gün", minWidth: 150, sortable: false, renderCell: (params: any) => renderDaysChip(params) },
+                          { field: "purchased_from", headerName: "Firma / Kaynak", minWidth: 210, flex: 1, valueGetter: (_value: any, row: any) => toDisplayText(row?.purchased_from || row?.renewal_responsible || row?.issuer) },
+                          { field: "created_by_display", headerName: "Kaydı Giren", minWidth: 170, valueGetter: (_value: any, row: any) => toDisplayText(row?.created_by_display) },
+                          actionColumn,
+                        ].map((column) => withSortIndicator(column as GridColDef, activeSortState))
+                      : columns
+                  }
                   loading={loading}
                   disableRowSelectionOnClick
                   autoHeight={false}
@@ -1847,7 +1890,7 @@ export default function WarrantyTrackingView() {
                   pageSizeOptions={[12, 20, 30, 50, 100]}
                   paginationModel={activePaginationModel}
                   onPaginationModelChange={handlePaginationModelChange}
-                  onColumnHeaderDoubleClick={handleColumnHeaderDoubleClick}
+                  onColumnHeaderClick={handleColumnHeaderDoubleClick}
                   localeText={{
                     noRowsLabel:
                       sectionItems.length === 0
