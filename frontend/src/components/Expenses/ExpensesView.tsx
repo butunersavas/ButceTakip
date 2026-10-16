@@ -2541,17 +2541,10 @@ export default function ExpensesView() {
         headerName: "Bütçe Özeti",
         width: 230,
         minWidth: 220,
-        sortable: false,
         filterable: false,
         valueGetter: (_value, row) => {
           const summary = buildBudgetSummary(row as Expense);
-          if (!summary) return "-";
-          const resultLabel = summary.isOverrun ? "Aşım" : "Kalan";
-          return [
-            `Bütçe: ${formatCurrency(summary.budgetTotal)}`,
-            `Harcama: ${formatCurrency(summary.spendingTotal)}`,
-            `${resultLabel}: ${formatCurrency(Math.abs(summary.result))}`
-          ].join(" | ");
+          return summary?.result ?? null;
         },
         renderCell: ({ row }) => {
           const summary = buildBudgetSummary(row);
