@@ -162,9 +162,8 @@ export default function MarketIndicators() {
         variant="outlined"
         sx={{
           borderRadius: 2.5,
-          borderColor: converterOpen ? "primary.main" : "divider",
+          borderColor: "divider",
           overflow: "hidden",
-          transition: "border-color 0.2s ease",
           bgcolor: "background.paper",
         }}
       >
@@ -174,21 +173,24 @@ export default function MarketIndicators() {
           onClick={() => setConverterOpen((open) => !open)}
           endIcon={converterOpen ? <ExpandLessOutlinedIcon /> : <ExpandMoreOutlinedIcon />}
           sx={{
-            minHeight: 38,
+            minHeight: 34,
             px: 1.2,
             justifyContent: "space-between",
             textTransform: "none",
-            fontSize: "0.76rem",
+            fontSize: "0.74rem",
             fontWeight: 700,
             color: "text.secondary",
-            "& .MuiButton-endIcon": { ml: "auto" },
+            "& .MuiButton-endIcon": {
+              ml: "auto",
+              "& svg": { fontSize: 16 },
+            },
           }}
         >
           Kur Dönüştürücü
         </Button>
 
         <Collapse in={converterOpen} timeout="auto" unmountOnExit>
-          <Stack spacing={1} sx={{ px: 1.2, pb: 1.2 }}>
+          <Stack spacing={0.75} sx={{ px: 1.2, pb: 1, pt: 0.15 }}>
             <ToggleButtonGroup
               exclusive
               fullWidth
@@ -203,9 +205,10 @@ export default function MarketIndicators() {
               aria-label="Kur dönüştürme yönü"
               sx={{
                 "& .MuiToggleButton-root": {
-                  py: 0.5,
+                  minHeight: 28,
+                  py: 0.15,
                   px: 0.5,
-                  fontSize: "0.68rem",
+                  fontSize: "0.66rem",
                   fontWeight: 700,
                   textTransform: "none",
                   "&.Mui-selected": {
@@ -224,41 +227,46 @@ export default function MarketIndicators() {
 
             <TextField
               size="small"
-              label="Tutar"
               value={amount}
               onChange={(event) => setAmount(event.target.value)}
               disabled={!usdRate}
-              inputProps={{ inputMode: "decimal" }}
+              placeholder="Tutar"
+              inputProps={{ inputMode: "decimal", "aria-label": "Dönüştürülecek tutar" }}
               InputProps={{
                 endAdornment: <InputAdornment position="end">{inputCurrency}</InputAdornment>,
               }}
               sx={{
-                "& .MuiInputBase-root": { height: 36, fontSize: "0.78rem" },
-                "& .MuiInputLabel-root": { fontSize: "0.78rem" },
+                "& .MuiInputBase-root": {
+                  height: 32,
+                  fontSize: "0.76rem",
+                  borderRadius: 1.5,
+                },
+                "& .MuiInputAdornment-root": { fontSize: "0.7rem" },
               }}
             />
 
-            <Box
-              sx={{
-                px: 1,
-                py: 0.85,
-                borderRadius: 1.5,
-                bgcolor: "action.hover",
-                border: 1,
-                borderColor: "divider",
-              }}
+            <Stack
+              direction="row"
+              alignItems="baseline"
+              justifyContent="space-between"
+              spacing={1}
+              sx={{ px: 0.25, minHeight: 24 }}
             >
               <Typography variant="caption" color="text.secondary">
                 Sonuç
               </Typography>
-              <Typography variant="body2" fontWeight={800}>
+              <Typography variant="body2" fontWeight={800} noWrap>
                 {convertedValue === null
                   ? `- ${outputCurrency}`
                   : `${formatConvertedAmount(convertedValue)} ${outputCurrency}`}
               </Typography>
-            </Box>
+            </Stack>
 
-            <Typography variant="caption" color="text.disabled" sx={{ lineHeight: 1.2 }}>
+            <Typography
+              variant="caption"
+              color="text.disabled"
+              sx={{ fontSize: "0.62rem", lineHeight: 1.15 }}
+            >
               TCMB USD satış kuru kullanılır.
             </Typography>
           </Stack>
