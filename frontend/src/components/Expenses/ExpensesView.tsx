@@ -68,6 +68,12 @@ import OverBudgetDialog, {
 } from "../common/OverBudgetDialog";
 import { useConfirmDialog } from "../../context/ConfirmDialogContext";
 import { buildAccrualDistribution } from "../../utils/accrualDistribution";
+import {
+  SortableTableCell,
+  nextTableSort,
+  sortRowsBy,
+  type TableSortState
+} from "../common/SortableTable";
 
 interface Scenario {
   id: number;
@@ -758,6 +764,10 @@ export default function ExpensesView() {
   >(null);
   const [filterModel, setFilterModel] = useState<GridFilterModel>({ items: [] });
   const [sortModel, setSortModel] = useState<GridSortModel>([]);
+  const [tableSort, setTableSort] = useState<TableSortState>(null);
+  const handleTableSort = useCallback((scope: string, key: string) => {
+    setTableSort((current) => nextTableSort(current, scope, key));
+  }, []);
   const [columnVisibilityModel, setColumnVisibilityModel] =
     useState<GridColumnVisibilityModel>({});
   const [searchText, setSearchText] = useState<string>("");
@@ -4198,13 +4208,17 @@ export default function ExpensesView() {
                               <Table size="small" stickyHeader>
                                 <TableHead>
                                   <TableRow>
-                                    <TableCell>Ay</TableCell>
-                                    <TableCell align="right">Plan Tutarı</TableCell>
-                                    <TableCell align="right">Kapsam</TableCell>
+                                    <SortableTableCell label="Ay" scope="expense-plan-preview" sortKey="month" sortState={tableSort} onSort={handleTableSort} />
+                                    <SortableTableCell align="right" label="Plan Tutarı" scope="expense-plan-preview" sortKey="amount" sortState={tableSort} onSort={handleTableSort} />
+                                    <SortableTableCell align="right" label="Kapsam" scope="expense-plan-preview" sortKey="selected" sortState={tableSort} onSort={handleTableSort} />
                                   </TableRow>
                                 </TableHead>
                                 <TableBody>
-                                  {plannedBudgetRows.map((row) => (
+                                  {sortRowsBy(plannedBudgetRows, tableSort, "expense-plan-preview", {
+                                    month: (row) => row.month,
+                                    amount: (row) => row.amount,
+                                    selected: (row) => row.isSelected,
+                                  }).map((row) => (
                                     <TableRow
                                       key={row.month}
                                       selected={row.isSelected}
@@ -4268,12 +4282,15 @@ export default function ExpensesView() {
                                     <Table size="small" stickyHeader>
                                       <TableHead>
                                         <TableRow>
-                                          <TableCell>Ay</TableCell>
-                                          <TableCell align="right">Tahmini Dağıtım</TableCell>
+                                          <SortableTableCell label="Ay" scope="expense-allocation-preview" sortKey="month" sortState={tableSort} onSort={handleTableSort} />
+                                          <SortableTableCell align="right" label="Tahmini Dağıtım" scope="expense-allocation-preview" sortKey="amount" sortState={tableSort} onSort={handleTableSort} />
                                         </TableRow>
                                       </TableHead>
                                       <TableBody>
-                                        {allocationPreview.rows.map((row) => (
+                                        {sortRowsBy(allocationPreview.rows, tableSort, "expense-allocation-preview", {
+                                          month: (row) => row.month,
+                                          amount: (row) => row.amount,
+                                        }).map((row) => (
                                           <TableRow key={row.month}>
                                             <TableCell>{row.label}</TableCell>
                                             <TableCell align="right">
@@ -4624,18 +4641,27 @@ export default function ExpensesView() {
               <Table size="small" stickyHeader>
                 <TableHead>
                   <TableRow>
-                    <TableCell>Bütçe Kalemi</TableCell>
-                    <TableCell>Ay / Dönem</TableCell>
-                    <TableCell>Departman</TableCell>
-                    <TableCell>Capex/Opex</TableCell>
-                    <TableCell>Nitelik</TableCell>
-                    <TableCell align="right">Toplam Bütçe</TableCell>
-                    <TableCell align="right">Gerçekleşen Harcama</TableCell>
-                    <TableCell align="right">Pazarlıklı Tasarruf</TableCell>
+                    <SortableTableCell label="Bütçe Kalemi" scope="expense-negotiated" sortKey="budget" sortState={tableSort} onSort={handleTableSort} />
+                    <SortableTableCell label="Ay / Dönem" scope="expense-negotiated" sortKey="period" sortState={tableSort} onSort={handleTableSort} />
+                    <SortableTableCell label="Departman" scope="expense-negotiated" sortKey="department" sortState={tableSort} onSort={handleTableSort} />
+                    <SortableTableCell label="Capex/Opex" scope="expense-negotiated" sortKey="capex" sortState={tableSort} onSort={handleTableSort} />
+                    <SortableTableCell label="Nitelik" scope="expense-negotiated" sortKey="asset" sortState={tableSort} onSort={handleTableSort} />
+                    <SortableTableCell align="right" label="Toplam Bütçe" scope="expense-negotiated" sortKey="plan" sortState={tableSort} onSort={handleTableSort} />
+                    <SortableTableCell align="right" label="Gerçekleşen Harcama" scope="expense-negotiated" sortKey="actual" sortState={tableSort} onSort={handleTableSort} />
+                    <SortableTableCell align="right" label="Pazarlıklı Tasarruf" scope="expense-negotiated" sortKey="saving" sortState={tableSort} onSort={handleTableSort} />
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {negotiatedSavingItems.map((item, index) => (
+                  {sortRowsBy(negotiatedSavingItems, tableSort, "expense-negotiated", {
+                    budget: (item) => formatBudgetItemLabel({ code: item.budget_code, name: item.budget_name }),
+                    period: (item) => formatBudgetPeriod(item),
+                    department: (item) => item.department,
+                    capex: (item) => item.capex_opex,
+                    asset: (item) => item.asset_type,
+                    plan: (item) => Number(item.plan) || 0,
+                    actual: (item) => Number(item.actual) || 0,
+                    saving: (item) => Number(item.over) || 0,
+                  }).map((item, index) => (
                     <TableRow key={`${item.budget_item_id}-${item.budget_code}-${index}`} hover>
                       <TableCell>
                         {formatBudgetItemLabel({
@@ -4705,19 +4731,29 @@ export default function ExpensesView() {
               <Table size="small" stickyHeader>
                 <TableHead>
                   <TableRow>
-                    <TableCell>Tür</TableCell>
-                    <TableCell>Bütçe Kalemi</TableCell>
-                    <TableCell>Ay / Dönem</TableCell>
-                    <TableCell>Departman</TableCell>
-                    <TableCell>Capex/Opex</TableCell>
-                    <TableCell>Nitelik</TableCell>
-                    <TableCell align="right">Toplam Bütçe</TableCell>
-                    <TableCell align="right">Gerçekleşen</TableCell>
-                    <TableCell align="right">Tasarruf Tutarı</TableCell>
+                    <SortableTableCell label="Tür" scope="expense-combined" sortKey="type" sortState={tableSort} onSort={handleTableSort} />
+                    <SortableTableCell label="Bütçe Kalemi" scope="expense-combined" sortKey="budget" sortState={tableSort} onSort={handleTableSort} />
+                    <SortableTableCell label="Ay / Dönem" scope="expense-combined" sortKey="period" sortState={tableSort} onSort={handleTableSort} />
+                    <SortableTableCell label="Departman" scope="expense-combined" sortKey="department" sortState={tableSort} onSort={handleTableSort} />
+                    <SortableTableCell label="Capex/Opex" scope="expense-combined" sortKey="capex" sortState={tableSort} onSort={handleTableSort} />
+                    <SortableTableCell label="Nitelik" scope="expense-combined" sortKey="asset" sortState={tableSort} onSort={handleTableSort} />
+                    <SortableTableCell align="right" label="Toplam Bütçe" scope="expense-combined" sortKey="plan" sortState={tableSort} onSort={handleTableSort} />
+                    <SortableTableCell align="right" label="Gerçekleşen" scope="expense-combined" sortKey="actual" sortState={tableSort} onSort={handleTableSort} />
+                    <SortableTableCell align="right" label="Tasarruf Tutarı" scope="expense-combined" sortKey="saving" sortState={tableSort} onSort={handleTableSort} />
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {combinedSavingItems.map(({ type, item, amount, unusedAmount }, index) => (
+                  {sortRowsBy(combinedSavingItems, tableSort, "expense-combined", {
+                    type: (row) => row.type,
+                    budget: (row) => formatBudgetItemLabel({ code: row.item.budget_code, name: row.item.budget_name }),
+                    period: (row) => formatBudgetPeriod(row.item),
+                    department: (row) => row.item.department,
+                    capex: (row) => row.item.capex_opex,
+                    asset: (row) => row.item.asset_type,
+                    plan: (row) => Number(row.item.plan) || 0,
+                    actual: (row) => row.type === "Pazarlıklı Tasarruf" ? Number(row.item.actual) || 0 : row.unusedAmount,
+                    saving: (row) => row.amount,
+                  }).map(({ type, item, amount, unusedAmount }, index) => (
                     <TableRow key={`${type}-${item.budget_item_id}-${item.budget_code}-${index}`} hover>
                       <TableCell>{type}</TableCell>
                       <TableCell>
@@ -4770,17 +4806,17 @@ export default function ExpensesView() {
             <Table size="small" stickyHeader>
               <TableHead>
                 <TableRow>
-                  <TableCell>Tarih</TableCell>
-                  <TableCell>Bütçe Kalemi</TableCell>
-                  <TableCell>Ay / Dönem</TableCell>
-                  <TableCell>Departman</TableCell>
-                  <TableCell>Capex/Opex</TableCell>
-                  <TableCell>Nitelik</TableCell>
-                  <TableCell align="right">Tutar</TableCell>
-                  {expenseDetailDialog === "cancelled" && <TableCell>Açıklama</TableCell>}
-                  <TableCell>Satıcı</TableCell>
-                  <TableCell>Kaydı Giren</TableCell>
-                  <TableCell>Durum</TableCell>
+                  <SortableTableCell label="Tarih" scope="expense-detail" sortKey="date" sortState={tableSort} onSort={handleTableSort} />
+                  <SortableTableCell label="Bütçe Kalemi" scope="expense-detail" sortKey="budget" sortState={tableSort} onSort={handleTableSort} />
+                  <SortableTableCell label="Ay / Dönem" scope="expense-detail" sortKey="period" sortState={tableSort} onSort={handleTableSort} />
+                  <SortableTableCell label="Departman" scope="expense-detail" sortKey="department" sortState={tableSort} onSort={handleTableSort} />
+                  <SortableTableCell label="Capex/Opex" scope="expense-detail" sortKey="capex" sortState={tableSort} onSort={handleTableSort} />
+                  <SortableTableCell label="Nitelik" scope="expense-detail" sortKey="asset" sortState={tableSort} onSort={handleTableSort} />
+                  <SortableTableCell align="right" label="Tutar" scope="expense-detail" sortKey="amount" sortState={tableSort} onSort={handleTableSort} />
+                  {expenseDetailDialog === "cancelled" && <SortableTableCell label="Açıklama" scope="expense-detail" sortKey="description" sortState={tableSort} onSort={handleTableSort} />}
+                  <SortableTableCell label="Satıcı" scope="expense-detail" sortKey="vendor" sortState={tableSort} onSort={handleTableSort} />
+                  <SortableTableCell label="Kaydı Giren" scope="expense-detail" sortKey="owner" sortState={tableSort} onSort={handleTableSort} />
+                  <SortableTableCell label="Durum" scope="expense-detail" sortKey="status" sortState={tableSort} onSort={handleTableSort} />
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -4793,7 +4829,19 @@ export default function ExpensesView() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  expenseDetailItems.map((expense) => {
+                  sortRowsBy(expenseDetailItems, tableSort, "expense-detail", {
+                    date: (expense) => expense.expense_date ?? expense.date,
+                    budget: (expense) => formatBudgetItemLabel({ code: expense.budget_code ?? "", name: expense.budget_name ?? "" }),
+                    period: (expense) => formatExpensePeriod(expense),
+                    department: (expense) => expense.department,
+                    capex: (expense) => expense.capex_opex ?? expense.map_capex_opex,
+                    asset: (expense) => expense.asset_type ?? expense.map_nitelik ?? expense.nitelik,
+                    amount: (expense) => Number(expense.amount) || 0,
+                    description: (expense) => expense.description,
+                    vendor: (expense) => expense.vendor,
+                    owner: (expense) => formatExpenseOwner(expense),
+                    status: (expense) => expense.status,
+                  }).map((expense) => {
                     const displayValues = getExpenseDisplayValues(expense);
                     return (
                       <TableRow key={expense.id} hover>
@@ -4873,22 +4921,35 @@ export default function ExpensesView() {
               <Table size="small" stickyHeader>
                 <TableHead>
                   <TableRow>
-                    <TableCell>Bütçe Kalemi</TableCell>
-                    <TableCell>Ay / Dönem</TableCell>
-                    <TableCell>Departman</TableCell>
-                    <TableCell>Capex/Opex</TableCell>
-                    <TableCell>Nitelik</TableCell>
-                    <TableCell align="right">Toplam Bütçe</TableCell>
-                    <TableCell align="right">Harcama</TableCell>
-                    <TableCell align="right">Kullanılmayacak Tutar</TableCell>
-                    <TableCell align="right">Kalan Kullanılabilir</TableCell>
-                    <TableCell>Sebep</TableCell>
-                    <TableCell>Açıklama</TableCell>
-                    <TableCell>Güncelleme Tarihi</TableCell>
+                    <SortableTableCell label="Bütçe Kalemi" scope="expense-unused" sortKey="budget" sortState={tableSort} onSort={handleTableSort} />
+                    <SortableTableCell label="Ay / Dönem" scope="expense-unused" sortKey="period" sortState={tableSort} onSort={handleTableSort} />
+                    <SortableTableCell label="Departman" scope="expense-unused" sortKey="department" sortState={tableSort} onSort={handleTableSort} />
+                    <SortableTableCell label="Capex/Opex" scope="expense-unused" sortKey="capex" sortState={tableSort} onSort={handleTableSort} />
+                    <SortableTableCell label="Nitelik" scope="expense-unused" sortKey="asset" sortState={tableSort} onSort={handleTableSort} />
+                    <SortableTableCell align="right" label="Toplam Bütçe" scope="expense-unused" sortKey="plan" sortState={tableSort} onSort={handleTableSort} />
+                    <SortableTableCell align="right" label="Harcama" scope="expense-unused" sortKey="actual" sortState={tableSort} onSort={handleTableSort} />
+                    <SortableTableCell align="right" label="Kullanılmayacak Tutar" scope="expense-unused" sortKey="unused" sortState={tableSort} onSort={handleTableSort} />
+                    <SortableTableCell align="right" label="Kalan Kullanılabilir" scope="expense-unused" sortKey="available" sortState={tableSort} onSort={handleTableSort} />
+                    <SortableTableCell label="Sebep" scope="expense-unused" sortKey="reason" sortState={tableSort} onSort={handleTableSort} />
+                    <SortableTableCell label="Açıklama" scope="expense-unused" sortKey="note" sortState={tableSort} onSort={handleTableSort} />
+                    <SortableTableCell label="Güncelleme Tarihi" scope="expense-unused" sortKey="updated" sortState={tableSort} onSort={handleTableSort} />
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {unusedBudgetItems.map((item, index) => {
+                  {sortRowsBy(unusedBudgetItems, tableSort, "expense-unused", {
+                    budget: (item) => formatBudgetItemLabel({ code: item.budget_code, name: item.budget_name }),
+                    period: (item) => formatBudgetPeriod(item),
+                    department: (item) => item.department,
+                    capex: (item) => item.capex_opex,
+                    asset: (item) => item.asset_type,
+                    plan: (item) => Number(item.plan) || 0,
+                    actual: (item) => Number(item.actual) || 0,
+                    unused: (item) => Number(item.unused_amount ?? 0),
+                    available: (item) => Number(item.available_amount ?? 0),
+                    reason: (item) => formatUnusedReason(item.reason),
+                    note: (item) => item.note,
+                    updated: (item) => item.unused_updated_at,
+                  }).map((item, index) => {
                     const unusedAmount = Number(item.unused_amount ?? 0);
                     return (
                       <TableRow
@@ -5011,14 +5072,19 @@ export default function ExpensesView() {
             <Table size="small" stickyHeader>
               <TableHead>
                 <TableRow>
-                  <TableCell>Ay</TableCell>
-                  <TableCell align="right">Aylık Bütçe</TableCell>
-                  <TableCell align="right">Geçerli Gerçekleşen</TableCell>
-                  <TableCell>Sonuç</TableCell>
+                  <SortableTableCell label="Ay" scope="expense-distribution" sortKey="period" sortState={tableSort} onSort={handleTableSort} />
+                  <SortableTableCell align="right" label="Aylık Bütçe" scope="expense-distribution" sortKey="budget" sortState={tableSort} onSort={handleTableSort} />
+                  <SortableTableCell align="right" label="Geçerli Gerçekleşen" scope="expense-distribution" sortKey="actual" sortState={tableSort} onSort={handleTableSort} />
+                  <SortableTableCell label="Sonuç" scope="expense-distribution" sortKey="result" sortState={tableSort} onSort={handleTableSort} />
                 </TableRow>
               </TableHead>
               <TableBody>
-                {distributionDetailRows.map((detail) => {
+                {sortRowsBy(distributionDetailRows, tableSort, "expense-distribution", {
+                  period: (detail) => detail.year * 100 + detail.month,
+                  budget: (detail) => detail.budgetAmount,
+                  actual: (detail) => detail.allocatedAmount,
+                  result: (detail) => detail.result,
+                }).map((detail) => {
                   const monthLabel =
                     detail.month >= 1 && detail.month <= 12
                       ? `${monthOptions[detail.month - 1]} ${detail.year}`
