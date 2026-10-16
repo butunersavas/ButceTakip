@@ -33,6 +33,12 @@ import usePersistentState from "../../hooks/usePersistentState";
 import { useAuth } from "../../context/AuthContext";
 import { formatBudgetItemLabel, stripBudgetCode } from "../../utils/budgetLabel";
 import { useConfirmDialog } from "../../context/ConfirmDialogContext";
+import {
+  SortableTableCell,
+  nextTableSort,
+  sortRowsBy,
+  type TableSortState
+} from "../common/SortableTable";
 
 interface Scenario {
   id: number;
@@ -749,6 +755,7 @@ export default function ImportExportView() {
   const [capexOpex, setCapexOpex] = usePersistentState<"" | "capex" | "opex">("io:capexOpex", "");
   const [assetTypeFilter, setAssetTypeFilter] = usePersistentState<string>("io:assetType", "");
   const [selectedReport, setSelectedReport] = useState<ReportId>("executive-summary");
+  const [reportTableSort, setReportTableSort] = useState<TableSortState>(null);
 
   const selectedMonthList = useMemo(
     () => normalizeMonthSelection(selectedMonths),
@@ -1610,6 +1617,14 @@ export default function ImportExportView() {
     reportGroups.flatMap((group) => group.reports).find((report) => report.id === selectedReport)?.title ??
     "Rapor Önizleme";
   const previewColumns = Object.keys(selectedReportRows[0] ?? { Bilgi: "Kayıt bulunamadı" });
+  const sortedSelectedReportRows = sortRowsBy(
+    selectedReportRows,
+    reportTableSort,
+    "report-preview",
+    Object.fromEntries(
+      previewColumns.map((column) => [column, (row: ReportRow) => row[column]])
+    ) as Record<string, (row: ReportRow) => unknown>
+  );
   const selectedReportTotals = buildReportTotals(selectedReportRows);
   const selectedReportTotalRows = buildReportTotalRows(selectedReportRows);
 
@@ -2178,7 +2193,16 @@ export default function ImportExportView() {
               <TableHead>
                 <TableRow>
                   {previewColumns.map((column) => (
-                    <TableCell key={column}>{column}</TableCell>
+                    <SortableTableCell
+                      key={column}
+                      label={column}
+                      scope="report-preview"
+                      sortKey={column}
+                      sortState={reportTableSort}
+                      onSort={(scope, key) =>
+                        setReportTableSort((current) => nextTableSort(current, scope, key))
+                      }
+                    />
                   ))}
                 </TableRow>
               </TableHead>
@@ -2192,7 +2216,7 @@ export default function ImportExportView() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  selectedReportRows.slice(0, 200).map((row, rowIndex) => (
+                  sortedSelectedReportRows.slice(0, 200).map((row, rowIndex) => (
                     <TableRow key={`preview-${rowIndex}`} hover>
                       {previewColumns.map((column) => (
                         <TableCell key={column}>
