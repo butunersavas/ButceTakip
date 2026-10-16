@@ -1596,7 +1596,8 @@ export default function PlansView() {
         field: "plan_type",
         headerName: "Tahakkuk",
         width: 220,
-        sortable: false,
+        valueGetter: (_value, row) =>
+          row.has_accrual ? Number(row.plan_accrual_allocation_amount ?? 0) : 0,
         renderCell: ({ row }) => {
           if (!row.has_accrual) return <Typography color="text.secondary">-</Typography>;
           return (
