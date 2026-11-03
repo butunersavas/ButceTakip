@@ -4,7 +4,7 @@ import logging
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import func
+from sqlalchemy import String, cast, func, or_
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import aliased
 from sqlmodel import Session, select
@@ -71,6 +71,37 @@ def _normalize_output_text(value: str | None) -> str | None:
     if not cleaned or cleaned in {"-", "—"}:
         return None
     return cleaned
+
+
+_SEARCH_CHAR_REPLACEMENTS = (
+    ("İ", "i"),
+    ("I", "i"),
+    ("ı", "i"),
+    ("Ş", "s"),
+    ("ş", "s"),
+    ("Ğ", "g"),
+    ("ğ", "g"),
+    ("Ü", "u"),
+    ("ü", "u"),
+    ("Ö", "o"),
+    ("ö", "o"),
+    ("Ç", "c"),
+    ("ç", "c"),
+)
+
+
+def _normalize_search_term(value: str) -> str:
+    normalized = value
+    for source, target in _SEARCH_CHAR_REPLACEMENTS:
+        normalized = normalized.replace(source, target)
+    return normalized.lower()
+
+
+def _normalized_search_expression(field):
+    expression = cast(field, String)
+    for source, target in _SEARCH_CHAR_REPLACEMENTS:
+        expression = func.replace(expression, source, target)
+    return func.lower(expression)
 
 
 def _build_user_map(session: Session, items: list[WarrantyItem]) -> dict[int, str | None]:
@@ -225,6 +256,8 @@ async def confirm_warranty_import_file(
 @router.get("/", response_model=list[WarrantyItemRead], include_in_schema=False)
 def list_warranty_items(
     include_inactive: bool = False,
+    search: str | None = Query(default=None, max_length=200),
+    item_type: WarrantyItemType | None = Query(default=None, alias="type"),
     session: Session = Depends(get_db_session),
     _: User = Depends(get_current_user),
 ) -> list[WarrantyItemRead]:
@@ -252,6 +285,45 @@ def list_warranty_items(
     )
     if not include_inactive:
         statement = statement.where(WarrantyItem.is_active.is_(True))
+    search_term = search.strip() if isinstance(search, str) else ""
+    if search_term:
+        searchable_fields = (
+            WarrantyItem.name,
+            WarrantyItem.location,
+            WarrantyItem.domain,
+            WarrantyItem.note,
+            WarrantyItem.issuer,
+            WarrantyItem.certificate_issuer,
+            WarrantyItem.renewal_owner,
+            WarrantyItem.renewal_responsible,
+            WarrantyItem.purchased_from,
+            WarrantyItem.brand,
+            WarrantyItem.model,
+            WarrantyItem.serial_number,
+            WarrantyItem.asset_tag,
+            WarrantyItem.service_code,
+            WarrantyItem.ordered_product_model,
+            WarrantyItem.status,
+            WarrantyItem.type,
+            WarrantyItem.price,
+            WarrantyItem.shipment_date,
+            WarrantyItem.end_date,
+            WarrantyItem.end_of_service_life,
+        )
+        normalized_search_term = _normalize_search_term(search_term)
+        statement = statement.where(
+            or_(
+                *(
+                    _normalized_search_expression(field).contains(
+                        normalized_search_term,
+                        autoescape=True,
+                    )
+                    for field in searchable_fields
+                ),
+            )
+        )
+    elif isinstance(item_type, WarrantyItemType):
+        statement = statement.where(WarrantyItem.type == item_type)
     rows = session.exec(statement).all()
     items: list[WarrantyItemRead] = []
     for row in rows:

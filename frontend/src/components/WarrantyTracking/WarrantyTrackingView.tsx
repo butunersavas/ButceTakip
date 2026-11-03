@@ -264,6 +264,40 @@ const toDisplayText = (value: string | null | undefined) => {
   return String(value);
 };
 
+const toSearchResultText = (value: string | null | undefined) => {
+  const displayValue = toDisplayText(value);
+  return displayValue === "-" ? "—" : displayValue;
+};
+
+const joinSearchResultValues = (...values: Array<string | null | undefined>) => {
+  const uniqueValues = Array.from(
+    new Set(
+      values
+        .map((value) => toSearchResultText(value))
+        .filter((value) => value !== "—")
+    )
+  );
+  return uniqueValues.length ? uniqueValues.join(" / ") : "—";
+};
+
+const getWarrantySource = (row: WarrantyItem) =>
+  joinSearchResultValues(
+    row.purchased_from,
+    row.issuer,
+    row.certificate_issuer,
+    row.renewal_responsible,
+    row.renewal_owner
+  );
+
+const renderSearchResultText = (value: string | null | undefined) => {
+  const displayValue = toSearchResultText(value);
+  return (
+    <Typography variant="body2" noWrap title={displayValue} sx={{ width: "100%" }}>
+      {displayValue}
+    </Typography>
+  );
+};
+
 const normalizeWarrantyRow = (row: any): WarrantyItem => {
   const shipment = normalizeDateInput(row?.shipment_date ?? row?.shipmentDate ?? null) || null;
   const endOfServiceLife =
@@ -478,6 +512,11 @@ const parseSortableDate = (value: unknown): number | null => {
 };
 
 const getWarrantyFieldDisplayValue = (row: WarrantyItem, field: string): string => {
+  if (field === "type") return getTypeLabel(row.type);
+  if (field === "name") return toSearchResultText(row.domain || row.name);
+  if (field === "brand_model") return joinSearchResultValues(row.brand, row.model);
+  if (field === "source") return getWarrantySource(row);
+  if (field === "created_by_display") return toSearchResultText(row.created_by_display);
   if (field === "domain") return toDisplayText(row.domain || row.name);
   if (field === "certificate_issuer") return toDisplayText(row.certificate_issuer || row.issuer);
   if (field === "renewal_responsible") {
@@ -1086,7 +1125,7 @@ export default function WarrantyTrackingView() {
           : statusKey === "ok"
             ? { color: "success" as const }
             : { color: "default" as const };
-    const label = daysLeft === null ? "-" : `${daysLeft} gün`;
+    const label = daysLeft === null ? "—" : `${daysLeft} gün`;
     return <Chip size="small" {...chipProps} label={label} />;
   }, []);
 
@@ -1814,7 +1853,9 @@ export default function WarrantyTrackingView() {
                       : `${activeTypeLabel} Kayıtları`}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Toplam {sectionItems.length} kayıt / Filtrelenen {visibleItems.length} kayıt
+                  {globalSearch.trim()
+                    ? `Arama sonucu ${visibleItems.length} kayıt`
+                    : `Toplam ${sectionItems.length} kayıt / Filtrelenen ${visibleItems.length} kayıt`}
                 </Typography>
               </Stack>
               <Stack
@@ -1829,7 +1870,7 @@ export default function WarrantyTrackingView() {
                   value={activeSearchText}
                   onChange={handleSearchChange}
                   fullWidth
-                  placeholder="Cihaz, domain, SSL ve servis kayıtlarında ara"
+                  placeholder="Kayıt / ürün adı, marka, model, seri numarası, firma / kaynak..."
                 />
                 <Stack direction="row" spacing={1} justifyContent={{ xs: "flex-start", md: "flex-end" }}>
                   {activeSearchText && (
@@ -1874,12 +1915,63 @@ export default function WarrantyTrackingView() {
                   columns={
                     globalSearch || selectedWarrantyFilter === "YEAR"
                       ? [
-                          { field: "type", headerName: "Kategori", minWidth: 140, valueGetter: (_value: any, row: any) => getTypeLabel(row?.type) },
-                          { field: "name", headerName: "Kayıt", minWidth: 260, flex: 1.4, valueGetter: (_value: any, row: any) => toDisplayText(row?.type === "DOMAIN_SSL" ? row?.domain || row?.name : row?.name) },
-                          { field: "end_date", headerName: "Bitiş Tarihi", minWidth: 160, valueGetter: (_value: any, row: any) => formatDate(row?.end_date) },
+                          {
+                            field: "type",
+                            headerName: "KATEGORİ",
+                            minWidth: 125,
+                            renderCell: (params: any) =>
+                              renderSearchResultText(getTypeLabel(params?.row?.type)),
+                          },
+                          {
+                            field: "name",
+                            headerName: "KAYIT / ÜRÜN ADI",
+                            minWidth: 220,
+                            flex: 1.2,
+                            renderCell: (params: any) =>
+                              renderSearchResultText(params?.row?.domain || params?.row?.name),
+                          },
+                          {
+                            field: "brand_model",
+                            headerName: "MARKA / MODEL",
+                            minWidth: 210,
+                            flex: 1.1,
+                            renderCell: (params: any) =>
+                              renderSearchResultText(
+                                joinSearchResultValues(params?.row?.brand, params?.row?.model)
+                              ),
+                          },
+                          {
+                            field: "serial_number",
+                            headerName: "SERİ NUMARASI",
+                            minWidth: 190,
+                            flex: 1,
+                            renderCell: (params: any) =>
+                              renderSearchResultText(params?.row?.serial_number),
+                          },
+                          {
+                            field: "end_date",
+                            headerName: "GARANTİ BİTİŞ TARİHİ",
+                            minWidth: 205,
+                            renderCell: (params: any) =>
+                              renderSearchResultText(formatDate(params?.row?.end_date)),
+                          },
                           { field: "days_left", headerName: "Kalan Gün", minWidth: 150, sortable: false, renderCell: (params: any) => renderDaysChip(params) },
-                          { field: "purchased_from", headerName: "Firma / Kaynak", minWidth: 210, flex: 1, valueGetter: (_value: any, row: any) => toDisplayText(row?.purchased_from || row?.renewal_responsible || row?.issuer) },
-                          { field: "created_by_display", headerName: "Kaydı Giren", minWidth: 170, valueGetter: (_value: any, row: any) => toDisplayText(row?.created_by_display) },
+                          {
+                            field: "source",
+                            headerName: "FİRMA / KAYNAK",
+                            minWidth: 210,
+                            flex: 1.1,
+                            renderCell: (params: any) =>
+                              renderSearchResultText(getWarrantySource(params.row)),
+                          },
+                          {
+                            field: "created_by_display",
+                            headerName: "KAYDI GİREN",
+                            minWidth: 170,
+                            flex: 0.9,
+                            renderCell: (params: any) =>
+                              renderSearchResultText(params?.row?.created_by_display),
+                          },
                           actionColumn,
                         ].map((column) => withSortIndicator(column as GridColDef, activeSortState))
                       : columns
