@@ -3,7 +3,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy import Column, Index, LargeBinary, Numeric, UniqueConstraint, text
+from sqlalchemy import CheckConstraint, Column, Index, LargeBinary, Numeric, Text, UniqueConstraint, text
 from sqlmodel import Field, Relationship, SQLModel
 
 
@@ -444,3 +444,139 @@ class WarrantyItem(TimestampMixin, SQLModel, table=True):
         back_populates="warranties_updated",
         sa_relationship_kwargs={"foreign_keys": "[WarrantyItem.updated_by_id]"},
     )
+
+
+class QuoteNumberSequence(SQLModel, table=True):
+    """Year-scoped counter used to generate collision-free quote numbers."""
+
+    __tablename__ = "quote_number_sequences"
+
+    year: int = Field(primary_key=True)
+    last_value: int = Field(default=0, nullable=False)
+
+
+class QuoteProcess(TimestampMixin, SQLModel, table=True):
+    __tablename__ = "quote_processes"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    quote_no: str = Field(nullable=False, unique=True, index=True, max_length=32)
+    name: str = Field(nullable=False, index=True, max_length=250)
+    description: Optional[str] = Field(default=None, nullable=True)
+    status: str = Field(default="COLLECTING", nullable=False, index=True, max_length=32)
+    created_by_id: int = Field(foreign_key="users.id", nullable=False, index=True)
+    preferred_offer_id: Optional[int] = Field(
+        default=None, foreign_key="quote_vendor_offers.id", nullable=True, index=True
+    )
+    archived_at: Optional[datetime] = Field(default=None, nullable=True)
+    archived_by_id: Optional[int] = Field(default=None, foreign_key="users.id", nullable=True)
+
+
+class QuoteProcessItem(TimestampMixin, SQLModel, table=True):
+    __tablename__ = "quote_process_items"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    process_id: int = Field(foreign_key="quote_processes.id", nullable=False, index=True)
+    budget_item_id: Optional[int] = Field(
+        default=None, foreign_key="budget_items.id", nullable=True, index=True
+    )
+    name: str = Field(nullable=False, index=True, max_length=250)
+    product_code: Optional[str] = Field(default=None, nullable=True, index=True, max_length=120)
+    category: str = Field(nullable=False, index=True, max_length=100)
+    description: Optional[str] = Field(default=None, nullable=True)
+    sort_order: int = Field(default=0, nullable=False)
+
+
+class QuoteVendorOffer(TimestampMixin, SQLModel, table=True):
+    __tablename__ = "quote_vendor_offers"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    process_id: int = Field(foreign_key="quote_processes.id", nullable=False, index=True)
+    vendor_name: str = Field(nullable=False, index=True, max_length=250)
+    created_by_id: int = Field(foreign_key="users.id", nullable=False, index=True)
+    is_active: bool = Field(default=True, nullable=False, index=True)
+
+
+class QuoteOfferRevision(TimestampMixin, SQLModel, table=True):
+    __tablename__ = "quote_offer_revisions"
+    __table_args__ = (
+        UniqueConstraint("vendor_offer_id", "revision_no", name="uq_quote_offer_revision_no"),
+        CheckConstraint("total_amount >= 0", name="ck_quote_revision_total_nonnegative"),
+    )
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    vendor_offer_id: int = Field(
+        foreign_key="quote_vendor_offers.id", nullable=False, index=True
+    )
+    revision_no: int = Field(nullable=False)
+    quote_date: date = Field(nullable=False, index=True)
+    valid_until: Optional[date] = Field(default=None, nullable=True, index=True)
+    currency: str = Field(default="USD", nullable=False, index=True, max_length=3)
+    total_amount: Decimal = Field(
+        default=Decimal("0.00"), sa_column=Column(Numeric(20, 2), nullable=False)
+    )
+    note: Optional[str] = Field(default=None, nullable=True)
+    created_by_id: int = Field(foreign_key="users.id", nullable=False, index=True)
+
+
+class QuoteOfferItem(TimestampMixin, SQLModel, table=True):
+    __tablename__ = "quote_offer_items"
+    __table_args__ = (
+        CheckConstraint("quantity > 0", name="ck_quote_item_quantity_positive"),
+        CheckConstraint("unit_price >= 0", name="ck_quote_item_price_nonnegative"),
+        CheckConstraint("line_total >= 0", name="ck_quote_item_total_nonnegative"),
+    )
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    revision_id: int = Field(foreign_key="quote_offer_revisions.id", nullable=False, index=True)
+    process_item_id: Optional[int] = Field(
+        default=None, foreign_key="quote_process_items.id", nullable=True, index=True
+    )
+    product_name: str = Field(nullable=False, index=True, max_length=250)
+    product_code: Optional[str] = Field(default=None, nullable=True, index=True, max_length=120)
+    category: str = Field(nullable=False, index=True, max_length=100)
+    duration_months: Optional[int] = Field(default=None, nullable=True)
+    quantity: Decimal = Field(sa_column=Column(Numeric(16, 4), nullable=False))
+    unit_price: Decimal = Field(sa_column=Column(Numeric(20, 4), nullable=False))
+    line_total: Decimal = Field(sa_column=Column(Numeric(20, 2), nullable=False))
+    description: Optional[str] = Field(default=None, nullable=True)
+    sort_order: int = Field(default=0, nullable=False)
+
+
+class QuoteDocument(TimestampMixin, SQLModel, table=True):
+    __tablename__ = "quote_documents"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    process_id: int = Field(foreign_key="quote_processes.id", nullable=False, index=True)
+    vendor_offer_id: int = Field(
+        foreign_key="quote_vendor_offers.id", nullable=False, index=True
+    )
+    revision_id: int = Field(foreign_key="quote_offer_revisions.id", nullable=False, index=True)
+    original_name: str = Field(nullable=False, max_length=255)
+    storage_key: str = Field(nullable=False, unique=True, max_length=120)
+    content_type: str = Field(nullable=False, max_length=120)
+    size_bytes: int = Field(nullable=False)
+    sha256: str = Field(nullable=False, index=True, max_length=64)
+    uploaded_by_id: int = Field(foreign_key="users.id", nullable=False, index=True)
+    is_active: bool = Field(default=True, nullable=False, index=True)
+    deactivated_at: Optional[datetime] = Field(default=None, nullable=True)
+    deactivated_by_id: Optional[int] = Field(default=None, foreign_key="users.id", nullable=True)
+
+
+class QuoteAuditLog(SQLModel, table=True):
+    __tablename__ = "quote_audit_logs"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    process_id: int = Field(foreign_key="quote_processes.id", nullable=False, index=True)
+    vendor_offer_id: Optional[int] = Field(
+        default=None, foreign_key="quote_vendor_offers.id", nullable=True, index=True
+    )
+    revision_id: Optional[int] = Field(
+        default=None, foreign_key="quote_offer_revisions.id", nullable=True, index=True
+    )
+    document_id: Optional[int] = Field(
+        default=None, foreign_key="quote_documents.id", nullable=True, index=True
+    )
+    action: str = Field(nullable=False, index=True, max_length=80)
+    details: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
+    user_id: int = Field(foreign_key="users.id", nullable=False, index=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False, index=True)

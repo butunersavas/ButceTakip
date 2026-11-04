@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "test:dashboard-savings": "node --test dashboardSavings.test.mjs",
     "test:accrual-distribution": "node --test accrualDistribution.test.mjs",
-    "test:market-indicators": "node --test marketIndicators.test.mjs"
+    "test:market-indicators": "node --test marketIndicators.test.mjs",
+    "test:quote-management": "node --test quoteManagement.test.mjs"
   },
   "dependencies": {
     "@emotion/react": "^11.11.4",

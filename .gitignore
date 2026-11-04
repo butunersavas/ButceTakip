@@ -46,3 +46,4 @@ backups/
 *.tar.gz
 *.dump
 *Yedek*.tsx
+tests/.tmp/
