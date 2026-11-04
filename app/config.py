@@ -28,6 +28,12 @@ class Settings(BaseSettings):
         env=["CORS_ORIGINS", "ALLOWED_ORIGINS"],
     )
     cors_allow_credentials: bool = Field(default=True, env="CORS_ALLOW_CREDENTIALS")
+    quote_storage_path: str = Field(
+        default="./data/quote_documents", env="QUOTE_STORAGE_PATH"
+    )
+    quote_document_max_bytes: int = Field(
+        default=20 * 1024 * 1024, env="QUOTE_DOCUMENT_MAX_BYTES"
+    )
 
     DEFAULT_ADMIN_EMAIL: str = Field(default="admin@local", env="DEFAULT_ADMIN_EMAIL")
     DEFAULT_ADMIN_PASSWORD: str = Field(default="GucluBirSifre123!", env="DEFAULT_ADMIN_PASSWORD")

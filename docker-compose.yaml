@@ -10,11 +10,15 @@ services:
       - TRUSTED_HOSTS=localhost,127.0.0.1,0.0.0.0,api,172.24.2.128
       - CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,http://172.24.2.128:5173
       - APP_ENV=dev
+      - QUOTE_STORAGE_PATH=/app/data/quote_documents
+      - QUOTE_DOCUMENT_MAX_BYTES=20971520
     ports:
       - "8000:8000"
     depends_on:
       db:
         condition: service_healthy
+    volumes:
+      - quote_documents:/app/data/quote_documents
 
   db:
     image: postgres:15-alpine
@@ -72,3 +76,4 @@ services:
 
 volumes:
   db_data:
+  quote_documents:
