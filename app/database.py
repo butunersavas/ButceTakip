@@ -36,48 +36,38 @@ def get_session() -> Iterator[Session]:
 
 
 def init_default_admin(session: Session) -> None:
-    """Create or update the default admin user based on environment variables."""
+    """Create the initial admin once, without mutating any existing user."""
+
+    if not settings.admin_bootstrap_enabled:
+        logger.info("Admin bootstrap is disabled.")
+        return
 
     admin_username = "admin"
     admin_email = settings.DEFAULT_ADMIN_EMAIL.strip().lower()
     admin_full_name = settings.DEFAULT_ADMIN_FULL_NAME or "Admin Kullanıcı"
     admin_password = settings.DEFAULT_ADMIN_PASSWORD
 
-    if not admin_email:
+    if not admin_email or not admin_password.strip():
+        logger.warning("Admin bootstrap skipped because required credentials are missing.")
         return
 
-    user = session.exec(
-        select(User).where(
-            (User.username == admin_username)
-            | (User.username == admin_email)
-            | (User.email == admin_email)
-        )
-    ).first()
-    hashed_password = get_password_hash(admin_password)
+    if session.exec(select(User.id).limit(1)).first() is not None:
+        logger.info("Admin bootstrap skipped because users already exist.")
+        return
 
-    if user is None:
-        user = User(
-            username=admin_username,
-            email=admin_email,
-            full_name=admin_full_name,
-            hashed_password=hashed_password,
-            is_admin=True,
-            role="admin",
-            is_active=True,
-        )
-        logger.info("Default admin created.")
-    else:
-        user.email = admin_email
-        user.full_name = admin_full_name
-        user.is_admin = True
-        user.role = "admin"
-        user.is_active = True
-        user.hashed_password = hashed_password
-        logger.info("Default admin exists.")
-
+    user = User(
+        username=admin_username,
+        email=admin_email,
+        full_name=admin_full_name,
+        hashed_password=get_password_hash(admin_password),
+        is_admin=True,
+        role="admin",
+        is_active=True,
+    )
     session.add(user)
     session.commit()
     session.refresh(user)
+    logger.info("Initial admin account created.")
 
 
 def ensure_warranty_schema(inspector) -> None:

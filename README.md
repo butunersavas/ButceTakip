@@ -69,35 +69,30 @@ oluşturur. PostgreSQL kullanmak isterseniz `DATABASE_URL` ortam değişkeni ile
 
 ### Varsayılan yönetici hesabı oluşturma
 
-İlk kullanıcıyı elle oluşturmak istemiyorsanız `.env` dosyasına aşağıdaki değişkenleri ekleyerek uygulama her başlatıldığında
-hesabın otomatik olarak var olduğundan emin olabilirsiniz:
+Yalnız tamamen boş bir kullanıcı tablosundaki ilk kurulum için `.env` dosyasında bootstrap'ı bilinçli olarak açın. Gerçek
+e-posta ve güçlü parolayı private ortam/secret yönetimi üzerinden sağlayın; bu değerleri kaynak koda veya Git'e yazmayın:
 
 ```env
-DEFAULT_ADMIN_EMAIL=admin@local
-DEFAULT_ADMIN_PASSWORD=GucluBirSifre123!
+ADMIN_BOOTSTRAP_ENABLED=true
+DEFAULT_ADMIN_EMAIL=
+DEFAULT_ADMIN_PASSWORD=
 # İsteğe bağlı
 DEFAULT_ADMIN_FULL_NAME=Admin Kullanıcı
 DEFAULT_ADMIN_ROLE=admin
 ```
 
-E-posta ve parola değerleri sağlandığında veritabanında kayıt bulunmuyorsa kullanıcı otomatik oluşturulur. Parola yalnızca ilk
-oluşturma sırasında kullanılır; ileride değiştirmek isterseniz API üzerindeki kullanıcı uç noktalarını veya veritabanını
-kullanabilirsiniz.
+Bootstrap herhangi bir kullanıcı varsa hiçbir hesabı değiştirmez. İlk admin oluşturulduktan sonra
+`ADMIN_BOOTSTRAP_ENABLED=false` yapın. Production ortamı ayrıca güçlü, ortama özel `SECRET_KEY` ve güvenli bootstrap kimlik
+bilgileri yoksa başlamaz.
 
 #### Admin hesabını sıfırlama (opsiyonel)
 
-Varsayılan admin hesabını yeniden oluşturmak veya parolasını resetlemek için aşağıdaki komutu çalıştırabilirsiniz:
-
-```bash
-docker compose exec api python scripts/reset_admin.py
-```
-
-İsterseniz kullanıcı bilgilerini parametre ile de verebilirsiniz:
+Admin hesabını bilinçli olarak oluşturmak veya parolasını resetlemek için e-posta adresini açıkça verin. Parola komut satırına
+yazılmaz; script parolayı gizli terminal girdisiyle ister:
 
 ```bash
 docker compose exec api python scripts/reset_admin.py \
-  --email admin@local \
-  --password "GucluBirSifre123!" \
+  --email admin@example.com \
   --full-name "Admin Kullanıcı" \
   --username admin
 ```

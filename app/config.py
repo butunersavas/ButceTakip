@@ -1,6 +1,52 @@
+import hashlib
 import json
 from functools import lru_cache
 from pydantic import BaseSettings, Field, validator
+
+
+PRODUCTION_ENVIRONMENTS = {"prod", "production"}
+DEFAULT_SECRET_KEY = "change-me"
+MIN_PRODUCTION_SECRET_KEY_LENGTH = 32
+MIN_PRODUCTION_ADMIN_PASSWORD_LENGTH = 14
+KNOWN_UNSAFE_ADMIN_PASSWORD_HASHES = {
+    # SHA-256 fingerprint of the legacy repository default. The password itself
+    # must not be kept in source control or included in validation errors.
+    "d840c64ea6c7f64abba7a4bd41d3e1e242ab1cb40a192e02570ae89e8a1028ac",
+}
+KNOWN_UNSAFE_SECRET_KEYS = {
+    "change-me",
+    "changeme",
+    "secret",
+    "secret-key",
+    "your-secret-key",
+    "replace-me",
+}
+
+
+def _fingerprint(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _is_weak_secret_key(value: str) -> bool:
+    normalized = value.strip()
+    return (
+        not normalized
+        or normalized.lower() in KNOWN_UNSAFE_SECRET_KEYS
+        or len(normalized) < MIN_PRODUCTION_SECRET_KEY_LENGTH
+        or len(set(normalized)) < 8
+    )
+
+
+def _is_strong_admin_password(value: str) -> bool:
+    if len(value) < MIN_PRODUCTION_ADMIN_PASSWORD_LENGTH:
+        return False
+    character_checks = (
+        any(character.islower() for character in value),
+        any(character.isupper() for character in value),
+        any(character.isdigit() for character in value),
+        any(not character.isalnum() for character in value),
+    )
+    return all(character_checks)
 
 
 class Settings(BaseSettings):
@@ -10,7 +56,7 @@ class Settings(BaseSettings):
         default="sqlite:///./butce_takip.db",
         env="DATABASE_URL",
     )
-    secret_key: str = Field(default="change-me", env="SECRET_KEY")
+    secret_key: str = Field(default=DEFAULT_SECRET_KEY, env="SECRET_KEY")
     algorithm: str = Field(default="HS256", env="ALGORITHM")
     access_token_expire_minutes: int = Field(default=60 * 24, env="ACCESS_TOKEN_EXPIRE_MINUTES")
     allowed_hosts: list[str] = Field(
@@ -35,10 +81,19 @@ class Settings(BaseSettings):
         default=20 * 1024 * 1024, env="QUOTE_DOCUMENT_MAX_BYTES"
     )
 
-    DEFAULT_ADMIN_EMAIL: str = Field(default="admin@local", env="DEFAULT_ADMIN_EMAIL")
-    DEFAULT_ADMIN_PASSWORD: str = Field(default="GucluBirSifre123!", env="DEFAULT_ADMIN_PASSWORD")
+    ADMIN_BOOTSTRAP_ENABLED: bool = Field(default=False, env="ADMIN_BOOTSTRAP_ENABLED")
+    DEFAULT_ADMIN_EMAIL: str = Field(default="", env="DEFAULT_ADMIN_EMAIL")
+    DEFAULT_ADMIN_PASSWORD: str = Field(default="", env="DEFAULT_ADMIN_PASSWORD")
     DEFAULT_ADMIN_FULL_NAME: str = Field(default="Admin Kullanıcı", env="DEFAULT_ADMIN_FULL_NAME")
     DEFAULT_ADMIN_ROLE: str = Field(default="admin", env="DEFAULT_ADMIN_ROLE")
+
+    @property
+    def is_production(self) -> bool:
+        return self.environment.strip().lower() in PRODUCTION_ENVIRONMENTS
+
+    @property
+    def admin_bootstrap_enabled(self) -> bool:
+        return self.ADMIN_BOOTSTRAP_ENABLED
 
     @property
     def default_admin_email(self) -> str:
@@ -63,6 +118,52 @@ class Settings(BaseSettings):
         """Backward compatible accessor for the default admin role."""
 
         return self.DEFAULT_ADMIN_ROLE
+
+    def validate_runtime_security(self) -> None:
+        """Reject unsafe production secrets without exposing their values."""
+
+        if not self.is_production:
+            return
+
+        errors: list[str] = []
+        secret_key = self.secret_key.strip()
+        admin_email = self.DEFAULT_ADMIN_EMAIL.strip().lower()
+        admin_password = self.DEFAULT_ADMIN_PASSWORD
+
+        if _is_weak_secret_key(secret_key):
+            errors.append(
+                "SECRET_KEY must be a non-default value with at least "
+                f"{MIN_PRODUCTION_SECRET_KEY_LENGTH} characters."
+            )
+
+        if admin_password and _fingerprint(admin_password) in KNOWN_UNSAFE_ADMIN_PASSWORD_HASHES:
+            errors.append("DEFAULT_ADMIN_PASSWORD uses a known unsafe legacy default.")
+
+        if self.ADMIN_BOOTSTRAP_ENABLED:
+            if (
+                not admin_email
+                or "@" not in admin_email
+                or any(character.isspace() for character in admin_email)
+                or admin_email == "admin@local"
+            ):
+                errors.append(
+                    "DEFAULT_ADMIN_EMAIL must be explicitly set to a non-default address "
+                    "when production bootstrap is enabled."
+                )
+            if not admin_password:
+                errors.append(
+                    "DEFAULT_ADMIN_PASSWORD must be explicitly set when production bootstrap "
+                    "is enabled."
+                )
+            elif not _is_strong_admin_password(admin_password):
+                errors.append(
+                    "DEFAULT_ADMIN_PASSWORD must contain at least "
+                    f"{MIN_PRODUCTION_ADMIN_PASSWORD_LENGTH} characters including upper-case, "
+                    "lower-case, numeric, and special characters."
+                )
+
+        if errors:
+            raise RuntimeError("Unsafe production configuration: " + " ".join(errors))
 
     class Config:
         env_file = ".env"
@@ -94,10 +195,8 @@ class Settings(BaseSettings):
                 return raw_value
 
     @validator("secret_key")
-    def normalize_secret_key(cls, value: str) -> str:  # noqa: D417
-        if value and value.strip():
-            return value
-        return "change-me"
+    def preserve_secret_key(cls, value: str) -> str:  # noqa: D417
+        return value or ""
 
     @validator("allowed_hosts", pre=True)
     def normalize_allowed_hosts(cls, value: str | list[str] | None) -> list[str]:  # noqa: D417
