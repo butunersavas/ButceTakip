@@ -14,6 +14,13 @@ settings = get_settings()
 is_sqlite = settings.database_url.startswith("sqlite")
 connect_args = {"check_same_thread": False} if is_sqlite else {}
 logger = logging.getLogger(__name__)
+SCHEMA_VERSION_TABLE = "app_schema_version"
+CURRENT_SCHEMA_VERSION = "20261105_01"
+POSTGRES_MIGRATION_LOCK_ID = 2026110501
+REQUIRED_SCHEMA_INDEXES = {
+    "scenarios": {"uq_scenarios_primary_year"},
+    "budget_preparation_allocations": {"uq_preparation_item_year_month"},
+}
 engine = create_engine(
     settings.database_url,
     echo=False,
@@ -22,9 +29,179 @@ engine = create_engine(
 )
 
 
+class SchemaValidationError(RuntimeError):
+    """Raised when the database is not at the schema expected by this release."""
+
+
+def _read_schema_version(connection) -> str | None:
+    inspector = inspect(connection)
+    if not inspector.has_table(SCHEMA_VERSION_TABLE):
+        return None
+    return connection.execute(
+        text(f"SELECT version FROM {SCHEMA_VERSION_TABLE} WHERE id = 1")
+    ).scalar_one_or_none()
+
+
+def _schema_contract_errors(connection, *, require_version: bool = True) -> list[str]:
+    inspector = inspect(connection)
+    existing_tables = set(inspector.get_table_names())
+    errors: list[str] = []
+
+    version = _read_schema_version(connection)
+    if require_version and version is None:
+        errors.append("schema version marker is missing")
+    elif require_version and version != CURRENT_SCHEMA_VERSION:
+        errors.append(
+            f"schema version is {version!r}; expected {CURRENT_SCHEMA_VERSION!r}"
+        )
+
+    expected_tables = {
+        table.name: {column.name for column in table.columns}
+        for table in SQLModel.metadata.tables.values()
+    }
+    for table_name, expected_columns in sorted(expected_tables.items()):
+        if table_name not in existing_tables:
+            errors.append(f"required table {table_name!r} is missing")
+            continue
+        actual_columns = {
+            column["name"] for column in inspector.get_columns(table_name)
+        }
+        missing_columns = sorted(expected_columns - actual_columns)
+        if missing_columns:
+            errors.append(
+                f"table {table_name!r} is missing columns: {', '.join(missing_columns)}"
+            )
+
+    for table_name, required_indexes in REQUIRED_SCHEMA_INDEXES.items():
+        if table_name not in existing_tables:
+            continue
+        actual_indexes = {
+            index.get("name") for index in inspector.get_indexes(table_name)
+        }
+        actual_indexes.update(
+            constraint.get("name")
+            for constraint in inspector.get_unique_constraints(table_name)
+        )
+        missing_indexes = sorted(required_indexes - actual_indexes)
+        if missing_indexes:
+            errors.append(
+                f"table {table_name!r} is missing indexes: {', '.join(missing_indexes)}"
+            )
+
+    return errors
+
+
+def validate_database_schema(
+    *,
+    require_postgresql: bool = False,
+    require_version: bool = True,
+) -> None:
+    """Validate the schema without issuing DDL or DML."""
+
+    if require_postgresql and engine.dialect.name != "postgresql":
+        raise SchemaValidationError(
+            "Production database must use PostgreSQL; no schema changes were attempted."
+        )
+
+    with engine.connect() as connection:
+        errors = _schema_contract_errors(
+            connection,
+            require_version=require_version,
+        )
+
+    if errors:
+        raise SchemaValidationError(
+            "Database schema is not ready for this release: "
+            + "; ".join(errors)
+            + ". Run the explicit migration command before starting the API."
+        )
+
+
+def _record_schema_version() -> None:
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                f"CREATE TABLE IF NOT EXISTS {SCHEMA_VERSION_TABLE} ("
+                "id INTEGER PRIMARY KEY, "
+                "version VARCHAR(64) NOT NULL, "
+                "updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, "
+                "CONSTRAINT ck_app_schema_version_singleton CHECK (id = 1)"
+                ")"
+            )
+        )
+        connection.execute(
+            text(
+                f"INSERT INTO {SCHEMA_VERSION_TABLE} (id, version, updated_at) "
+                "VALUES (1, :version, CURRENT_TIMESTAMP) "
+                "ON CONFLICT (id) DO UPDATE SET "
+                "version = EXCLUDED.version, updated_at = CURRENT_TIMESTAMP"
+            ),
+            {"version": CURRENT_SCHEMA_VERSION},
+        )
+
+
+def baseline_schema_version() -> None:
+    """Record the current version only after a read-only schema contract check."""
+
+    validate_database_schema(
+        require_postgresql=settings.is_production,
+        require_version=False,
+    )
+    _record_schema_version()
+    validate_database_schema(require_postgresql=settings.is_production)
+
+
+def apply_schema_migrations() -> None:
+    """Apply schema changes explicitly; production startup never calls this function."""
+
+    if settings.is_production and engine.dialect.name != "postgresql":
+        raise RuntimeError("Production migrations require PostgreSQL.")
+
+    with engine.connect() as connection:
+        current_version = _read_schema_version(connection)
+    if current_version == CURRENT_SCHEMA_VERSION:
+        validate_database_schema(require_postgresql=settings.is_production)
+        logger.info("Database schema is already at version %s.", CURRENT_SCHEMA_VERSION)
+        return
+
+    lock_connection = None
+    try:
+        if engine.dialect.name == "postgresql":
+            lock_connection = engine.connect()
+            lock_connection.execute(
+                text("SELECT pg_advisory_lock(:lock_id)"),
+                {"lock_id": POSTGRES_MIGRATION_LOCK_ID},
+            )
+            if _read_schema_version(lock_connection) == CURRENT_SCHEMA_VERSION:
+                validate_database_schema(require_postgresql=settings.is_production)
+                logger.info(
+                    "Database schema reached version %s while waiting for the migration lock.",
+                    CURRENT_SCHEMA_VERSION,
+                )
+                return
+
+        SQLModel.metadata.create_all(engine)
+        _apply_schema_upgrades()
+        _record_schema_version()
+        validate_database_schema(require_postgresql=settings.is_production)
+    finally:
+        if lock_connection is not None:
+            try:
+                lock_connection.execute(
+                    text("SELECT pg_advisory_unlock(:lock_id)"),
+                    {"lock_id": POSTGRES_MIGRATION_LOCK_ID},
+                )
+            finally:
+                lock_connection.close()
+
+
 def init_db() -> None:
-    SQLModel.metadata.create_all(engine)
-    _apply_schema_upgrades()
+    if settings.is_production:
+        validate_database_schema(require_postgresql=True)
+        logger.info("Production schema validation succeeded; startup performed no DDL or DML.")
+        return
+
+    apply_schema_migrations()
     with Session(engine) as session:
         init_default_admin(session)
 
@@ -234,17 +411,17 @@ def _apply_schema_upgrades() -> None:
                         else "ALTER TABLE scenarios ADD COLUMN is_primary BOOLEAN NOT NULL DEFAULT 0"
                     )
                 )
-            connection.execute(
-                text(
-                    "UPDATE scenarios SET is_primary = "
-                    + ("TRUE" if is_postgres else "1")
-                    + " WHERE year IN ("
-                    "SELECT year FROM scenarios GROUP BY year HAVING COUNT(*) = 1"
-                    ") AND (is_primary IS NULL OR is_primary = "
-                    + ("FALSE" if is_postgres else "0")
-                    + ")"
+                connection.execute(
+                    text(
+                        "UPDATE scenarios SET is_primary = "
+                        + ("TRUE" if is_postgres else "1")
+                        + " WHERE year IN ("
+                        "SELECT year FROM scenarios GROUP BY year HAVING COUNT(*) = 1"
+                        ") AND (is_primary IS NULL OR is_primary = "
+                        + ("FALSE" if is_postgres else "0")
+                        + ")"
+                    )
                 )
-            )
             connection.execute(
                 text(
                     "CREATE UNIQUE INDEX IF NOT EXISTS uq_scenarios_primary_year "

@@ -62,6 +62,7 @@ def reset_admin(
                 full_name=admin_full_name,
                 hashed_password=hashed_password,
                 is_admin=True,
+                role="admin",
                 is_active=True,
             )
             logger.info("Admin kullanıcı oluşturuldu: %s", admin_email)
@@ -69,6 +70,7 @@ def reset_admin(
             user.email = admin_email
             user.full_name = admin_full_name
             user.is_admin = True
+            user.role = "admin"
             user.is_active = True
             user.hashed_password = hashed_password
             logger.info("Admin kullanıcı güncellendi: %s", admin_email)

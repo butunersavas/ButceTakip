@@ -96,7 +96,7 @@ app.add_middleware(
 
 @app.on_event("startup")
 def on_startup() -> None:
-    settings.validate_runtime_security()
+    settings.validate_runtime_security(api_startup=True)
     init_db()
 
 

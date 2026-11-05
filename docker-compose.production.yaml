@@ -1,0 +1,15 @@
+services:
+  api:
+    environment:
+      - APP_ENV=production
+      - PRODUCTION_MODE_REQUIRED=true
+      - ADMIN_BOOTSTRAP_ENABLED=false
+      - SECRET_KEY=${SECRET_KEY:?SECRET_KEY must be provided for production}
+      - DATABASE_URL=${DATABASE_URL:?DATABASE_URL must be provided for production}
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --log-level info --access-log
+
+  db:
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB must be provided for production}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER must be provided for production}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be provided for production}

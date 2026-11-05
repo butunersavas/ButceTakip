@@ -31,17 +31,23 @@ Kurumsal bütçe planlama ve gerçekleşen harcamaları takip etmeye yönelik AP
    `/api` yoluna yapar; geliştirme ortamında Vite proxy bu istekleri arka uç servisine yönlendirir.
 5. PgAdmin arayüzüne `http://localhost:8080` adresinden erişebilirsiniz.
 
-### Şema güncellemeleri (geliştirme ortamı)
+### Şema güncellemeleri
 
-Veritabanı şemasında yeni alanlar eklendiğinde (ör. harcama kayıtlarına ek FK alanları), mevcut Docker veritabanı hacminde
-uyumsuzluk yaşanabilir. Geliştirme ortamında hızlı sıfırlamak için:
+Development/test başlangıcı mevcut kolaylığı koruyarak şemayı otomatik hazırlar. Production API başlangıcı ise hiçbir
+DDL/DML çalıştırmaz; yalnız şema sürümünü, tablo/kolon sözleşmesini ve kritik indexleri salt okunur doğrular.
+
+Production migration veya mevcut şemayı sürümleme adımları API başlangıcından ayrı yürütülür. Yedek ve restore provası
+tamamlanmadan çalıştırmayın:
 
 ```bash
-docker compose down -v
-docker compose up --build
+python -m scripts.migrate_database --baseline --backup-confirmed  # şema zaten tam ise
+python -m scripts.migrate_database --apply --backup-confirmed     # şema yükseltmesi gerekiyorsa
+python -m scripts.migrate_database --check                         # salt okunur son kontrol
 ```
 
-### Docker Compose sorun giderme
+DB volume silinmez ve `docker compose down -v` kullanılmaz. Ayrıntılı prosedür için `migrations/README.md` dosyasına bakın.
+
+### Docker Compose sorun giderme (yalnız development)
 
 `butce_db` benzeri bir kapsayıcı adının zaten kullanımda olduğuna dair uyarı alırsanız önce ilgili kapsayıcının durdurulup silindiğinden emin olun:
 
@@ -54,6 +60,7 @@ docker rm -f butce_db
 ```
 
 Ardından tekrar `docker compose up --build` komutunu çalıştırabilirsiniz. Aynı hatanın sık yaşanmaması için yeni bir kurulum öncesinde `docker compose down` komutuyla mevcut servisleri kapatmak da yardımcı olur.
+Bu adımlar production container'larında uygulanmaz; production DB container'ı/volume'u korunur.
 
 ## Geliştirme Ortamı
 Yerel geliştirmede aşağıdaki adımları takip edebilirsiniz:
@@ -81,9 +88,9 @@ DEFAULT_ADMIN_FULL_NAME=Admin Kullanıcı
 DEFAULT_ADMIN_ROLE=admin
 ```
 
-Bootstrap herhangi bir kullanıcı varsa hiçbir hesabı değiştirmez. İlk admin oluşturulduktan sonra
-`ADMIN_BOOTSTRAP_ENABLED=false` yapın. Production ortamı ayrıca güçlü, ortama özel `SECRET_KEY` ve güvenli bootstrap kimlik
-bilgileri yoksa başlamaz.
+Bootstrap herhangi bir kullanıcı varsa hiçbir hesabı değiştirmez. Production API startup'ında otomatik bootstrap tamamen
+yasaktır; `ADMIN_BOOTSTRAP_ENABLED=false` olmalıdır. Production'da ilk hesap veya kontrollü reset yalnız aşağıdaki açık
+komutla ve yetkili operatör tarafından yapılır.
 
 #### Admin hesabını sıfırlama (opsiyonel)
 
@@ -109,6 +116,16 @@ Varsayılan olarak arayüz `http://localhost:5173` portundan yayına alınır. A
 ve Vite geliştirme sunucusu bu istekleri backend'e proxy eder. Proxy hedefini değiştirmek isterseniz
 `VITE_API_PROXY_TARGET` değişkenini kullanabilirsiniz. Örnek değerler için `frontend/.env.example` dosyasını
 `.env` olarak kopyalayabilirsiniz.
+
+### Production compose güvenlik kapısı
+
+Production çalıştırmalarında temel compose dosyası tek başına kullanılmaz; `docker-compose.production.yaml` override'ı
+zorunludur. Override `APP_ENV=production`, `PRODUCTION_MODE_REQUIRED=true` ve kapalı bootstrap değerlerini sabitler;
+gerekli secret ve DB değişkenleri eksikse Compose API'yi oluşturmadan hata verir. Değerleri yazdırmadan sözdizimi kontrolü:
+
+```bash
+docker compose -f docker-compose.yaml -f docker-compose.production.yaml config --quiet
+```
 
 ### Nginx reverse proxy + SSL (opsiyonel)
 

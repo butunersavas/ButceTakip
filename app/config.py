@@ -59,6 +59,10 @@ class Settings(BaseSettings):
     secret_key: str = Field(default=DEFAULT_SECRET_KEY, env="SECRET_KEY")
     algorithm: str = Field(default="HS256", env="ALGORITHM")
     access_token_expire_minutes: int = Field(default=60 * 24, env="ACCESS_TOKEN_EXPIRE_MINUTES")
+    production_mode_required: bool = Field(
+        default=False,
+        env="PRODUCTION_MODE_REQUIRED",
+    )
     allowed_hosts: list[str] = Field(
         default=["*"],
         env="ALLOWED_HOSTS",
@@ -119,8 +123,13 @@ class Settings(BaseSettings):
 
         return self.DEFAULT_ADMIN_ROLE
 
-    def validate_runtime_security(self) -> None:
+    def validate_runtime_security(self, *, api_startup: bool = False) -> None:
         """Reject unsafe production secrets without exposing their values."""
+
+        if self.production_mode_required and not self.is_production:
+            raise RuntimeError(
+                "Unsafe production configuration: APP_ENV must be set to production."
+            )
 
         if not self.is_production:
             return
@@ -160,6 +169,12 @@ class Settings(BaseSettings):
                     "DEFAULT_ADMIN_PASSWORD must contain at least "
                     f"{MIN_PRODUCTION_ADMIN_PASSWORD_LENGTH} characters including upper-case, "
                     "lower-case, numeric, and special characters."
+                )
+
+            if api_startup:
+                errors.append(
+                    "ADMIN_BOOTSTRAP_ENABLED must be false during production API startup; "
+                    "use the explicit bootstrap command for first installation."
                 )
 
         if errors:

@@ -152,6 +152,34 @@ class AdminBootstrapTests(unittest.TestCase):
                     password="",
                 )
 
+    def test_manual_reset_keeps_admin_flag_and_role_consistent(self) -> None:
+        with Session(self.engine) as session:
+            session.add(
+                User(
+                    username="admin",
+                    email="manual-admin@example.test",
+                    hashed_password=get_password_hash("Existing-Password-2026!"),
+                    is_admin=False,
+                    role="viewer",
+                    is_active=False,
+                )
+            )
+            session.commit()
+
+        with patch.object(reset_admin_module, "engine", self.engine), patch.object(
+            reset_admin_module,
+            "get_settings",
+            return_value=_settings(ADMIN_BOOTSTRAP_ENABLED=False),
+        ):
+            user = reset_admin_module.reset_admin(
+                email="manual-admin@example.test",
+                password="Replacement-Password-2026!",
+            )
+
+        self.assertTrue(user.is_admin)
+        self.assertEqual("admin", user.role)
+        self.assertTrue(user.is_active)
+
 
 class ProductionSecurityValidationTests(unittest.TestCase):
     def test_existing_jwt_encode_decode_contract_is_preserved(self) -> None:
@@ -176,6 +204,15 @@ class ProductionSecurityValidationTests(unittest.TestCase):
             DEFAULT_ADMIN_PASSWORD="short",
         )
         settings.validate_runtime_security()
+
+    def test_required_production_mode_rejects_development_environment(self) -> None:
+        settings = _settings(
+            environment="development",
+            production_mode_required=True,
+            ADMIN_BOOTSTRAP_ENABLED=False,
+        )
+        with self.assertRaisesRegex(RuntimeError, "APP_ENV"):
+            settings.validate_runtime_security()
 
     def test_production_rejects_empty_default_and_weak_secret_keys(self) -> None:
         for secret_key in ("", "change-me", "short-secret"):
@@ -243,6 +280,18 @@ class ProductionSecurityValidationTests(unittest.TestCase):
             DEFAULT_ADMIN_PASSWORD=STRONG_BOOTSTRAP_PASSWORD,
         )
         safe_settings.validate_runtime_security()
+
+    def test_production_api_startup_rejects_automatic_bootstrap(self) -> None:
+        settings = _settings(
+            environment="production",
+            secret_key=STRONG_PRODUCTION_SECRET,
+            ADMIN_BOOTSTRAP_ENABLED=True,
+            DEFAULT_ADMIN_EMAIL="secure-admin@example.test",
+            DEFAULT_ADMIN_PASSWORD=STRONG_BOOTSTRAP_PASSWORD,
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "explicit bootstrap command"):
+            settings.validate_runtime_security(api_startup=True)
 
     def test_startup_validates_before_database_initialization(self) -> None:
         unsafe_settings = _settings(
