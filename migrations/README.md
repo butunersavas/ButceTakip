@@ -1,5 +1,33 @@
 # Veritabanı migration çalışma modeli
 
+## Teklif Yönetimi release akışı (2026-11-09)
+
+Bu release için genel `python -m scripts.migrate_database --apply` **kullanılmaz**.
+Teklif Yönetimi yalnız aşağıdaki açık, modüle özel PostgreSQL dosyalarıyla hazırlanır:
+
+1. Salt-okunur şema, satır sayısı ve para birimi envanteri:
+
+   `psql "$PGURL" -X -v ON_ERROR_STOP=1 -f migrations/20261109_quote_management_preflight.sql`
+
+2. Yalnız yeni Teklif tablolarını oluşturan USD-only migration:
+
+   `psql "$PGURL" -X -v ON_ERROR_STOP=1 -f migrations/20261109_quote_management_usd_only_up.sql`
+
+3. Uygulamanın bütün şema sözleşmesi eksiksizse, tarihsel migration çalıştırmadan
+   release sürüm işaretini yaz:
+
+   `python -m scripts.migrate_database --baseline --backup-confirmed`
+
+4. Salt-okunur son kontrol:
+
+   `python -m scripts.migrate_database --check`
+
+Forward SQL aktif şemada herhangi bir Teklif tablosu görürse durur. Mevcut EUR/TRY
+kayıtlarını dönüştürmez, silmez veya constraint'i zorla değiştirmez; önce preflight
+çıktısı raporlanmalı ve mevcut şemaya özel ayrı bir karar alınmalıdır. Production
+yedeğinden geri yüklenmiş izole PostgreSQL kopyasında başarılı prova ve geri yükleme
+kanıtı olmadan bu komutlar production'da çalıştırılmaz.
+
 Production API başlangıcı şema değiştirmez. Başlangıç yalnız:
 
 - PostgreSQL kullanıldığını,
@@ -20,8 +48,8 @@ salt okunur olarak doğrular. Uyuşmazlıkta API, herhangi bir DDL/DML çalışt
 
    `python -m scripts.migrate_database --baseline --backup-confirmed`
 
-5. Şema eksikse API kapalıyken veya onaylı bakım penceresinde migration container'ını
-   tek örnek olarak çalıştır:
+5. Teklif Yönetimi dışındaki bir release'te şema eksikse API kapalıyken veya onaylı
+   bakım penceresinde migration container'ını tek örnek olarak çalıştır:
 
    `python -m scripts.migrate_database --apply --backup-confirmed`
 

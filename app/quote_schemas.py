@@ -12,7 +12,7 @@ QUOTE_STATUSES = {
     "CANCELLED",
     "ARCHIVED",
 }
-QUOTE_CURRENCIES = {"TRY", "USD", "EUR"}
+QUOTE_CURRENCIES = {"USD"}
 QUOTE_DURATIONS = {1, 6, 12, 24, 36, 60}
 
 
@@ -144,7 +144,7 @@ class QuoteRevisionCreate(BaseModel):
     def validate_currency(cls, value: str) -> str:
         normalized = value.strip().upper()
         if normalized not in QUOTE_CURRENCIES:
-            raise ValueError("Para birimi TRY, USD veya EUR olmalıdır.")
+            raise ValueError("Yeni teklifler yalnız USD para birimiyle oluşturulabilir.")
         return normalized
 
     _note = validator("note", allow_reuse=True)(_optional_text)

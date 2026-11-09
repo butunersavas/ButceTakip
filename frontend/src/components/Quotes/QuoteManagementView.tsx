@@ -63,7 +63,6 @@ import {
   formatQuoteCurrency,
   formatQuoteDate,
   type QuoteComparison,
-  type QuoteCurrency,
   type QuoteDocument,
   type QuoteListItem,
   type QuoteProcess,
@@ -296,7 +295,6 @@ function OfferDialog({
   const [vendorName, setVendorName] = useState("");
   const [quoteDate, setQuoteDate] = useState(new Date().toISOString().slice(0, 10));
   const [validUntil, setValidUntil] = useState("");
-  const [currency, setCurrency] = useState<QuoteCurrency>("USD");
   const [note, setNote] = useState("");
   const [items, setItems] = useState<OfferItemForm[]>([]);
   const [files, setFiles] = useState<File[]>([]);
@@ -307,7 +305,6 @@ function OfferDialog({
     setVendorName(offer?.vendor_name ?? "");
     setQuoteDate(new Date().toISOString().slice(0, 10));
     setValidUntil("");
-    setCurrency(current?.currency ?? "USD");
     setNote("");
     setFiles([]);
     setItems(
@@ -350,7 +347,7 @@ function OfferDialog({
     const revision = {
       quote_date: quoteDate,
       valid_until: validUntil || null,
-      currency,
+      currency: "USD",
       note: note.trim() || null,
       items: items.map((item) => ({
         process_item_id: item.process_item_id ? Number(item.process_item_id) : null,
@@ -375,8 +372,8 @@ function OfferDialog({
           <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(4, 1fr)" }, gap: 1.5 }}>
             <TextField label="Teklif Tarihi" type="date" required value={quoteDate} onChange={(event) => setQuoteDate(event.target.value)} InputLabelProps={{ shrink: true }} />
             <TextField label="Geçerlilik Tarihi" type="date" value={validUntil} onChange={(event) => setValidUntil(event.target.value)} InputLabelProps={{ shrink: true }} />
-            <TextField select label="Para Birimi" value={currency} onChange={(event) => setCurrency(event.target.value as QuoteCurrency)}>{QUOTE_CURRENCIES.map((item) => <MenuItem key={item} value={item}>{item}</MenuItem>)}</TextField>
-            <TextField label="Firma Toplamı" value={formatQuoteCurrency(total, currency)} InputProps={{ readOnly: true }} />
+            <TextField label="Para Birimi" value="USD" InputProps={{ readOnly: true }} helperText="Yeni teklifler yalnız USD olarak kaydedilir." />
+            <TextField label="Firma Toplamı" value={formatQuoteCurrency(total, "USD")} InputProps={{ readOnly: true }} />
           </Box>
           <TextField label="Revizyon açıklaması" fullWidth value={note} onChange={(event) => setNote(event.target.value)} />
           <Box>
@@ -401,7 +398,7 @@ function OfferDialog({
                   <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25} mt={1.25} alignItems="center">
                     <TextField label="Ürün / Hizmet Adı" required fullWidth value={item.product_name} onChange={(event) => updateItem(index, { product_name: event.target.value })} />
                     <TextField label="Açıklama" fullWidth value={item.description} onChange={(event) => updateItem(index, { description: event.target.value })} />
-                    <Typography fontWeight={700} noWrap>{formatQuoteCurrency(calculateQuoteLineTotal(item.quantity, item.unit_price), currency)}</Typography>
+                    <Typography fontWeight={700} noWrap>{formatQuoteCurrency(calculateQuoteLineTotal(item.quantity, item.unit_price), "USD")}</Typography>
                     {items.length > 1 && <IconButton color="error" onClick={() => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index))}><DeleteOutlineOutlinedIcon /></IconButton>}
                   </Stack>
                 </Paper>

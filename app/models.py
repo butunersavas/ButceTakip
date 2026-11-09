@@ -501,6 +501,7 @@ class QuoteOfferRevision(TimestampMixin, SQLModel, table=True):
     __table_args__ = (
         UniqueConstraint("vendor_offer_id", "revision_no", name="uq_quote_offer_revision_no"),
         CheckConstraint("total_amount >= 0", name="ck_quote_revision_total_nonnegative"),
+        CheckConstraint("currency = 'USD'", name="ck_quote_revision_currency_usd"),
     )
 
     id: Optional[int] = Field(default=None, primary_key=True)

@@ -15,10 +15,9 @@ test("teklif tutarı arayüzde adet x birim fiyat olarak hesaplanır", () => {
   assert.equal(utility.calculateQuoteLineTotal("0.1", "0.2"), 0.02);
 });
 
-test("USD, EUR ve TRY tutarları Türkçe sayı biçiminde gösterilir", () => {
+test("Teklif oluşturma para birimi yalnız USD'dir", () => {
+  assert.deepEqual(utility.QUOTE_CURRENCIES, ["USD"]);
   assert.match(utility.formatQuoteCurrency(12500, "USD"), /12\.500,00/);
-  assert.match(utility.formatQuoteCurrency(11800, "EUR"), /11\.800,00/);
-  assert.match(utility.formatQuoteCurrency(13200, "TRY"), /13\.200,00/);
 });
 
 test("Teklif Yönetimi KDV alanı oluşturmaz ve güvenli belge akışını sunar", async () => {
@@ -32,6 +31,9 @@ test("Teklif Yönetimi KDV alanı oluşturmaz ve güvenli belge akışını suna
   assert.ok(component.includes("Teklif Belgeleri"));
   assert.ok(component.includes("<Autocomplete"));
   assert.ok(component.includes("Bütçe ürünü ara"));
+  assert.ok(component.includes('currency: "USD"'));
+  assert.ok(component.includes('value="USD"'));
+  assert.ok(!component.includes("setCurrency("));
   assert.ok(!component.includes("KDV Oranı"));
   assert.ok(!component.includes("kdv_orani"));
 });

@@ -15,7 +15,7 @@ is_sqlite = settings.database_url.startswith("sqlite")
 connect_args = {"check_same_thread": False} if is_sqlite else {}
 logger = logging.getLogger(__name__)
 SCHEMA_VERSION_TABLE = "app_schema_version"
-CURRENT_SCHEMA_VERSION = "20261105_01"
+CURRENT_SCHEMA_VERSION = "20261109_quote_usd_01"
 POSTGRES_MIGRATION_LOCK_ID = 2026110501
 REQUIRED_SCHEMA_INDEXES = {
     "scenarios": {"uq_scenarios_primary_year"},

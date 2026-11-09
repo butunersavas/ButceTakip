@@ -13,11 +13,11 @@ export const QUOTE_STATUSES = {
   ARCHIVED: "Arşivlendi",
 } as const;
 
-export const QUOTE_CURRENCIES = ["USD", "EUR", "TRY"] as const;
+export const QUOTE_CURRENCIES = ["USD"] as const;
 export const QUOTE_DURATIONS = [1, 6, 12, 24, 36, 60] as const;
 
 export type QuoteStatus = keyof typeof QUOTE_STATUSES;
-export type QuoteCurrency = (typeof QUOTE_CURRENCIES)[number];
+export type QuoteCurrency = string;
 
 export interface QuoteSummary {
   total_processes: number;

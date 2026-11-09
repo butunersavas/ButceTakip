@@ -8,12 +8,13 @@ import unittest
 
 from fastapi import HTTPException
 from openpyxl import Workbook
+from pydantic import ValidationError
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine, select
 from starlette.datastructures import UploadFile
 
 from app.config import get_settings
-from app.dependencies import get_write_user
+from app.dependencies import get_current_user, get_write_user
 from app.models import BudgetItem, Expense, QuoteDocument, QuoteOfferRevision, QuoteProcess, User
 from app.quote_schemas import (
     QuoteOfferItemInput,
@@ -35,6 +36,7 @@ from app.routers.quotes import (
     update_quote_status,
     upload_quote_documents,
 )
+from app.routers.quotes import router as quote_router
 from app.services.quote_storage import read_and_validate_upload, validate_document_content
 
 
@@ -237,7 +239,21 @@ class QuoteManagementTests(unittest.TestCase):
         )
         self.assertEqual(0, len(self.session.exec(select(Expense)).all()))
 
-    def test_comparison_only_marks_equivalent_same_currency_offers(self) -> None:
+    def test_new_revisions_accept_only_usd(self) -> None:
+        process = self._create_process()
+        for currency in ("EUR", "TRY"):
+            with self.subTest(currency=currency):
+                with self.assertRaises(ValidationError) as invalid_currency:
+                    self._revision(process, price="10000", currency=currency)
+                self.assertIn(
+                    "Yeni teklifler yalnız USD para birimiyle oluşturulabilir.",
+                    str(invalid_currency.exception),
+                )
+
+        revision = self._revision(process, price="10000", currency="usd")
+        self.assertEqual("USD", revision.currency)
+
+    def test_comparison_only_marks_equivalent_usd_offers(self) -> None:
         process = self._create_process()
         first = create_vendor_offer(
             process.id,
@@ -261,20 +277,6 @@ class QuoteManagementTests(unittest.TestCase):
         lowest = [row for row in comparison.offers if row.is_lowest]
         self.assertEqual([second.id], [row.offer_id for row in lowest])
 
-        create_vendor_offer(
-            process.id,
-            QuoteVendorOfferCreate(
-                vendor_name="EUR Satıcı",
-                revision=self._revision(process, price="9000", currency="EUR"),
-            ),
-            self.session,
-            self.user,
-        )
-        comparison = compare_quote_offers(process.id, self.session, self.user)
-        eur_offer = next(row for row in comparison.offers if row.currency == "EUR")
-        self.assertFalse(eur_offer.is_lowest)
-        self.assertTrue(any("Farklı para birimleri" in warning for warning in comparison.warnings))
-
         create_offer_revision(
             process.id,
             first.id,
@@ -283,8 +285,7 @@ class QuoteManagementTests(unittest.TestCase):
             self.user,
         )
         comparison = compare_quote_offers(process.id, self.session, self.user)
-        usd_rows = [row for row in comparison.offers if row.currency == "USD"]
-        self.assertFalse(any(row.is_lowest for row in usd_rows))
+        self.assertFalse(any(row.is_lowest for row in comparison.offers))
 
     def test_documents_are_validated_persisted_and_soft_deactivated(self) -> None:
         process = self._create_process()
@@ -352,6 +353,18 @@ class QuoteManagementTests(unittest.TestCase):
         with self.assertRaises(HTTPException) as viewer_error:
             get_write_user(self.viewer)
         self.assertEqual(403, viewer_error.exception.status_code)
+
+    def test_quote_api_routes_keep_existing_read_and_write_role_guards(self) -> None:
+        mutation_methods = {"POST", "PUT", "PATCH", "DELETE"}
+        for route in quote_router.routes:
+            dependency_calls = {
+                dependency.call for dependency in route.dependant.dependencies
+            }
+            with self.subTest(path=route.path, methods=tuple(sorted(route.methods))):
+                if route.methods & mutation_methods:
+                    self.assertIn(get_write_user, dependency_calls)
+                if "GET" in route.methods:
+                    self.assertIn(get_current_user, dependency_calls)
 
     def test_archive_keeps_revisions_and_documents(self) -> None:
         process = self._create_process()
