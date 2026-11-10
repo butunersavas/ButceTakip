@@ -97,6 +97,7 @@ type ProcessItemForm = {
   description: string;
   requested_quantity: string;
   requested_duration_months: string;
+  initial_unit_price: string;
 };
 
 type OfferItemForm = {
@@ -120,6 +121,7 @@ const emptyProcessItem = (): ProcessItemForm => ({
   description: "",
   requested_quantity: "1",
   requested_duration_months: "",
+  initial_unit_price: "",
 });
 
 const emptyFilters = {
@@ -181,6 +183,11 @@ function ProcessDialog({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [processType, setProcessType] = useState<QuoteProcessType>("SINGLE");
+  const [initialOfferEnabled, setInitialOfferEnabled] = useState(false);
+  const [initialVendorName, setInitialVendorName] = useState("");
+  const [initialQuoteDate, setInitialQuoteDate] = useState(new Date().toISOString().slice(0, 10));
+  const [initialValidUntil, setInitialValidUntil] = useState("");
+  const [initialNote, setInitialNote] = useState("");
   const [items, setItems] = useState<ProcessItemForm[]>([emptyProcessItem()]);
 
   useEffect(() => {
@@ -188,6 +195,11 @@ function ProcessDialog({
     setName(editing?.name ?? "");
     setDescription(editing?.description ?? "");
     setProcessType(editing?.process_type ?? "SINGLE");
+    setInitialOfferEnabled(false);
+    setInitialVendorName("");
+    setInitialQuoteDate(new Date().toISOString().slice(0, 10));
+    setInitialValidUntil("");
+    setInitialNote("");
     setItems(
       editing?.items.length
         ? editing.items.map((item) => ({
@@ -200,6 +212,7 @@ function ProcessDialog({
             description: item.description ?? "",
             requested_quantity: String(item.requested_quantity),
             requested_duration_months: item.requested_duration_months ? String(item.requested_duration_months) : "",
+            initial_unit_price: "",
           }))
         : [emptyProcessItem()],
     );
@@ -231,8 +244,26 @@ function ProcessDialog({
         requested_quantity: item.requested_quantity,
         requested_duration_months: item.requested_duration_months ? Number(item.requested_duration_months) : null,
       }));
+    if (!editing && initialOfferEnabled) {
+      payload.initial_offer = {
+        vendor_name: initialVendorName.trim(),
+        quote_date: initialQuoteDate,
+        valid_until: initialValidUntil || null,
+        note: initialNote.trim() || null,
+        items: items.map((item, item_index) => ({
+          item_index,
+          quantity: item.requested_quantity,
+          unit_price: item.initial_unit_price,
+        })),
+      };
+    }
     await onSave(payload);
   };
+
+  const initialOfferTotal = items.reduce(
+    (sum, item) => sum + calculateQuoteLineTotal(item.requested_quantity, item.initial_unit_price),
+    0,
+  );
 
   return (
     <Dialog open={open} onClose={saving ? undefined : onClose} maxWidth="md" fullWidth>
@@ -244,6 +275,18 @@ function ProcessDialog({
           <TextField select label="Süreç Türü" required value={processType} onChange={(event) => { const next = event.target.value as QuoteProcessType; setProcessType(next); if (next === "SINGLE") setItems((current) => [current[0] ?? emptyProcessItem()]); }}>
             {Object.entries(QUOTE_PROCESS_TYPES).map(([value, label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}
           </TextField>
+          {!editing && <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
+            <FormControlLabel control={<Checkbox checked={initialOfferEnabled} onChange={(event) => setInitialOfferEnabled(event.target.checked)} />} label="İlk firma teklifini ve fiyatlarını birlikte ekle" />
+            {initialOfferEnabled && <Stack spacing={2} mt={1.5}>
+              <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(3, minmax(0, 1fr))" }, gap: 1.5 }}>
+                <TextField size="small" label="Satıcı Firma" required fullWidth value={initialVendorName} onChange={(event) => setInitialVendorName(event.target.value)} />
+                <TextField size="small" label="Teklif Tarihi" required fullWidth type="date" InputLabelProps={{ shrink: true }} value={initialQuoteDate} onChange={(event) => setInitialQuoteDate(event.target.value)} />
+                <TextField size="small" label="Geçerlilik Tarihi" fullWidth type="date" InputLabelProps={{ shrink: true }} value={initialValidUntil} onChange={(event) => setInitialValidUntil(event.target.value)} />
+              </Box>
+              <TextField size="small" label="Firma Teklif Notu (İsteğe Bağlı)" fullWidth value={initialNote} onChange={(event) => setInitialNote(event.target.value)} />
+              <Typography variant="body2" color="text.secondary">Aşağıda her kalemin USD birim fiyatını gir. Paket ve ilk firma teklifi birlikte kaydedilir.</Typography>
+            </Stack>}
+          </Paper>}
           <Box>
             <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.5}>
               <Typography variant="subtitle1" fontWeight={700}>Ürün / Hizmet Kalemleri</Typography>
@@ -282,9 +325,16 @@ function ProcessDialog({
                     </Stack>
                     <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
                       <TextField label="İstenen Adet" type="number" inputProps={{ min: 0.0001, step: 1 }} value={item.requested_quantity} onChange={(event) => updateItem(index, { requested_quantity: event.target.value })} />
-                      <TextField select label="İstenen Süre" value={item.requested_duration_months} onChange={(event) => updateItem(index, { requested_duration_months: event.target.value })}><MenuItem value="">Uygulanmaz</MenuItem>{QUOTE_DURATIONS.map((duration) => <MenuItem key={duration} value={duration}>{duration} Ay</MenuItem>)}</TextField>
+                      <TextField select label="İstenen Süre" value={item.requested_duration_months} onChange={(event) => updateItem(index, { requested_duration_months: event.target.value })}><MenuItem value="">Süre Yok</MenuItem>{QUOTE_DURATIONS.map((duration) => <MenuItem key={duration} value={duration}>{duration} Ay</MenuItem>)}</TextField>
                     </Stack>
                     <TextField label="Kalem açıklaması" fullWidth value={item.description} onChange={(event) => updateItem(index, { description: event.target.value })} />
+                    {!editing && initialOfferEnabled && <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems={{ sm: "center" }}>
+                      <TextField size="small" label="İlk Firma Birim Fiyatı (USD)" required type="number" inputProps={{ min: 0, step: 0.01 }} value={item.initial_unit_price} onChange={(event) => updateItem(index, { initial_unit_price: event.target.value })} sx={{ flex: 1, minWidth: 0 }} />
+                      <Box sx={{ bgcolor: "action.hover", borderRadius: 2, py: 1, px: 2, minWidth: 190 }}>
+                        <Typography variant="caption" color="text.secondary">SATIR TOPLAMI</Typography>
+                        <Typography fontWeight={800}>{formatQuoteCurrency(calculateQuoteLineTotal(item.requested_quantity, item.initial_unit_price), "USD")}</Typography>
+                      </Box>
+                    </Stack>}
                     {processType === "PACKAGE" && <Stack direction="row" spacing={0.5}>
                       <Tooltip title="Yukarı taşı"><span><IconButton size="small" disabled={index === 0} onClick={() => setItems((current) => { const copy = [...current]; [copy[index - 1], copy[index]] = [copy[index], copy[index - 1]]; return copy; })}><KeyboardArrowUpOutlinedIcon /></IconButton></span></Tooltip>
                       <Tooltip title="Aşağı taşı"><span><IconButton size="small" disabled={index === items.length - 1} onClick={() => setItems((current) => { const copy = [...current]; [copy[index], copy[index + 1]] = [copy[index + 1], copy[index]]; return copy; })}><KeyboardArrowDownOutlinedIcon /></IconButton></span></Tooltip>
@@ -295,11 +345,17 @@ function ProcessDialog({
               ))}
             </Stack>
           </Box>
+          {!editing && initialOfferEnabled && <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, bgcolor: "action.hover" }}>
+            <Stack direction="row" alignItems="center" justifyContent="space-between">
+              <Typography fontWeight={800}>İlk Firma Teklifi Toplamı (USD)</Typography>
+              <Typography variant="h6" fontWeight={900}>{formatQuoteCurrency(initialOfferTotal, "USD")}</Typography>
+            </Stack>
+          </Paper>}
         </Stack>
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose} disabled={saving}>İptal</Button>
-        <Button variant="contained" onClick={submit} disabled={saving || !name.trim() || items.some((item) => !item.name.trim() || Number(item.requested_quantity) <= 0)}>{saving ? <CircularProgress size={22} /> : "Kaydet"}</Button>
+        <Button variant="contained" onClick={submit} disabled={saving || !name.trim() || items.some((item) => !item.name.trim() || Number(item.requested_quantity) <= 0) || (!editing && initialOfferEnabled && (!initialVendorName.trim() || !initialQuoteDate || Boolean(initialValidUntil && initialValidUntil < initialQuoteDate) || items.some((item) => item.initial_unit_price.trim() === "" || !Number.isFinite(Number(item.initial_unit_price)) || Number(item.initial_unit_price) < 0)))}>{saving ? <CircularProgress size={22} /> : "Kaydet"}</Button>
       </DialogActions>
     </Dialog>
   );
@@ -413,7 +469,7 @@ function OfferDialog({
             <TextField label="Para Birimi" value="USD" InputProps={{ readOnly: true }} helperText="Yeni teklifler yalnız USD olarak kaydedilir." />
             <TextField label="Firma Toplamı" value={formatQuoteCurrency(total, "USD")} InputProps={{ readOnly: true }} />
           </Box>
-          <TextField label="Revizyon açıklaması" fullWidth value={note} onChange={(event) => setNote(event.target.value)} />
+          <TextField label="Revizyon Notu (İsteğe Bağlı)" size="small" fullWidth value={note} onChange={(event) => setNote(event.target.value)} />
           {!isEditing && process.process_type === "PACKAGE" && <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
             <TextField select label="Revizyon Kapsamı" value={revisionScope} onChange={(event) => setRevisionScope(event.target.value as "ALL" | "SELECTED")} sx={{ minWidth: 280 }}>
               <MenuItem value="ALL">Tüm paket</MenuItem>
@@ -431,18 +487,20 @@ function OfferDialog({
                 const index = items.indexOf(item);
                 return (
                 <Paper key={`${item.process_item_id || "manual"}-${index}`} variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
-                  <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "2fr 1fr 1fr 0.8fr 0.9fr 1fr" }, gap: 1.25 }}>
-                    <TextField label="Süreç Kalemi" value={process.items.find((row) => String(row.id) === item.process_item_id)?.name ?? item.product_name} InputProps={{ readOnly: true }} />
+                  <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(3, minmax(0, 1fr))" }, gap: 1.25 }}>
+                    <TextField size="small" label="Ürün / Hizmet Adı" required fullWidth sx={{ gridColumn: { md: "span 2" }, minWidth: 0 }} value={item.product_name} onChange={(event) => updateItem(index, { product_name: event.target.value })} />
                     <TextField label="Ürün Kodu" value={item.product_code} onChange={(event) => updateItem(index, { product_code: event.target.value })} />
                     <TextField select label="Kategori" value={item.category} onChange={(event) => updateItem(index, { category: event.target.value })}>{QUOTE_CATEGORIES.map((category) => <MenuItem key={category} value={category}>{category}</MenuItem>)}</TextField>
-                    <TextField select label="Süre" value={item.duration_months} onChange={(event) => updateItem(index, { duration_months: event.target.value })}><MenuItem value="">Uygulanmaz</MenuItem>{QUOTE_DURATIONS.map((duration) => <MenuItem key={duration} value={duration}>{duration} Ay</MenuItem>)}</TextField>
+                    <TextField select label="Süre" value={item.duration_months} onChange={(event) => updateItem(index, { duration_months: event.target.value })}><MenuItem value="">Süre Yok</MenuItem>{QUOTE_DURATIONS.map((duration) => <MenuItem key={duration} value={duration}>{duration} Ay</MenuItem>)}</TextField>
                     <TextField label="Adet" type="number" inputProps={{ min: 0.0001, step: 1 }} value={item.quantity} onChange={(event) => updateItem(index, { quantity: event.target.value })} />
-                    <TextField label="Birim Fiyat" type="number" inputProps={{ min: 0, step: 0.01 }} value={item.unit_price} onChange={(event) => updateItem(index, { unit_price: event.target.value })} />
+                    <TextField size="small" fullWidth label="Birim Fiyat (USD)" type="number" sx={{ gridColumn: { xs: "1 / -1", md: "span 3" }, minWidth: 0 }} inputProps={{ min: 0, step: 0.01 }} value={item.unit_price} onChange={(event) => updateItem(index, { unit_price: event.target.value })} />
                   </Box>
-                  <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25} mt={1.25} alignItems="center">
-                    <TextField label="Ürün / Hizmet Adı" required fullWidth value={item.product_name} onChange={(event) => updateItem(index, { product_name: event.target.value })} />
-                    <TextField label="Açıklama" fullWidth value={item.description} onChange={(event) => updateItem(index, { description: event.target.value })} />
-                    <Typography fontWeight={700} noWrap>{formatQuoteCurrency(calculateQuoteLineTotal(item.quantity, item.unit_price), "USD")}</Typography>
+                  <Stack direction={{ xs: "column", md: "row" }} spacing={1.25} mt={1.25} alignItems={{ md: "center" }} justifyContent="space-between">
+                    <TextField size="small" label="Kısa Açıklama (İsteğe Bağlı)" fullWidth sx={{ maxWidth: { md: 440 }, minWidth: 0 }} value={item.description} onChange={(event) => updateItem(index, { description: event.target.value })} />
+                    <Box sx={{ bgcolor: "action.hover", borderRadius: 2, px: 2, py: 1, minWidth: 230, textAlign: { xs: "left", md: "right" }, flexShrink: 0 }}>
+                      <Typography variant="caption" color="text.secondary">SATIR TOPLAMI (USD)</Typography>
+                      <Typography fontWeight={900} variant="h6" sx={{ whiteSpace: "nowrap" }}>{formatQuoteCurrency(calculateQuoteLineTotal(item.quantity, item.unit_price), "USD")}</Typography>
+                    </Box>
                   </Stack>
                 </Paper>
               )})}
@@ -526,7 +584,8 @@ function DetailDialog({
   onUploadDocuments: (offer: QuoteVendorOffer, revision: QuoteRevision, files: File[]) => void;
 }) {
   const [tab, setTab] = useState(0);
-  useEffect(() => { if (open) setTab(0); }, [open, process?.id]);
+  const [historyShownForOffers, setHistoryShownForOffers] = useState<number[]>([]);
+  useEffect(() => { if (open) { setTab(0); setHistoryShownForOffers([]); } }, [open, process?.id]);
   const allDocuments = process?.offers.flatMap((offer) => offer.revisions.flatMap((revision) => revision.documents.map((document) => ({ document, offer, revision })))) ?? [];
 
   return (
@@ -557,7 +616,31 @@ function DetailDialog({
                     {!readOnly ? <TextField select size="small" label="Durum" value={process.status} disabled={actionBusy} onChange={(event) => onStatus(event.target.value as QuoteStatus)}>{Object.entries(QUOTE_STATUSES).map(([value, label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}</TextField> : <Box><Typography variant="caption" color="text.secondary">Durum</Typography><Box mt={0.5}><StatusChip status={process.status} /></Box></Box>}
                   </Box>
                   {process.description && <Typography mt={2}>{process.description}</Typography>}
-                  <Stack direction="row" spacing={1} flexWrap="wrap" mt={2}>{process.items.map((item) => <Chip key={item.id} label={`${item.name} · ${item.requested_quantity} adet${item.requested_duration_months ? ` · ${item.requested_duration_months} ay` : ""}`} variant="outlined" />)}</Stack>
+                  <Box sx={{ mt: 2 }}>
+                    <Typography variant="subtitle2" fontWeight={800} mb={1}>
+                      {process.process_type === "PACKAGE" ? "Paket İçeriği" : "Ürün / Hizmet"} · {process.items.length} kalem
+                    </Typography>
+                    <TableContainer component={Paper} sx={{ borderRadius: 2, border: 1, borderColor: "divider", overflowX: "auto" }}>
+                      <Table size="small" aria-label="Paket ürünleri" sx={{ minWidth: 620 }}>
+                        <TableHead><TableRow sx={{ bgcolor: "action.hover" }}>
+                          <TableCell sx={{ fontWeight: 700 }}>Ürün / Hizmet</TableCell>
+                          <TableCell sx={{ fontWeight: 700 }}>Ürün Kodu</TableCell>
+                          <TableCell sx={{ fontWeight: 700 }}>Kategori</TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 700 }}>Adet</TableCell>
+                          <TableCell sx={{ fontWeight: 700 }}>Süre</TableCell>
+                        </TableRow></TableHead>
+                        <TableBody>{process.items.map((item) => (
+                          <TableRow key={item.id}>
+                            <TableCell sx={{ fontWeight: 600, overflowWrap: "anywhere" }}>{item.name}</TableCell>
+                            <TableCell>{item.product_code || "—"}</TableCell>
+                            <TableCell>{item.category}</TableCell>
+                            <TableCell align="right">{item.requested_quantity}</TableCell>
+                            <TableCell>{item.requested_duration_months ? `${item.requested_duration_months} Ay` : "Süre Yok"}</TableCell>
+                          </TableRow>
+                        ))}</TableBody>
+                      </Table>
+                    </TableContainer>
+                  </Box>
                 </Paper>
                 <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ sm: "center" }}>
                   <Typography variant="h6" fontWeight={800}>Firma Teklifleri</Typography>
@@ -576,8 +659,13 @@ function DetailDialog({
                     </AccordionSummary>
                     <AccordionDetails>
                       <Stack spacing={2}>
-                        {!readOnly && process.status !== "ARCHIVED" && <Button variant="outlined" startIcon={<AddOutlinedIcon />} onClick={() => onAddRevision(offer)} sx={{ alignSelf: "flex-start" }}>Yeni Revizyon</Button>}
-                        {offer.revisions.map((revision) => (
+                        <Stack direction={{ xs: "column", sm: "row" }} spacing={1} justifyContent="space-between" alignItems={{ sm: "center" }}>
+                          {!readOnly && process.status !== "ARCHIVED" && <Button variant="outlined" startIcon={<AddOutlinedIcon />} onClick={() => onAddRevision(offer)}>Yeni Revizyon</Button>}
+                          {offer.revisions.length > 1 && <Button size="small" variant="text" startIcon={<HistoryOutlinedIcon />} onClick={() => setHistoryShownForOffers((current) => current.includes(offer.id) ? current.filter((id) => id !== offer.id) : [...current, offer.id])}>
+                            {historyShownForOffers.includes(offer.id) ? "Geçmiş Revizyonları Gizle" : `Geçmiş Revizyonları Göster (${offer.revisions.length - 1})`}
+                          </Button>}
+                        </Stack>
+                        {offer.revisions.filter((revision) => revision.id === offer.current_revision?.id || historyShownForOffers.includes(offer.id)).map((revision) => (
                           <Paper key={revision.id} variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
                             <Stack direction={{ xs: "column", sm: "row" }} spacing={1} justifyContent="space-between" mb={1.5}>
                               <Box><Typography fontWeight={800}>Revizyon {revision.revision_no}</Typography><Typography variant="body2" color="text.secondary">{formatQuoteDate(revision.quote_date)} · Geçerlilik: {formatQuoteDate(revision.valid_until)}</Typography></Box>

@@ -41,6 +41,7 @@ from app.quote_schemas import (
     QuoteItemComparisonRow,
     QuoteListItem,
     QuoteOfferItemRead,
+    QuoteOfferItemInput,
     QuotePreferredOfferUpdate,
     QuoteProcessCreate,
     QuoteProcessItemRead,
@@ -984,12 +985,62 @@ def create_quote_process(
         )
         session.add(process)
         session.flush()
-        _sync_process_items(
+        created_items = _sync_process_items(
             session,
             process,
             payload.items,
             current_user_id=current_user.id,
         )
+        if payload.initial_offer is not None:
+            initial = payload.initial_offer
+            indices = [line.item_index for line in initial.items]
+            if sorted(indices) != list(range(len(created_items))):
+                raise HTTPException(
+                    status_code=400,
+                    detail="İlk firma teklifinde her ürün için yalnız bir fiyat girilmelidir.",
+                )
+            offer = QuoteVendorOffer(
+                process_id=process.id,
+                vendor_name=initial.vendor_name,
+                created_by_id=current_user.id,
+            )
+            session.add(offer)
+            session.flush()
+            revision_payload = QuoteRevisionCreate(
+                quote_date=initial.quote_date,
+                valid_until=initial.valid_until,
+                currency="USD",
+                note=initial.note,
+                items=[
+                    QuoteOfferItemInput(
+                        process_item_id=created_items[line.item_index].id,
+                        product_name=created_items[line.item_index].name,
+                        product_code=created_items[line.item_index].product_code,
+                        category=created_items[line.item_index].category,
+                        duration_months=created_items[line.item_index].requested_duration_months,
+                        quantity=line.quantity,
+                        unit_price=line.unit_price,
+                        description=created_items[line.item_index].description,
+                    )
+                    for line in initial.items
+                ],
+            )
+            revision = _create_revision_rows(
+                session,
+                process_id=process.id,
+                offer=offer,
+                revision_in=revision_payload,
+                current_user=current_user,
+            )
+            _audit(
+                session,
+                process_id=process.id,
+                vendor_offer_id=offer.id,
+                revision_id=revision.id,
+                action="OFFER_CREATED",
+                user_id=current_user.id,
+                details={"vendor": offer.vendor_name, "revision_no": revision.revision_no},
+            )
         _audit(
             session,
             process_id=process.id,
@@ -998,6 +1049,9 @@ def create_quote_process(
             details={"quote_no": quote_no, "name": process.name},
         )
         session.commit()
+    except HTTPException:
+        session.rollback()
+        raise
     except IntegrityError as exc:
         session.rollback()
         raise HTTPException(status_code=409, detail="Teklif numarası oluşturulurken çakışma oluştu.") from exc

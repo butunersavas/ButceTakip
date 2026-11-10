@@ -30,6 +30,8 @@ from app.quote_schemas import (
     QuoteDeleteRequest,
     QuotePreferredOfferUpdate,
     QuoteProcessCreate,
+    QuoteInitialOfferCreate,
+    QuoteInitialOfferItemInput,
     QuoteProcessItemInput,
     QuoteProcessUpdate,
     QuoteRevisionCreate,
@@ -149,6 +151,65 @@ class QuoteManagementTests(unittest.TestCase):
                 ),
             ],
         )
+
+    def test_process_and_initial_vendor_offer_are_saved_together(self) -> None:
+        process = create_quote_process(
+            QuoteProcessCreate(
+                name="FortiGate Paketi",
+                process_type="PACKAGE",
+                items=[
+                    QuoteProcessItemInput(name="Firewall", category="Donanım", requested_quantity=Decimal("2")),
+                    QuoteProcessItemInput(name="Destek", category="Hizmet", requested_quantity=Decimal("1")),
+                ],
+                initial_offer=QuoteInitialOfferCreate(
+                    vendor_name="TürkTelekom",
+                    quote_date=date(2026, 11, 10),
+                    items=[
+                        QuoteInitialOfferItemInput(item_index=0, quantity=Decimal("2"), unit_price=Decimal("1500.50")),
+                        QuoteInitialOfferItemInput(item_index=1, quantity=Decimal("1"), unit_price=Decimal("200")),
+                    ],
+                ),
+            ),
+            self.session,
+            self.user,
+        )
+        self.assertEqual(1, len(process.offers))
+        self.assertEqual("TürkTelekom", process.offers[0].vendor_name)
+        self.assertEqual(1, len(process.offers[0].revisions))
+        revision = process.offers[0].current_revision
+        self.assertEqual("USD", revision.currency)
+        self.assertEqual(Decimal("3201.00"), revision.total_amount)
+        self.assertEqual({item.id for item in process.items}, {item.process_item_id for item in revision.items})
+        self.assertEqual(1, len(self.session.exec(select(QuoteProcess)).all()))
+
+    def test_invalid_initial_vendor_lines_do_not_create_partial_process(self) -> None:
+        with self.assertRaises(HTTPException) as error:
+            create_quote_process(
+                QuoteProcessCreate(
+                    name="Eksik Fiyatlı Paket",
+                    process_type="PACKAGE",
+                    items=[
+                        QuoteProcessItemInput(name="Cihaz", category="Donanım"),
+                        QuoteProcessItemInput(name="Lisans", category="Lisans Uzatma"),
+                    ],
+                    initial_offer=QuoteInitialOfferCreate(
+                        vendor_name="Firma",
+                        quote_date=date(2026, 11, 10),
+                        items=[
+                            QuoteInitialOfferItemInput(item_index=0, quantity=Decimal("1"), unit_price=Decimal("10"))
+                        ],
+                    ),
+                ),
+                self.session,
+                self.user,
+            )
+        self.assertEqual(400, error.exception.status_code)
+        self.assertEqual(0, len(self.session.exec(select(QuoteProcess)).all()))
+        self.assertEqual(0, len(self.session.exec(select(QuoteOfferRevision)).all()))
+
+    def test_initial_offer_rejects_negative_prices(self) -> None:
+        with self.assertRaises(ValidationError):
+            QuoteInitialOfferItemInput(item_index=0, quantity=Decimal("1"), unit_price=Decimal("-1"))
 
     def test_year_sequence_is_unique_and_budget_data_is_untouched(self) -> None:
         budget_item = BudgetItem(code="HW-001", name="Mevcut Donanım", map_category="Donanım")

@@ -69,3 +69,20 @@ test("menü ve route Teklif Yönetimi ekranına bağlıdır", async () => {
   assert.ok(layout.includes('label: "Teklif Yönetimi"'));
   assert.ok(layout.includes('path: "/quote-management"'));
 });
+
+test("teklif giriş ve revizyon ekranları fiyat odaklı ve sade görünür", async () => {
+  const component = await readFile(
+    new URL("./src/components/Quotes/QuoteManagementView.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.ok(component.includes("İlk firma teklifini ve fiyatlarını birlikte ekle"));
+  assert.ok(component.includes("payload.initial_offer"));
+  assert.ok(component.includes("İlk Firma Birim Fiyatı (USD)"));
+  assert.ok(component.includes("Birim Fiyat (USD)"));
+  assert.ok(component.includes("SATIR TOPLAMI (USD)"));
+  assert.ok(component.includes("Kısa Açıklama (İsteğe Bağlı)"));
+  assert.ok(component.includes("Geçmiş Revizyonları Göster"));
+  assert.ok(component.includes("historyShownForOffers"));
+  assert.ok(component.includes("aria-label=\"Paket ürünleri\""));
+  assert.ok(component.includes("Süre Yok"));
+});
