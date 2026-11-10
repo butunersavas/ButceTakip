@@ -179,6 +179,7 @@ class QuoteManagementTests(unittest.TestCase):
         revision = process.offers[0].current_revision
         self.assertEqual("USD", revision.currency)
         self.assertEqual(Decimal("3201.00"), revision.total_amount)
+        self.assertEqual([], revision.changed_process_item_ids)
         self.assertEqual({item.id for item in process.items}, {item.process_item_id for item in revision.items})
         self.assertEqual(1, len(self.session.exec(select(QuoteProcess)).all()))
 
@@ -303,6 +304,7 @@ class QuoteManagementTests(unittest.TestCase):
             self.user,
         )
         self.assertEqual(Decimal("12000.01"), offer.current_revision.total_amount)
+        self.assertEqual([], offer.current_revision.changed_process_item_ids)
 
         revision_two = create_offer_revision(
             process.id,
@@ -504,6 +506,7 @@ class QuoteManagementTests(unittest.TestCase):
             self.session,
             self.user,
         )
+        self.assertEqual([], partial_vendor.current_revision.changed_process_item_ids)
         comparison = compare_quote_offers(process.id, self.session, self.user)
         license_row = next(row for row in comparison.item_rows if row.key == f"process:{process.items[1].id}")
         self.assertFalse(any(cell.offer_id == partial_vendor.id for cell in license_row.cells))

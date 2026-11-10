@@ -499,7 +499,8 @@ def _changed_process_item_ids(
         if item.process_item_id is not None
     }
     if not previous:
-        return sorted(current_by_process)
+        # An initial quote establishes the baseline; nothing has changed yet.
+        return []
     previous_items = session.exec(
         select(QuoteOfferItem).where(QuoteOfferItem.revision_id == previous.id)
     ).all()
