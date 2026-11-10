@@ -282,7 +282,7 @@ function ProcessDialog({
                     </Stack>
                     <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
                       <TextField label="İstenen Adet" type="number" inputProps={{ min: 0.0001, step: 1 }} value={item.requested_quantity} onChange={(event) => updateItem(index, { requested_quantity: event.target.value })} />
-                      <TextField select label="İstenen Süre" value={item.requested_duration_months} onChange={(event) => updateItem(index, { requested_duration_months: event.target.value })}><MenuItem value="">Uygulanmaz</MenuItem>{QUOTE_DURATIONS.map((duration) => <MenuItem key={duration} value={duration}>{duration} Ay</MenuItem>)}</TextField>
+                      <TextField select label="İstenen Süre" value={item.requested_duration_months} onChange={(event) => updateItem(index, { requested_duration_months: event.target.value })}><MenuItem value="">Süre Yok</MenuItem>{QUOTE_DURATIONS.map((duration) => <MenuItem key={duration} value={duration}>{duration} Ay</MenuItem>)}</TextField>
                     </Stack>
                     <TextField label="Kalem açıklaması" fullWidth value={item.description} onChange={(event) => updateItem(index, { description: event.target.value })} />
                     {processType === "PACKAGE" && <Stack direction="row" spacing={0.5}>
@@ -413,7 +413,7 @@ function OfferDialog({
             <TextField label="Para Birimi" value="USD" InputProps={{ readOnly: true }} helperText="Yeni teklifler yalnız USD olarak kaydedilir." />
             <TextField label="Firma Toplamı" value={formatQuoteCurrency(total, "USD")} InputProps={{ readOnly: true }} />
           </Box>
-          <TextField label="Revizyon açıklaması" fullWidth value={note} onChange={(event) => setNote(event.target.value)} />
+          <TextField label="Revizyon Notu (İsteğe Bağlı)" size="small" fullWidth value={note} onChange={(event) => setNote(event.target.value)} />
           {!isEditing && process.process_type === "PACKAGE" && <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
             <TextField select label="Revizyon Kapsamı" value={revisionScope} onChange={(event) => setRevisionScope(event.target.value as "ALL" | "SELECTED")} sx={{ minWidth: 280 }}>
               <MenuItem value="ALL">Tüm paket</MenuItem>
@@ -431,18 +431,20 @@ function OfferDialog({
                 const index = items.indexOf(item);
                 return (
                 <Paper key={`${item.process_item_id || "manual"}-${index}`} variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
-                  <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "2fr 1fr 1fr 0.8fr 0.9fr 1fr" }, gap: 1.25 }}>
-                    <TextField label="Süreç Kalemi" value={process.items.find((row) => String(row.id) === item.process_item_id)?.name ?? item.product_name} InputProps={{ readOnly: true }} />
+                  <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(3, minmax(0, 1fr))" }, gap: 1.25 }}>
+                    <TextField size="small" label="Ürün / Hizmet Adı" required fullWidth sx={{ gridColumn: { md: "span 2" }, minWidth: 0 }} value={item.product_name} onChange={(event) => updateItem(index, { product_name: event.target.value })} />
                     <TextField label="Ürün Kodu" value={item.product_code} onChange={(event) => updateItem(index, { product_code: event.target.value })} />
                     <TextField select label="Kategori" value={item.category} onChange={(event) => updateItem(index, { category: event.target.value })}>{QUOTE_CATEGORIES.map((category) => <MenuItem key={category} value={category}>{category}</MenuItem>)}</TextField>
-                    <TextField select label="Süre" value={item.duration_months} onChange={(event) => updateItem(index, { duration_months: event.target.value })}><MenuItem value="">Uygulanmaz</MenuItem>{QUOTE_DURATIONS.map((duration) => <MenuItem key={duration} value={duration}>{duration} Ay</MenuItem>)}</TextField>
+                    <TextField select label="Süre" value={item.duration_months} onChange={(event) => updateItem(index, { duration_months: event.target.value })}><MenuItem value="">Süre Yok</MenuItem>{QUOTE_DURATIONS.map((duration) => <MenuItem key={duration} value={duration}>{duration} Ay</MenuItem>)}</TextField>
                     <TextField label="Adet" type="number" inputProps={{ min: 0.0001, step: 1 }} value={item.quantity} onChange={(event) => updateItem(index, { quantity: event.target.value })} />
-                    <TextField label="Birim Fiyat" type="number" inputProps={{ min: 0, step: 0.01 }} value={item.unit_price} onChange={(event) => updateItem(index, { unit_price: event.target.value })} />
+                    <TextField size="small" fullWidth label="Birim Fiyat (USD)" type="number" sx={{ gridColumn: { xs: "1 / -1", md: "span 3" }, minWidth: 0 }} inputProps={{ min: 0, step: 0.01 }} value={item.unit_price} onChange={(event) => updateItem(index, { unit_price: event.target.value })} />
                   </Box>
-                  <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25} mt={1.25} alignItems="center">
-                    <TextField label="Ürün / Hizmet Adı" required fullWidth value={item.product_name} onChange={(event) => updateItem(index, { product_name: event.target.value })} />
-                    <TextField label="Açıklama" fullWidth value={item.description} onChange={(event) => updateItem(index, { description: event.target.value })} />
-                    <Typography fontWeight={700} noWrap>{formatQuoteCurrency(calculateQuoteLineTotal(item.quantity, item.unit_price), "USD")}</Typography>
+                  <Stack direction={{ xs: "column", md: "row" }} spacing={1.25} mt={1.25} alignItems={{ md: "center" }} justifyContent="space-between">
+                    <TextField size="small" label="Kısa Açıklama (İsteğe Bağlı)" fullWidth sx={{ maxWidth: { md: 440 }, minWidth: 0 }} value={item.description} onChange={(event) => updateItem(index, { description: event.target.value })} />
+                    <Box sx={{ bgcolor: "action.hover", borderRadius: 2, px: 2, py: 1, minWidth: 230, textAlign: { xs: "left", md: "right" }, flexShrink: 0 }}>
+                      <Typography variant="caption" color="text.secondary">SATIR TOPLAMI (USD)</Typography>
+                      <Typography fontWeight={900} variant="h6" sx={{ whiteSpace: "nowrap" }}>{formatQuoteCurrency(calculateQuoteLineTotal(item.quantity, item.unit_price), "USD")}</Typography>
+                    </Box>
                   </Stack>
                 </Paper>
               )})}
