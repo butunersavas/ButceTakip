@@ -139,6 +139,51 @@ class DatabaseStartupSafetyTests(unittest.TestCase):
             table_names = set(database_module.inspect(connection).get_table_names())
         self.assertEqual(set(), table_names)
 
+    def test_quote_process_type_backfill_runs_only_when_column_is_added(self) -> None:
+        with self.engine.begin() as connection:
+            connection.execute(text(
+                "CREATE TABLE quote_processes (id INTEGER PRIMARY KEY, name TEXT)"
+            ))
+            connection.execute(text(
+                "CREATE TABLE quote_process_items ("
+                "id INTEGER PRIMARY KEY, process_id INTEGER NOT NULL)"
+            ))
+            connection.execute(text(
+                "CREATE TABLE quote_offer_revisions (id INTEGER PRIMARY KEY)"
+            ))
+            connection.execute(text(
+                "INSERT INTO quote_processes (id, name) VALUES (1, 'Paket')"
+            ))
+            connection.execute(text(
+                "INSERT INTO quote_process_items (id, process_id) VALUES (1, 1), (2, 1)"
+            ))
+
+        with self._database_patches():
+            database_module._apply_schema_upgrades()
+            with self.engine.begin() as connection:
+                self.assertEqual(
+                    "PACKAGE",
+                    connection.execute(text(
+                        "SELECT process_type FROM quote_processes WHERE id = 1"
+                    )).scalar_one(),
+                )
+                connection.execute(text(
+                    "UPDATE quote_processes SET process_type = 'SINGLE' WHERE id = 1"
+                ))
+                connection.execute(text(
+                    "UPDATE quote_process_items SET is_active = 0 WHERE id = 2"
+                ))
+
+            database_module._apply_schema_upgrades()
+
+        with self.engine.connect() as connection:
+            self.assertEqual(
+                "SINGLE",
+                connection.execute(text(
+                    "SELECT process_type FROM quote_processes WHERE id = 1"
+                )).scalar_one(),
+            )
+
     def test_production_init_only_validates_and_never_runs_schema_writes(self) -> None:
         with self._database_patches(environment="production"), patch.object(
             database_module, "validate_database_schema"

@@ -102,4 +102,32 @@ SELECT
 FROM quote_tables
 ORDER BY table_name;
 
+SELECT table_name, column_name, data_type, is_nullable, column_default
+FROM information_schema.columns
+WHERE table_schema = current_schema()
+  AND (
+    (table_name = 'quote_processes' AND column_name IN (
+        'process_type', 'deleted_at', 'deleted_by_id', 'deleted_reason'
+    ))
+    OR (table_name = 'quote_process_items' AND column_name IN (
+        'requested_quantity', 'requested_duration_months', 'is_active',
+        'removed_at', 'removed_by_id'
+    ))
+    OR (table_name = 'quote_offer_revisions' AND column_name IN (
+        'updated_by_id', 'deleted_at', 'deleted_by_id', 'deleted_reason'
+    ))
+  )
+ORDER BY table_name, ordinal_position;
+
+SELECT tablename, indexname, indexdef
+FROM pg_indexes
+WHERE schemaname = current_schema()
+  AND indexname IN (
+    'ix_quote_processes_process_type',
+    'ix_quote_processes_deleted_at',
+    'ix_quote_process_items_is_active',
+    'ix_quote_offer_revisions_deleted_at'
+  )
+ORDER BY tablename, indexname;
+
 ROLLBACK;

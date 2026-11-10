@@ -14,6 +14,8 @@ QUOTE_STATUSES = {
 }
 QUOTE_CURRENCIES = {"USD"}
 QUOTE_DURATIONS = {1, 6, 12, 24, 36, 60}
+QUOTE_PROCESS_TYPES = {"SINGLE", "PACKAGE"}
+QUOTE_REVISION_SCOPES = {"ALL", "SELECTED"}
 
 
 def _required_text(value: str, label: str) -> str:
@@ -41,30 +43,68 @@ def _decimal(value: object, label: str) -> Decimal:
 
 
 class QuoteProcessItemInput(BaseModel):
+    id: Optional[int] = None
     budget_item_id: Optional[int] = None
     name: str = Field(min_length=1, max_length=250)
     product_code: Optional[str] = Field(default=None, max_length=120)
     category: str = Field(min_length=1, max_length=100)
     description: Optional[str] = None
+    requested_quantity: Decimal = Decimal("1")
+    requested_duration_months: Optional[int] = None
 
     _name = validator("name", allow_reuse=True)(lambda value: _required_text(value, "Ürün / hizmet adı"))
     _category = validator("category", allow_reuse=True)(lambda value: _required_text(value, "Kategori"))
     _product_code = validator("product_code", allow_reuse=True)(_optional_text)
     _description = validator("description", allow_reuse=True)(_optional_text)
 
+    @validator("requested_quantity", pre=True)
+    def validate_requested_quantity(cls, value: object) -> Decimal:
+        parsed = _decimal(value, "İstenen adet")
+        if parsed <= 0:
+            raise ValueError("İstenen adet sıfırdan büyük olmalıdır.")
+        return parsed
+
+    @validator("requested_duration_months")
+    def validate_requested_duration(cls, value: Optional[int]) -> Optional[int]:
+        if value is not None and value not in QUOTE_DURATIONS:
+            raise ValueError("İstenen süre 1, 6, 12, 24, 36, 60 ay veya uygulanmaz olmalıdır.")
+        return value
+
+
+def _validate_process_items(cls, values: dict) -> dict:
+    process_type = values.get("process_type")
+    items = values.get("items")
+    if process_type and items is not None:
+        if process_type == "SINGLE" and len(items) != 1:
+            raise ValueError("Tek Ürün sürecinde tam olarak bir ürün / hizmet olmalıdır.")
+        if process_type == "PACKAGE" and len(items) < 1:
+            raise ValueError("Paket sürecinde en az bir ürün / hizmet olmalıdır.")
+    return values
+
 
 class QuoteProcessCreate(BaseModel):
     name: str = Field(min_length=1, max_length=250)
     description: Optional[str] = None
+    process_type: str
     items: list[QuoteProcessItemInput] = Field(min_items=1)
 
     _name = validator("name", allow_reuse=True)(lambda value: _required_text(value, "Teklif süreci adı"))
     _description = validator("description", allow_reuse=True)(_optional_text)
 
+    @validator("process_type")
+    def validate_process_type(cls, value: str) -> str:
+        normalized = value.strip().upper()
+        if normalized not in QUOTE_PROCESS_TYPES:
+            raise ValueError("Teklif süreci türü Tek Ürün veya Paket olmalıdır.")
+        return normalized
+
+    _items_by_type = root_validator(allow_reuse=True)(_validate_process_items)
+
 
 class QuoteProcessUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=250)
     description: Optional[str] = None
+    process_type: Optional[str] = None
     items: Optional[list[QuoteProcessItemInput]] = None
 
     @validator("name")
@@ -78,6 +118,23 @@ class QuoteProcessUpdate(BaseModel):
         if value is not None and not value:
             raise ValueError("En az bir ürün veya hizmet kalemi olmalıdır.")
         return value
+
+    @validator("process_type")
+    def validate_process_type(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        normalized = value.strip().upper()
+        if normalized not in QUOTE_PROCESS_TYPES:
+            raise ValueError("Teklif süreci türü Tek Ürün veya Paket olmalıdır.")
+        return normalized
+
+    _items_by_type = root_validator(allow_reuse=True)(_validate_process_items)
+
+
+class QuoteDeleteRequest(BaseModel):
+    reason: Optional[str] = Field(default=None, max_length=500)
+
+    _reason = validator("reason", allow_reuse=True)(_optional_text)
 
 
 class QuoteStatusUpdate(BaseModel):
@@ -138,6 +195,8 @@ class QuoteRevisionCreate(BaseModel):
     valid_until: Optional[date] = None
     currency: str = "USD"
     note: Optional[str] = None
+    revision_scope: str = "ALL"
+    selected_process_item_ids: list[int] = Field(default_factory=list)
     items: list[QuoteOfferItemInput] = Field(min_items=1)
 
     @validator("currency")
@@ -146,6 +205,32 @@ class QuoteRevisionCreate(BaseModel):
         if normalized not in QUOTE_CURRENCIES:
             raise ValueError("Yeni teklifler yalnız USD para birimiyle oluşturulabilir.")
         return normalized
+
+    _note = validator("note", allow_reuse=True)(_optional_text)
+
+    @validator("revision_scope")
+    def validate_scope(cls, value: str) -> str:
+        normalized = value.strip().upper()
+        if normalized not in QUOTE_REVISION_SCOPES:
+            raise ValueError("Revizyon kapsamı Tüm paket veya Belirli ürünler olmalıdır.")
+        return normalized
+
+    @root_validator
+    def validate_dates(cls, values: dict):
+        quote_date = values.get("quote_date")
+        valid_until = values.get("valid_until")
+        if quote_date and valid_until and valid_until < quote_date:
+            raise ValueError("Teklif geçerlilik tarihi teklif tarihinden önce olamaz.")
+        if values.get("revision_scope") == "SELECTED" and not values.get("selected_process_item_ids"):
+            raise ValueError("Belirli ürün revizyonunda en az bir süreç ürünü seçilmelidir.")
+        return values
+
+
+class QuoteRevisionUpdate(BaseModel):
+    quote_date: date
+    valid_until: Optional[date] = None
+    note: Optional[str] = None
+    items: list[QuoteOfferItemInput] = Field(min_items=1)
 
     _note = validator("note", allow_reuse=True)(_optional_text)
 
@@ -182,7 +267,10 @@ class QuoteProcessItemRead(BaseModel):
     product_code: Optional[str] = None
     category: str
     description: Optional[str] = None
+    requested_quantity: Decimal
+    requested_duration_months: Optional[int] = None
     sort_order: int
+    is_active: bool
 
     class Config:
         orm_mode = True
@@ -233,6 +321,11 @@ class QuoteRevisionRead(BaseModel):
     created_by_id: int
     created_by_name: Optional[str] = None
     created_at: datetime
+    updated_at: datetime
+    deleted_at: Optional[datetime] = None
+    deleted_by_id: Optional[int] = None
+    deleted_reason: Optional[str] = None
+    changed_process_item_ids: list[int] = Field(default_factory=list)
     items: list[QuoteOfferItemRead] = Field(default_factory=list)
     documents: list[QuoteDocumentRead] = Field(default_factory=list)
 
@@ -246,6 +339,7 @@ class QuoteVendorOfferRead(BaseModel):
     created_at: datetime
     current_revision: Optional[QuoteRevisionRead] = None
     revisions: list[QuoteRevisionRead] = Field(default_factory=list)
+    deleted_revisions: list[QuoteRevisionRead] = Field(default_factory=list)
 
 
 class QuoteAuditRead(BaseModel):
@@ -265,11 +359,15 @@ class QuoteProcessRead(BaseModel):
     quote_no: str
     name: str
     description: Optional[str] = None
+    process_type: str
     status: str
     created_by_id: int
     created_by_name: Optional[str] = None
     preferred_offer_id: Optional[int] = None
     archived_at: Optional[datetime] = None
+    deleted_at: Optional[datetime] = None
+    deleted_by_id: Optional[int] = None
+    deleted_reason: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     items: list[QuoteProcessItemRead] = Field(default_factory=list)
@@ -281,12 +379,16 @@ class QuoteListItem(BaseModel):
     id: int
     quote_no: str
     name: str
+    process_type: str
     categories: list[str] = Field(default_factory=list)
+    vendor_names: list[str] = Field(default_factory=list)
     vendor_count: int = 0
     offer_count: int = 0
     status: str
     created_at: datetime
     has_document: bool = False
+    deleted_at: Optional[datetime] = None
+    deleted_reason: Optional[str] = None
 
 
 class QuoteSummaryRead(BaseModel):
@@ -295,6 +397,7 @@ class QuoteSummaryRead(BaseModel):
     collected_offers: int = 0
     completed_processes: int = 0
     archived_processes: int = 0
+    deleted_processes: int = 0
 
 
 class QuoteComparisonOffer(BaseModel):

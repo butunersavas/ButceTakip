@@ -57,6 +57,36 @@ class QuoteReleaseMigrationTests(unittest.TestCase):
         ):
             self.assertIn(f"EXISTS (SELECT 1 FROM {table} LIMIT 1)", normalized)
 
+    def test_package_migration_is_additive_versioned_and_fail_closed(self) -> None:
+        up_sql = (
+            MIGRATIONS / "20261109_quote_packages_product_revisions_up.sql"
+        ).read_text(encoding="utf-8")
+        normalized = " ".join(up_sql.upper().split())
+
+        self.assertIn("20261109_QUOTE_USD_01", normalized)
+        self.assertIn("20261109_QUOTE_PACKAGES_01", normalized)
+        self.assertIn("PG_ADVISORY_XACT_LOCK(2026110902)", normalized)
+        self.assertIn("ADD COLUMN PROCESS_TYPE", normalized)
+        self.assertIn("ADD COLUMN REQUESTED_QUANTITY", normalized)
+        self.assertIn("ADD COLUMN DELETED_AT", normalized)
+        self.assertIn("COUNT(*) FROM QUOTE_PROCESS_ITEMS", normalized)
+        self.assertIn("THEN 'SINGLE' ELSE 'PACKAGE'", normalized)
+        for protected_table in ("USERS", "BUDGET_ITEMS", "PLAN_ENTRIES", "EXPENSES"):
+            self.assertNotIn(f"ALTER TABLE {protected_table}", normalized)
+            self.assertNotIn(f"DELETE FROM {protected_table}", normalized)
+            self.assertNotIn(f"UPDATE {protected_table}", normalized)
+
+    def test_package_down_migration_refuses_when_new_data_exists(self) -> None:
+        down_sql = (
+            MIGRATIONS / "20261109_quote_packages_product_revisions_down.sql"
+        ).read_text(encoding="utf-8")
+        normalized = " ".join(down_sql.upper().split())
+
+        self.assertIn("PROCESS_TYPE <> 'SINGLE'", normalized)
+        self.assertIn("IS_ACTIVE IS NOT TRUE", normalized)
+        self.assertIn("DELETED_AT IS NOT NULL", normalized)
+        self.assertIn("DOWN MIGRATION DURDURULDU", normalized)
+
 
 if __name__ == "__main__":
     unittest.main()
