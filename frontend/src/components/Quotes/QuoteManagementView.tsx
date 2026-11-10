@@ -97,6 +97,7 @@ type ProcessItemForm = {
   description: string;
   requested_quantity: string;
   requested_duration_months: string;
+  initial_unit_price: string;
 };
 
 type OfferItemForm = {
@@ -120,6 +121,7 @@ const emptyProcessItem = (): ProcessItemForm => ({
   description: "",
   requested_quantity: "1",
   requested_duration_months: "",
+  initial_unit_price: "",
 });
 
 const emptyFilters = {
@@ -181,6 +183,11 @@ function ProcessDialog({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [processType, setProcessType] = useState<QuoteProcessType>("SINGLE");
+  const [initialOfferEnabled, setInitialOfferEnabled] = useState(false);
+  const [initialVendorName, setInitialVendorName] = useState("");
+  const [initialQuoteDate, setInitialQuoteDate] = useState(new Date().toISOString().slice(0, 10));
+  const [initialValidUntil, setInitialValidUntil] = useState("");
+  const [initialNote, setInitialNote] = useState("");
   const [items, setItems] = useState<ProcessItemForm[]>([emptyProcessItem()]);
 
   useEffect(() => {
@@ -188,6 +195,11 @@ function ProcessDialog({
     setName(editing?.name ?? "");
     setDescription(editing?.description ?? "");
     setProcessType(editing?.process_type ?? "SINGLE");
+    setInitialOfferEnabled(false);
+    setInitialVendorName("");
+    setInitialQuoteDate(new Date().toISOString().slice(0, 10));
+    setInitialValidUntil("");
+    setInitialNote("");
     setItems(
       editing?.items.length
         ? editing.items.map((item) => ({
@@ -200,6 +212,7 @@ function ProcessDialog({
             description: item.description ?? "",
             requested_quantity: String(item.requested_quantity),
             requested_duration_months: item.requested_duration_months ? String(item.requested_duration_months) : "",
+            initial_unit_price: "",
           }))
         : [emptyProcessItem()],
     );
@@ -231,8 +244,26 @@ function ProcessDialog({
         requested_quantity: item.requested_quantity,
         requested_duration_months: item.requested_duration_months ? Number(item.requested_duration_months) : null,
       }));
+    if (!editing && initialOfferEnabled) {
+      payload.initial_offer = {
+        vendor_name: initialVendorName.trim(),
+        quote_date: initialQuoteDate,
+        valid_until: initialValidUntil || null,
+        note: initialNote.trim() || null,
+        items: items.map((item, item_index) => ({
+          item_index,
+          quantity: item.requested_quantity,
+          unit_price: item.initial_unit_price,
+        })),
+      };
+    }
     await onSave(payload);
   };
+
+  const initialOfferTotal = items.reduce(
+    (sum, item) => sum + calculateQuoteLineTotal(item.requested_quantity, item.initial_unit_price),
+    0,
+  );
 
   return (
     <Dialog open={open} onClose={saving ? undefined : onClose} maxWidth="md" fullWidth>
@@ -244,6 +275,18 @@ function ProcessDialog({
           <TextField select label="Süreç Türü" required value={processType} onChange={(event) => { const next = event.target.value as QuoteProcessType; setProcessType(next); if (next === "SINGLE") setItems((current) => [current[0] ?? emptyProcessItem()]); }}>
             {Object.entries(QUOTE_PROCESS_TYPES).map(([value, label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}
           </TextField>
+          {!editing && <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
+            <FormControlLabel control={<Checkbox checked={initialOfferEnabled} onChange={(event) => setInitialOfferEnabled(event.target.checked)} />} label="İlk firma teklifini ve fiyatlarını birlikte ekle" />
+            {initialOfferEnabled && <Stack spacing={2} mt={1.5}>
+              <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(3, minmax(0, 1fr))" }, gap: 1.5 }}>
+                <TextField size="small" label="Satıcı Firma" required fullWidth value={initialVendorName} onChange={(event) => setInitialVendorName(event.target.value)} />
+                <TextField size="small" label="Teklif Tarihi" required fullWidth type="date" InputLabelProps={{ shrink: true }} value={initialQuoteDate} onChange={(event) => setInitialQuoteDate(event.target.value)} />
+                <TextField size="small" label="Geçerlilik Tarihi" fullWidth type="date" InputLabelProps={{ shrink: true }} value={initialValidUntil} onChange={(event) => setInitialValidUntil(event.target.value)} />
+              </Box>
+              <TextField size="small" label="Firma Teklif Notu (İsteğe Bağlı)" fullWidth value={initialNote} onChange={(event) => setInitialNote(event.target.value)} />
+              <Typography variant="body2" color="text.secondary">Aşağıda her kalemin USD birim fiyatını gir. Paket ve ilk firma teklifi birlikte kaydedilir.</Typography>
+            </Stack>}
+          </Paper>}
           <Box>
             <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.5}>
               <Typography variant="subtitle1" fontWeight={700}>Ürün / Hizmet Kalemleri</Typography>
@@ -285,6 +328,13 @@ function ProcessDialog({
                       <TextField select label="İstenen Süre" value={item.requested_duration_months} onChange={(event) => updateItem(index, { requested_duration_months: event.target.value })}><MenuItem value="">Süre Yok</MenuItem>{QUOTE_DURATIONS.map((duration) => <MenuItem key={duration} value={duration}>{duration} Ay</MenuItem>)}</TextField>
                     </Stack>
                     <TextField label="Kalem açıklaması" fullWidth value={item.description} onChange={(event) => updateItem(index, { description: event.target.value })} />
+                    {!editing && initialOfferEnabled && <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems={{ sm: "center" }}>
+                      <TextField size="small" label="İlk Firma Birim Fiyatı (USD)" required type="number" inputProps={{ min: 0, step: 0.01 }} value={item.initial_unit_price} onChange={(event) => updateItem(index, { initial_unit_price: event.target.value })} sx={{ flex: 1, minWidth: 0 }} />
+                      <Box sx={{ bgcolor: "action.hover", borderRadius: 2, py: 1, px: 2, minWidth: 190 }}>
+                        <Typography variant="caption" color="text.secondary">SATIR TOPLAMI</Typography>
+                        <Typography fontWeight={800}>{formatQuoteCurrency(calculateQuoteLineTotal(item.requested_quantity, item.initial_unit_price), "USD")}</Typography>
+                      </Box>
+                    </Stack>}
                     {processType === "PACKAGE" && <Stack direction="row" spacing={0.5}>
                       <Tooltip title="Yukarı taşı"><span><IconButton size="small" disabled={index === 0} onClick={() => setItems((current) => { const copy = [...current]; [copy[index - 1], copy[index]] = [copy[index], copy[index - 1]]; return copy; })}><KeyboardArrowUpOutlinedIcon /></IconButton></span></Tooltip>
                       <Tooltip title="Aşağı taşı"><span><IconButton size="small" disabled={index === items.length - 1} onClick={() => setItems((current) => { const copy = [...current]; [copy[index], copy[index + 1]] = [copy[index + 1], copy[index]]; return copy; })}><KeyboardArrowDownOutlinedIcon /></IconButton></span></Tooltip>
@@ -295,11 +345,17 @@ function ProcessDialog({
               ))}
             </Stack>
           </Box>
+          {!editing && initialOfferEnabled && <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, bgcolor: "action.hover" }}>
+            <Stack direction="row" alignItems="center" justifyContent="space-between">
+              <Typography fontWeight={800}>İlk Firma Teklifi Toplamı (USD)</Typography>
+              <Typography variant="h6" fontWeight={900}>{formatQuoteCurrency(initialOfferTotal, "USD")}</Typography>
+            </Stack>
+          </Paper>}
         </Stack>
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose} disabled={saving}>İptal</Button>
-        <Button variant="contained" onClick={submit} disabled={saving || !name.trim() || items.some((item) => !item.name.trim() || Number(item.requested_quantity) <= 0)}>{saving ? <CircularProgress size={22} /> : "Kaydet"}</Button>
+        <Button variant="contained" onClick={submit} disabled={saving || !name.trim() || items.some((item) => !item.name.trim() || Number(item.requested_quantity) <= 0) || (!editing && initialOfferEnabled && (!initialVendorName.trim() || !initialQuoteDate || Boolean(initialValidUntil && initialValidUntil < initialQuoteDate) || items.some((item) => item.initial_unit_price.trim() === "" || !Number.isFinite(Number(item.initial_unit_price)) || Number(item.initial_unit_price) < 0)))}>{saving ? <CircularProgress size={22} /> : "Kaydet"}</Button>
       </DialogActions>
     </Dialog>
   );
