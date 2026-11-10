@@ -620,7 +620,7 @@ function DetailDialog({
                     <Typography variant="subtitle2" fontWeight={800} mb={1}>
                       {process.process_type === "PACKAGE" ? "Paket İçeriği" : "Ürün / Hizmet"} · {process.items.length} kalem
                     </Typography>
-                    <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2, overflowX: "auto" }}>
+                    <TableContainer component={Paper} sx={{ borderRadius: 2, border: 1, borderColor: "divider", overflowX: "auto" }}>
                       <Table size="small" aria-label="Paket ürünleri" sx={{ minWidth: 620 }}>
                         <TableHead><TableRow sx={{ bgcolor: "action.hover" }}>
                           <TableCell sx={{ fontWeight: 700 }}>Ürün / Hizmet</TableCell>
