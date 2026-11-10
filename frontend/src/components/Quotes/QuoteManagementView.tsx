@@ -528,7 +528,8 @@ function DetailDialog({
   onUploadDocuments: (offer: QuoteVendorOffer, revision: QuoteRevision, files: File[]) => void;
 }) {
   const [tab, setTab] = useState(0);
-  useEffect(() => { if (open) setTab(0); }, [open, process?.id]);
+  const [historyShownForOffers, setHistoryShownForOffers] = useState<number[]>([]);
+  useEffect(() => { if (open) { setTab(0); setHistoryShownForOffers([]); } }, [open, process?.id]);
   const allDocuments = process?.offers.flatMap((offer) => offer.revisions.flatMap((revision) => revision.documents.map((document) => ({ document, offer, revision })))) ?? [];
 
   return (
@@ -559,7 +560,31 @@ function DetailDialog({
                     {!readOnly ? <TextField select size="small" label="Durum" value={process.status} disabled={actionBusy} onChange={(event) => onStatus(event.target.value as QuoteStatus)}>{Object.entries(QUOTE_STATUSES).map(([value, label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}</TextField> : <Box><Typography variant="caption" color="text.secondary">Durum</Typography><Box mt={0.5}><StatusChip status={process.status} /></Box></Box>}
                   </Box>
                   {process.description && <Typography mt={2}>{process.description}</Typography>}
-                  <Stack direction="row" spacing={1} flexWrap="wrap" mt={2}>{process.items.map((item) => <Chip key={item.id} label={`${item.name} · ${item.requested_quantity} adet${item.requested_duration_months ? ` · ${item.requested_duration_months} ay` : ""}`} variant="outlined" />)}</Stack>
+                  <Box sx={{ mt: 2 }}>
+                    <Typography variant="subtitle2" fontWeight={800} mb={1}>
+                      {process.process_type === "PACKAGE" ? "Paket İçeriği" : "Ürün / Hizmet"} · {process.items.length} kalem
+                    </Typography>
+                    <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2, overflowX: "auto" }}>
+                      <Table size="small" aria-label="Paket ürünleri" sx={{ minWidth: 620 }}>
+                        <TableHead><TableRow sx={{ bgcolor: "action.hover" }}>
+                          <TableCell sx={{ fontWeight: 700 }}>Ürün / Hizmet</TableCell>
+                          <TableCell sx={{ fontWeight: 700 }}>Ürün Kodu</TableCell>
+                          <TableCell sx={{ fontWeight: 700 }}>Kategori</TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 700 }}>Adet</TableCell>
+                          <TableCell sx={{ fontWeight: 700 }}>Süre</TableCell>
+                        </TableRow></TableHead>
+                        <TableBody>{process.items.map((item) => (
+                          <TableRow key={item.id}>
+                            <TableCell sx={{ fontWeight: 600, overflowWrap: "anywhere" }}>{item.name}</TableCell>
+                            <TableCell>{item.product_code || "—"}</TableCell>
+                            <TableCell>{item.category}</TableCell>
+                            <TableCell align="right">{item.requested_quantity}</TableCell>
+                            <TableCell>{item.requested_duration_months ? `${item.requested_duration_months} Ay` : "Süre Yok"}</TableCell>
+                          </TableRow>
+                        ))}</TableBody>
+                      </Table>
+                    </TableContainer>
+                  </Box>
                 </Paper>
                 <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ sm: "center" }}>
                   <Typography variant="h6" fontWeight={800}>Firma Teklifleri</Typography>
@@ -578,8 +603,13 @@ function DetailDialog({
                     </AccordionSummary>
                     <AccordionDetails>
                       <Stack spacing={2}>
-                        {!readOnly && process.status !== "ARCHIVED" && <Button variant="outlined" startIcon={<AddOutlinedIcon />} onClick={() => onAddRevision(offer)} sx={{ alignSelf: "flex-start" }}>Yeni Revizyon</Button>}
-                        {offer.revisions.map((revision) => (
+                        <Stack direction={{ xs: "column", sm: "row" }} spacing={1} justifyContent="space-between" alignItems={{ sm: "center" }}>
+                          {!readOnly && process.status !== "ARCHIVED" && <Button variant="outlined" startIcon={<AddOutlinedIcon />} onClick={() => onAddRevision(offer)}>Yeni Revizyon</Button>}
+                          {offer.revisions.length > 1 && <Button size="small" variant="text" startIcon={<HistoryOutlinedIcon />} onClick={() => setHistoryShownForOffers((current) => current.includes(offer.id) ? current.filter((id) => id !== offer.id) : [...current, offer.id])}>
+                            {historyShownForOffers.includes(offer.id) ? "Geçmiş Revizyonları Gizle" : `Geçmiş Revizyonları Göster (${offer.revisions.length - 1})`}
+                          </Button>}
+                        </Stack>
+                        {offer.revisions.filter((revision) => revision.id === offer.current_revision?.id || historyShownForOffers.includes(offer.id)).map((revision) => (
                           <Paper key={revision.id} variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
                             <Stack direction={{ xs: "column", sm: "row" }} spacing={1} justifyContent="space-between" mb={1.5}>
                               <Box><Typography fontWeight={800}>Revizyon {revision.revision_no}</Typography><Typography variant="body2" color="text.secondary">{formatQuoteDate(revision.quote_date)} · Geçerlilik: {formatQuoteDate(revision.valid_until)}</Typography></Box>
