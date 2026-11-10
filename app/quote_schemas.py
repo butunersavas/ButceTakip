@@ -82,11 +82,52 @@ def _validate_process_items(cls, values: dict) -> dict:
     return values
 
 
+class QuoteInitialOfferItemInput(BaseModel):
+    item_index: int = Field(ge=0)
+    quantity: Decimal
+    unit_price: Decimal
+
+    @validator("quantity", pre=True)
+    def validate_quantity(cls, value: object) -> Decimal:
+        parsed = _decimal(value, "İlk teklif adedi")
+        if parsed <= 0:
+            raise ValueError("Adet sıfırdan büyük olmalıdır.")
+        return parsed
+
+    @validator("unit_price", pre=True)
+    def validate_unit_price(cls, value: object) -> Decimal:
+        parsed = _decimal(value, "İlk teklif birim fiyatı")
+        if parsed < 0:
+            raise ValueError("Birim fiyat negatif olamaz.")
+        return parsed
+
+
+class QuoteInitialOfferCreate(BaseModel):
+    vendor_name: str = Field(min_length=1, max_length=250)
+    quote_date: date
+    valid_until: Optional[date] = None
+    note: Optional[str] = None
+    items: list[QuoteInitialOfferItemInput] = Field(min_items=1)
+
+    _vendor_name = validator("vendor_name", allow_reuse=True)(
+        lambda value: _required_text(value, "İlk satıcı firma")
+    )
+    _note = validator("note", allow_reuse=True)(_optional_text)
+
+    @root_validator
+    def validate_dates(cls, values: dict) -> dict:
+        quote_date = values.get("quote_date")
+        valid_until = values.get("valid_until")
+        if quote_date and valid_until and valid_until < quote_date:
+            raise ValueError("Teklif geçerlilik tarihi teklif tarihinden önce olamaz.")
+        return values
+
 class QuoteProcessCreate(BaseModel):
     name: str = Field(min_length=1, max_length=250)
     description: Optional[str] = None
     process_type: str
     items: list[QuoteProcessItemInput] = Field(min_items=1)
+    initial_offer: Optional[QuoteInitialOfferCreate] = None
 
     _name = validator("name", allow_reuse=True)(lambda value: _required_text(value, "Teklif süreci adı"))
     _description = validator("description", allow_reuse=True)(_optional_text)
