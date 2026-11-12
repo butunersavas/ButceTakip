@@ -14,6 +14,12 @@ export const QUOTE_STATUSES = {
 } as const;
 
 export const QUOTE_CURRENCIES = ["USD"] as const;
+export const QUOTE_DISPLAY_CURRENCIES = [
+  { value: "USD", label: "USD ($)" },
+  { value: "TRY", label: "TRY (₺)" },
+] as const;
+export const DEFAULT_QUOTE_DISPLAY_CURRENCY = "USD" as const;
+export const MAX_QUOTE_RATE_AGE_DAYS = 7;
 export const QUOTE_DURATIONS = [1, 6, 12, 24, 36, 60] as const;
 export const QUOTE_PROCESS_TYPES = {
   SINGLE: "Tek Ürün",
@@ -22,7 +28,16 @@ export const QUOTE_PROCESS_TYPES = {
 
 export type QuoteStatus = keyof typeof QUOTE_STATUSES;
 export type QuoteCurrency = string;
+export type QuoteDisplayCurrency = (typeof QUOTE_DISPLAY_CURRENCIES)[number]["value"];
 export type QuoteProcessType = keyof typeof QUOTE_PROCESS_TYPES;
+
+export interface QuoteExchangeRates {
+  usd_try: number | null;
+  eur_try: number | null;
+  rate_date: string | null;
+  stale: boolean;
+  warning: string | null;
+}
 
 export interface QuoteSummary {
   total_processes: number;
@@ -202,6 +217,61 @@ export function formatQuoteCurrency(value: string | number | null | undefined, c
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(Number.isFinite(numeric) ? numeric : 0);
+}
+
+function positiveRate(value: number | null | undefined) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
+}
+
+export function isQuoteExchangeRateUsable(
+  rates: QuoteExchangeRates | null | undefined,
+  now = new Date(),
+) {
+  if (!rates || rates.stale || rates.warning || !rates.rate_date) return false;
+  if (!positiveRate(rates.usd_try)) return false;
+
+  const rateDate = new Date(`${rates.rate_date}T00:00:00Z`);
+  if (Number.isNaN(rateDate.getTime()) || Number.isNaN(now.getTime())) return false;
+  const todayUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const ageDays = (todayUtc - rateDate.getTime()) / (24 * 60 * 60 * 1000);
+  return ageDays >= 0 && ageDays <= MAX_QUOTE_RATE_AGE_DAYS;
+}
+
+export function convertQuoteAmountForDisplay(
+  value: string | number | null | undefined,
+  sourceCurrency: string,
+  targetCurrency: QuoteDisplayCurrency,
+  rates?: QuoteExchangeRates | null,
+  now = new Date(),
+) {
+  if (value === null || value === undefined || value === "") return null;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+
+  const source = sourceCurrency.trim().toUpperCase();
+  if (source === targetCurrency) return numeric;
+  if (!isQuoteExchangeRateUsable(rates, now)) return null;
+
+  const usdTry = positiveRate(rates?.usd_try);
+  const eurTry = positiveRate(rates?.eur_try);
+  if (!usdTry) return null;
+
+  const sourceTryRate = source === "TRY" ? 1 : source === "USD" ? usdTry : source === "EUR" ? eurTry : null;
+  const targetTryRate = targetCurrency === "TRY" ? 1 : usdTry;
+  if (!sourceTryRate || !targetTryRate) return null;
+  return numeric * sourceTryRate / targetTryRate;
+}
+
+export function formatQuoteDisplayCurrency(
+  value: string | number | null | undefined,
+  sourceCurrency: string,
+  targetCurrency: QuoteDisplayCurrency,
+  rates?: QuoteExchangeRates | null,
+  now = new Date(),
+) {
+  const converted = convertQuoteAmountForDisplay(value, sourceCurrency, targetCurrency, rates, now);
+  return converted === null ? "—" : formatQuoteCurrency(converted, targetCurrency);
 }
 
 const VENDOR_COLORS = [

@@ -461,3 +461,60 @@ AGENTS ve docs içindeki TL/TRY/sembol eşleşmeleri kural açıklamaları ve ta
 - Hedefli Teklif ve migration paketi 19/19, son tam backend paketi 112 başarılı + PostgreSQL ortamı gerektiren 7 güvenli skip sonucuyla geçti. Volume'süz geçici PostgreSQL 15.19 container'ında gerçek forward migration/backfill/veri koruma/tekrar apply/down güvenliği testi 1/1 başarılı oldu; container doğrulama sonunda kaldırıldı. Frontend regresyonları 19/19 ve Vite production build 2.350 modülle başarılıdır; yalnız mevcut yaklaşık 2,15 MB ana chunk uyarısı sürer.
 - Geçici SQLite, localhost API/frontend ve sentetik admin ile tarayıcı kabulünde üç kalemli `TKL-2026-0001` paketi, iki firma rengi, kısmi lisans revizyonu, tam snapshot toplamı, aynı revizyon numarasıyla düzenleme, eksik teklif hücresi, eşdeğerlik uyarısı ve işlem geçmişi doğrulandı. Kabul DB'si, loglar, port süreçleri ve geçici bağımlılık bağlantısı temizlendi.
 - Production `172.24.2.227` sunucusuna, production DB/container/volume/`.env`/secret/SSO yapılandırmasına bağlanılmadı; canlı migration veya deploy yapılmadı. Gerçek ortam preflight'ı, eşlenmiş DB ve belge volume yedeği/restore provası, SSO override doğrulaması ve immutable staging image smoke testi tamamlanmadan karar **NO-GO** olarak kalır.
+
+## 2026-11-12 — Teklif Detay modalı USD/TRY görüntüleme seçimi
+
+### Kapsam ve düzeltme
+- Değişiklik yalnız `Teklif Yönetimi > Teklif Detay` modalındadır. Durum alanının
+  yanına `USD ($)` / `TRY (₺)` görüntüleme seçicisi eklendi; modal her açılışta
+  tekrar USD ile başlar.
+- Firma güncel teklif toplamı, revizyon toplamı, birim fiyat, satır tutarı, silinen
+  revizyon toplamı ve modal içindeki Karşılaştırma tutarları aynı görüntüleme
+  seçimini kullanır. Teklif ekleme/düzenleme, revizyon, tercih, karşılaştırma,
+  belge ve audit mutasyonları değiştirilmedi.
+- Dönüşüm her tutarın API'den gelen özgün `revision.currency` / `offer.currency`
+  alanına göre yapılır; ekran değerlerinin USD olduğu varsayılmaz. USD, TRY ve
+  geriye uyumlu EUR kaynakları desteklenir. DB tutarı ve currency alanı değişmez.
+- Mevcut `/api/market-rates` akışı tekrar kullanılır: TCMB döviz satış kuru, kaynak
+  URL'si ve kur tarihi gösterilir. Eski önbellek, warning, eksik/pozitif olmayan kur,
+  gelecekteki tarih veya yedi günden eski tarih dönüşüm için reddedilir. Geçerli kur
+  yoksa dönüşüm gereken hücreler `—` kalır; yalnız sembol değiştirilmez ve uydurma
+  değer gösterilmez.
+- Bütçe Yönetimi, Plan Yönetimi, Bekleyen İşlemler, raporlama, diğer modaller,
+  import/export ve backend/DB davranışı değiştirilmedi. Migration yoktur.
+
+### Test, build ve LOCAL kabul
+- Frontend regresyonları 19/19 başarılıdır: dashboard tasarruf 3/3, tahakkuk 5/5,
+  piyasa göstergeleri 4/4, Teklif Yönetimi 7/7. Yeni testler USD varsayılanını,
+  USD/TRY/EUR dönüşüm yönlerini, aynı para biriminde kursuz gösterimi ve stale,
+  eksik, eski veya desteklenmeyen kurda fail-closed davranışı kapsar.
+- Vite production build 2.350 modülle başarılıdır; mevcut yaklaşık 2,16 MB büyük
+  chunk uyarısı sürer. `git diff --check` başarılıdır.
+- Geçici SQLite API ve `127.0.0.1:5174/8002` ile sentetik
+  `TKL-2026-0001` kaydında özgün `$67.514,00` ve `$483.000,00` satırları kontrol
+  edildi. İlk açılış USD, TRY seçimi, kapanıp yeniden açıldığında USD ve
+  Karşılaştırma sekmesindeki aynı seçime bağlı tutarlar doğrulandı.
+- Geçersiz/eksik kur yanıtında firma/revizyon toplamları, birim fiyatlar ve satır
+  tutarları `—` kaldı ve uyarı göründü. Geçerli-yol kabulünde yalnız geçici API
+  fixture'ı olarak 11.11.2026 tarihli TCMB döviz satış değerleri kullanıldı; ekranda
+  TCMB kaynak/tarih, özgün USD ve “veritabanı tutarları değişmez” metni görüldü.
+  Production koduna sabit kur eklenmedi.
+- Geçici frontend/API süreçleri, node_modules junction'ı, SQLite DB ve kabul
+  dosyaları doğrulama sonunda kaldırıldı. Mevcut Docker container/volume'larına
+  dokunulmadı.
+
+### Production ön kontrol ve karar
+- GitHub PR #308 açık, merge edilmemiş ve remote head
+  `003bddfe627a51aac422adeafed4f22cf2961236` olarak doğrulandı. Bu görevdeki
+  frontend değişiklikleri henüz commit/push edilmedi.
+- Mevcut release belgelerindeki production yedek/restore, SSO override birleştirme
+  ve immutable staging smoke kapıları kapanmamıştır. Ayrıca güncel proje bağlamı
+  hedefi `172.24.2.128`, eski paket rollout belgesi `172.24.2.227` olarak belirtir;
+  gerçek hedef container label/working-directory ile doğrulanmalıdır.
+- `172.24.2.128` için TCP 22, 5173, 8000 ve 5433 erişilemedi; frontend ile API
+  health yanıtı alınamadı. Önce durumu doğrulanamadığı için deploy ve deploy sonrası
+  health kontrolü yapılmadı. Production DB, container, volume, `.env`, secret veya
+  veriye dokunulmadı; canlıya alındığı iddia edilmez.
+- Frontend-only güvenli deploy, health/smoke ve yalnız frontend image rollback
+  adımları `docs/QUOTE_DETAIL_CURRENCY_DISPLAY_DEPLOY.md` içinde hazırlandı. Release
+  GO kapıları, gerçek hedef ve erişim tamamlanmadan karar **NO-GO**'dur.

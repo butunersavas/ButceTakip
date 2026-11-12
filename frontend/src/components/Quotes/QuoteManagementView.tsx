@@ -19,6 +19,7 @@ import {
   FormControlLabel,
   FormGroup,
   IconButton,
+  Link,
   MenuItem,
   Paper,
   Snackbar,
@@ -60,16 +61,21 @@ import { useAuth } from "../../context/AuthContext";
 import {
   QUOTE_CATEGORIES,
   QUOTE_CURRENCIES,
+  QUOTE_DISPLAY_CURRENCIES,
   QUOTE_DURATIONS,
   QUOTE_PROCESS_TYPES,
   QUOTE_STATUSES,
+  DEFAULT_QUOTE_DISPLAY_CURRENCY,
   calculateQuoteLineTotal,
   formatFileSize,
   formatQuoteCurrency,
   formatQuoteDate,
+  formatQuoteDisplayCurrency,
   getVendorChipSx,
+  isQuoteExchangeRateUsable,
   type QuoteComparison,
   type QuoteDocument,
+  type QuoteDisplayCurrency,
   type QuoteListItem,
   type QuoteProcess,
   type QuoteProcessType,
@@ -78,6 +84,11 @@ import {
   type QuoteSummary,
   type QuoteVendorOffer,
 } from "../../utils/quoteManagement";
+import {
+  formatMarketRate,
+  formatMarketRateDate,
+  type MarketRatesResponse,
+} from "../../utils/marketRates";
 
 
 type BudgetItem = {
@@ -525,9 +536,41 @@ function DetailDialog({
   onDeactivate: (document: QuoteDocument) => void;
   onUploadDocuments: (offer: QuoteVendorOffer, revision: QuoteRevision, files: File[]) => void;
 }) {
+  const client = useAuthorizedClient();
   const [tab, setTab] = useState(0);
-  useEffect(() => { if (open) setTab(0); }, [open, process?.id]);
+  const [displayCurrency, setDisplayCurrency] = useState<QuoteDisplayCurrency>(DEFAULT_QUOTE_DISPLAY_CURRENCY);
+  useEffect(() => {
+    if (open) {
+      setTab(0);
+      setDisplayCurrency(DEFAULT_QUOTE_DISPLAY_CURRENCY);
+    }
+  }, [open, process?.id]);
+  const marketRatesQuery = useQuery<MarketRatesResponse>({
+    queryKey: ["market-rates"],
+    queryFn: async () => (
+      await client.get<MarketRatesResponse>("/market-rates", { suppressGlobalError: true })
+    ).data,
+    enabled: open,
+    staleTime: 20 * 60 * 1000,
+    retry: false,
+  });
   const allDocuments = process?.offers.flatMap((offer) => offer.revisions.flatMap((revision) => revision.documents.map((document) => ({ document, offer, revision })))) ?? [];
+  const revisions = process?.offers.flatMap((offer) => [...offer.revisions, ...offer.deleted_revisions]) ?? [];
+  const originalCurrencies = [...new Set(revisions.map((revision) => revision.currency.trim().toUpperCase()))];
+  const requiresConversion = originalCurrencies.some((currency) => currency !== displayCurrency);
+  const usableRate = isQuoteExchangeRateUsable(marketRatesQuery.data);
+  const displayAmount = (value: string | number | null | undefined, sourceCurrency: string) => (
+    formatQuoteDisplayCurrency(value, sourceCurrency, displayCurrency, marketRatesQuery.data)
+  );
+  const rateUnavailableMessage = marketRatesQuery.isLoading
+    ? "TCMB kuru alınıyor; dönüşüm gereken tutarlar kur doğrulanana kadar gösterilmiyor."
+    : marketRatesQuery.isError
+      ? "TCMB kur servisine ulaşılamadı; dönüşüm gereken tutarlar gösterilmiyor."
+      : marketRatesQuery.data?.stale
+        ? "TCMB kuru güncellenemedi; eski önbellek dönüşüm için kullanılmadı."
+        : !marketRatesQuery.data?.rate_date
+          ? "Geçerli TCMB kur tarihi bulunamadı; dönüşüm gereken tutarlar gösterilmiyor."
+          : "TCMB kur tarihi güncel değil veya gerekli kur değeri eksik; dönüşüm gereken tutarlar gösterilmiyor.";
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="xl" fullWidth fullScreen={false} PaperProps={{ sx: { minHeight: { md: "82vh" } } }}>
@@ -550,12 +593,20 @@ function DetailDialog({
             {tab === 0 && (
               <Stack spacing={2.5}>
                 <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
-                  <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(4, 1fr)" }, gap: 2 }}>
+                  <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(5, minmax(0, 1fr))" }, gap: 2 }}>
                     <Box><Typography variant="caption" color="text.secondary">Oluşturan</Typography><Typography>{process.created_by_name ?? "-"}</Typography></Box>
                     <Box><Typography variant="caption" color="text.secondary">Oluşturma Tarihi</Typography><Typography>{formatQuoteDate(process.created_at, true)}</Typography></Box>
                     <Box><Typography variant="caption" color="text.secondary">Firma / Revizyon</Typography><Typography>{process.offers.length} / {process.offers.reduce((sum, offer) => sum + offer.revisions.length, 0)}</Typography></Box>
                     {!readOnly ? <TextField select size="small" label="Durum" value={process.status} disabled={actionBusy} onChange={(event) => onStatus(event.target.value as QuoteStatus)}>{Object.entries(QUOTE_STATUSES).map(([value, label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}</TextField> : <Box><Typography variant="caption" color="text.secondary">Durum</Typography><Box mt={0.5}><StatusChip status={process.status} /></Box></Box>}
+                    <TextField select size="small" label="Görüntüleme Para Birimi" value={displayCurrency} onChange={(event) => setDisplayCurrency(event.target.value as QuoteDisplayCurrency)}>{QUOTE_DISPLAY_CURRENCIES.map((currency) => <MenuItem key={currency.value} value={currency.value}>{currency.label}</MenuItem>)}</TextField>
                   </Box>
+                  {requiresConversion && (usableRate ? (
+                    <Alert severity="info" sx={{ mt: 2 }}>
+                      Yalnız görüntüleme dönüşümü: {marketRatesQuery.data?.source ?? "Türkiye Cumhuriyet Merkez Bankası (TCMB)"} · {marketRatesQuery.data?.rate_type ?? "Döviz satış"} · {formatMarketRateDate(marketRatesQuery.data?.rate_date ?? null)} · 1 USD = ₺{formatMarketRate(marketRatesQuery.data?.usd_try ?? null, 4)}. Özgün para birimleri: {originalCurrencies.join(", ")}. Veritabanı tutarları değişmez. {marketRatesQuery.data?.source_url && <Link href={marketRatesQuery.data.source_url} target="_blank" rel="noreferrer">Kur kaynağı</Link>}
+                    </Alert>
+                  ) : (
+                    <Alert severity="warning" sx={{ mt: 2 }}>{rateUnavailableMessage} Özgün para birimleri: {originalCurrencies.join(", ") || "—"}. Veritabanı tutarları değişmez.</Alert>
+                  ))}
                   {process.description && <Typography mt={2}>{process.description}</Typography>}
                   <Stack direction="row" spacing={1} flexWrap="wrap" mt={2}>{process.items.map((item) => <Chip key={item.id} label={`${item.name} · ${item.requested_quantity} adet${item.requested_duration_months ? ` · ${item.requested_duration_months} ay` : ""}`} variant="outlined" />)}</Stack>
                 </Paper>
@@ -570,7 +621,7 @@ function DetailDialog({
                       <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems={{ sm: "center" }} width="100%" mr={2}>
                         <Box sx={{ flexGrow: 1 }}><Chip label={offer.vendor_name} sx={getVendorChipSx(offer.vendor_name, process.offers.map((row) => row.vendor_name))} /></Box>
                         {process.preferred_offer_id === offer.id && <Chip color="success" size="small" icon={<StarOutlineOutlinedIcon />} label="Tercih Edilen" />}
-                        {offer.current_revision ? <Typography fontWeight={800}>{formatQuoteCurrency(offer.current_revision.total_amount, offer.current_revision.currency)}</Typography> : <Typography color="text.secondary">Teklif yok</Typography>}
+                        {offer.current_revision ? <Typography fontWeight={800}>{displayAmount(offer.current_revision.total_amount, offer.current_revision.currency)}</Typography> : <Typography color="text.secondary">Teklif yok</Typography>}
                         <Chip size="small" label={`${offer.revisions.length} revizyon`} />
                       </Stack>
                     </AccordionSummary>
@@ -581,9 +632,9 @@ function DetailDialog({
                           <Paper key={revision.id} variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
                             <Stack direction={{ xs: "column", sm: "row" }} spacing={1} justifyContent="space-between" mb={1.5}>
                               <Box><Typography fontWeight={800}>Revizyon {revision.revision_no}</Typography><Typography variant="body2" color="text.secondary">{formatQuoteDate(revision.quote_date)} · Geçerlilik: {formatQuoteDate(revision.valid_until)}</Typography></Box>
-                              <Stack direction="row" spacing={1} alignItems="center"><Typography variant="h6" fontWeight={800}>{formatQuoteCurrency(revision.total_amount, revision.currency)}</Typography>{!readOnly && <Button size="small" startIcon={<EditOutlinedIcon />} onClick={() => onEditRevision(offer, revision)}>Düzenle</Button>}{!readOnly && <Button size="small" color="error" startIcon={<DeleteOutlineOutlinedIcon />} onClick={() => onDeleteRevision(offer, revision)}>Sil</Button>}</Stack>
+                              <Stack direction="row" spacing={1} alignItems="center"><Typography variant="h6" fontWeight={800}>{displayAmount(revision.total_amount, revision.currency)}</Typography><Chip size="small" variant="outlined" label={`Özgün: ${revision.currency}`} />{!readOnly && <Button size="small" startIcon={<EditOutlinedIcon />} onClick={() => onEditRevision(offer, revision)}>Düzenle</Button>}{!readOnly && <Button size="small" color="error" startIcon={<DeleteOutlineOutlinedIcon />} onClick={() => onDeleteRevision(offer, revision)}>Sil</Button>}</Stack>
                             </Stack>
-                            <TableContainer sx={{ overflowX: "auto" }}><Table size="small" sx={{ minWidth: 720 }}><TableHead><TableRow><TableCell>Ürün</TableCell><TableCell>Kod</TableCell><TableCell>Süre</TableCell><TableCell align="right">Adet</TableCell><TableCell align="right">Birim Fiyat</TableCell><TableCell align="right">Tutar</TableCell></TableRow></TableHead><TableBody>{revision.items.map((item) => <TableRow key={item.id} sx={item.process_item_id && revision.changed_process_item_ids.includes(item.process_item_id) ? { bgcolor: "action.hover" } : undefined}><TableCell><Stack direction="row" spacing={0.75} alignItems="center"><span>{item.product_name}</span>{item.process_item_id && revision.changed_process_item_ids.includes(item.process_item_id) && <Chip size="small" color="info" label="Değişti" />}</Stack></TableCell><TableCell>{item.product_code ?? "-"}</TableCell><TableCell>{item.duration_months ? `${item.duration_months} Ay` : "-"}</TableCell><TableCell align="right">{item.quantity}</TableCell><TableCell align="right">{formatQuoteCurrency(item.unit_price, revision.currency)}</TableCell><TableCell align="right">{formatQuoteCurrency(item.line_total, revision.currency)}</TableCell></TableRow>)}</TableBody></Table></TableContainer>
+                            <TableContainer sx={{ overflowX: "auto" }}><Table size="small" sx={{ minWidth: 720 }}><TableHead><TableRow><TableCell>Ürün</TableCell><TableCell>Kod</TableCell><TableCell>Süre</TableCell><TableCell align="right">Adet</TableCell><TableCell align="right">Birim Fiyat</TableCell><TableCell align="right">Tutar</TableCell></TableRow></TableHead><TableBody>{revision.items.map((item) => <TableRow key={item.id} sx={item.process_item_id && revision.changed_process_item_ids.includes(item.process_item_id) ? { bgcolor: "action.hover" } : undefined}><TableCell><Stack direction="row" spacing={0.75} alignItems="center"><span>{item.product_name}</span>{item.process_item_id && revision.changed_process_item_ids.includes(item.process_item_id) && <Chip size="small" color="info" label="Değişti" />}</Stack></TableCell><TableCell>{item.product_code ?? "-"}</TableCell><TableCell>{item.duration_months ? `${item.duration_months} Ay` : "-"}</TableCell><TableCell align="right">{item.quantity}</TableCell><TableCell align="right">{displayAmount(item.unit_price, revision.currency)}</TableCell><TableCell align="right">{displayAmount(item.line_total, revision.currency)}</TableCell></TableRow>)}</TableBody></Table></TableContainer>
                             {process.items.filter((processItem) => !revision.items.some((item) => item.process_item_id === processItem.id)).length > 0 && <Alert severity="info" sx={{ mt: 1.5 }}>{process.items.filter((processItem) => !revision.items.some((item) => item.process_item_id === processItem.id)).map((item) => item.name).join(", ")} için teklif verilmedi.</Alert>}
                             {revision.note && <Typography mt={1.5} variant="body2">{revision.note}</Typography>}
                             <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ sm: "center" }} mt={1.5}>
@@ -593,7 +644,7 @@ function DetailDialog({
                             {revision.documents.length > 0 && <Stack mt={1.5} spacing={0.75}>{revision.documents.map((document) => <Stack key={document.id} direction="row" spacing={1} alignItems="center"><AttachFileOutlinedIcon fontSize="small" color={document.is_active ? "primary" : "disabled"} /><Typography variant="body2" sx={{ flexGrow: 1, minWidth: 0 }} noWrap>{document.original_name} · {formatFileSize(document.size_bytes)}</Typography>{!document.is_active && <Chip size="small" label="Pasif" />}<DocumentActions document={document} readOnly={readOnly} onPreview={onPreview} onDownload={onDownload} onDeactivate={onDeactivate} /></Stack>)}</Stack>}
                           </Paper>
                         ))}
-                        {isAdmin && offer.deleted_revisions.length > 0 && <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, borderStyle: "dashed" }}><Typography fontWeight={800} mb={1}>Silinen Revizyonlar</Typography><Stack spacing={1}>{offer.deleted_revisions.map((revision) => <Stack key={revision.id} direction={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ sm: "center" }} spacing={1}><Box><Typography>Revizyon {revision.revision_no} · {formatQuoteCurrency(revision.total_amount, revision.currency)}</Typography><Typography variant="caption" color="text.secondary">Silinme: {formatQuoteDate(revision.deleted_at, true)}{revision.deleted_reason ? ` · ${revision.deleted_reason}` : ""}</Typography></Box><Button startIcon={<RestoreFromTrashOutlinedIcon />} onClick={() => onRestoreRevision(offer, revision)}>Geri Al</Button></Stack>)}</Stack></Paper>}
+                        {isAdmin && offer.deleted_revisions.length > 0 && <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, borderStyle: "dashed" }}><Typography fontWeight={800} mb={1}>Silinen Revizyonlar</Typography><Stack spacing={1}>{offer.deleted_revisions.map((revision) => <Stack key={revision.id} direction={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ sm: "center" }} spacing={1}><Box><Typography>Revizyon {revision.revision_no} · {displayAmount(revision.total_amount, revision.currency)} · Özgün: {revision.currency}</Typography><Typography variant="caption" color="text.secondary">Silinme: {formatQuoteDate(revision.deleted_at, true)}{revision.deleted_reason ? ` · ${revision.deleted_reason}` : ""}</Typography></Box><Button startIcon={<RestoreFromTrashOutlinedIcon />} onClick={() => onRestoreRevision(offer, revision)}>Geri Al</Button></Stack>)}</Stack></Paper>}
                       </Stack>
                     </AccordionDetails>
                   </Accordion>
@@ -604,9 +655,9 @@ function DetailDialog({
               <Stack spacing={2.5}>
                 {comparison.warnings.map((warning) => <Alert key={warning} severity="warning">{warning}</Alert>)}
                 <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))", xl: "repeat(3, minmax(0, 1fr))" }, gap: 2 }}>
-                  {comparison.offers.map((offer) => <Card key={offer.offer_id} variant="outlined" sx={{ borderColor: offer.is_lowest ? "success.main" : offer.is_preferred ? "primary.main" : "divider", borderWidth: offer.is_lowest || offer.is_preferred ? 2 : 1, borderRadius: 3 }}><CardContent><Stack spacing={1.25}><Stack direction="row" justifyContent="space-between" spacing={1}><Chip label={offer.vendor_name} sx={getVendorChipSx(offer.vendor_name, comparison.offers.map((row) => row.vendor_name))} /><Stack direction="row" spacing={0.5}>{offer.is_lowest && <Chip color="success" size="small" label="En Düşük" />}{offer.is_preferred && <Chip color="primary" size="small" label="Tercih" />}</Stack></Stack><Typography variant="h5" fontWeight={900}>{formatQuoteCurrency(offer.total_amount, offer.currency)}</Typography><Typography variant="body2" color="text.secondary">Son geçerli revizyon: {offer.revision_no}</Typography>{offer.warning && <Alert severity="info" sx={{ py: 0 }}>{offer.warning}</Alert>}<Stack direction="row" spacing={1}>{!readOnly && <Button size="small" variant={offer.is_preferred ? "outlined" : "contained"} startIcon={<StarOutlineOutlinedIcon />} onClick={() => onPreferred(offer.is_preferred ? null : offer.offer_id)}>{offer.is_preferred ? "Tercihi Kaldır" : "Tercih Et"}</Button>}{offer.documents.map((document) => document.content_type === "application/pdf" ? <Button key={document.id} size="small" onClick={() => onPreview(document)}>PDF Görüntüle</Button> : null)}</Stack></Stack></CardContent></Card>)}
+                  {comparison.offers.map((offer) => <Card key={offer.offer_id} variant="outlined" sx={{ borderColor: offer.is_lowest ? "success.main" : offer.is_preferred ? "primary.main" : "divider", borderWidth: offer.is_lowest || offer.is_preferred ? 2 : 1, borderRadius: 3 }}><CardContent><Stack spacing={1.25}><Stack direction="row" justifyContent="space-between" spacing={1}><Chip label={offer.vendor_name} sx={getVendorChipSx(offer.vendor_name, comparison.offers.map((row) => row.vendor_name))} /><Stack direction="row" spacing={0.5}>{offer.is_lowest && <Chip color="success" size="small" label="En Düşük" />}{offer.is_preferred && <Chip color="primary" size="small" label="Tercih" />}</Stack></Stack><Typography variant="h5" fontWeight={900}>{displayAmount(offer.total_amount, offer.currency)}</Typography><Typography variant="body2" color="text.secondary">Son geçerli revizyon: {offer.revision_no} · Özgün: {offer.currency}</Typography>{offer.warning && <Alert severity="info" sx={{ py: 0 }}>{offer.warning}</Alert>}<Stack direction="row" spacing={1}>{!readOnly && <Button size="small" variant={offer.is_preferred ? "outlined" : "contained"} startIcon={<StarOutlineOutlinedIcon />} onClick={() => onPreferred(offer.is_preferred ? null : offer.offer_id)}>{offer.is_preferred ? "Tercihi Kaldır" : "Tercih Et"}</Button>}{offer.documents.map((document) => document.content_type === "application/pdf" ? <Button key={document.id} size="small" onClick={() => onPreview(document)}>PDF Görüntüle</Button> : null)}</Stack></Stack></CardContent></Card>)}
                 </Box>
-                <Paper variant="outlined" sx={{ borderRadius: 2 }}><TableContainer sx={{ overflowX: "auto" }}><Table size="small" sx={{ minWidth: 820 }}><TableHead><TableRow><TableCell>Kalem</TableCell>{comparison.offers.map((offer) => <TableCell key={offer.offer_id}><Chip size="small" label={offer.vendor_name} sx={getVendorChipSx(offer.vendor_name, comparison.offers.map((row) => row.vendor_name))} /></TableCell>)}</TableRow></TableHead><TableBody>{comparison.item_rows.map((row) => <TableRow key={row.key}><TableCell sx={{ fontWeight: 700 }}>{row.label}</TableCell>{comparison.offers.map((offer) => { const cell = row.cells.find((candidate) => candidate.offer_id === offer.offer_id); return <TableCell key={offer.offer_id}>{cell ? <Stack spacing={0.25}><Typography variant="body2">{cell.item.quantity} adet · {cell.item.duration_months ? `${cell.item.duration_months} ay` : "süre yok"}</Typography><Typography fontWeight={700}>{formatQuoteCurrency(cell.item.line_total, offer.currency)}</Typography></Stack> : <Typography color="text.secondary">Teklif verilmedi</Typography>}</TableCell>; })}</TableRow>)}</TableBody></Table></TableContainer></Paper>
+                <Paper variant="outlined" sx={{ borderRadius: 2 }}><TableContainer sx={{ overflowX: "auto" }}><Table size="small" sx={{ minWidth: 820 }}><TableHead><TableRow><TableCell>Kalem</TableCell>{comparison.offers.map((offer) => <TableCell key={offer.offer_id}><Chip size="small" label={offer.vendor_name} sx={getVendorChipSx(offer.vendor_name, comparison.offers.map((row) => row.vendor_name))} /></TableCell>)}</TableRow></TableHead><TableBody>{comparison.item_rows.map((row) => <TableRow key={row.key}><TableCell sx={{ fontWeight: 700 }}>{row.label}</TableCell>{comparison.offers.map((offer) => { const cell = row.cells.find((candidate) => candidate.offer_id === offer.offer_id); return <TableCell key={offer.offer_id}>{cell ? <Stack spacing={0.25}><Typography variant="body2">{cell.item.quantity} adet · {cell.item.duration_months ? `${cell.item.duration_months} ay` : "süre yok"}</Typography><Typography fontWeight={700}>{displayAmount(cell.item.line_total, offer.currency)}</Typography></Stack> : <Typography color="text.secondary">Teklif verilmedi</Typography>}</TableCell>; })}</TableRow>)}</TableBody></Table></TableContainer></Paper>
               </Stack>
             ))}
             {tab === 2 && (
