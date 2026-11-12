@@ -457,11 +457,18 @@ class QuoteNumberSequence(SQLModel, table=True):
 
 class QuoteProcess(TimestampMixin, SQLModel, table=True):
     __tablename__ = "quote_processes"
+    __table_args__ = (
+        CheckConstraint(
+            "process_type IN ('SINGLE', 'PACKAGE')",
+            name="ck_quote_process_type",
+        ),
+    )
 
     id: Optional[int] = Field(default=None, primary_key=True)
     quote_no: str = Field(nullable=False, unique=True, index=True, max_length=32)
     name: str = Field(nullable=False, index=True, max_length=250)
     description: Optional[str] = Field(default=None, nullable=True)
+    process_type: str = Field(default="SINGLE", nullable=False, index=True, max_length=16)
     status: str = Field(default="COLLECTING", nullable=False, index=True, max_length=32)
     created_by_id: int = Field(foreign_key="users.id", nullable=False, index=True)
     preferred_offer_id: Optional[int] = Field(
@@ -469,10 +476,23 @@ class QuoteProcess(TimestampMixin, SQLModel, table=True):
     )
     archived_at: Optional[datetime] = Field(default=None, nullable=True)
     archived_by_id: Optional[int] = Field(default=None, foreign_key="users.id", nullable=True)
+    deleted_at: Optional[datetime] = Field(default=None, nullable=True, index=True)
+    deleted_by_id: Optional[int] = Field(default=None, foreign_key="users.id", nullable=True)
+    deleted_reason: Optional[str] = Field(default=None, nullable=True)
 
 
 class QuoteProcessItem(TimestampMixin, SQLModel, table=True):
     __tablename__ = "quote_process_items"
+    __table_args__ = (
+        CheckConstraint(
+            "requested_quantity > 0",
+            name="ck_quote_process_item_requested_quantity",
+        ),
+        CheckConstraint(
+            "requested_duration_months IS NULL OR requested_duration_months IN (1,6,12,24,36,60)",
+            name="ck_quote_process_item_requested_duration",
+        ),
+    )
 
     id: Optional[int] = Field(default=None, primary_key=True)
     process_id: int = Field(foreign_key="quote_processes.id", nullable=False, index=True)
@@ -483,7 +503,14 @@ class QuoteProcessItem(TimestampMixin, SQLModel, table=True):
     product_code: Optional[str] = Field(default=None, nullable=True, index=True, max_length=120)
     category: str = Field(nullable=False, index=True, max_length=100)
     description: Optional[str] = Field(default=None, nullable=True)
+    requested_quantity: Decimal = Field(
+        default=Decimal("1.0000"), sa_column=Column(Numeric(16, 4), nullable=False)
+    )
+    requested_duration_months: Optional[int] = Field(default=None, nullable=True)
     sort_order: int = Field(default=0, nullable=False)
+    is_active: bool = Field(default=True, nullable=False, index=True)
+    removed_at: Optional[datetime] = Field(default=None, nullable=True)
+    removed_by_id: Optional[int] = Field(default=None, foreign_key="users.id", nullable=True)
 
 
 class QuoteVendorOffer(TimestampMixin, SQLModel, table=True):
@@ -517,6 +544,10 @@ class QuoteOfferRevision(TimestampMixin, SQLModel, table=True):
     )
     note: Optional[str] = Field(default=None, nullable=True)
     created_by_id: int = Field(foreign_key="users.id", nullable=False, index=True)
+    updated_by_id: Optional[int] = Field(default=None, foreign_key="users.id", nullable=True)
+    deleted_at: Optional[datetime] = Field(default=None, nullable=True, index=True)
+    deleted_by_id: Optional[int] = Field(default=None, foreign_key="users.id", nullable=True)
+    deleted_reason: Optional[str] = Field(default=None, nullable=True)
 
 
 class QuoteOfferItem(TimestampMixin, SQLModel, table=True):

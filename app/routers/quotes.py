@@ -17,7 +17,7 @@ from sqlalchemy import func, or_, text
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
-from app.dependencies import get_current_user, get_db_session, get_write_user
+from app.dependencies import get_admin_user, get_current_user, get_db_session, get_write_user
 from app.models import (
     BudgetItem,
     QuoteAuditLog,
@@ -35,6 +35,7 @@ from app.quote_schemas import (
     QuoteAuditRead,
     QuoteComparisonOffer,
     QuoteComparisonRead,
+    QuoteDeleteRequest,
     QuoteDocumentRead,
     QuoteItemComparisonCell,
     QuoteItemComparisonRow,
@@ -47,6 +48,7 @@ from app.quote_schemas import (
     QuoteProcessUpdate,
     QuoteRevisionCreate,
     QuoteRevisionRead,
+    QuoteRevisionUpdate,
     QuoteStatusUpdate,
     QuoteSummaryRead,
     QuoteVendorOfferCreate,
@@ -99,14 +101,24 @@ def _audit(
     )
 
 
-def _get_process(session: Session, process_id: int) -> QuoteProcess:
+def _get_process(
+    session: Session,
+    process_id: int,
+    *,
+    include_deleted: bool = False,
+) -> QuoteProcess:
     process = session.get(QuoteProcess, process_id)
-    if not process:
+    if not process or (process.deleted_at is not None and not include_deleted):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Teklif süreci bulunamadı.")
     return process
 
 
 def _ensure_mutable(process: QuoteProcess) -> None:
+    if process.deleted_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Silinmiş teklif süreci değiştirilemez.",
+        )
     if process.status == "ARCHIVED":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -121,11 +133,28 @@ def _get_offer(session: Session, process_id: int, offer_id: int) -> QuoteVendorO
     return offer
 
 
-def _get_revision(session: Session, offer: QuoteVendorOffer, revision_id: int) -> QuoteOfferRevision:
+def _get_revision(
+    session: Session,
+    offer: QuoteVendorOffer,
+    revision_id: int,
+    *,
+    include_deleted: bool = False,
+) -> QuoteOfferRevision:
     revision = session.get(QuoteOfferRevision, revision_id)
-    if not revision or revision.vendor_offer_id != offer.id:
+    if (
+        not revision
+        or revision.vendor_offer_id != offer.id
+        or (revision.deleted_at is not None and not include_deleted)
+    ):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Teklif revizyonu bulunamadı.")
     return revision
+
+
+def _lock_offer(session: Session, offer_id: int) -> None:
+    if session.get_bind().dialect.name == "postgresql":
+        session.exec(
+            select(QuoteVendorOffer).where(QuoteVendorOffer.id == offer_id).with_for_update()
+        ).one()
 
 
 def _next_quote_number(session: Session, year: int) -> str:
@@ -156,30 +185,54 @@ def _validate_budget_item(session: Session, budget_item_id: int | None) -> None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Seçilen bütçe ürünü bulunamadı.")
 
 
-def _replace_process_items(
+def _sync_process_items(
     session: Session,
     process: QuoteProcess,
     items: Iterable,
+    *,
+    current_user_id: int,
 ) -> list[QuoteProcessItem]:
+    items = list(items)
     current = session.exec(
         select(QuoteProcessItem).where(QuoteProcessItem.process_id == process.id)
     ).all()
-    for existing in current:
-        session.delete(existing)
+    current_by_id = {item.id: item for item in current}
+    submitted_ids = [item.id for item in items if item.id is not None]
+    if len(submitted_ids) != len(set(submitted_ids)):
+        raise HTTPException(status_code=400, detail="Aynı süreç kalemi birden fazla gönderilemez.")
+    if any(item_id not in current_by_id for item_id in submitted_ids):
+        raise HTTPException(status_code=400, detail="Süreç kalemi bu teklif sürecine ait değil.")
+
     created: list[QuoteProcessItem] = []
     for index, item in enumerate(items):
         _validate_budget_item(session, item.budget_item_id)
-        row = QuoteProcessItem(
-            process_id=process.id,
-            budget_item_id=item.budget_item_id,
-            name=item.name,
-            product_code=item.product_code,
-            category=item.category,
-            description=item.description,
-            sort_order=index,
+        row = current_by_id.get(item.id) if item.id is not None else QuoteProcessItem(
+            process_id=process.id
         )
+        row.budget_item_id = item.budget_item_id
+        row.name = item.name
+        row.product_code = item.product_code
+        row.category = item.category
+        row.description = item.description
+        row.requested_quantity = item.requested_quantity
+        row.requested_duration_months = item.requested_duration_months
+        row.sort_order = index
+        row.is_active = True
+        row.removed_at = None
+        row.removed_by_id = None
+        row.updated_at = datetime.utcnow()
         session.add(row)
         created.append(row)
+
+    submitted_id_set = set(submitted_ids)
+    for existing in current:
+        if existing.id not in submitted_id_set and existing.is_active:
+            existing.is_active = False
+            existing.removed_at = datetime.utcnow()
+            existing.removed_by_id = current_user_id
+            existing.updated_at = datetime.utcnow()
+            session.add(existing)
+    session.flush()
     return created
 
 
@@ -188,17 +241,64 @@ def _validate_revision_item_links(
     process_id: int,
     revision_in: QuoteRevisionCreate,
 ) -> None:
-    valid_ids = set(
+    active_ids = set(
         session.exec(
-            select(QuoteProcessItem.id).where(QuoteProcessItem.process_id == process_id)
+            select(QuoteProcessItem.id).where(
+                QuoteProcessItem.process_id == process_id,
+                QuoteProcessItem.is_active.is_(True),
+            )
         ).all()
     )
-    for item in revision_in.items:
-        if item.process_item_id is not None and item.process_item_id not in valid_ids:
+    linked_ids = [item.process_item_id for item in revision_in.items if item.process_item_id]
+    if len(linked_ids) != len(set(linked_ids)):
+        raise HTTPException(status_code=400, detail="Aynı süreç ürünü bir revizyonda birden fazla fiyatlanamaz.")
+    if any(item_id not in active_ids for item_id in linked_ids):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Teklif kalemi bu sürecin aktif olmayan veya başka sürece ait bir ürününe bağlanamaz.",
+        )
+    selected_ids = set(revision_in.selected_process_item_ids)
+    if revision_in.revision_scope == "ALL" and not active_ids.issubset(set(linked_ids)):
+        raise HTTPException(
+            status_code=400,
+            detail="Tüm paket revizyonu bütün aktif süreç ürünlerini içermelidir.",
+        )
+    if revision_in.revision_scope == "SELECTED":
+        if any(item.process_item_id is None for item in revision_in.items):
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Teklif kalemi bu teklif sürecine ait olmayan bir ürüne bağlanamaz.",
+                status_code=400,
+                detail="Belirli ürün revizyonunda manuel/bağlantısız kalem kullanılamaz.",
             )
+        if selected_ids != set(linked_ids):
+            raise HTTPException(
+                status_code=400,
+                detail="Seçilen ürünler ile gönderilen revizyon satırları eşleşmelidir.",
+            )
+        if not selected_ids.issubset(active_ids):
+            raise HTTPException(status_code=400, detail="Yalnız aktif süreç ürünleri revize edilebilir.")
+
+
+def _revision_item_key(item: object, fallback: int = 0) -> tuple[str, object]:
+    process_item_id = getattr(item, "process_item_id", None)
+    if process_item_id is not None:
+        return ("process", int(process_item_id))
+    product_code = (getattr(item, "product_code", None) or "").strip().casefold()
+    product_name = (getattr(item, "product_name", "") or "").strip().casefold()
+    category = (getattr(item, "category", "") or "").strip().casefold()
+    return ("manual", (product_code, product_name, category, fallback))
+
+
+def _revision_item_values(item: object) -> dict[str, object]:
+    return {
+        "process_item_id": getattr(item, "process_item_id", None),
+        "product_name": getattr(item, "product_name"),
+        "product_code": getattr(item, "product_code", None),
+        "category": getattr(item, "category"),
+        "duration_months": getattr(item, "duration_months", None),
+        "quantity": getattr(item, "quantity"),
+        "unit_price": getattr(item, "unit_price"),
+        "description": getattr(item, "description", None),
+    }
 
 
 def _create_revision_rows(
@@ -210,16 +310,56 @@ def _create_revision_rows(
     current_user: User,
 ) -> QuoteOfferRevision:
     _validate_revision_item_links(session, process_id, revision_in)
-    if session.get_bind().dialect.name == "postgresql":
-        session.exec(
-            select(QuoteVendorOffer).where(QuoteVendorOffer.id == offer.id).with_for_update()
-        ).one()
+    _lock_offer(session, offer.id)
     latest_number = session.exec(
         select(func.max(QuoteOfferRevision.revision_no)).where(
             QuoteOfferRevision.vendor_offer_id == offer.id
         )
     ).one()
     revision_no = int(latest_number or 0) + 1
+
+    previous = session.exec(
+        select(QuoteOfferRevision)
+        .where(
+            QuoteOfferRevision.vendor_offer_id == offer.id,
+            QuoteOfferRevision.deleted_at.is_(None),
+        )
+        .order_by(QuoteOfferRevision.revision_no.desc())
+    ).first()
+    previous_items = (
+        session.exec(
+            select(QuoteOfferItem)
+            .where(QuoteOfferItem.revision_id == previous.id)
+            .order_by(QuoteOfferItem.sort_order, QuoteOfferItem.id)
+        ).all()
+        if previous
+        else []
+    )
+    active_process_item_ids = set(
+        session.exec(
+            select(QuoteProcessItem.id).where(
+                QuoteProcessItem.process_id == process_id,
+                QuoteProcessItem.is_active.is_(True),
+            )
+        ).all()
+    )
+    previous_items = [
+        item
+        for item in previous_items
+        if item.process_item_id is None or item.process_item_id in active_process_item_ids
+    ]
+    merged: dict[tuple[str, object], dict[str, object]] = {}
+    order: list[tuple[str, object]] = []
+    for index, item in enumerate(previous_items):
+        key = _revision_item_key(item, index)
+        merged[key] = _revision_item_values(item)
+        order.append(key)
+    for index, item in enumerate(revision_in.items):
+        key = _revision_item_key(item, index)
+        if key not in merged:
+            order.append(key)
+        merged[key] = _revision_item_values(item)
+
     line_rows: list[QuoteOfferItem] = []
     total = Decimal("0.00")
     revision = QuoteOfferRevision(
@@ -234,10 +374,67 @@ def _create_revision_rows(
     )
     session.add(revision)
     session.flush()
+    for index, key in enumerate(order):
+        item = merged[key]
+        quantity = Decimal(str(item["quantity"]))
+        unit_price = Decimal(str(item["unit_price"]))
+        line_total = _money(quantity * unit_price)
+        total += line_total
+        line_rows.append(
+            QuoteOfferItem(
+                revision_id=revision.id,
+                process_item_id=item["process_item_id"],
+                product_name=item["product_name"],
+                product_code=item["product_code"],
+                category=item["category"],
+                duration_months=item["duration_months"],
+                quantity=quantity,
+                unit_price=unit_price,
+                line_total=line_total,
+                description=item["description"],
+                sort_order=index,
+            )
+        )
+    revision.total_amount = _money(total)
+    session.add(revision)
+    session.add_all(line_rows)
+    session.flush()
+    return revision
+
+
+def _replace_revision_rows(
+    session: Session,
+    *,
+    process_id: int,
+    revision: QuoteOfferRevision,
+    revision_in: QuoteRevisionUpdate,
+) -> None:
+    valid_ids = set(
+        session.exec(
+            select(QuoteProcessItem.id).where(QuoteProcessItem.process_id == process_id)
+        ).all()
+    )
+    linked_ids = [item.process_item_id for item in revision_in.items if item.process_item_id]
+    if len(linked_ids) != len(set(linked_ids)):
+        raise HTTPException(status_code=400, detail="Aynı süreç ürünü bir revizyonda birden fazla fiyatlanamaz.")
+    if any(item_id not in valid_ids for item_id in linked_ids):
+        raise HTTPException(
+            status_code=400,
+            detail="Revizyon kalemi bu teklif sürecine ait olmayan bir ürüne bağlanamaz.",
+        )
+
+    existing = session.exec(
+        select(QuoteOfferItem).where(QuoteOfferItem.revision_id == revision.id)
+    ).all()
+    for item in existing:
+        session.delete(item)
+
+    total = Decimal("0.00")
+    rows: list[QuoteOfferItem] = []
     for index, item in enumerate(revision_in.items):
         line_total = _money(item.quantity * item.unit_price)
         total += line_total
-        line_rows.append(
+        rows.append(
             QuoteOfferItem(
                 revision_id=revision.id,
                 process_item_id=item.process_item_id,
@@ -254,9 +451,8 @@ def _create_revision_rows(
         )
     revision.total_amount = _money(total)
     session.add(revision)
-    session.add_all(line_rows)
+    session.add_all(rows)
     session.flush()
-    return revision
 
 
 def _document_read(session: Session, document: QuoteDocument) -> QuoteDocumentRead:
@@ -268,6 +464,54 @@ def _document_read(session: Session, document: QuoteDocument) -> QuoteDocumentRe
 
 def _item_read(item: QuoteOfferItem) -> QuoteOfferItemRead:
     return QuoteOfferItemRead.from_orm(item)
+
+
+def _offer_item_signature(item: QuoteOfferItem) -> tuple[object, ...]:
+    return (
+        item.product_name,
+        item.product_code,
+        item.category,
+        item.duration_months,
+        item.quantity,
+        item.unit_price,
+        item.description,
+    )
+
+
+def _changed_process_item_ids(
+    session: Session,
+    revision: QuoteOfferRevision,
+    items: list[QuoteOfferItem],
+) -> list[int]:
+    previous = session.exec(
+        select(QuoteOfferRevision)
+        .where(
+            QuoteOfferRevision.vendor_offer_id == revision.vendor_offer_id,
+            QuoteOfferRevision.revision_no < revision.revision_no,
+            QuoteOfferRevision.deleted_at.is_(None),
+        )
+        .order_by(QuoteOfferRevision.revision_no.desc())
+    ).first()
+    current_by_process = {
+        item.process_item_id: _offer_item_signature(item)
+        for item in items
+        if item.process_item_id is not None
+    }
+    if not previous:
+        return sorted(current_by_process)
+    previous_items = session.exec(
+        select(QuoteOfferItem).where(QuoteOfferItem.revision_id == previous.id)
+    ).all()
+    previous_by_process = {
+        item.process_item_id: _offer_item_signature(item)
+        for item in previous_items
+        if item.process_item_id is not None
+    }
+    return sorted(
+        process_item_id
+        for process_item_id in set(current_by_process) | set(previous_by_process)
+        if current_by_process.get(process_item_id) != previous_by_process.get(process_item_id)
+    )
 
 
 def _revision_read(session: Session, revision: QuoteOfferRevision) -> QuoteRevisionRead:
@@ -284,29 +528,54 @@ def _revision_read(session: Session, revision: QuoteOfferRevision) -> QuoteRevis
     return QuoteRevisionRead(
         **revision.model_dump(),
         created_by_name=_user_name(session.get(User, revision.created_by_id)),
+        changed_process_item_ids=_changed_process_item_ids(session, revision, items),
         items=[_item_read(item) for item in items],
         documents=[_document_read(session, document) for document in documents],
     )
 
 
-def _offer_read(session: Session, offer: QuoteVendorOffer, *, include_history: bool) -> QuoteVendorOfferRead:
+def _offer_read(
+    session: Session,
+    offer: QuoteVendorOffer,
+    *,
+    include_history: bool,
+    include_deleted: bool = False,
+) -> QuoteVendorOfferRead:
     revisions = session.exec(
         select(QuoteOfferRevision)
         .where(QuoteOfferRevision.vendor_offer_id == offer.id)
         .order_by(QuoteOfferRevision.revision_no.desc())
     ).all()
-    revision_reads = [_revision_read(session, revision) for revision in revisions]
+    active_reads = [
+        _revision_read(session, revision)
+        for revision in revisions
+        if revision.deleted_at is None
+    ]
+    deleted_reads = [
+        _revision_read(session, revision)
+        for revision in revisions
+        if revision.deleted_at is not None
+    ]
     return QuoteVendorOfferRead(
         **offer.model_dump(),
-        current_revision=revision_reads[0] if revision_reads else None,
-        revisions=revision_reads if include_history else [],
+        current_revision=active_reads[0] if active_reads else None,
+        revisions=active_reads if include_history else [],
+        deleted_revisions=deleted_reads if include_deleted else [],
     )
 
 
-def _process_read(session: Session, process: QuoteProcess) -> QuoteProcessRead:
+def _process_read(
+    session: Session,
+    process: QuoteProcess,
+    *,
+    include_deleted_revisions: bool = False,
+) -> QuoteProcessRead:
     items = session.exec(
         select(QuoteProcessItem)
-        .where(QuoteProcessItem.process_id == process.id)
+        .where(
+            QuoteProcessItem.process_id == process.id,
+            QuoteProcessItem.is_active.is_(True),
+        )
         .order_by(QuoteProcessItem.sort_order, QuoteProcessItem.id)
     ).all()
     offers = session.exec(
@@ -330,7 +599,15 @@ def _process_read(session: Session, process: QuoteProcess) -> QuoteProcessRead:
         **process.model_dump(),
         created_by_name=_user_name(session.get(User, process.created_by_id)),
         items=[QuoteProcessItemRead.from_orm(item) for item in items],
-        offers=[_offer_read(session, offer, include_history=True) for offer in offers],
+        offers=[
+            _offer_read(
+                session,
+                offer,
+                include_history=True,
+                include_deleted=include_deleted_revisions,
+            )
+            for offer in offers
+        ],
         audit_logs=audit_reads,
     )
 
@@ -359,17 +636,26 @@ def _process_matches_filters(
     if end_date and process.created_at.date() > end_date:
         return False
     items = session.exec(
-        select(QuoteProcessItem).where(QuoteProcessItem.process_id == process.id)
+        select(QuoteProcessItem).where(
+            QuoteProcessItem.process_id == process.id,
+            QuoteProcessItem.is_active.is_(True),
+        )
     ).all()
     offers = session.exec(
-        select(QuoteVendorOffer).where(QuoteVendorOffer.process_id == process.id)
+        select(QuoteVendorOffer).where(
+            QuoteVendorOffer.process_id == process.id,
+            QuoteVendorOffer.is_active.is_(True),
+        )
     ).all()
     if vendor and not any(vendor.casefold() in offer.vendor_name.casefold() for offer in offers):
         return False
     offer_ids = [offer.id for offer in offers]
     revision_ids = (
         session.exec(
-            select(QuoteOfferRevision.id).where(QuoteOfferRevision.vendor_offer_id.in_(offer_ids))
+            select(QuoteOfferRevision.id).where(
+                QuoteOfferRevision.vendor_offer_id.in_(offer_ids),
+                QuoteOfferRevision.deleted_at.is_(None),
+            )
         ).all()
         if offer_ids
         else []
@@ -406,12 +692,16 @@ def _process_matches_filters(
         if not any(revision.currency == currency for revision in revisions):
             return False
     if has_document is not None:
-        count = session.exec(
-            select(func.count(QuoteDocument.id)).where(
-                QuoteDocument.process_id == process.id,
-                QuoteDocument.is_active.is_(True),
-            )
-        ).one()
+        count = (
+            session.exec(
+                select(func.count(QuoteDocument.id)).where(
+                    QuoteDocument.revision_id.in_(revision_ids),
+                    QuoteDocument.is_active.is_(True),
+                )
+            ).one()
+            if revision_ids
+            else 0
+        )
         if bool(count) is not has_document:
             return False
     return True
@@ -419,7 +709,10 @@ def _process_matches_filters(
 
 def _list_item(session: Session, process: QuoteProcess) -> QuoteListItem:
     items = session.exec(
-        select(QuoteProcessItem).where(QuoteProcessItem.process_id == process.id)
+        select(QuoteProcessItem).where(
+            QuoteProcessItem.process_id == process.id,
+            QuoteProcessItem.is_active.is_(True),
+        )
     ).all()
     offers = session.exec(
         select(QuoteVendorOffer).where(
@@ -431,28 +724,47 @@ def _list_item(session: Session, process: QuoteProcess) -> QuoteListItem:
     revision_count = (
         session.exec(
             select(func.count(QuoteOfferRevision.id)).where(
-                QuoteOfferRevision.vendor_offer_id.in_(offer_ids)
+                QuoteOfferRevision.vendor_offer_id.in_(offer_ids),
+                QuoteOfferRevision.deleted_at.is_(None),
             )
         ).one()
         if offer_ids
         else 0
     )
-    document_count = session.exec(
-        select(func.count(QuoteDocument.id)).where(
-            QuoteDocument.process_id == process.id,
-            QuoteDocument.is_active.is_(True),
-        )
-    ).one()
+    active_revision_ids = (
+        session.exec(
+            select(QuoteOfferRevision.id).where(
+                QuoteOfferRevision.vendor_offer_id.in_(offer_ids),
+                QuoteOfferRevision.deleted_at.is_(None),
+            )
+        ).all()
+        if offer_ids
+        else []
+    )
+    document_count = (
+        session.exec(
+            select(func.count(QuoteDocument.id)).where(
+                QuoteDocument.revision_id.in_(active_revision_ids),
+                QuoteDocument.is_active.is_(True),
+            )
+        ).one()
+        if active_revision_ids
+        else 0
+    )
     return QuoteListItem(
         id=process.id,
         quote_no=process.quote_no,
         name=process.name,
+        process_type=process.process_type,
         categories=sorted({item.category for item in items}),
+        vendor_names=sorted({offer.vendor_name for offer in offers}, key=str.casefold),
         vendor_count=len(offers),
         offer_count=int(revision_count),
         status=process.status,
         created_at=process.created_at,
         has_document=bool(document_count),
+        deleted_at=process.deleted_at,
+        deleted_reason=process.deleted_reason,
     )
 
 
@@ -461,17 +773,27 @@ def get_quote_summary(
     session: Session = Depends(get_db_session),
     _: User = Depends(get_current_user),
 ) -> QuoteSummaryRead:
-    processes = session.exec(select(QuoteProcess)).all()
+    processes = session.exec(
+        select(QuoteProcess).where(QuoteProcess.deleted_at.is_(None))
+    ).all()
+    deleted_count = session.exec(
+        select(func.count(QuoteProcess.id)).where(QuoteProcess.deleted_at.is_not(None))
+    ).one()
+    process_ids = [process.id for process in processes]
     return QuoteSummaryRead(
         total_processes=len(processes),
         active_processes=sum(p.status in {"COLLECTING", "EVALUATING"} for p in processes),
         collected_offers=int(
             session.exec(
-                select(func.count(QuoteVendorOffer.id)).where(QuoteVendorOffer.is_active.is_(True))
-            ).one()
+                select(func.count(QuoteVendorOffer.id)).where(
+                    QuoteVendorOffer.is_active.is_(True),
+                    QuoteVendorOffer.process_id.in_(process_ids),
+                )
+            ).one() if process_ids else 0
         ),
         completed_processes=sum(p.status == "COMPLETED" for p in processes),
         archived_processes=sum(p.status == "ARCHIVED" for p in processes),
+        deleted_processes=int(deleted_count),
     )
 
 
@@ -498,7 +820,7 @@ def list_quote_processes(
             raise HTTPException(status_code=400, detail="Geçersiz teklif durumu.")
     if currency:
         currency = currency.strip().upper()
-    statement = select(QuoteProcess)
+    statement = select(QuoteProcess).where(QuoteProcess.deleted_at.is_(None))
     if q:
         pattern = f"%{q.strip()}%"
         statement = statement.where(
@@ -556,12 +878,18 @@ def export_quote_processes(
     ])
     for process in session.exec(select(QuoteProcess).where(QuoteProcess.id.in_(process_ids))).all() if process_ids else []:
         offers = session.exec(
-            select(QuoteVendorOffer).where(QuoteVendorOffer.process_id == process.id)
+            select(QuoteVendorOffer).where(
+                QuoteVendorOffer.process_id == process.id,
+                QuoteVendorOffer.is_active.is_(True),
+            )
         ).all()
         for offer in offers:
             revision = session.exec(
                 select(QuoteOfferRevision)
-                .where(QuoteOfferRevision.vendor_offer_id == offer.id)
+                .where(
+                    QuoteOfferRevision.vendor_offer_id == offer.id,
+                    QuoteOfferRevision.deleted_at.is_(None),
+                )
                 .order_by(QuoteOfferRevision.revision_no.desc())
             ).first()
             if not revision:
@@ -599,6 +927,45 @@ def export_quote_processes(
     )
 
 
+@router.get("/deleted", response_model=list[QuoteListItem])
+def list_deleted_quote_processes(
+    session: Session = Depends(get_db_session),
+    _: User = Depends(get_admin_user),
+) -> list[QuoteListItem]:
+    processes = session.exec(
+        select(QuoteProcess)
+        .where(QuoteProcess.deleted_at.is_not(None))
+        .order_by(QuoteProcess.deleted_at.desc())
+    ).all()
+    return [_list_item(session, process) for process in processes]
+
+
+@router.post("/deleted/{process_id}/restore", response_model=QuoteProcessRead)
+def restore_quote_process(
+    process_id: int,
+    session: Session = Depends(get_db_session),
+    current_user: User = Depends(get_admin_user),
+) -> QuoteProcessRead:
+    process = _get_process(session, process_id, include_deleted=True)
+    if process.deleted_at is None:
+        raise HTTPException(status_code=409, detail="Teklif süreci zaten aktiftir.")
+    process.deleted_at = None
+    process.deleted_by_id = None
+    process.deleted_reason = None
+    process.updated_at = datetime.utcnow()
+    session.add(process)
+    _audit(
+        session,
+        process_id=process.id,
+        action="PROCESS_RESTORED",
+        user_id=current_user.id,
+        details={"quote_no": process.quote_no},
+    )
+    session.commit()
+    session.refresh(process)
+    return _process_read(session, process, include_deleted_revisions=True)
+
+
 @router.post("", response_model=QuoteProcessRead, status_code=status.HTTP_201_CREATED)
 @router.post("/", response_model=QuoteProcessRead, status_code=status.HTTP_201_CREATED, include_in_schema=False)
 def create_quote_process(
@@ -612,11 +979,17 @@ def create_quote_process(
             quote_no=quote_no,
             name=payload.name,
             description=payload.description,
+            process_type=payload.process_type,
             created_by_id=current_user.id,
         )
         session.add(process)
         session.flush()
-        _replace_process_items(session, process, payload.items)
+        _sync_process_items(
+            session,
+            process,
+            payload.items,
+            current_user_id=current_user.id,
+        )
         _audit(
             session,
             process_id=process.id,
@@ -636,9 +1009,13 @@ def create_quote_process(
 def get_quote_process(
     process_id: int,
     session: Session = Depends(get_db_session),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ) -> QuoteProcessRead:
-    return _process_read(session, _get_process(session, process_id))
+    return _process_read(
+        session,
+        _get_process(session, process_id),
+        include_deleted_revisions=current_user.is_admin,
+    )
 
 
 @router.put("/{process_id}", response_model=QuoteProcessRead)
@@ -650,16 +1027,26 @@ def update_quote_process(
 ) -> QuoteProcessRead:
     process = _get_process(session, process_id)
     _ensure_mutable(process)
+    next_type = payload.process_type or process.process_type
     if payload.items is not None:
-        offer_count = session.exec(
-            select(func.count(QuoteVendorOffer.id)).where(QuoteVendorOffer.process_id == process.id)
-        ).one()
-        if offer_count:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Firma teklifi bulunan süreçte ana kalemler değiştirilemez; yeni revizyon oluşturun.",
+        if next_type == "SINGLE" and len(payload.items) != 1:
+            raise HTTPException(status_code=400, detail="Tek Ürün sürecinde tam olarak bir kalem olmalıdır.")
+        _sync_process_items(
+            session,
+            process,
+            payload.items,
+            current_user_id=current_user.id,
+        )
+    elif payload.process_type is not None:
+        active_item_count = session.exec(
+            select(func.count(QuoteProcessItem.id)).where(
+                QuoteProcessItem.process_id == process.id,
+                QuoteProcessItem.is_active.is_(True),
             )
-        _replace_process_items(session, process, payload.items)
+        ).one()
+        if next_type == "SINGLE" and active_item_count != 1:
+            raise HTTPException(status_code=400, detail="Tek Ürün sürecinde tam olarak bir kalem olmalıdır.")
+    process.process_type = next_type
     if payload.name is not None:
         process.name = payload.name
     if "description" in payload.__fields_set__:
@@ -669,7 +1056,37 @@ def update_quote_process(
     _audit(session, process_id=process.id, action="PROCESS_UPDATED", user_id=current_user.id)
     session.commit()
     session.refresh(process)
-    return _process_read(session, process)
+    return _process_read(session, process, include_deleted_revisions=current_user.is_admin)
+
+
+@router.delete("/{process_id}", response_model=QuoteProcessRead)
+def delete_quote_process(
+    process_id: int,
+    payload: QuoteDeleteRequest,
+    session: Session = Depends(get_db_session),
+    current_user: User = Depends(get_write_user),
+) -> QuoteProcessRead:
+    process = _get_process(session, process_id)
+    process.deleted_at = datetime.utcnow()
+    process.deleted_by_id = current_user.id
+    process.deleted_reason = payload.reason
+    process.updated_at = datetime.utcnow()
+    session.add(process)
+    _audit(
+        session,
+        process_id=process.id,
+        action="PROCESS_DELETED",
+        user_id=current_user.id,
+        details={
+            "quote_no": process.quote_no,
+            "name": process.name,
+            "reason": payload.reason,
+            "physical_records_retained": True,
+        },
+    )
+    session.commit()
+    session.refresh(process)
+    return _process_read(session, process, include_deleted_revisions=current_user.is_admin)
 
 
 @router.patch("/{process_id}/status", response_model=QuoteProcessRead)
@@ -833,6 +1250,148 @@ def create_offer_revision(
     return _revision_read(session, revision)
 
 
+@router.put(
+    "/{process_id}/offers/{offer_id}/revisions/{revision_id}",
+    response_model=QuoteRevisionRead,
+)
+def update_offer_revision(
+    process_id: int,
+    offer_id: int,
+    revision_id: int,
+    payload: QuoteRevisionUpdate,
+    session: Session = Depends(get_db_session),
+    current_user: User = Depends(get_write_user),
+) -> QuoteRevisionRead:
+    process = _get_process(session, process_id)
+    _ensure_mutable(process)
+    offer = _get_offer(session, process_id, offer_id)
+    _lock_offer(session, offer.id)
+    revision = _get_revision(session, offer, revision_id)
+    before_item_count = session.exec(
+        select(func.count(QuoteOfferItem.id)).where(QuoteOfferItem.revision_id == revision.id)
+    ).one()
+    before = {
+        "quote_date": revision.quote_date,
+        "valid_until": revision.valid_until,
+        "total": revision.total_amount,
+        "item_count": int(before_item_count),
+        "had_note": bool(revision.note),
+    }
+    revision.quote_date = payload.quote_date
+    revision.valid_until = payload.valid_until
+    previous_note = revision.note
+    revision.note = payload.note
+    revision.updated_by_id = current_user.id
+    revision.updated_at = datetime.utcnow()
+    _replace_revision_rows(
+        session,
+        process_id=process.id,
+        revision=revision,
+        revision_in=payload,
+    )
+    _audit(
+        session,
+        process_id=process.id,
+        vendor_offer_id=offer.id,
+        revision_id=revision.id,
+        action="REVISION_UPDATED",
+        user_id=current_user.id,
+        details={
+            "before": before,
+            "after": {
+                "quote_date": revision.quote_date,
+                "valid_until": revision.valid_until,
+                "total": revision.total_amount,
+                "item_count": len(payload.items),
+                "had_note": bool(revision.note),
+            },
+            "note_changed": previous_note != revision.note,
+        },
+    )
+    session.commit()
+    session.refresh(revision)
+    return _revision_read(session, revision)
+
+
+@router.delete(
+    "/{process_id}/offers/{offer_id}/revisions/{revision_id}",
+    response_model=QuoteRevisionRead,
+)
+def delete_offer_revision(
+    process_id: int,
+    offer_id: int,
+    revision_id: int,
+    payload: QuoteDeleteRequest,
+    session: Session = Depends(get_db_session),
+    current_user: User = Depends(get_write_user),
+) -> QuoteRevisionRead:
+    process = _get_process(session, process_id)
+    _ensure_mutable(process)
+    offer = _get_offer(session, process_id, offer_id)
+    _lock_offer(session, offer.id)
+    revision = _get_revision(session, offer, revision_id)
+    revision.deleted_at = datetime.utcnow()
+    revision.deleted_by_id = current_user.id
+    revision.deleted_reason = payload.reason
+    revision.updated_by_id = current_user.id
+    revision.updated_at = datetime.utcnow()
+    session.add(revision)
+    _audit(
+        session,
+        process_id=process.id,
+        vendor_offer_id=offer.id,
+        revision_id=revision.id,
+        action="REVISION_DELETED",
+        user_id=current_user.id,
+        details={
+            "revision_no": revision.revision_no,
+            "reason": payload.reason,
+            "documents_retained": True,
+        },
+    )
+    session.commit()
+    session.refresh(revision)
+    return _revision_read(session, revision)
+
+
+@router.post(
+    "/{process_id}/offers/{offer_id}/revisions/{revision_id}/restore",
+    response_model=QuoteRevisionRead,
+)
+def restore_offer_revision(
+    process_id: int,
+    offer_id: int,
+    revision_id: int,
+    session: Session = Depends(get_db_session),
+    current_user: User = Depends(get_admin_user),
+) -> QuoteRevisionRead:
+    process = _get_process(session, process_id)
+    _ensure_mutable(process)
+    offer = _get_offer(session, process_id, offer_id)
+    _lock_offer(session, offer.id)
+    revision = _get_revision(session, offer, revision_id, include_deleted=True)
+    if revision.deleted_at is None:
+        raise HTTPException(status_code=409, detail="Teklif revizyonu zaten aktiftir.")
+    revision.deleted_at = None
+    revision.deleted_by_id = None
+    revision.deleted_reason = None
+    revision.updated_by_id = current_user.id
+    revision.updated_at = datetime.utcnow()
+    session.add(revision)
+    _audit(
+        session,
+        process_id=process.id,
+        vendor_offer_id=offer.id,
+        revision_id=revision.id,
+        action="REVISION_RESTORED",
+        user_id=current_user.id,
+        details={"revision_no": revision.revision_no},
+    )
+    session.commit()
+    session.refresh(revision)
+    return _revision_read(session, revision)
+
+
 @router.post(
     "/{process_id}/offers/{offer_id}/revisions/{revision_id}/documents",
     response_model=list[QuoteDocumentRead],
@@ -897,6 +1456,10 @@ def upload_quote_documents(
 def _get_active_document(session: Session, document_id: int) -> QuoteDocument:
     document = session.get(QuoteDocument, document_id)
     if not document or not document.is_active:
+        raise HTTPException(status_code=404, detail="Belge bulunamadı veya pasife alınmış.")
+    _get_process(session, document.process_id)
+    revision = session.get(QuoteOfferRevision, document.revision_id)
+    if not revision or revision.deleted_at is not None:
         raise HTTPException(status_code=404, detail="Belge bulunamadı veya pasife alınmış.")
     return document
 
@@ -1065,7 +1628,17 @@ def compare_quote_offers(
                 )
             )
 
-    item_map: dict[str, tuple[str, list[QuoteItemComparisonCell]]] = {}
+    process_items = session.exec(
+        select(QuoteProcessItem)
+        .where(
+            QuoteProcessItem.process_id == process.id,
+            QuoteProcessItem.is_active.is_(True),
+        )
+        .order_by(QuoteProcessItem.sort_order, QuoteProcessItem.id)
+    ).all()
+    item_map: dict[str, tuple[str, list[QuoteItemComparisonCell]]] = {
+        f"process:{item.id}": (item.name, []) for item in process_items
+    }
     for offer in comparison_offers:
         for item in offer.items:
             key, label = _comparison_row_key(item)

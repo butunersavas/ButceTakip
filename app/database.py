@@ -15,11 +15,14 @@ is_sqlite = settings.database_url.startswith("sqlite")
 connect_args = {"check_same_thread": False} if is_sqlite else {}
 logger = logging.getLogger(__name__)
 SCHEMA_VERSION_TABLE = "app_schema_version"
-CURRENT_SCHEMA_VERSION = "20261109_quote_usd_01"
+CURRENT_SCHEMA_VERSION = "20261109_quote_packages_01"
 POSTGRES_MIGRATION_LOCK_ID = 2026110501
 REQUIRED_SCHEMA_INDEXES = {
     "scenarios": {"uq_scenarios_primary_year"},
     "budget_preparation_allocations": {"uq_preparation_item_year_month"},
+    "quote_processes": {"ix_quote_processes_process_type", "ix_quote_processes_deleted_at"},
+    "quote_process_items": {"ix_quote_process_items_is_active"},
+    "quote_offer_revisions": {"ix_quote_offer_revisions_deleted_at"},
 }
 engine = create_engine(
     settings.database_url,
@@ -163,6 +166,12 @@ def apply_schema_migrations() -> None:
         validate_database_schema(require_postgresql=settings.is_production)
         logger.info("Database schema is already at version %s.", CURRENT_SCHEMA_VERSION)
         return
+    if settings.is_production:
+        raise RuntimeError(
+            "Generic production --apply is disabled for this release. "
+            "Run the reviewed quote migration SQL after backup/restore verification, "
+            "then use --check."
+        )
 
     lock_connection = None
     try:
@@ -687,3 +696,82 @@ def _apply_schema_upgrades() -> None:
                         "WHERE role IS NULL OR role = ''"
                     )
                 )
+
+    if inspector.has_table("quote_processes"):
+        process_columns = {
+            column["name"] for column in inspect(engine).get_columns("quote_processes")
+        }
+        process_type_added = "process_type" not in process_columns
+        process_definitions = {
+            "process_type": "VARCHAR(16) DEFAULT 'SINGLE'",
+            "deleted_at": "TIMESTAMP",
+            "deleted_by_id": "INTEGER",
+            "deleted_reason": "TEXT",
+        }
+        for column_name, column_definition in process_definitions.items():
+            if column_name not in process_columns:
+                with engine.begin() as connection:
+                    connection.execute(text(
+                        f"ALTER TABLE quote_processes ADD COLUMN {column_name} {column_definition}"
+                    ))
+        with engine.begin() as connection:
+            if process_type_added:
+                connection.execute(text(
+                    "UPDATE quote_processes SET process_type = CASE "
+                    "WHEN (SELECT COUNT(*) FROM quote_process_items item "
+                    "WHERE item.process_id = quote_processes.id) <= 1 "
+                    "THEN 'SINGLE' ELSE 'PACKAGE' END"
+                ))
+            connection.execute(text(
+                "CREATE INDEX IF NOT EXISTS ix_quote_processes_process_type "
+                "ON quote_processes (process_type)"
+            ))
+            connection.execute(text(
+                "CREATE INDEX IF NOT EXISTS ix_quote_processes_deleted_at "
+                "ON quote_processes (deleted_at)"
+            ))
+
+    if inspector.has_table("quote_process_items"):
+        item_columns = {
+            column["name"] for column in inspect(engine).get_columns("quote_process_items")
+        }
+        item_definitions = {
+            "requested_quantity": "NUMERIC(16,4) NOT NULL DEFAULT 1",
+            "requested_duration_months": "INTEGER",
+            "is_active": "BOOLEAN NOT NULL DEFAULT TRUE" if is_postgres else "BOOLEAN NOT NULL DEFAULT 1",
+            "removed_at": "TIMESTAMP",
+            "removed_by_id": "INTEGER",
+        }
+        for column_name, column_definition in item_definitions.items():
+            if column_name not in item_columns:
+                with engine.begin() as connection:
+                    connection.execute(text(
+                        f"ALTER TABLE quote_process_items ADD COLUMN {column_name} {column_definition}"
+                    ))
+        with engine.begin() as connection:
+            connection.execute(text(
+                "CREATE INDEX IF NOT EXISTS ix_quote_process_items_is_active "
+                "ON quote_process_items (is_active)"
+            ))
+
+    if inspector.has_table("quote_offer_revisions"):
+        revision_columns = {
+            column["name"] for column in inspect(engine).get_columns("quote_offer_revisions")
+        }
+        revision_definitions = {
+            "updated_by_id": "INTEGER",
+            "deleted_at": "TIMESTAMP",
+            "deleted_by_id": "INTEGER",
+            "deleted_reason": "TEXT",
+        }
+        for column_name, column_definition in revision_definitions.items():
+            if column_name not in revision_columns:
+                with engine.begin() as connection:
+                    connection.execute(text(
+                        f"ALTER TABLE quote_offer_revisions ADD COLUMN {column_name} {column_definition}"
+                    ))
+        with engine.begin() as connection:
+            connection.execute(text(
+                "CREATE INDEX IF NOT EXISTS ix_quote_offer_revisions_deleted_at "
+                "ON quote_offer_revisions (deleted_at)"
+            ))

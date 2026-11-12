@@ -14,10 +14,30 @@ export const QUOTE_STATUSES = {
 } as const;
 
 export const QUOTE_CURRENCIES = ["USD"] as const;
+export const QUOTE_DISPLAY_CURRENCIES = [
+  { value: "USD", label: "USD ($)" },
+  { value: "TRY", label: "TRY (₺)" },
+] as const;
+export const DEFAULT_QUOTE_DISPLAY_CURRENCY = "USD" as const;
+export const MAX_QUOTE_RATE_AGE_DAYS = 7;
 export const QUOTE_DURATIONS = [1, 6, 12, 24, 36, 60] as const;
+export const QUOTE_PROCESS_TYPES = {
+  SINGLE: "Tek Ürün",
+  PACKAGE: "Paket / Çoklu Ürün",
+} as const;
 
 export type QuoteStatus = keyof typeof QUOTE_STATUSES;
 export type QuoteCurrency = string;
+export type QuoteDisplayCurrency = (typeof QUOTE_DISPLAY_CURRENCIES)[number]["value"];
+export type QuoteProcessType = keyof typeof QUOTE_PROCESS_TYPES;
+
+export interface QuoteExchangeRates {
+  usd_try: number | null;
+  eur_try: number | null;
+  rate_date: string | null;
+  stale: boolean;
+  warning: string | null;
+}
 
 export interface QuoteSummary {
   total_processes: number;
@@ -25,18 +45,23 @@ export interface QuoteSummary {
   collected_offers: number;
   completed_processes: number;
   archived_processes: number;
+  deleted_processes: number;
 }
 
 export interface QuoteListItem {
   id: number;
   quote_no: string;
   name: string;
+  process_type: QuoteProcessType;
   categories: string[];
+  vendor_names: string[];
   vendor_count: number;
   offer_count: number;
   status: QuoteStatus;
   created_at: string;
   has_document: boolean;
+  deleted_at: string | null;
+  deleted_reason: string | null;
 }
 
 export interface QuoteProcessItem {
@@ -46,7 +71,10 @@ export interface QuoteProcessItem {
   product_code: string | null;
   category: string;
   description: string | null;
+  requested_quantity: string | number;
+  requested_duration_months: number | null;
   sort_order: number;
+  is_active: boolean;
 }
 
 export interface QuoteDocument {
@@ -62,6 +90,11 @@ export interface QuoteDocument {
   uploaded_by_name: string | null;
   is_active: boolean;
   created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+  deleted_by_id: number | null;
+  deleted_reason: string | null;
+  changed_process_item_ids: number[];
   deactivated_at: string | null;
 }
 
@@ -104,6 +137,7 @@ export interface QuoteVendorOffer {
   created_at: string;
   current_revision: QuoteRevision | null;
   revisions: QuoteRevision[];
+  deleted_revisions: QuoteRevision[];
 }
 
 export interface QuoteAuditLog {
@@ -123,11 +157,15 @@ export interface QuoteProcess {
   quote_no: string;
   name: string;
   description: string | null;
+  process_type: QuoteProcessType;
   status: QuoteStatus;
   created_by_id: number;
   created_by_name: string | null;
   preferred_offer_id: number | null;
   archived_at: string | null;
+  deleted_at: string | null;
+  deleted_by_id: number | null;
+  deleted_reason: string | null;
   created_at: string;
   updated_at: string;
   items: QuoteProcessItem[];
@@ -170,7 +208,8 @@ export interface QuoteComparison {
 }
 
 export function formatQuoteCurrency(value: string | number | null | undefined, currency: string) {
-  const numeric = Number(value ?? 0);
+  if (value === null || value === undefined || value === "") return "—";
+  const numeric = Number(value);
   return new Intl.NumberFormat("tr-TR", {
     style: "currency",
     currency,
@@ -178,6 +217,101 @@ export function formatQuoteCurrency(value: string | number | null | undefined, c
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(Number.isFinite(numeric) ? numeric : 0);
+}
+
+function positiveRate(value: number | null | undefined) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
+}
+
+export function isQuoteExchangeRateUsable(
+  rates: QuoteExchangeRates | null | undefined,
+  now = new Date(),
+) {
+  if (!rates || rates.stale || rates.warning || !rates.rate_date) return false;
+  if (!positiveRate(rates.usd_try)) return false;
+
+  const rateDate = new Date(`${rates.rate_date}T00:00:00Z`);
+  if (Number.isNaN(rateDate.getTime()) || Number.isNaN(now.getTime())) return false;
+  const todayUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const ageDays = (todayUtc - rateDate.getTime()) / (24 * 60 * 60 * 1000);
+  return ageDays >= 0 && ageDays <= MAX_QUOTE_RATE_AGE_DAYS;
+}
+
+export function convertQuoteAmountForDisplay(
+  value: string | number | null | undefined,
+  sourceCurrency: string,
+  targetCurrency: QuoteDisplayCurrency,
+  rates?: QuoteExchangeRates | null,
+  now = new Date(),
+) {
+  if (value === null || value === undefined || value === "") return null;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+
+  const source = sourceCurrency.trim().toUpperCase();
+  if (source === targetCurrency) return numeric;
+  if (!isQuoteExchangeRateUsable(rates, now)) return null;
+
+  const usdTry = positiveRate(rates?.usd_try);
+  const eurTry = positiveRate(rates?.eur_try);
+  if (!usdTry) return null;
+
+  const sourceTryRate = source === "TRY" ? 1 : source === "USD" ? usdTry : source === "EUR" ? eurTry : null;
+  const targetTryRate = targetCurrency === "TRY" ? 1 : usdTry;
+  if (!sourceTryRate || !targetTryRate) return null;
+  return numeric * sourceTryRate / targetTryRate;
+}
+
+export function formatQuoteDisplayCurrency(
+  value: string | number | null | undefined,
+  sourceCurrency: string,
+  targetCurrency: QuoteDisplayCurrency,
+  rates?: QuoteExchangeRates | null,
+  now = new Date(),
+) {
+  const converted = convertQuoteAmountForDisplay(value, sourceCurrency, targetCurrency, rates, now);
+  return converted === null ? "—" : formatQuoteCurrency(converted, targetCurrency);
+}
+
+const VENDOR_COLORS = [
+  { backgroundColor: "#0B57D0", color: "#FFFFFF", borderColor: "#0842A0" },
+  { backgroundColor: "#8E24AA", color: "#FFFFFF", borderColor: "#6A1B7A" },
+  { backgroundColor: "#00796B", color: "#FFFFFF", borderColor: "#005B50" },
+  { backgroundColor: "#C62828", color: "#FFFFFF", borderColor: "#8E1C1C" },
+  { backgroundColor: "#6D4C41", color: "#FFFFFF", borderColor: "#4E342E" },
+  { backgroundColor: "#1565C0", color: "#FFFFFF", borderColor: "#0D47A1" },
+  { backgroundColor: "#2E7D32", color: "#FFFFFF", borderColor: "#1B5E20" },
+  { backgroundColor: "#AD1457", color: "#FFFFFF", borderColor: "#880E4F" },
+  { backgroundColor: "#5E35B1", color: "#FFFFFF", borderColor: "#4527A0" },
+  { backgroundColor: "#00695C", color: "#FFFFFF", borderColor: "#004D40" },
+] as const;
+
+export function normalizeVendorName(value: string) {
+  return value.normalize("NFKD").replace(/\p{M}/gu, "").trim().toLocaleLowerCase("tr-TR");
+}
+
+export function vendorColorIndex(vendorName: string, processVendorNames: string[] = []) {
+  const normalized = normalizeVendorName(vendorName);
+  const uniqueNames = [...new Set(processVendorNames.map(normalizeVendorName))].sort((a, b) => a.localeCompare(b, "tr"));
+  const scopedIndex = uniqueNames.indexOf(normalized);
+  if (scopedIndex >= 0 && uniqueNames.length <= VENDOR_COLORS.length) return scopedIndex;
+  let hash = 2166136261;
+  for (const character of normalized) {
+    hash ^= character.codePointAt(0) ?? 0;
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0) % VENDOR_COLORS.length;
+}
+
+export function getVendorChipSx(vendorName: string, processVendorNames: string[] = []) {
+  const color = VENDOR_COLORS[vendorColorIndex(vendorName, processVendorNames)];
+  return {
+    ...color,
+    border: "1px solid",
+    fontWeight: 800,
+    "& .MuiChip-label": { color: color.color },
+  };
 }
 
 export function calculateQuoteLineTotal(quantity: string | number, unitPrice: string | number) {

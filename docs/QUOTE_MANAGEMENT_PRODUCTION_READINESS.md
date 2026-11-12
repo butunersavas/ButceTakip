@@ -2,11 +2,15 @@
 
 Tarih: 2026-11-09
 
-Release branch: `release/quote-management-usd-prod-ready`
+Release branch: `feature/quote-packages-product-revisions-delete-ui`
 
-Şema sürümü: `20261109_quote_usd_01`
+Şema sürümü: `20261109_quote_packages_01`
 
 Karar: **NO-GO (production kanıtları bekleniyor)**
+
+Bu belgeye paket/ürün bazlı revizyon, revizyon ve süreç soft-delete/restore teslimi
+eklenmiştir. Güncel migration sırası, production `--apply` yasağı, SSO koruma kapısı
+ve rollback ayrıntıları `docs/QUOTE_PACKAGE_REVISION_ROLLOUT.md` içindedir.
 
 Bu belge yalnız BütçeTakip API ve frontend servislerini kapsar. SystemPortal,
 Ürün Çıkış, Bulgu Takip, Sürüm Yönetimi ve Saha Network kapsam dışıdır. Bu çalışma
@@ -42,15 +46,13 @@ Production'da bu sıra ancak aşağıdaki GO kapıları tamamlandıktan sonra uy
 
 ```bash
 psql "$PGURL" -X -v ON_ERROR_STOP=1 -f migrations/20261109_quote_management_preflight.sql
-psql "$PGURL" -X -v ON_ERROR_STOP=1 -f migrations/20261109_quote_management_usd_only_up.sql
-python -m scripts.migrate_database --baseline --backup-confirmed
+psql "$PGURL" -X -v ON_ERROR_STOP=1 -f migrations/20261109_quote_packages_product_revisions_up.sql
 python -m scripts.migrate_database --check
 ```
 
-`--baseline`, yalnız uygulamanın bütün tablo/kolon/index sözleşmesi salt-okunur
-doğrulamadan geçtiğinde `20261109_quote_usd_01` sürüm işaretini yazar; tarihsel DDL/DML
-çalıştırmaz. Herhangi bir başka şema farkında işlem durur. `--apply` bu release için
-kullanılmaz.
+`--apply` bu release için production'da kod seviyesinde kapalıdır. Hedef sürüm yalnız
+incelenmiş, transaction içindeki modüle özel SQL başarıyla tamamlandığında yazılır;
+uygulama başlangıcı ve `--check` salt-okunurdur.
 
 Down SQL otomatik rollback değildir. Herhangi bir Teklif tablosunda veri varsa
 fail-closed durur. Normal uygulama rollback'i önceki immutable API/frontend image'larına

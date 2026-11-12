@@ -20,6 +20,57 @@ test("Teklif oluşturma para birimi yalnız USD'dir", () => {
   assert.match(utility.formatQuoteCurrency(12500, "USD"), /12\.500,00/);
 });
 
+test("Teklif Detay görüntüleme para birimi USD varsayılanı ve TRY seçimini destekler", () => {
+  assert.equal(utility.DEFAULT_QUOTE_DISPLAY_CURRENCY, "USD");
+  assert.deepEqual(utility.QUOTE_DISPLAY_CURRENCIES, [
+    { value: "USD", label: "USD ($)" },
+    { value: "TRY", label: "TRY (₺)" },
+  ]);
+
+  const rates = {
+    usd_try: 40,
+    eur_try: 45,
+    rate_date: "2026-11-12",
+    stale: false,
+    warning: null,
+  };
+  const now = new Date("2026-11-12T10:00:00Z");
+  assert.equal(utility.convertQuoteAmountForDisplay(100, "USD", "TRY", rates, now), 4000);
+  assert.equal(utility.convertQuoteAmountForDisplay(4000, "TRY", "USD", rates, now), 100);
+  assert.equal(utility.convertQuoteAmountForDisplay(100, "EUR", "USD", rates, now), 112.5);
+  assert.equal(utility.convertQuoteAmountForDisplay(100, "TRY", "TRY", null, now), 100);
+});
+
+test("Teklif Detay eski, eksik veya hatalı kurla dönüşüm göstermez", () => {
+  const now = new Date("2026-11-12T10:00:00Z");
+  const base = {
+    usd_try: 40,
+    eur_try: 45,
+    rate_date: "2026-11-12",
+    stale: false,
+    warning: null,
+  };
+  assert.equal(utility.convertQuoteAmountForDisplay(100, "USD", "TRY", { ...base, stale: true }, now), null);
+  assert.equal(utility.convertQuoteAmountForDisplay(100, "USD", "TRY", { ...base, usd_try: null }, now), null);
+  assert.equal(utility.convertQuoteAmountForDisplay(100, "USD", "TRY", { ...base, rate_date: "2026-10-01" }, now), null);
+  assert.equal(utility.convertQuoteAmountForDisplay(100, "GBP", "TRY", base, now), null);
+  assert.equal(utility.formatQuoteDisplayCurrency(100, "USD", "TRY", { ...base, stale: true }, now), "—");
+});
+
+test("firma renkleri deterministik ve aynı süreçte ayırt edicidir", () => {
+  assert.equal(utility.QUOTE_PROCESS_TYPES.PACKAGE, "Paket / Çoklu Ürün");
+  const vendors = ["TürkTelekom", "F1 Teknoloji"];
+  assert.deepEqual(
+    utility.getVendorChipSx("TürkTelekom", vendors),
+    utility.getVendorChipSx(" TürkTelekom ", vendors),
+  );
+  assert.notEqual(
+    utility.getVendorChipSx(vendors[0], vendors).backgroundColor,
+    utility.getVendorChipSx(vendors[1], vendors).backgroundColor,
+  );
+  assert.equal(utility.getVendorChipSx(vendors[0], vendors).color, "#FFFFFF");
+});
+
 test("Teklif Yönetimi KDV alanı oluşturmaz ve güvenli belge akışını sunar", async () => {
   const component = await readFile(
     new URL("./src/components/Quotes/QuoteManagementView.tsx", import.meta.url),
@@ -31,8 +82,23 @@ test("Teklif Yönetimi KDV alanı oluşturmaz ve güvenli belge akışını suna
   assert.ok(component.includes("Teklif Belgeleri"));
   assert.ok(component.includes("<Autocomplete"));
   assert.ok(component.includes("Bütçe ürünü ara"));
-  assert.ok(component.includes('currency: "USD"'));
+  assert.ok(component.includes('revisionPayload.currency = "USD"'));
   assert.ok(component.includes('value="USD"'));
+  assert.ok(component.includes('label="Görüntüleme Para Birimi"'));
+  assert.ok(component.includes('setDisplayCurrency(DEFAULT_QUOTE_DISPLAY_CURRENCY)'));
+  assert.ok(component.includes('formatQuoteDisplayCurrency'));
+  assert.ok(component.includes('client.get<MarketRatesResponse>("/market-rates"'));
+  assert.ok(component.includes("Veritabanı tutarları değişmez"));
+  assert.ok(component.includes("Tüm paket"));
+  assert.ok(component.includes("Belirli ürün(ler)"));
+  assert.ok(component.includes("Teklif verilmedi"));
+  assert.ok(component.includes("changed_process_item_ids"));
+  assert.ok(component.includes("Silinen Teklifler"));
+  assert.ok(component.includes("/revisions/${offerDialog.revision.id}"));
+  assert.ok(component.includes("/revisions/${revision.id}/restore"));
+  assert.ok(component.includes("getVendorChipSx"));
+  assert.ok(component.includes("const total = items.reduce"));
+  assert.ok(!component.includes("const total = visibleItems.reduce"));
   assert.ok(!component.includes("setCurrency("));
   assert.ok(!component.includes("KDV Oranı"));
   assert.ok(!component.includes("kdv_orani"));
